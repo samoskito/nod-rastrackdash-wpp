@@ -43,13 +43,13 @@ import { MetaAdapter } from "./meta/meta.adapter";
 import { MetaAssetsService } from "./meta/meta-assets.service";
 import { MetaConnectionsService } from "./meta/meta-connections.service";
 import { MetaManualConnectionsService } from "./meta/meta-manual-connections.service";
-import { UazapiAdapter } from "./uazapi/uazapi.adapter";
+import { WhatsappProviderRegistry } from "./whatsapp-providers/whatsapp-provider.registry";
 
 @Injectable()
 export class IntegrationsService {
   constructor(
     private readonly metaAdapter: MetaAdapter,
-    private readonly uazapiAdapter: UazapiAdapter,
+    private readonly whatsappProviders: WhatsappProviderRegistry,
     @Inject(INTEGRATION_ENV) private readonly env: IntegrationEnv = process.env,
     @Inject(MetaConnectionsService)
     private readonly metaConnectionsService?: MetaConnectionsService,
@@ -72,8 +72,21 @@ export class IntegrationsService {
       checkedAt: new Date().toISOString(),
       providers: await Promise.all([
         this.metaAdapter.getHealth(),
-        this.uazapiAdapter.getHealth(),
+        this.getUazapiByoHealth(),
       ]),
+    };
+  }
+
+  private async getUazapiByoHealth() {
+    const health = await this.whatsappProviders
+      .require("uazapi_byo")
+      .getHealth();
+
+    return {
+      provider: "uazapi_byo" as const,
+      status: health.status,
+      checkedAt: health.checkedAt,
+      message: health.message,
     };
   }
 

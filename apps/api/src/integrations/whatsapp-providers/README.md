@@ -55,3 +55,22 @@ to keep the interface from becoming an unused superset.
 - Real HTTP for `nod_api`/`waha`/`zapi` (F5.3-F5.5).
 - Per-workspace provider selection UI.
 - Disconnect alert port (F5.7).
+
+## F5.2: call sites now route through the registry
+
+`IntegrationsService.getHealthSummary()` and
+`UazapiProviderConversionService.listLabelCatalog()` (in
+`inbound-webhooks/uazapi-provider-conversion.service.ts`) no longer inject
+`UazapiAdapter` directly — both resolve `registry.require("uazapi_byo")`
+and call `getHealth()` / `listLabels()` off the returned adapter. The
+health summary now reports provider id **`uazapi_byo`** (not the legacy
+`"uazapi"`) — `@wpptrack/shared`'s `integrationProviderSchema` was widened
+to accept both.
+
+`InboundWebhooksModule` imports `WhatsappProvidersModule` for this (it no
+longer declares its own separate `UazapiAdapter` provider). A student
+running this edition only needs to configure `UAZAPI_BASE_URL` and
+`UAZAPI_TOKEN` (your own Uazapi instance token — never a PalmUP admin
+fleet token); there is no `UAZAPI_ADMIN_TOKEN` anywhere in this repo, and
+`UazapiAdapter.createInstance()` stays a stub that returns
+`not_configured` in the BYO edition.

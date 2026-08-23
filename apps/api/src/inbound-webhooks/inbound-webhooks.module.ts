@@ -27,9 +27,9 @@ import { InboundWebhookQueueService } from "./inbound-webhook-queue.service";
 import { InboundWebhookParserRegistry } from "./providers/inbound-webhook-parser.registry";
 import { UazapiConversionBridgeService } from "./uazapi-conversion-bridge.service";
 import { UazapiProviderConversionService } from "./uazapi-provider-conversion.service";
-import { UazapiAdapter } from "../integrations/uazapi/uazapi.adapter";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 import { INTEGRATION_ENV } from "../integrations/integration.types";
+import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/whatsapp-providers.module";
 
 @Module({
   imports: [
@@ -38,6 +38,7 @@ import { INTEGRATION_ENV } from "../integrations/integration.types";
     RuntimeModule,
     ConversionRulesModule,
     WorkspacesModule,
+    WhatsappProvidersModule,
     BullModule.registerQueue({
       name: INBOUND_WEBHOOK_QUEUE,
     }),
@@ -66,7 +67,6 @@ import { INTEGRATION_ENV } from "../integrations/integration.types";
     InboundWebhookParserRegistry,
     UazapiConversionBridgeService,
     UazapiProviderConversionService,
-    UazapiAdapter,
     MetaTokenEncryptionService,
     { provide: INTEGRATION_ENV, useValue: process.env },
   ],

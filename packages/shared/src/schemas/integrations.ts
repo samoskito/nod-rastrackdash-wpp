@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { integrationStatuses } from "../statuses";
 
-export const integrationProviderSchema = z.enum(["meta", "uazapi"]);
+// "uazapi_byo" is the WhatsappProviderRegistry id for the BYO Uazapi
+// adapter (F5.2) — the health summary now reports it instead of the
+// legacy "uazapi" value so FE can distinguish WhatsApp provider health
+// from other "uazapi"-labelled fields (webhook source, lead source, etc,
+// which use unrelated schemas and are untouched by this enum).
+export const integrationProviderSchema = z.enum([
+  "meta",
+  "uazapi",
+  "uazapi_byo",
+]);
 
 export const integrationHealthSchema = z.object({
   provider: integrationProviderSchema,

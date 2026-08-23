@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { INTEGRATION_ENV } from "../integration.types";
 import { UazapiAdapter } from "../uazapi/uazapi.adapter";
 import { UazapiByoAdapter } from "./uazapi-byo.adapter";
 import { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
@@ -21,6 +22,11 @@ export type {
  */
 @Module({
   providers: [
+    // UazapiAdapter needs INTEGRATION_ENV and this module declares no
+    // imports of its own (leaf module) — provide it locally, same pattern
+    // as every other module that instantiates an INTEGRATION_ENV consumer
+    // (integrations.module.ts, inbound-webhooks.module.ts).
+    { provide: INTEGRATION_ENV, useValue: process.env },
     UazapiAdapter,
     UazapiByoAdapter,
     WhatsappProviderRegistry,

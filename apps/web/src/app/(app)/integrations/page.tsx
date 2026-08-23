@@ -514,6 +514,10 @@ function money(cents: number | null | undefined) {
 
 function providerTitle(provider: string) {
   const titles: Record<string, string> = {
+    // F5.2: health summary now reports the WhatsappProviderRegistry id
+    // "uazapi_byo" instead of "uazapi" — keep the old key too in case an
+    // older API build is still serving traffic during a rolling deploy.
+    uazapi_byo: "WhatsApp / NOD API",
     uazapi: "WhatsApp / NOD API",
     meta: "Meta OAuth",
     asaas: "Asaas",
@@ -1388,7 +1392,7 @@ export default async function IntegrationsPage({
                   <strong>
                     {statusLabel(
                       health?.providers.find(
-                        (item) => item.provider === "uazapi",
+                        (item) => item.provider === "uazapi_byo",
                       )?.status ?? "not_configured",
                     )}
                   </strong>

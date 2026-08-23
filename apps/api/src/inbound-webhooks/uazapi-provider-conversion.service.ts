@@ -35,7 +35,7 @@ import {
   UazapiConversionBridgeService,
   type UazapiBridgeInstance,
 } from "./uazapi-conversion-bridge.service";
-import { UazapiAdapter } from "../integrations/uazapi/uazapi.adapter";
+import { WhatsappProviderRegistry } from "../integrations/whatsapp-providers/whatsapp-provider.registry";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 
 const PARSER_VERSION = "v1";
@@ -124,7 +124,8 @@ export class UazapiProviderConversionService {
     private readonly paidLeads: ProviderConversionPaidLeadResolver,
     @Inject(InboundWebhookProductionQueueService)
     private readonly productionQueue: InboundWebhookProductionQueueService,
-    @Inject(UazapiAdapter) private readonly uazapi: UazapiAdapter,
+    @Inject(WhatsappProviderRegistry)
+    private readonly whatsappProviders: WhatsappProviderRegistry,
     @Inject(MetaTokenEncryptionService)
     private readonly tokenEncryption: MetaTokenEncryptionService,
   ) {}
@@ -873,7 +874,14 @@ export class UazapiProviderConversionService {
   private async listLabelCatalog(
     instance: UazapiBridgeInstance,
   ): Promise<Array<{ name: string; keys: string[] }>> {
-    const result = await this.uazapi.listLabels(
+    const uazapiByo = this.whatsappProviders.require("uazapi_byo");
+    if (!uazapiByo.listLabels) {
+      throw new Error(
+        'WhatsApp provider "uazapi_byo" does not implement listLabels',
+      );
+    }
+
+    const result = await uazapiByo.listLabels(
       instance.providerInstanceId ?? instance.id,
       this.instanceToken(instance),
     );
