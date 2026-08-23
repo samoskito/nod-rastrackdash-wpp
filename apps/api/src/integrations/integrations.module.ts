@@ -14,11 +14,18 @@ import { MetaConnectionsService } from "./meta/meta-connections.service";
 import { MetaManualConnectionsService } from "./meta/meta-manual-connections.service";
 import { MetaTokenEncryptionService } from "./meta/meta-token-encryption.service";
 import { UazapiAdapter } from "./uazapi/uazapi.adapter";
+import { WhatsappProvidersModule } from "./whatsapp-providers/whatsapp-providers.module";
 
 export { INTEGRATION_ENV } from "./integration.types";
 
 @Module({
-  imports: [AuthModule, PrismaModule, InboundWebhooksModule, WorkspacesModule],
+  imports: [
+    AuthModule,
+    PrismaModule,
+    InboundWebhooksModule,
+    WorkspacesModule,
+    WhatsappProvidersModule,
+  ],
   providers: [
     {
       provide: INTEGRATION_ENV,
@@ -31,7 +38,6 @@ export { INTEGRATION_ENV } from "./integration.types";
     MetaTokenEncryptionService,
     MetaConnectionsService,
     MetaManualConnectionsService,
-    UazapiAdapter,
     IntegrationsService,
   ],
   controllers: [IntegrationsController],
@@ -45,6 +51,7 @@ export { INTEGRATION_ENV } from "./integration.types";
     MetaManualConnectionsService,
     UazapiAdapter,
     IntegrationsService,
+    WhatsappProvidersModule,
   ],
 })
 export class IntegrationsModule {}

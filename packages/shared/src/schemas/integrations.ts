@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { integrationStatuses } from "../statuses";
 
-export const integrationProviderSchema = z.enum(["meta", "uazapi", "asaas"]);
+export const integrationProviderSchema = z.enum(["meta", "uazapi"]);
 
 export const integrationHealthSchema = z.object({
   provider: integrationProviderSchema,
