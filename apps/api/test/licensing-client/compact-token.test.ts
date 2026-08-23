@@ -1,6 +1,7 @@
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  canonicalizeJson,
   signCompactToken,
   verifyCompactToken,
   type LicenseCachePayload,
@@ -39,6 +40,32 @@ describe("compact-token", () => {
 
     expect(result.valid).toBe(true);
     expect(result.payload?.status).toBe("active");
+  });
+
+  it("signs the UTF-8 canonical JSON body bytes, not the base64url segment (matches PalmUP server)", () => {
+    const payload = payloadFixture();
+    const token = signCompactToken(payload, privateKey);
+    const [bodySegment] = token.split(".");
+
+    const bodyBytes = Buffer.from(bodySegment, "base64url").toString("utf8");
+
+    expect(bodyBytes).toBe(canonicalizeJson(payload));
+  });
+
+  it("fails closed when the signed bytes are valid JSON but not canonical", () => {
+    // Sign a non-canonical (insertion-order, not sorted-key) encoding of the
+    // same payload — this must never verify, even though the signature is
+    // technically valid for those exact bytes, because it doesn't match what
+    // canonicalizeJson would have produced (mirrors the server's own check).
+    const payload = payloadFixture();
+    const nonCanonicalBody = Buffer.from(JSON.stringify(payload), "utf8");
+    const signature = sign(null, nonCanonicalBody, privateKey);
+    const token = `${nonCanonicalBody.toString("base64url")}.${signature.toString("base64url")}`;
+
+    const result = verifyCompactToken(token, publicKey);
+
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe("malformed");
   });
 
   it("rejects a token whose payload was tampered with after signing", () => {

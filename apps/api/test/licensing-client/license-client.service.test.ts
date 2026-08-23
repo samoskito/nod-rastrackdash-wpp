@@ -18,34 +18,41 @@ function baseEnv(overrides: Record<string, string | undefined> = {}) {
   };
 }
 
+// The server's signed cacheToken payload only carries the claims
+// LicenseCryptoService.signCache actually signs (status/softLock/hardLock/
+// expiresAt/validUntil/iat/exp) — `usable`, `bound`, and `keyPrefix` live
+// only on the HTTP body (LicenseActionResult), never in the signed payload.
 function actionResultFixture(
   privateKey: KeyLike,
-  overrides: Partial<LicenseCachePayload> = {},
+  overrides: Partial<LicenseActionResult> = {},
 ): LicenseActionResult {
   const nowSeconds = Math.floor(Date.now() / 1000);
+  const status = overrides.status ?? "active";
+  const softLock = overrides.softLock ?? false;
+  const hardLock = overrides.hardLock ?? false;
+  const expiresAt =
+    overrides.expiresAt ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const validUntil = overrides.validUntil ?? new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+
   const payload: LicenseCachePayload = {
-    status: "active",
-    softLock: false,
-    hardLock: false,
-    usable: true,
-    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-    validUntil: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-    bound: true,
-    keyPrefix: "RTD-1234",
-    fingerprint: "any-fingerprint",
+    status,
+    softLock,
+    hardLock,
+    expiresAt,
+    validUntil,
     iat: nowSeconds,
     exp: nowSeconds + 6 * 60 * 60,
-    ...overrides,
   };
+
   return {
-    status: payload.status,
-    softLock: payload.softLock,
-    hardLock: payload.hardLock,
-    usable: payload.usable,
-    expiresAt: payload.expiresAt,
-    validUntil: payload.validUntil,
-    bound: payload.bound,
-    keyPrefix: payload.keyPrefix,
+    status,
+    softLock,
+    hardLock,
+    usable: overrides.usable ?? true,
+    expiresAt,
+    validUntil,
+    bound: overrides.bound ?? true,
+    keyPrefix: overrides.keyPrefix ?? "RTD-1234",
     cacheToken: signCompactToken(payload, privateKey),
   };
 }
