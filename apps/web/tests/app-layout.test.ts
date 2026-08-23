@@ -340,6 +340,18 @@ describe("product app layout", () => {
     expect(source).toContain("<WorkspaceAccessGate>");
   });
 
+  it("mounts the license status banner above the app shell content", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/app/(app)/layout.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("LicenseStatusBanner");
+    expect(source.indexOf("<LicenseStatusBanner")).toBeLessThan(
+      source.indexOf("<Suspense"),
+    );
+  });
+
   it("forwards the protected pathname to the server access gate", () => {
     const source = readFileSync(
       join(process.cwd(), "src/middleware.ts"),

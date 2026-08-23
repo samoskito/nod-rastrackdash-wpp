@@ -4,12 +4,18 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, RUNTIME_FETCH, type RuntimeEnv, type RuntimeFetch } from "../common/runtime/runtime.module";
 import { verifyCompactToken } from "./compact-token";
 import { computeFingerprint } from "./fingerprint";
+import { LicenseAccountMismatchError } from "./license-client-errors";
 import {
   DEFAULT_LICENSE_SERVER_URL,
   LICENSE_GRACE_WINDOW_MS,
   LICENSE_STATE_ID,
 } from "./license-client.constants";
-import type { LicenseActionResult, LicensePublicKeyResult, LicenseRuntimeState } from "./license-client.types";
+import type {
+  LicenseActionResult,
+  LicenseBlockReason,
+  LicensePublicKeyResult,
+  LicenseRuntimeState,
+} from "./license-client.types";
 
 const UNLICENSED_STATE: LicenseRuntimeState = {
   status: "unlicensed",
@@ -19,6 +25,7 @@ const UNLICENSED_STATE: LicenseRuntimeState = {
   expiresAt: null,
   validUntil: null,
   source: "cache",
+  reason: null,
 };
 
 /**
@@ -48,8 +55,8 @@ export class LicenseClientService {
     return computeFingerprint(appOrigin);
   }
 
-  async activate(options?: { appVersion?: string; deployLabel?: string }): Promise<LicenseRuntimeState> {
-    const key = this.env.LICENSE_KEY?.trim();
+  async activate(options?: { key?: string; appVersion?: string; deployLabel?: string }): Promise<LicenseRuntimeState> {
+    const key = options?.key?.trim() || this.env.LICENSE_KEY?.trim();
     const accountIdentity = this.env.LICENSE_ACCOUNT_IDENTITY?.trim();
     if (!key || !accountIdentity) {
       throw new Error("license_client_not_configured");
@@ -68,10 +75,32 @@ export class LicenseClientService {
       }),
     });
     if (!response.ok) {
+      // The private license server responds 403/409 specifically when the
+      // key is already bound to a different accountIdentity — single
+      // attempt, no retry loop (see .claude-task-f4-2-softlock.md #3).
+      if (response.status === 403 || response.status === 409) {
+        throw new LicenseAccountMismatchError();
+      }
       throw new Error(`license_activate_failed:${response.status}`);
     }
     const result = (await response.json()) as LicenseActionResult;
     return this.persistVerifiedResult(result, fingerprint, accountIdentity);
+  }
+
+  /**
+   * True when the soft-lock guard should be a no-op: no license server
+   * configured, or nothing has ever been activated and no key is set either
+   * (fresh template checkout / dev without license envs).
+   */
+  async isInert(): Promise<boolean> {
+    if (!this.env.LICENSE_SERVER_URL?.trim()) {
+      return true;
+    }
+    if (this.env.LICENSE_KEY?.trim()) {
+      return false;
+    }
+    const row = await this.prisma.licenseState.findUnique({ where: { id: LICENSE_STATE_ID } });
+    return !row;
   }
 
   async heartbeat(): Promise<LicenseRuntimeState> {
@@ -124,7 +153,7 @@ export class LicenseClientService {
       return UNLICENSED_STATE;
     }
 
-    const status = this.deriveStatus(row.status, row.cacheValidUntil, row.lastCheckedAt);
+    const { status, reason } = this.deriveStatus(row.status, row.expiresAt, row.cacheValidUntil, row.lastCheckedAt);
     return {
       status,
       softLock: status !== "active",
@@ -133,6 +162,7 @@ export class LicenseClientService {
       expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
       validUntil: row.cacheValidUntil ? row.cacheValidUntil.toISOString() : null,
       source: "cache",
+      reason,
     };
   }
 
@@ -145,21 +175,26 @@ export class LicenseClientService {
    */
   private deriveStatus(
     storedStatus: string,
+    expiresAt: Date | null,
     cacheValidUntil: Date | null,
     lastCheckedAt: Date | null,
-  ): LicenseRuntimeState["status"] {
-    if (storedStatus === "blocked") {
-      return "blocked";
-    }
+  ): { status: LicenseRuntimeState["status"]; reason: LicenseBlockReason | null } {
     const now = Date.now();
+    if (storedStatus === "blocked") {
+      const reason: LicenseBlockReason = expiresAt && expiresAt.getTime() <= now ? "expired" : "revoked";
+      return { status: "blocked", reason };
+    }
     if (cacheValidUntil && cacheValidUntil.getTime() > now) {
-      return isLicenseStatus(storedStatus) ? storedStatus : "active";
+      return { status: isLicenseStatus(storedStatus) ? storedStatus : "active", reason: null };
     }
     if (!lastCheckedAt) {
-      return "blocked";
+      return { status: "blocked", reason: "expired" };
     }
     const elapsedSinceLastCheck = now - lastCheckedAt.getTime();
-    return elapsedSinceLastCheck <= LICENSE_GRACE_WINDOW_MS ? "grace" : "blocked";
+    if (elapsedSinceLastCheck <= LICENSE_GRACE_WINDOW_MS) {
+      return { status: "grace", reason: null };
+    }
+    return { status: "blocked", reason: "grace_exceeded" };
   }
 
   private async persistVerifiedResult(
@@ -191,6 +226,12 @@ export class LicenseClientService {
       update: data,
     });
 
+    const reason: LicenseBlockReason | null =
+      result.status === "blocked"
+        ? result.expiresAt && new Date(result.expiresAt).getTime() <= Date.now()
+          ? "expired"
+          : "revoked"
+        : null;
     return {
       status: result.status,
       softLock: result.softLock,
@@ -199,6 +240,7 @@ export class LicenseClientService {
       expiresAt: result.expiresAt ?? null,
       validUntil: result.validUntil,
       source: "server",
+      reason,
     };
   }
 

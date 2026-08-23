@@ -2,6 +2,7 @@ import { generateKeyPairSync, type KeyLike } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { signCompactToken, type LicenseCachePayload } from "../../src/licensing-client/compact-token";
 import { LICENSE_GRACE_WINDOW_MS } from "../../src/licensing-client/license-client.constants";
+import { LicenseAccountMismatchError } from "../../src/licensing-client/license-client-errors";
 import { LicenseClientService } from "../../src/licensing-client/license-client.service";
 import type { LicenseActionResult } from "../../src/licensing-client/license-client.types";
 import { createFakePrisma } from "./support";
@@ -177,5 +178,157 @@ describe("LicenseClientService", () => {
     const state = await service.getState();
 
     expect(state.status).toBe("blocked");
+  });
+
+  it("getState() reason is 'grace_exceeded' when blocked because contact lapsed past the 72h window", async () => {
+    const { prisma } = createFakePrisma({
+      status: "active",
+      cacheValidUntil: new Date(Date.now() - 60_000),
+      lastCheckedAt: new Date(Date.now() - (LICENSE_GRACE_WINDOW_MS + 60_000)),
+    });
+    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
+      throw new Error("no network calls expected");
+    }) as typeof fetch);
+
+    const state = await service.getState();
+
+    expect(state.status).toBe("blocked");
+    expect(state.reason).toBe("grace_exceeded");
+  });
+
+  it("getState() reason is 'expired' when a verified blocked verdict has an expiresAt already in the past", async () => {
+    const { prisma } = createFakePrisma({
+      status: "blocked",
+      expiresAt: new Date(Date.now() - 60_000),
+      cacheValidUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      lastCheckedAt: new Date(),
+    });
+    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
+      throw new Error("no network calls expected");
+    }) as typeof fetch);
+
+    const state = await service.getState();
+
+    expect(state.status).toBe("blocked");
+    expect(state.reason).toBe("expired");
+  });
+
+  it("getState() reason is 'revoked' when a verified blocked verdict has no expiry in the past", async () => {
+    const { prisma } = createFakePrisma({
+      status: "blocked",
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      cacheValidUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      lastCheckedAt: new Date(),
+    });
+    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
+      throw new Error("no network calls expected");
+    }) as typeof fetch);
+
+    const state = await service.getState();
+
+    expect(state.status).toBe("blocked");
+    expect(state.reason).toBe("revoked");
+  });
+
+  it("getState() reason is null for non-blocked states", async () => {
+    const { prisma } = createFakePrisma({
+      status: "active",
+      cacheValidUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      lastCheckedAt: new Date(),
+    });
+    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
+      throw new Error("no network calls expected");
+    }) as typeof fetch);
+
+    const state = await service.getState();
+
+    expect(state.status).toBe("active");
+    expect(state.reason).toBeNull();
+  });
+
+  describe("isInert()", () => {
+    it("is inert when LICENSE_SERVER_URL is not set, regardless of LicenseState", async () => {
+      const { prisma } = createFakePrisma({ status: "active" });
+      const service = new LicenseClientService(prisma, baseEnv({ LICENSE_SERVER_URL: undefined }));
+
+      expect(await service.isInert()).toBe(true);
+    });
+
+    it("is inert when no LicenseState row exists and LICENSE_KEY is empty", async () => {
+      const { prisma } = createFakePrisma(); // no initial row -> findUnique() resolves null
+      const service = new LicenseClientService(prisma, baseEnv({ LICENSE_KEY: undefined }));
+
+      expect(await service.isInert()).toBe(true);
+    });
+
+    it("is not inert when LICENSE_KEY is set, even without a LicenseState row yet", async () => {
+      const { prisma } = createFakePrisma();
+      const service = new LicenseClientService(prisma, baseEnv());
+
+      expect(await service.isInert()).toBe(false);
+    });
+
+    it("is not inert when a LicenseState row exists, even without LICENSE_KEY set", async () => {
+      const { prisma } = createFakePrisma({ status: "active" });
+      const service = new LicenseClientService(prisma, baseEnv({ LICENSE_KEY: undefined }));
+
+      expect(await service.isInert()).toBe(false);
+    });
+  });
+
+  describe("activate() account mismatch", () => {
+    it("throws LicenseAccountMismatchError when the server responds 403", async () => {
+      const { prisma } = createFakePrisma();
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () => new Response(null, { status: 403 }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      await expect(service.activate()).rejects.toBeInstanceOf(LicenseAccountMismatchError);
+    });
+
+    it("throws LicenseAccountMismatchError when the server responds 409", async () => {
+      const { prisma } = createFakePrisma();
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () => new Response(null, { status: 409 }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      await expect(service.activate()).rejects.toBeInstanceOf(LicenseAccountMismatchError);
+    });
+
+    it("still throws a plain error for unrelated failures (e.g. 500)", async () => {
+      const { prisma } = createFakePrisma();
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () => new Response(null, { status: 500 }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      await expect(service.activate()).rejects.not.toBeInstanceOf(LicenseAccountMismatchError);
+    });
+  });
+
+  it("activate() uses the key passed in options over LICENSE_KEY when both are set", async () => {
+    const { prisma, getRow } = createFakePrisma();
+    const activateResult = actionResultFixture(privateKey, { status: "active" });
+    let capturedBody: { key?: string } = {};
+    const fetchFn: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(typeof input === "string" ? input : input.toString()).pathname;
+      if (path === "/license/public-key") return publicKeyHandler();
+      if (path === "/license/activate") {
+        capturedBody = JSON.parse(init?.body as string);
+        return Response.json(activateResult);
+      }
+      throw new Error(`unhandled fetch path in test: ${path}`);
+    }) as typeof fetch;
+    const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+    await service.activate({ key: "override-key" });
+
+    expect(capturedBody.key).toBe("override-key");
+    expect(getRow()?.licenseKeyPrefix).toBe("RTD-1234");
   });
 });

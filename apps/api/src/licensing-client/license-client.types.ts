@@ -17,6 +17,9 @@ export interface LicensePublicKeyResult {
   publicKey: string;
 }
 
+/** Why a "blocked" status was reached — carried internally, never exposed on the public status endpoint. */
+export type LicenseBlockReason = "revoked" | "expired" | "grace_exceeded";
+
 /** Locally-derived runtime state, as returned by LicenseClientService.getState(). */
 export interface LicenseRuntimeState {
   status: "active" | "grace" | "blocked" | "unlicensed";
@@ -26,4 +29,6 @@ export interface LicenseRuntimeState {
   expiresAt: string | null;
   validUntil: string | null;
   source: "cache" | "server";
+  /** Set only when status is "blocked"; null otherwise. */
+  reason: LicenseBlockReason | null;
 }
