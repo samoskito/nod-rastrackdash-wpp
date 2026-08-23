@@ -2149,3 +2149,24 @@ enum LicenseHeartbeatStatus {
 /// Telemetry of student instances. Unlimited fingerprints for the same bound account.
 
 /// Idempotent Guru (and future provider) webhook audit. Invalid signatures must not mutate License.
+
+/// Local (client-side) runtime state for the license-client module (F4.1). Single row keyed by
+/// `id = "singleton"`. Populated by talking to the private PalmUP license server over HTTP; this
+/// public template contains no license-server logic itself. `status` is intentionally a plain
+/// string ("active" | "grace" | "blocked" | "unlicensed") rather than a DB enum so the client can
+/// evolve independently of the (private) server's own License/LicenseStatus vocabulary above.
+model LicenseState {
+  id               String    @id @default("singleton")
+  fingerprint      String
+  accountIdentity  String
+  licenseKeyPrefix String
+  signedCache      String?   @db.Text
+  cacheValidUntil  DateTime?
+  lastCheckedAt    DateTime?
+  lastError        String?   @db.Text
+  status           String    @default("unlicensed")
+  expiresAt        DateTime?
+  bound            Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
