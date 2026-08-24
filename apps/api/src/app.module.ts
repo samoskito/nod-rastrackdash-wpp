@@ -17,6 +17,7 @@ import { InboundWebhookReplayModule } from "./inbound-webhook-replay/inbound-web
 import { IntegrationsModule } from "./integrations/integrations.module";
 import { LeadsModule } from "./leads/leads.module";
 import { LicenseClientModule } from "./licensing-client/license-client.module";
+import { OnboardingModule } from "./onboarding/onboarding.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
@@ -42,6 +43,7 @@ import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
     WebhooksModule,
     OpsAlertsModule,
     LicenseClientModule,
+    OnboardingModule,
   ],
   controllers: [HealthController],
   providers: [

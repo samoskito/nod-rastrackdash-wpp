@@ -6,9 +6,11 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "test": "turbo test",
+    "test:setup": "node --test scripts/setup.test.mjs",
     "lint": "turbo lint",
     "format": "prettier --write .",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "setup": "node scripts/setup.mjs"
   },
   "devDependencies": {
     "prettier": "^3.3.3",

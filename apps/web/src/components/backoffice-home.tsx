@@ -6,7 +6,9 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import type { OnboardingStatusResponse } from "../lib/onboarding-status";
 import { BackofficeNavigation } from "./backoffice-navigation";
+import { OnboardingChecklist } from "./onboarding-checklist";
 
 const destinations: Array<{
   description: string;
@@ -40,7 +42,11 @@ const destinations: Array<{
   },
 ];
 
-export function BackofficeHome() {
+export function BackofficeHome({
+  onboarding = null,
+}: {
+  onboarding?: OnboardingStatusResponse | null;
+}) {
   return (
     <section className="page-stack standalone-page backoffice-home">
       <BackofficeNavigation active="home" />
@@ -56,6 +62,8 @@ export function BackofficeHome() {
           Instância aluno
         </span>
       </header>
+
+      <OnboardingChecklist status={onboarding} />
 
       <section className="backoffice-command-section">
         <div className="section-heading-row">
