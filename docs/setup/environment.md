@@ -17,7 +17,7 @@ Convenção de colunas:
 | `WEB_ORIGIN` | Sim | URL pública do seu frontend (CORS) | `.env` da API / env do serviço | Não |
 | `NEXT_PUBLIC_API_URL` | Sim | URL pública da sua API | `.env` do web / env do projeto Vercel | Não (é exposta ao navegador de propósito) |
 | `API_PUBLIC_URL` | Sim | URL pública da sua API | `.env` da API / env do serviço | Não |
-| `API_PORT` | Sim (tem padrão `3333`) | Porta que você expõe para a API | `.env` da API / env do serviço | Não |
+| `API_PORT` | Sim (tem padrão `3333`) | Porta que você expõe para a API. **No Dokploy, defina `API_PORT=3000`** — o `Dockerfile` faz `EXPOSE 3000`, e essa variável precisa bater exatamente com a porta interna do container configurada no serviço (veja [`dokploy.md`](dokploy.md#6-variáveis-de-ambiente-da-api)); sem isso a API sobe na porta padrão `3333` e o Dokploy não a alcança | `.env` da API / env do serviço | Não |
 | `INBOUND_WEBHOOKS_ENABLED` e demais `INBOUND_*` | Não (tem padrão) | Flags de feature do produto | `.env` da API | Não |
 | `WPPTRACK_*_MS`, `WPPTRACK_EXTERNAL_SYNC_*`, `WPPTRACK_EXTERNAL_MYSQL_*` | Não (têm padrão) | Tuning de performance/timeout — mantenha o padrão salvo se tiver um motivo específico para ajustar | `.env` da API | Não |
 
@@ -25,7 +25,7 @@ Convenção de colunas:
 
 | Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
 |---|---|---|---|---|
-| `DATABASE_URL` | Sim | Você monta a partir do host/porta/usuário/senha/banco do seu Postgres (local: `docker-compose.yml`; Dokploy: tela de conexão do serviço de banco) | `.env` local / env do serviço | **Sim** |
+| `DATABASE_URL` | Sim | Você monta a partir do host/porta/usuário/senha/banco do seu Postgres (local: `docker-compose.yml`; Dokploy: tela de conexão do serviço de banco). Formato: `postgresql://usuario:senha@host:5432/banco` — **se a senha tiver caractere especial (`@ : / % # ?` etc.), URL-encode antes de montar a string** (`node -e "console.log(encodeURIComponent('sua_senha'))"`), senão a conexão quebra | `.env` local / env do serviço | **Sim** |
 | `REDIS_URL` | Sim | Idem, a partir do serviço Redis | `.env` local / env do serviço | **Sim** (contém host/porta; trate como sensível se tiver senha) |
 | `EXTERNAL_CONNECTOR_ENCRYPTION_KEY` | Sim | Você gera (`openssl rand -hex 32` ou similar) | `.env` local / env do serviço | **Sim** |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Sim | Você gera; use valores diferentes em dev e produção | `.env` local / env do serviço | **Sim** |
@@ -106,3 +106,53 @@ Essas variáveis nunca escondem o rodapé residual `RastrackDash · powered by P
 - Qualquer variável com prefixo `NEXT_PUBLIC_` é embutida no bundle do navegador e é **pública** — hoje isso é só `NEXT_PUBLIC_API_URL`. Nunca crie uma `NEXT_PUBLIC_*` para um token, senha ou chave.
 - Todas as demais variáveis (`.env` da API, e o restante do `.env` do web) ficam **só no servidor** e nunca são enviadas ao navegador.
 - Se um provedor pedir uma chave/token, ela vai sempre em uma variável de servidor (API) — nunca em `NEXT_PUBLIC_*` nem em código do `apps/web`.
+
+## Esqueleto copiável de produção (envs da API)
+
+Placeholders apenas — **nenhum valor real**. Cole cada linha, uma de cada vez, direto no painel de variáveis de ambiente do serviço da API no Dokploy (ou nas envs do serviço equivalente no seu provedor). Nunca cole um valor real aqui, em um arquivo commitado, ou em um chat de IA — se um agente de IA estiver te guiando, ele deve pedir para **você** digitar cada segredo direto no formulário do Dokploy, nunca pedir para colá-lo na conversa.
+
+```bash
+# ---- Núcleo / público (não secreto) ----
+NODE_ENV=production
+API_PORT=3000
+API_PUBLIC_URL=https://[SUA-API].seudominio.com
+WEB_ORIGIN=https://[SEU-WEB].seudominio.com
+
+# ---- Banco de dados / Redis (montar a partir da tela de conexão do Dokploy) ----
+DATABASE_URL=postgresql://[USUARIO]:[SENHA_URL_ENCODED]@[HOST_INTERNO]:5432/[BANCO]
+REDIS_URL=redis://[HOST_INTERNO]:6379
+
+# ---- Segredos gerados (gere valores novos para produção; nunca reuse os de dev) ----
+JWT_ACCESS_SECRET=[GERAR]
+JWT_REFRESH_SECRET=[GERAR]
+EXTERNAL_CONNECTOR_ENCRYPTION_KEY=[GERAR]
+META_TOKEN_ENCRYPTION_KEY=[GERAR]
+
+# ---- Licença (PalmUP) ----
+LICENSE_SERVER_URL=[já vem preenchido no .env.example — não altere sem orientação da PalmUP]
+LICENSE_KEY=[PREENCHER NO DOKPLOY]
+LICENSE_ACCOUNT_IDENTITY=[e-mail exato da sua conta de compra]
+
+# ---- WhatsApp — preencha só o(s) provedor(es) que for usar ----
+UAZAPI_BASE_URL=[PREENCHER]
+UAZAPI_TOKEN=[PREENCHER NO DOKPLOY]
+UAZAPI_WEBHOOK_AUTH_TOKEN=[GERAR]
+WAHA_BASE_URL=[PREENCHER]
+WAHA_API_KEY=[PREENCHER NO DOKPLOY]
+ZAPI_BASE_URL=[PREENCHER]
+ZAPI_INSTANCE_ID=[PREENCHER]
+ZAPI_TOKEN=[PREENCHER NO DOKPLOY]
+NOD_API_BROKER_URL=[já vem preenchido no .env.example — só se tiver o add-on licenciado]
+
+# ---- Meta Ads — só se for usar App próprio ----
+META_APP_ID=[PREENCHER]
+META_APP_SECRET=[PREENCHER NO DOKPLOY]
+META_WEBHOOK_VERIFY_TOKEN=[GERAR]
+
+# ---- Opcional ----
+BRAND_NAME=[opcional]
+BRAND_LOGO_URL=[opcional]
+BRAND_PRIMARY_COLOR=[opcional, ex. #0F766E]
+```
+
+O web (Vercel ou serviço Dokploy separado) só precisa de uma variável: `NEXT_PUBLIC_API_URL=https://[SUA-API].seudominio.com` — ela é pública por definição (ver regra acima).

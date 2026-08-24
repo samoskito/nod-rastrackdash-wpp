@@ -1,73 +1,170 @@
 # Setup em VPS com Dokploy
 
-Passo a passo para levar a API, o PostgreSQL e o Redis do RastrackDash para uma VPS usando [Dokploy](https://dokploy.com) como PaaS. Este guia não inventa rótulos exatos de tela — o Dokploy muda a UI entre versões — mas descreve os **conceitos** que qualquer versão recente cobre, para você reconhecer a opção certa mesmo que o texto do botão seja diferente.
+Passo a passo **operacional** para levar a API, o PostgreSQL e o Redis do RastrackDash para uma VPS usando [Dokploy](https://dokploy.com) como PaaS: o que escolher, o que digitar, em que ordem, e como validar cada etapa — sem expor segredos.
+
+> **Sobre nomes de botão/tela:** o Dokploy muda a UI entre versões. Este guia nomeia o **conceito** de cada campo/opção (ex.: "campo de variáveis de ambiente do serviço") em vez de inventar um rótulo exato de botão. Se você (IA lendo este guia para conduzir um aluno) não reconhecer a tela descrita, **peça um print/descrição da tela ao aluno em vez de adivinhar** o nome do botão.
 
 Antes de começar, dimensione a máquina com [`vps.md`](vps.md) (RAM/CPU conforme workspaces e leads/dia).
 
+## 0. Pré-requisitos
+
+Confirme cada item antes de abrir o Dokploy:
+
+| Pré-requisito | O que verificar |
+|---|---|
+| VPS | Servidor com o Dokploy **já instalado** e acessível (painel abre no navegador). Ver dimensionamento em [`vps.md`](vps.md) — 2 GB é o piso só do painel, não do produto completo. |
+| DNS / domínio | Você controla um domínio (ou subdomínio) e consegue criar registros `A`/`CNAME` apontando para o IP da VPS — necessário para a API e, se for o caso, para o web. |
+| Acesso ao GitHub | O Dokploy precisa enxergar `https://github.com/samoskito/nod-rastrackdash-wpp` (repositório público — não é obrigatório instalar GitHub App, mas confirme que o Dokploy consegue clonar o branch `main`). |
+| Alvo do web | Decida agora: **Vercel** (recomendado, mais simples) ou **Dokploy** para `apps/web`. Isso muda o passo 10. |
+| Dimensionamento | Rode a entrevista de [`vps.md`](vps.md) (workspaces, leads/dia) antes de contratar/redimensionar a VPS. |
+
 ## Arquitetura recomendada
 
-- **Vercel** para `apps/web` (Next.js) — mais simples, CDN e HTTPS automáticos.
+- **Vercel** para `apps/web` (Next.js) — CDN e HTTPS automáticos.
 - **VPS + Dokploy** para `apps/api` (NestJS), PostgreSQL e Redis.
 
 Você pode rodar o web também na VPS via Dokploy se preferir; os passos de API/banco/Redis abaixo não mudam.
 
-## 0. Pré-requisitos
+## Ordem geral
 
-- VPS com Dokploy instalado (2 GB RAM é o piso só do Dokploy; siga [`vps.md`](vps.md) para o piso real do produto).
-- Domínio (ou subdomínio) que você controla, para apontar à API e, se quiser, ao web.
-- Repositório acessível pelo Dokploy (Git remoto, ou build local + registry, conforme sua configuração de Dokploy).
+`projeto → PostgreSQL → Redis → armazenamento persistente → envs da API → build/deploy da API → migrations → domínio/HTTPS da API → web → correção do WEB_ORIGIN → licença → Meta/WhatsApp → checagem final`
 
-## 1. Criar o projeto e o serviço da API
+Siga nessa ordem — pular etapas (ex.: fazer deploy da API antes do banco existir) gera crash-loop evitável.
 
-1. No painel do Dokploy, crie um **projeto** novo para o RastrackDash.
-2. Dentro dele, crie um **serviço de aplicação** apontando para este repositório e para o `Dockerfile` na raiz (build multi-stage já preparado para `apps/api`).
-3. Configure o **build** para usar o `Dockerfile` do repositório (não é necessário customizar comandos — o Dockerfile já roda `prisma generate`, build do `@wpptrack/shared` e do `@wpptrack/api`).
+## 1. Criar o projeto
 
-**Validação:** o serviço aparece criado no projeto, ainda sem deploy bem-sucedido (esperado neste ponto — faltam banco, Redis e envs).
+1. No painel do Dokploy, crie um **projeto** novo para o RastrackDash (um projeto agrupa API, banco, Redis e, opcionalmente, o web — todos na mesma rede interna).
 
-## 2. Criar PostgreSQL e Redis como serviços gerenciados
+**Validação:** o projeto aparece na lista, vazio, pronto para receber serviços.
 
-No mesmo projeto, crie dois **serviços de banco de dados** gerenciados pelo Dokploy (não containers avulsos que você mesmo cuida):
+## 2. Criar o serviço PostgreSQL
 
-- Um serviço **PostgreSQL** (a versão usada pelo produto é a 16 — veja `docker-compose.yml` para referência local).
-- Um serviço **Redis** (versão 7 usada localmente).
+Dentro do projeto, crie um serviço de **banco de dados gerenciado** do tipo **PostgreSQL**, versão **16** (mesma versão usada localmente — veja `docker-compose.yml` na raiz do repositório).
 
-Ao criar cada um, o Dokploy gera (ou permite definir) usuário, senha e nome do banco/instância. Anote **onde esses valores ficam guardados na própria UI do Dokploy** — normalmente cada serviço de banco mostra uma tela de "conexão"/"credenciais" com host interno, porta, usuário, senha e nome do banco. Você vai usá-los no próximo passo, mas nunca precisa copiá-los para fora do painel do Dokploy além de colar na env da API.
+Preencha (o Dokploy pode gerar alguns destes automaticamente — confirme o que a tela mostrar):
 
-Conceitos que valem para qualquer versão do Dokploy:
+| Campo | Valor sugerido |
+|---|---|
+| Nome do serviço | `rastrackdash-postgres` (ou outro nome estável — você vai usá-lo como host interno) |
+| Versão da imagem | `16` |
+| Nome do banco | `[PREENCHER: ex. rastrackdash]` |
+| Usuário | `[PREENCHER: ex. rastrackdash]` |
+| Senha | `[GERAR — senha forte, deixe o Dokploy gerar se oferecer essa opção]` |
+| Exposição pública | **Desligada** — o banco só precisa ser acessível pela rede interna do Dokploy, nunca pela internet |
+| Volume persistente | **Ativar/confirmar** — sem isso, um redeploy pode apagar os dados |
 
-- **Host interno**: dentro da rede do Dokploy, o serviço da API se conecta ao banco pelo nome interno do serviço (não por IP público) — normalmente algo como `<nome-do-servico>` ou um hostname interno mostrado na tela de conexão do banco.
-- **Porta**: Postgres `5432`, Redis `6379`, salvo se você mudou explicitamente.
-- **Persistência (volume)**: confirme que o serviço de banco tem um **volume persistente** anexado antes de colocar dados reais — sem isso, um redeploy pode apagar o banco. Todo serviço de banco gerenciado pelo Dokploy deveria oferecer essa opção por padrão; confirme na tela do serviço.
+Depois de criado, o Dokploy mostra uma tela de **conexão/credenciais** do serviço (o rótulo exato varia por versão — pode ser "Connection", "Environment" ou similar) com host interno, porta, usuário, senha e nome do banco. É dali que você vai copiar os valores no passo 5 — nunca precisa levar esses valores para fora do painel além de colar na env da API.
 
-**Validação:** os dois serviços de banco de dados aparecem com status "rodando"/"saudável" no painel, com um volume persistente listado.
+**Validação:**
+- Status do serviço: **rodando/saudável** no painel.
+- A tela do serviço lista um **volume persistente** anexado.
+- A tela de conexão mostra host interno, porta (`5432` salvo alteração), usuário, senha e nome do banco preenchidos (não em branco).
 
-## 3. Variáveis de ambiente da API
+## 3. Criar o serviço Redis
 
-No serviço da API, abra a seção de **variáveis de ambiente** e preencha a partir do seu `.env` local validado (veja [`environment.md`](environment.md) para a tabela completa). No mínimo:
+No mesmo projeto, crie um serviço de **banco de dados gerenciado** do tipo **Redis**, versão **7** (mesma versão usada localmente).
 
-- `DATABASE_URL` — monte com host interno/porta/usuário/senha/nome do banco do passo 2 (`postgresql://usuario:senha@host-interno:5432/nome-do-banco`).
-- `REDIS_URL` — mesma lógica (`redis://host-interno:6379`).
+| Campo | Valor sugerido |
+|---|---|
+| Nome do serviço | `rastrackdash-redis` |
+| Versão da imagem | `7` |
+| Armazenamento persistente | Ative se o seu uso depende de filas (BullMQ) sobreviverem a um restart — a maioria dos planos do Dokploy oferece essa opção para Redis; confirme na tela do serviço |
+| Exposição pública | **Desligada** |
+| Senha/auth | Opcional — se o Dokploy oferecer, defina uma; se não, o Redis fica acessível só pela rede interna do projeto |
+
+**Validação:**
+- Status do serviço: **rodando/saudável**.
+- Host interno e porta (`6379` salvo alteração) visíveis na tela de conexão do serviço.
+
+## 4. Confirmar armazenamento persistente
+
+Antes de seguir, confirme os dois serviços de banco juntos:
+
+- PostgreSQL: volume persistente **anexado e listado** na tela do serviço (não "nenhum volume").
+- Redis: armazenamento persistente **ativado**, se você optou por isso no passo 3.
+- Nenhum dos dois serviços tem **porta pública** exposta para a internet.
+
+**Validação:** um redeploy/restart de teste de qualquer um dos dois serviços (se você quiser testar agora) não deve resetar dados — só faça esse teste se ainda não houver dados reais.
+
+## 5. Criar o serviço da API
+
+Crie um **serviço de aplicação** no mesmo projeto, com estes campos:
+
+| Campo | Valor |
+|---|---|
+| Origem/provedor | GitHub |
+| Repositório | `https://github.com/samoskito/nod-rastrackdash-wpp` |
+| Branch | `main` |
+| Método de build | Dockerfile |
+| Caminho do Dockerfile | `Dockerfile` (raiz do repositório) |
+| Diretório de build/contexto | **raiz do repositório** |
+| Porta interna do container | `3000` (o `Dockerfile` faz `EXPOSE 3000`) |
+| Domínio público da API | `[PREENCHER: ex. api.seudominio.com]` (configurado no passo 9) |
+
+**Importante:**
+
+- **Não** aponte o diretório de build/contexto para `apps/api` — o build precisa da raiz do monorepo (o `Dockerfile` copia `packages/shared` e o workspace inteiro antes de compilar `apps/api`; um contexto restrito a `apps/api` quebra o build).
+- **Não clique em "Deploy" ainda.** O serviço pode ficar criado, sem build bem-sucedido, até PostgreSQL/Redis existirem (passos 2–4) e as variáveis de ambiente estarem completas (passo 6). Disparar o deploy antes disso só gera um crash-loop previsível.
+
+**Validação:** o serviço aparece criado no projeto, apontando para o repositório/branch/Dockerfile corretos, **ainda sem deploy disparado**.
+
+## 6. Variáveis de ambiente da API
+
+No serviço da API, abra o **painel/formulário de variáveis de ambiente do serviço** (é lá — nunca em um arquivo commitado, nunca em chat — que todo valor de produção entra). Preencha a partir da tabela completa em [`environment.md`](environment.md); o esqueleto copiável está na seção "[Esqueleto de produção](environment.md#esqueleto-copiável-de-produção-envs-da-api)" daquele arquivo. No mínimo:
+
+- **`DATABASE_URL`** — monte com os valores do passo 2:
+  ```
+  postgresql://USUARIO:SENHA@HOST-INTERNO:5432/NOME-DO-BANCO
+  ```
+  ⚠️ **Se a senha tiver caracteres especiais** (`@ : / % # ? & espaço` etc.), ela precisa estar **URL-encoded**, senão a string quebra o parser do Postgres/Prisma. Gere a versão codificada antes de montar a URL, por exemplo:
+  ```bash
+  node -e "console.log(encodeURIComponent('SUA_SENHA_AQUI'))"
+  ```
+  Troque só a senha na URL pelo resultado — usuário e nome do banco normalmente não têm caracteres especiais, mas aplique o mesmo cuidado se tiverem.
+
+- **`REDIS_URL`** — a partir do passo 3:
+  ```
+  redis://HOST-INTERNO:6379
+  ```
+  Se você definiu senha/auth no Redis, use `redis://:SENHA@HOST-INTERNO:6379` (mesmo cuidado de URL-encoding acima se a senha tiver caracteres especiais).
+
 - `NODE_ENV=production`
-- `API_PORT` (ou deixe o padrão do Dockerfile/env) e `API_PUBLIC_URL` com a URL pública que você vai apontar para este serviço.
-- `WEB_ORIGIN` com a URL pública do seu frontend (Vercel ou Dokploy), para CORS.
-- Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores novos para produção, não reuse os de desenvolvimento local.
-- `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preencha `LICENSE_KEY` direto no campo de env do Dokploy, nunca em um arquivo versionado.
-- Provedores de WhatsApp que você for usar (`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL`).
+- **`API_PORT=3000`** — precisa bater exatamente com a "porta interna do container" configurada no passo 5. Sem essa variável, a API sobe na porta padrão `3333` (ver [`environment.md`](environment.md)) e o Dokploy não vai conseguir alcançá-la na porta `3000` configurada — isso aparenta um crash-loop mas na verdade é descompasso de porta.
+- `API_PUBLIC_URL` — a URL pública que você vai apontar para este serviço (ex. `https://api.seudominio.com`), definida no passo 9.
+- `WEB_ORIGIN` — a URL pública do seu frontend. **No primeiro preenchimento você ainda não tem essa URL** (o web só é publicado no passo 10) — use um placeholder temporário (ex. `https://PLACEHOLDER.seudominio.com`) e volte a corrigir no passo 11. Não deixe de voltar: CORS depende deste valor bater exatamente com a URL real do web.
+- Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores **novos** para produção, nunca reutilize os de desenvolvimento local (ex.: `openssl rand -hex 32`).
+- `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preenchidos no passo 12; pode deixar em branco por enquanto se ainda não tiver a chave.
+- Provedores de WhatsApp que você for usar (`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL`) — preenchidos no passo 13.
 
-**Nunca** cole esses valores em um `.env` commitado no repositório nem em um chat de IA — preencha direto no formulário do Dokploy.
+**Nunca** cole esses valores em um `.env` commitado no repositório nem em um chat de IA — preencha direto no formulário do Dokploy. Se um agente de IA estiver conduzindo esta etapa, ele deve **pedir para você digitar cada segredo diretamente no Dokploy**, nunca pedir para você colá-lo na conversa.
 
-**Validação:** todas as variáveis obrigatórias de [`environment.md`](environment.md) estão preenchidas no serviço (sem `replace-me-*` restante).
+**Validação:** todas as variáveis obrigatórias de [`environment.md`](environment.md) estão preenchidas no serviço (sem `replace-me-*`/`[PREENCHER...]` restante nas obrigatórias).
 
-## 4. Deploy e ordem de migrations
+## 7. Build e deploy da API
 
-Dispare o deploy da API. O `CMD` do `Dockerfile` já roda `prisma migrate deploy` automaticamente antes de iniciar o processo (`pnpm --dir apps/api exec prisma migrate deploy ... && pnpm --filter @wpptrack/api start`), então a ordem correta é: **banco e Redis no ar primeiro, depois o deploy da API** — nessa ordem as migrations aplicam sozinhas a cada deploy.
+Só agora, com PostgreSQL/Redis no ar (passos 2–4) e as envs do passo 6 preenchidas, dispare o **deploy** do serviço da API.
 
-**Validação:** o log de deploy mostra as migrations sendo aplicadas (ou "no pending migrations") seguido da mensagem de start da API, sem o container reiniciar em loop.
+O que acontece no build (definido pelo `Dockerfile` na raiz — não customize comandos de build):
 
-## 5. Domínio e HTTPS
+1. Instala dependências do monorepo (`pnpm install --filter @wpptrack/api...`).
+2. `prisma generate`, build do `@wpptrack/shared` e do `@wpptrack/api`.
+3. Imagem final expõe a porta `3000` e, ao iniciar o container, roda:
+   ```
+   prisma migrate deploy && pnpm --filter @wpptrack/api start
+   ```
+   ou seja, **as migrations aplicam automaticamente a cada deploy**, antes da API aceitar tráfego — você não precisa (nem deve) rodar `prisma migrate deploy` manualmente contra produção.
 
-Configure o domínio/subdomínio da API no serviço (Dokploy normalmente integra com Let's Encrypt via Traefik para HTTPS automático — confirme a opção equivalente na sua versão). Aponte o DNS do domínio para o IP da VPS antes de pedir o certificado.
+**Validação:** o log de build conclui sem erro; o log de runtime mostra as migrations sendo aplicadas (ou "no pending migrations") seguido da mensagem de start da API, **sem o container reiniciar em loop**.
+
+## 8. Migrations
+
+Cobertas no passo 7 — não é uma etapa manual separada. Se o container reiniciar repetidamente logo após "Bootstrapping"/antes do "Nest application started", é quase sempre uma migration ou uma env de banco/Redis — veja [Diagnóstico de crash-loop](#diagnóstico-de-crash-loop) abaixo.
+
+**Validação:** nenhuma linha de erro do Prisma nos logs de deploy; o processo da API permanece de pé (não reinicia) por pelo menos alguns minutos após o start.
+
+## 9. Domínio e HTTPS da API
+
+Configure o domínio/subdomínio da API no serviço (ex. `api.seudominio.com`), apontando o **registro DNS para o IP da VPS antes** de pedir o certificado. O Dokploy normalmente integra com Let's Encrypt via Traefik para HTTPS automático — confirme a opção equivalente na tela do seu serviço (o nome exato do botão varia por versão).
 
 **Validação:**
 
@@ -76,22 +173,52 @@ curl -s https://sua-api.seudominio.com/health
 curl -s https://sua-api.seudominio.com/health/ready
 ```
 
-## 6. Deploy do web
+Ambos devem responder `200`. Se o certificado ainda não validou, veja [Domínio / HTTPS não valida](troubleshooting.md#domínio--https-não-valida).
 
-- **Vercel (recomendado):** conecte o repositório, aponte o diretório `apps/web`, defina `NEXT_PUBLIC_API_URL=https://sua-api.seudominio.com` nas envs do projeto Vercel.
-- **Dokploy:** crie um segundo serviço de aplicação apontando para `apps/web`, com a mesma variável `NEXT_PUBLIC_API_URL` e domínio/HTTPS próprios.
+## 10. Deploy do web
 
-Depois de publicado, volte na env `WEB_ORIGIN` da API (passo 3) e confirme que aponta para essa URL pública do web — CORS depende disso.
+- **Vercel (recomendado):** conecte o repositório, aponte o diretório `apps/web` como raiz do projeto Vercel, defina `NEXT_PUBLIC_API_URL=https://sua-api.seudominio.com` nas envs do projeto Vercel.
+- **Dokploy:** crie um segundo serviço de aplicação apontando para `apps/web` (aqui sim o diretório de build é `apps/web`, diferente do serviço da API), com a mesma variável `NEXT_PUBLIC_API_URL` e domínio/HTTPS próprios.
 
-**Validação:** abrir a URL pública do web carrega a tela de login sem erro de CORS no console do navegador.
+`NEXT_PUBLIC_API_URL` é embutida no bundle do navegador em build time — se você mudar essa variável depois, precisa **rebuildar** o web (Vercel: novo deploy; Dokploy: redeploy do serviço do web).
 
-## 7. Verificação pós-deploy
+**Validação:** a URL pública do web carrega (ainda pode dar erro de CORS neste ponto — corrigido no próximo passo).
 
-1. Logue no web publicado.
-2. `/backoffice` → checklist de onboarding completo.
-3. `/backoffice/license` → licença "utilizável" (depende do passo 3 com `LICENSE_*` corretos).
-4. `/integrations` → Meta ([`meta-manual.md`](meta-manual.md)) e ao menos um provedor de WhatsApp conectados.
-5. `GET https://sua-api.../health/ready` → `200`.
+## 11. Corrigir o WEB_ORIGIN
+
+Volte na env `WEB_ORIGIN` da API (passo 6) e troque o placeholder pela URL pública real do web publicada no passo 10 — protocolo, domínio e ausência/presença de barra final precisam bater **exatamente** com o que o navegador usa. Redeploy da API para aplicar.
+
+**Validação:** abrir a URL pública do web carrega a tela de login **sem** erro `blocked by CORS policy` no console do navegador.
+
+## 12. Licença
+
+Preencha na env da API (passo 6), se ainda não preencheu:
+
+- `LICENSE_KEY` — chave recebida da PalmUP por e-mail/WhatsApp após a compra.
+- `LICENSE_ACCOUNT_IDENTITY` — o e-mail **exato** da sua conta de compra (um valor diferente retorna `403` na ativação).
+- `LICENSE_SERVER_URL` — normalmente já vem preenchido a partir do `.env.example`; não altere sem orientação da PalmUP.
+
+Redeploy da API se você editou envs depois do passo 7.
+
+**Validação:** logado no web publicado, `/backoffice/license` mostra licença **utilizável**. Se der `403` ou "não configurada", veja [Licença 403](troubleshooting.md#licença-403não-configurada).
+
+## 13. Meta e WhatsApp
+
+- **Meta Ads:** siga [`meta-manual.md`](meta-manual.md) para gerar e conectar o token do usuário do sistema na UI de **Integrações** do workspace (não é variável de ambiente).
+- **WhatsApp:** preencha na env da API as variáveis do provedor escolhido (`UAZAPI_*`, `WAHA_*`, `ZAPI_*` ou `NOD_API_BROKER_URL`) — tabela completa em [`environment.md`](environment.md). Redeploy da API após adicionar.
+
+**Validação:** `/integrations` mostra Meta e o provedor de WhatsApp escolhido como **conectados**.
+
+## 14. Verificação pós-deploy (checklist final)
+
+1. `curl -s https://sua-api.seudominio.com/health` → `200`.
+2. `curl -s https://sua-api.seudominio.com/health/ready` → `200`, todas as dependências `ok`.
+3. Logue no web publicado, sem erro de CORS no console.
+4. `/backoffice` → checklist de onboarding completo.
+5. `/backoffice/license` → licença "utilizável".
+6. `/integrations` → Meta e ao menos um provedor de WhatsApp conectados.
+
+Se qualquer item falhar, vá para [`troubleshooting.md`](troubleshooting.md) antes de tentar de novo às cegas.
 
 ## Diagnóstico de crash-loop
 
@@ -100,10 +227,12 @@ Se o container da API reinicia repetidamente:
 1. Veja os logs do serviço no painel do Dokploy — a causa quase sempre aparece nas primeiras linhas após "Bootstrapping".
 2. Causas comuns:
    - `DATABASE_URL`/`REDIS_URL` errados ou apontando para host externo em vez do host interno do Dokploy → o container falha ao conectar e sai.
+   - Senha do Postgres/Redis com caractere especial não URL-encoded → a URL fica malformada e a conexão falha (veja o passo 6).
+   - `API_PORT` não definido como `3000` (ou diferente da "porta interna do container" configurada no passo 5) → a API sobe, mas o Dokploy não alcança a porta certa; parece crash-loop mas é descompasso de porta.
    - `prisma migrate deploy` falhou por schema divergente ou banco inacessível no boot → sem migrations aplicadas, a API não sobe.
    - Falta de memória durante o build (veja o piso de RAM em [`vps.md`](vps.md)) derruba o host inteiro, não só o container.
    - Variável obrigatória ausente causa um `throw` no boot (ex.: `API_PORT` inválido) — confira [`environment.md`](environment.md).
-3. Corrija a variável/serviço apontado, redeploy, e repita a validação do passo 4.
+3. Corrija a variável/serviço apontado, redeploy, e repita a validação do passo 7.
 
 Mais cenários: [`troubleshooting.md`](troubleshooting.md).
 

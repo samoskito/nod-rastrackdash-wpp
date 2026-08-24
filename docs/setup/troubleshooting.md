@@ -68,6 +68,27 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** ajuste a env para o host interno correto; se for RAM, aumente a VPS ou use build remoto do Dokploy; preencha a variável faltante.
 - **Verificação:** deploy conclui, log mostra "migrations aplicadas" seguido do start da API sem reinício.
 
+## Dokploy: API sobe nos logs mas o domínio não responde (parece crash-loop, mas não é)
+
+- **Diagnóstico:** o log de runtime mostra "Nest application started"/start bem-sucedido, mas `curl` no domínio público retorna erro de conexão/`502`; confira a variável `API_PORT` no serviço e a "porta interna do container" configurada no Dokploy.
+- **Causa provável:** `API_PORT` não foi definida como `3000` (o `Dockerfile` faz `EXPOSE 3000`, mas o padrão da aplicação sem essa variável é `3333`) — a API está de pé, só que numa porta diferente da que o Dokploy está escutando.
+- **Correção:** defina `API_PORT=3000` na env do serviço da API e confirme que a porta interna do container configurada no Dokploy também é `3000` (veja [`dokploy.md`](dokploy.md#6-variáveis-de-ambiente-da-api)); redeploy.
+- **Verificação:** `curl -s https://sua-api.seudominio.com/health` retorna `200`.
+
+## Dokploy: build da API falha (`prisma generate`, `pnpm install` ou módulo não encontrado)
+
+- **Diagnóstico:** log de **build** (não runtime) do serviço no painel do Dokploy; confira o diretório de build/contexto configurado no serviço.
+- **Causa provável:** o diretório de build/contexto foi apontado para `apps/api` em vez da **raiz do repositório** — o `Dockerfile` precisa copiar `packages/shared` e os arquivos do workspace (`pnpm-workspace.yaml`, `turbo.json`) antes de compilar `apps/api`, e isso só existe se o contexto for a raiz.
+- **Correção:** ajuste o diretório de build/contexto do serviço para a raiz do repositório (veja o passo 5 de [`dokploy.md`](dokploy.md#5-criar-o-serviço-da-api)); redeploy.
+- **Verificação:** o build conclui sem erro de "arquivo não encontrado"/módulo ausente.
+
+## `DATABASE_URL`/`REDIS_URL` malformada com senha gerada pelo Dokploy
+
+- **Diagnóstico:** erro de parsing de URL ou de autenticação nos logs da API logo no boot, mesmo com host/porta/usuário corretos.
+- **Causa provável:** a senha gerada tem caractere especial (`@ : / % # ?` etc.) e não foi URL-encoded ao montar a string de conexão.
+- **Correção:** gere a versão codificada da senha (`node -e "console.log(encodeURIComponent('sua_senha'))"`) e substitua só a senha na URL — veja [`environment.md`](environment.md#banco-de-dados--autenticação).
+- **Verificação:** `/health/ready` retorna `200` com o banco/Redis `ok`.
+
 ## URLs web/API não batem (produção)
 
 - **Diagnóstico:** compare `NEXT_PUBLIC_API_URL` (web) com `API_PUBLIC_URL`/domínio real da API; teste `curl` direto na URL configurada no web.
