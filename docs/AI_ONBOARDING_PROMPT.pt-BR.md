@@ -1,26 +1,49 @@
 # Prompt oficial de onboarding com IA (pt-BR)
 
-Este é o prompt que você (aluno) cola em um agente de IA — Claude Code, Codex CLI/App, ou similar — logo depois de clonar o repositório. Ele existe para que alguém sem experiência prévia em DevOps consiga sair do zero até uma instância rodando, com a IA explicando cada passo, validando antes de seguir e nunca manuseando seus segredos.
+**Repositório canônico:** `https://github.com/samoskito/nod-rastrackdash-wpp`
+
+Este é o prompt que você (aluno) cola em um agente de IA — Claude Code, Codex CLI/App, ou similar — **antes de clonar qualquer coisa**. Você só precisa da URL do repositório acima e deste prompt; a própria IA verifica a pasta atual, clona se for preciso, entra no diretório e só então começa a entrevista. Ele existe para que alguém sem experiência prévia em DevOps consiga sair do zero até uma instância rodando, com a IA explicando cada passo, validando antes de seguir e nunca manuseando seus segredos.
 
 ## Como usar
 
 1. Compre a licença e receba a chave da PalmUP (e-mail/WhatsApp).
-2. Clone o repositório e abra a pasta no Claude Code ou no Codex.
-3. Cole o prompt abaixo **exatamente como está** (não precisa editar nada antes de colar — a própria IA vai perguntar o que falta).
+2. Abra o Claude Code, o Codex (CLI/App) ou um agente equivalente em uma pasta de trabalho (pode estar vazia — não precisa clonar nada antes).
+3. Cole a URL do repositório (`https://github.com/samoskito/nod-rastrackdash-wpp`) e o prompt abaixo **exatamente como estão** (não precisa editar nada antes de colar). A IA confere a pasta atual, clona se necessário, entra no diretório certo e lê os documentos do repositório sozinha — você não precisa abri-los manualmente antes, apenas saiba que eles existem caso queira conferir depois.
 4. Responda às perguntas da IA. Quando ela pedir um valor secreto (senha, token, chave), **digite você mesmo** no terminal, no `.env` local ou na UI do provedor — nunca no chat.
 
 ## O prompt
 
 ```text
-Você vai me ajudar a instalar e configurar o RastrackDash a partir deste
-repositório clonado, do zero até uma instância rodando de verdade.
+Você vai me ajudar a instalar e configurar o RastrackDash, do zero até uma
+instância rodando de verdade, a partir do repositório
+https://github.com/samoskito/nod-rastrackdash-wpp.
 
-1. Leia, nesta ordem: AGENTS.md, docs/AI_AGENTS.md, este arquivo
-   (docs/AI_ONBOARDING_PROMPT.pt-BR.md), docs/GUIA-ALUNO.md e o índice
-   docs/setup/README.md. Não presuma nada sobre o estado do projeto sem
-   conferir o código e esses documentos.
+1. Primeiro, verifique o diretório de trabalho atual antes de fazer
+   qualquer outra coisa:
+   - Se ele já for um clone deste repositório, confirme com
+     `git remote -v` e `git branch --show-current` (sem exibir nenhum
+     token/credencial) que a origem aponta para
+     https://github.com/samoskito/nod-rastrackdash-wpp, e siga direto
+     para o passo 2.
+   - Se o diretório estiver vazio ou não existir ainda, clone
+     `https://github.com/samoskito/nod-rastrackdash-wpp.git`, entre na
+     pasta clonada e confirme `git remote -v`/branch da mesma forma.
+   - Se o diretório não estiver vazio e contiver outro projeto (não este
+     repositório), **pare e me pergunte antes de clonar** — nunca
+     sobrescreva nem misture projetos numa pasta que já tem conteúdo.
 
-2. Antes de rodar qualquer comando, me pergunte (sem segredos, só decisões):
+2. Só depois de confirmar que está dentro do clone certo, leia, nesta
+   ordem: AGENTS.md, docs/AI_AGENTS.md, este arquivo
+   (docs/AI_ONBOARDING_PROMPT.pt-BR.md), docs/GUIA-ALUNO.md, o índice
+   docs/setup/README.md, e os guias específicos relevantes para minhas
+   respostas no passo 3 (docs/setup/local.md ou docs/setup/dokploy.md,
+   docs/setup/environment.md, docs/setup/troubleshooting.md). Não presuma
+   nada sobre o estado do projeto sem conferir o código e esses
+   documentos. Eu não preciso abrir esses arquivos manualmente — você lê
+   por mim antes de começar a me entrevistar.
+
+3. Só depois de ler os documentos acima, e antes de rodar qualquer
+   comando, me pergunte (sem segredos, só decisões):
    a) Alvo do deploy: Docker local (dev/homolog na minha máquina),
       VPS com Dokploy, ou outro provedor (Vercel + outro host)?
    b) Quantos workspaces/clientes finais pretendo rodar e quantos
@@ -30,7 +53,7 @@ repositório clonado, do zero até uma instância rodando de verdade.
    d) Se quero personalizar marca (whitelabel) desde já ou depois.
    Não avance para comandos até eu responder essas perguntas.
 
-3. Nunca me peça para colar senha, token, chave de API, chave de licença
+4. Nunca me peça para colar senha, token, chave de API, chave de licença
    ou qualquer segredo aqui no chat, e nunca escreva um valor secreto real
    nos seus próprios comandos ou logs. Quando um passo exigir um segredo:
    - me diga exatamente qual variável preencher e onde (arquivo `.env`
@@ -39,12 +62,12 @@ repositório clonado, do zero até uma instância rodando de verdade.
    - só depois disso, valide o resultado (ex.: um endpoint de status)
      sem nunca me pedir para reexibir o segredo.
 
-4. Siga a ordem de docs/setup/README.md (local ou Dokploy, conforme minha
-   resposta no passo 2): ambiente → banco/Redis → migrations →
+5. Siga a ordem de docs/setup/README.md (local ou Dokploy, conforme minha
+   resposta no passo 3): ambiente → banco/Redis → migrations →
    `LICENSE_*` → primeiro admin → primeiro workspace → Meta manual →
    WhatsApp → marca opcional → verificação pós-deploy.
 
-5. Para cada passo:
+6. Para cada passo:
    - explique em 1-3 frases o que vamos fazer e por quê;
    - proponha **um** comando ou ação segura por vez (nada destrutivo,
      nada que apague dados sem eu confirmar antes);
@@ -54,16 +77,16 @@ repositório clonado, do zero até uma instância rodando de verdade.
    - se der erro, pare, leia docs/setup/troubleshooting.md e me proponha
      o diagnóstico e a correção antes de tentar de novo.
 
-6. Nunca invente endpoints privados da PalmUP, campos exatos de UI do
+7. Nunca invente endpoints privados da PalmUP, campos exatos de UI do
    Dokploy que você não confirmou comigo, nem automações que este
    repositório não suporta. Se não tiver certeza, diga que não tem certeza
    e me peça para conferir na tela.
 
-7. Nunca remova o rodapé residual "RastrackDash · powered by PalmUP" nem
+8. Nunca remova o rodapé residual "RastrackDash · powered by PalmUP" nem
    sugira uma forma de escondê-lo — é uma regra fixa do produto
    (docs/CUSTOMIZATION.md).
 
-8. Ao final, monte comigo um checklist de evidências, sem nenhum valor
+9. Ao final, monte comigo um checklist de evidências, sem nenhum valor
    secreto:
    - `GET /health` e `GET /health/ready` respondendo OK;
    - `/backoffice` com o checklist de onboarding completo;
@@ -80,6 +103,8 @@ provedores de WhatsApp?
 
 ## O que esperar da IA depois de colar o prompt
 
+- Verificação da pasta atual e, se preciso, clone do repositório e leitura dos documentos por conta própria — sem que você precise abri-los manualmente.
+- Se a pasta já tiver outro projeto, uma pergunta antes de clonar, nunca um clone silencioso por cima do que já existe.
 - Perguntas de decisão (não segredos) antes do primeiro comando.
 - Um passo por vez, com explicação curta, comando único e validação.
 - Pedidos explícitos para você digitar segredos fora do chat, nunca a IA pedindo para colá-los.
