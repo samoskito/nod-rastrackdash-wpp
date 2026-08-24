@@ -1,6 +1,6 @@
 import {
-  Activity,
   ArrowRight,
+  ShieldCheck,
   UsersRound,
   Webhook,
   Wrench,
@@ -32,12 +32,11 @@ const destinations: Array<{
     meta: "Contas da plataforma",
   },
   {
-    description:
-      "Consulte cobrancas, instancias, jobs, chamadas externas, CAPI e auditorias.",
-    href: "/backoffice?view=operations",
-    icon: Activity,
-    label: "Operacoes internas",
-    meta: "Uso tecnico",
+    description: "Consulte o status somente leitura da licenca local.",
+    href: "/backoffice/license",
+    icon: ShieldCheck,
+    label: "Licença",
+    meta: "Status da instancia",
   },
 ];
 
@@ -54,7 +53,7 @@ export function BackofficeHome() {
         </div>
         <span className="status-chip">
           <Wrench aria-hidden="true" size={14} strokeWidth={2} />
-          Platform owner
+          Instância aluno
         </span>
       </header>
 

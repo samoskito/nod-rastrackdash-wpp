@@ -1,16 +1,4 @@
-import { apiBaseUrl } from "../lib/api";
-
-type LicenseStatus = "active" | "grace" | "blocked" | "unlicensed";
-
-type LicenseStatusResponse = {
-  status: LicenseStatus;
-  softLock: boolean;
-  hardLock: boolean;
-  usable: boolean;
-  expiresAt: string | null;
-  validUntil: string | null;
-  source: "cache" | "server";
-};
+import { fetchLicenseStatus } from "../lib/license-status";
 
 /**
  * Server component: shows a persistent amber banner during the license
@@ -44,20 +32,4 @@ export async function LicenseStatusBanner() {
       </span>
     </div>
   );
-}
-
-async function fetchLicenseStatus(): Promise<LicenseStatusResponse | null> {
-  try {
-    const response = await fetch(`${apiBaseUrl}/license-client/status`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    return (await response.json()) as LicenseStatusResponse;
-  } catch {
-    return null;
-  }
 }

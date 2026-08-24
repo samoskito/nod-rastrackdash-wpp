@@ -1,18 +1,12 @@
 import {
-  CreditCard,
   Home,
-  Settings2,
+  ShieldCheck,
   UsersRound,
   Webhook,
   type LucideIcon,
 } from "lucide-react";
 
-export type BackofficeArea =
-  | "billing"
-  | "clients"
-  | "home"
-  | "operations"
-  | "webhooks";
+export type BackofficeArea = "clients" | "home" | "license" | "webhooks";
 
 type BackofficeNavigationProps = {
   active: BackofficeArea;
@@ -40,13 +34,6 @@ const items: Array<{
     shortLabel: "Clientes",
   },
   {
-    area: "billing",
-    href: "/backoffice/billing",
-    icon: CreditCard,
-    label: "Assinaturas",
-    shortLabel: "Assinaturas",
-  },
-  {
     area: "webhooks",
     href: "/backoffice/inbound-webhooks",
     icon: Webhook,
@@ -54,11 +41,11 @@ const items: Array<{
     shortLabel: "Webhooks",
   },
   {
-    area: "operations",
-    href: "/backoffice?view=operations",
-    icon: Settings2,
-    label: "Operacoes internas",
-    shortLabel: "Operacoes",
+    area: "license",
+    href: "/backoffice/license",
+    icon: ShieldCheck,
+    label: "Licença",
+    shortLabel: "Licença",
   },
 ];
 
