@@ -38,3 +38,10 @@ API: `GET /onboarding/status` (auth required).
 ## AI-first
 
 Peça a uma IA (Claude Code, Codex, Grok) para ler `AGENTS.md` / `docs/AI_AGENTS.md` e conduzir estes passos com verificação a cada etapa.
+
+## Release
+
+- [Acceptance matrix v1](../release/ACCEPTANCE-v1.md)
+- [Changelog](../../CHANGELOG.md)
+- [Tagging v1.0.0](../release/TAGGING.md) (human gate)
+- [PalmUP license ops runbook](../ops/palmup-license-runbook.md)

@@ -66,6 +66,10 @@ Verify: open `/backoffice` (onboarding checklist), `/backoffice/license`, `/inte
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md)
+- [Acceptance matrix v1](docs/release/ACCEPTANCE-v1.md)
+- [How to tag v1.0.0](docs/release/TAGGING.md) (human gate — not automatic)
+- [PalmUP license ops runbook](docs/ops/palmup-license-runbook.md)
 - [Student edition design spec](docs/superpowers/specs/2026-08-19-nod-rastrackdash-wpp-student-edition-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-08-19-rastrackdash-student-edition-implementation.md)
 - [Guide for AI agents](docs/AI_AGENTS.md) · root [AGENTS.md](AGENTS.md)
