@@ -1,5 +1,7 @@
 # RastrackDash student self-host template
 
+**Documentação do aluno (pt-BR):** [README.pt-BR.md](./README.pt-BR.md)
+
 `nod-rastrackdash-wpp` is a self-hosted, multi-tenant dashboard for agencies that run WhatsApp lead campaigns with Meta Ads. It brings together campaign performance, WhatsApp leads, conversion events, and operational diagnostics.
 
 ## Status

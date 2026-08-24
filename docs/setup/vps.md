@@ -1,64 +1,64 @@
-# VPS — recomendacao de sizing (baseada em pesquisa)
+# VPS — recomendação de dimensionamento
 
-Nao e um provisionador automatico. Use para escolher maquina **antes** do deploy.
-Web Next.js pode (e na arquitetura PalmUP costuma) ficar na **Vercel**; a VPS carrega principalmente **Dokploy + API Nest + Postgres + Redis + workers**.
+Não é um provisionador automático. Use-o para escolher a máquina **antes** do deploy.
+A aplicação web em Next.js pode (e, na arquitetura PalmUP, costuma) ficar na **Vercel**; a VPS carrega principalmente **Dokploy + API Nest + PostgreSQL + Redis + workers**.
 
 ## Fontes
 
-1. **Dokploy (oficial)** — docs de instalacao:
+1. **Dokploy (oficial)** — documentação de instalação:
    > "To ensure a smooth experience with Dokploy, your server should have at least **2GB of RAM** and **30GB of disk space**. This specification helps to handle the resources consumed by Docker during builds and prevents system freezes."
    - Fonte: [Dokploy Installation — Requirements](https://github.com/Dokploy/website/blob/main/apps/docs/content/docs/core/installation.mdx)
    - Portas: 80, 443, 3000 (painel Dokploy)
-2. **Stack RastrackDash / WppTrack** (codigo real):
+2. **Stack RastrackDash / WppTrack** (código real):
    - API NestJS (Node 22) + Prisma
    - PostgreSQL 16
    - Redis 7 + BullMQ (filas: e-mail, meta sync, webhooks, CAPI, etc.)
-   - Builds Docker no proprio host (pico de RAM/CPU na hora do deploy)
-3. **Carga de produto** (ordem de grandeza, nao benchmark de lab):
-   - 500 leads/dia ≈ **~0,35 lead/min** media (bursts no horario de anuncio)
-   - Cada lead tipico: 1–N webhooks Uazapi/WA + parse + write Postgres + possivel regra de conversao + enqueue CAPI/Meta
-   - Em regime baixo/medio o gargalo raramente e CPU sustentada; e **RAM** (Node + Postgres + Redis + Dokploy/Traefik) e **I/O de disco** em build/migrate
+   - Builds Docker no próprio host (pico de RAM/CPU na hora do deploy)
+3. **Carga de produto** (ordem de grandeza, não é benchmark de laboratório):
+   - 500 leads/dia ≈ **~0,35 lead/min** em média (picos no horário de anúncio)
+   - Cada lead típico: 1–N webhooks Uazapi/WA + parsing + escrita no PostgreSQL + possível regra de conversão + enqueue CAPI/Meta
+   - Em regime baixo/médio, o gargalo raramente é CPU sustentada; é **RAM** (Node + PostgreSQL + Redis + Dokploy/Traefik) e **I/O de disco** em build/migrate
 
-## O que roda na VPS (cenario aluno padrao)
+## O que roda na VPS (cenário padrão do aluno)
 
 | Componente | Papel | RAM ordem de grandeza (idle/leve) |
 |---|---|---|
 | Dokploy + Traefik + Docker overhead | PaaS / proxy | ~400–800 MB |
-| API Nest (+ workers no mesmo processo ou sidecar) | webhooks, CAPI, auth | ~300–700 MB |
+| API Nest (+ workers no mesmo processo ou sidecar) | webhooks, CAPI, autenticação | ~300–700 MB |
 | PostgreSQL 16 | dados | ~200–500 MB (+ shared_buffers sob carga) |
 | Redis 7 | filas/cache | ~50–150 MB |
-| Pico de **build** Docker/pnpm | deploy | +1–2 GB temporarios |
+| Pico de **build** Docker/pnpm | deploy | +1–2 GB temporários |
 
-Conclusao: **2 GB totais e o piso do Dokploy sozinho para nao travar no build** — nao e um piso confortavel para Dokploy **+** app completo sob build simultaneo. Por isso a faixa "minima viavel do produto" sobe.
+Conclusão: **2 GB totais é o piso do Dokploy sozinho para não travar no build** — não é um piso confortável para Dokploy **+** app completo sob build simultâneo. Por isso, a faixa "mínima viável do produto" sobe.
 
 ## Perguntas iniciais (IA deve fazer)
 
-1. Quantos **clientes/workspaces** pretende rodar nesta instancia?
-2. Quantos **leads/dia** em media (e no pico de campanha)?
-3. Vai rodar **build na mesma VPS** (Dokploy build local) ou tem build server separado?
-4. Web fica na **Vercel** (recomendado) ou tambem na VPS?
+1. Quantos **clientes/workspaces** pretende rodar nesta instância?
+2. Quantos **leads/dia** em média (e no pico de campanha)?
+3. Vai rodar **build na mesma VPS** (build local do Dokploy) ou tem servidor de build separado?
+4. A web fica na **Vercel** (recomendado) ou também na VPS?
 
 ## Faixas recomendadas (RastrackDash)
 
-| Perfil | Workspaces | Leads/dia (media) | Pico webhooks (ordem) | Tier | Spec sugerida | Observacao |
+| Perfil | Workspaces | Leads/dia (média) | Pico de webhooks (ordem) | Faixa | Especificação sugerida | Observação |
 |---|---|---|---|---|---|---|
-| **So Dokploy (referencia oficial)** | — | — | — | Piso Dokploy | **2 GB RAM / 30 GB disco** | So o painel; **nao** recomenda rodar o app completo com folga |
-| **Minima do produto** | 1–5 | ate ~500 | dezenas/min em burst curto | Minima | **2 vCPU / 4 GB RAM / 60–80 GB SSD** | Dokploy + API + PG + Redis; web na Vercel; evitar build pesado + trafego no mesmo instante |
-| **Recomendada** | 5–20 | ate ~5.000 | centenas/min em campanha | Padrao | **4 vCPU / 8 GB RAM / 120–160 GB SSD** | Folga para workers BullMQ, Postgres, deploys e picos CTWA |
-| **Alta** | 20+ ou multiplas instancias WA | >5.000 ou picos fortes | alto e sustentado | Alta | **4–8 vCPU / 16 GB RAM / 200 GB+ SSD** | Separar PG ou workers; considerar build server Dokploy remoto |
-| **Nao fazer** | — | — | — | — | 1 GB RAM / HDD lento | Dokploy oficialmente ja avisa freeze em build |
+| **Somente Dokploy (referência oficial)** | — | — | — | Piso Dokploy | **2 GB RAM / 30 GB disco** | Somente o painel; **não** recomenda rodar o app completo com folga |
+| **Mínima do produto** | 1–5 | até ~500 | dezenas/min em pico curto | Mínima | **2 vCPU / 4 GB RAM / 60–80 GB SSD** | Dokploy + API + PostgreSQL + Redis; web na Vercel; evite build pesado e tráfego no mesmo instante |
+| **Recomendada** | 5–20 | até ~5.000 | centenas/min em campanha | Padrão | **4 vCPU / 8 GB RAM / 120–160 GB SSD** | Folga para workers BullMQ, PostgreSQL, deploys e picos CTWA |
+| **Alta** | 20+ ou múltiplas instâncias WA | >5.000 ou picos fortes | alto e sustentado | Alta | **4–8 vCPU / 16 GB RAM / 200 GB+ SSD** | Separe PostgreSQL ou workers; considere servidor de build remoto do Dokploy |
+| **Não fazer** | — | — | — | — | 1 GB RAM / HDD lento | O Dokploy já alerta para travamentos em builds |
 
-### Por que 500 leads/dia nao exige maquina enorme?
+### Por que 500 leads/dia não exigem uma máquina enorme?
 
-- 500/dia e carga **baixa** se bem enfileirada (BullMQ) e com webhooks idempotentes.
-- O que drena maquina pequena:
+- 500/dia é carga **baixa** se bem enfileirada (BullMQ) e com webhooks idempotentes.
+- O que drena uma máquina pequena:
   - **Build Docker** na mesma VPS (pnpm + Prisma)
   - Sync Meta Graph em fan-out
-  - Falta de indices / queries pesadas no reporting
-  - Muitas instancias WhatsApp com QR/reconnect loops
-- Por isso a **minima do produto e 4 GB**, nao 2 GB: 2 GB e o minimo Dokploy; o app precisa de teto acima do piso do PaaS.
+  - Falta de índices / queries pesadas nos relatórios
+  - Muitas instâncias WhatsApp com loops de QR/reconexão
+- Por isso, a **mínima do produto é 4 GB**, não 2 GB: 2 GB é o mínimo do Dokploy; o app precisa de teto acima do piso do PaaS.
 
-### Separacao recomendada (igual PalmUP)
+### Separação recomendada (como a PalmUP)
 
 - **Vercel:** frontend Next
 - **VPS:** API + DB + Redis + Dokploy
@@ -66,17 +66,17 @@ Conclusao: **2 GB totais e o piso do Dokploy sozinho para nao travar no build** 
 
 ## Providers (links de afiliado PalmUP)
 
-Placeholders ate o Samuel fornecer URLs reais:
+Placeholders até Samuel fornecer URLs reais:
 
 - HostGator: `[AFILIADO_HOSTGATOR]`
 - DigitalOcean: `[AFILIADO_DIGITALOCEAN]`
 - Contabo: `[AFILIADO_CONTABO]`
 
-Dokploy tambem cita Hetzner como bom custo-beneficio na doc oficial (referencia de mercado, nao afiliado PalmUP).
+O Dokploy também cita Hetzner como bom custo-benefício na documentação oficial (referência de mercado, não afiliado PalmUP).
 
-## Checklist rapido pos-deploy
+## Checklist rápido pós-deploy
 
-- RAM disponivel em idle > 25%
+- RAM disponível em idle > 25%
 - Disco livre > 20%
-- Deploy nao mata o host (se matar, subir RAM ou build remoto)
-- Webhooks com p95 aceitavel (sem fila crescendo sem parar no Redis/BullMQ)
+- O deploy não derruba o host (se derrubar, aumente a RAM ou use build remoto)
+- Webhooks com p95 aceitável (sem fila crescendo sem parar no Redis/BullMQ)
