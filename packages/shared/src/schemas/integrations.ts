@@ -8,12 +8,14 @@ import { integrationStatuses } from "../statuses";
 // which use unrelated schemas and are untouched by this enum).
 // "nod_api" (F5.3b) is the WhatsappProviderRegistry id for the managed
 // PalmUP broker adapter — added so the health summary can report its
-// status alongside uazapi_byo.
+// status alongside uazapi_byo. "waha" (F5.4) is the WhatsappProviderRegistry
+// id for the BYO self-hosted WAHA adapter.
 export const integrationProviderSchema = z.enum([
   "meta",
   "uazapi",
   "uazapi_byo",
   "nod_api",
+  "waha",
 ]);
 
 export const integrationHealthSchema = z.object({

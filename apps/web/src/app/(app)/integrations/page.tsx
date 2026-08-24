@@ -519,6 +519,7 @@ function providerTitle(provider: string) {
     // older API build is still serving traffic during a rolling deploy.
     uazapi_byo: "WhatsApp (Uazapi BYO)",
     nod_api: "WhatsApp (NOD API / PalmUP)",
+    waha: "WhatsApp (WAHA)",
     uazapi: "WhatsApp / NOD API",
     meta: "Meta OAuth",
     asaas: "Asaas",

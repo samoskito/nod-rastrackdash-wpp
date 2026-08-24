@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { WahaWhatsappAdapter } from "../../src/integrations/whatsapp-providers/stubs/waha-whatsapp.adapter";
 import { ZapiWhatsappAdapter } from "../../src/integrations/whatsapp-providers/stubs/zapi-whatsapp.adapter";
 import type { WhatsappProviderAdapter } from "../../src/integrations/whatsapp-providers/whatsapp-provider.types";
 
 // "nod_api" graduated to a real adapter in F5.3b — see
-// ../nod-api-whatsapp.adapter.test.ts. Only "waha"/"zapi" remain stubs.
+// ../nod-api-whatsapp.adapter.test.ts. "waha" graduated to a real adapter
+// in F5.4 — see ../waha-whatsapp.adapter.test.ts. Only "zapi" remains a
+// stub.
 const STUBS: Array<{
   name: string;
-  id: "waha" | "zapi";
+  id: "zapi";
   create: () => WhatsappProviderAdapter;
 }> = [
-  { name: "WahaWhatsappAdapter", id: "waha", create: () => new WahaWhatsappAdapter() },
   { name: "ZapiWhatsappAdapter", id: "zapi", create: () => new ZapiWhatsappAdapter() },
 ];
 

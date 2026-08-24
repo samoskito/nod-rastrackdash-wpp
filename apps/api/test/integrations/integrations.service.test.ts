@@ -41,6 +41,15 @@ function fakeNodApiAdapter(
   };
 }
 
+function fakeWahaAdapter(
+  health: WhatsappProviderHealthDto,
+): WhatsappProviderAdapter {
+  return {
+    id: "waha",
+    getHealth: async () => health,
+  };
+}
+
 describe("IntegrationsService.getHealthSummary", () => {
   it("resolves WhatsApp health via WhatsappProviderRegistry.require('uazapi_byo') and reports provider id 'uazapi_byo'", async () => {
     const registry = new WhatsappProviderRegistry();
@@ -165,5 +174,92 @@ describe("IntegrationsService.getHealthSummary", () => {
     expect(summary.providers.some((item) => item.provider === "nod_api")).toBe(
       false,
     );
+  });
+
+  it("includes waha health when registered", async () => {
+    const registry = new WhatsappProviderRegistry();
+    registry.register(
+      fakeUazapiByoAdapter({
+        provider: "uazapi_byo",
+        status: "connected",
+        checkedAt: "2026-08-24T00:00:00.000Z",
+      }),
+    );
+    registry.register(
+      fakeWahaAdapter({
+        provider: "waha",
+        status: "disconnected",
+        checkedAt: "2026-08-24T00:00:00.000Z",
+        message: "Missing WAHA_BASE_URL or WAHA_API_KEY",
+      }),
+    );
+    const service = new IntegrationsService(fakeMetaAdapter(), registry, {});
+
+    const summary = await service.getHealthSummary();
+
+    expect(summary.providers).toHaveLength(3);
+    expect(summary.providers.map((item) => item.provider).sort()).toEqual([
+      "meta",
+      "uazapi_byo",
+      "waha",
+    ]);
+    const waha = summary.providers.find((item) => item.provider === "waha");
+    expect(waha?.status).toBe("disconnected");
+    expect(waha?.message).toBe("Missing WAHA_BASE_URL or WAHA_API_KEY");
+  });
+
+  it("omits waha from the summary when it is not registered (optional, unlike uazapi_byo)", async () => {
+    const registry = new WhatsappProviderRegistry();
+    registry.register(
+      fakeUazapiByoAdapter({
+        provider: "uazapi_byo",
+        status: "connected",
+        checkedAt: "2026-08-24T00:00:00.000Z",
+      }),
+    );
+    const service = new IntegrationsService(fakeMetaAdapter(), registry, {});
+
+    const summary = await service.getHealthSummary();
+
+    expect(summary.providers).toHaveLength(2);
+    expect(summary.providers.some((item) => item.provider === "waha")).toBe(
+      false,
+    );
+  });
+
+  it("includes nod_api and waha together when both are registered", async () => {
+    const registry = new WhatsappProviderRegistry();
+    registry.register(
+      fakeUazapiByoAdapter({
+        provider: "uazapi_byo",
+        status: "connected",
+        checkedAt: "2026-08-24T00:00:00.000Z",
+      }),
+    );
+    registry.register(
+      fakeNodApiAdapter({
+        provider: "nod_api",
+        status: "connected",
+        checkedAt: "2026-08-24T00:00:00.000Z",
+      }),
+    );
+    registry.register(
+      fakeWahaAdapter({
+        provider: "waha",
+        status: "connected",
+        checkedAt: "2026-08-24T00:00:00.000Z",
+      }),
+    );
+    const service = new IntegrationsService(fakeMetaAdapter(), registry, {});
+
+    const summary = await service.getHealthSummary();
+
+    expect(summary.providers).toHaveLength(4);
+    expect(summary.providers.map((item) => item.provider).sort()).toEqual([
+      "meta",
+      "nod_api",
+      "uazapi_byo",
+      "waha",
+    ]);
   });
 });

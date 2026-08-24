@@ -6,21 +6,52 @@ rewriting call sites each time.
 
 ## Providers
 
-| id          | status (F5.1)             | slice   |
-|-------------|----------------------------|---------|
-| `uazapi_byo`| **implemented, registered**| F5.1    |
-| `nod_api`   | stub only, not registered  | F5.3 (private repo broker) |
-| `waha`      | stub only, not registered  | F5.4    |
-| `zapi`      | stub only, not registered  | F5.5    |
+| id          | status                      | slice   |
+|-------------|------------------------------|---------|
+| `uazapi_byo`| **implemented, registered** | F5.1    |
+| `nod_api`   | **implemented, registered** | F5.3b (private repo broker) |
+| `waha`      | **implemented, registered, BYO** | F5.4 |
+| `zapi`      | stub only, not registered   | F5.5    |
 
-Only `uazapi_byo` is registered in `WhatsappProvidersModule` today
-(`WhatsappProvidersBootstrapService`). The other three exist as real
-classes under `./stubs/` that already implement `WhatsappProviderAdapter`
-so the later slices can register them by adding one line to the bootstrap
-service — but they are **not** wired in, so nothing in the app can
-accidentally call a broken provider. Their `getHealth()` returns
+`uazapi_byo`, `nod_api` and `waha` are registered in
+`WhatsappProvidersModule` today (`WhatsappProvidersBootstrapService`), all
+unconditionally — an unconfigured provider still shows up in the registry
+and reports `disconnected` health instead of being silently absent.
+`zapi` exists as a real class under `./stubs/` that already implements
+`WhatsappProviderAdapter` so a later slice can register it by adding one
+line to the bootstrap service — but it is **not** wired in, so nothing in
+the app can accidentally call a broken provider. Its `getHealth()` returns
 `{ status: "disconnected", message: "not_implemented" }`; every other
 method throws `NotImplementedException`.
+
+### `waha` (F5.4) — BYO self-hosted WAHA
+
+Pure BYO: the student runs their own [WAHA](https://github.com/devlikeape/waha)
+instance and this adapter talks to it directly — no PalmUP broker, no
+admin tokens.
+
+Contract:
+```
+GET {WAHA_BASE_URL}/api/sessions/{WAHA_SESSION}
+Header: X-Api-Key: {WAHA_API_KEY}
+```
+
+Env vars: `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` (default
+`"default"`). Missing `WAHA_BASE_URL`/`WAHA_API_KEY` → `getHealth()`
+reports `disconnected` with a clear message (never throws). Session
+status is mapped to `IntegrationStatus`:
+
+| WAHA status      | `IntegrationStatus`  |
+|------------------|-----------------------|
+| `WORKING` / `authenticated` | `connected`   |
+| `SCAN_QR_CODE`   | `needs_reconnect`      |
+| `STOPPED`        | `disconnected`         |
+| `FAILED` / other / HTTP error / network error | `error` |
+
+`listLabels` is intentionally left `undefined` — WAHA has no Uazapi-style
+label catalog. **Inbound webhook parsing for WAHA events is out of scope
+for F5.4** — see the F5.6 / follow-up slice; existing inbound providers
+(uazapi) are untouched by this change.
 
 ## Interface
 
@@ -55,6 +86,7 @@ to keep the interface from becoming an unused superset.
 - Real HTTP for `nod_api`/`waha`/`zapi` (F5.3-F5.5).
 - Per-workspace provider selection UI.
 - Disconnect alert port (F5.7).
+- Inbound WAHA webhook parser (deferred past F5.4 — see F5.6 / follow-up).
 
 ## F5.2: call sites now route through the registry
 
