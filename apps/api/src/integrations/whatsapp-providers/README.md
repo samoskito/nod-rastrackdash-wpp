@@ -130,3 +130,52 @@ running this edition only needs to configure `UAZAPI_BASE_URL` and
 fleet token); there is no `UAZAPI_ADMIN_TOKEN` anywhere in this repo, and
 `UazapiAdapter.createInstance()` stays a stub that returns
 `not_configured` in the BYO edition.
+
+## F5.6: inbound webhook parsers — how to plug a new provider
+
+Inbound webhooks flow through `InboundWebhookParserRegistry`
+(`apps/api/src/inbound-webhooks/providers/inbound-webhook-parser.registry.ts`).
+Registered parsers:
+
+| provider | parser | notes |
+|---|---|---|
+| `umbler` | `umbler-v1` | legacy inbound |
+| `gupshup` | `gupshup-v1` | legacy inbound |
+| `waha`   | `waha-v1`   | F5.6 — see `providers/waha/waha-v1.parser.ts` |
+| `zapi`   | `zapi-v1`   | F5.6 — see `providers/zapi/zapi-v1.parser.ts` |
+
+### Classification choices (v1)
+
+- `fromMe: true` → `ignored_outbound`
+- group chat (`@g.us` / `isGroup`) → `unsupported_event` ("groups not supported in v1")
+- inbound without CTWA fields → `eligible_route_unresolved` (reason `no_ctwa_in_{waha,zapi}_payload`)
+- CTWA object/`ad_id` present → `hasCtwa = true` + route resolution pending
+- non-`message` events (WAHA `message ACK` etc.) → `unsupported_event`
+- malformed payload → delivery-level `invalid_payload` error
+
+### How to add a parser
+
+1. Create `providers/<name>/<name>-v1.parser.ts` implementing `InboundWebhookParser`
+   (`provider`, `parserVersion`, `parse(payload): InboundWebhookParserResult`) —
+   mirror `waha-v1.parser.ts` for JID normalization and classification handling.
+2. Add it to `defaultParsers()` in `inbound-webhook-parser.registry.ts`.
+3. Add payload tests under `apps/api/test/inbound-webhooks/providers/`.
+4. Update the table above.
+
+Example WAHA payload (message, inbound):
+
+```json
+{ "event": "message", "session": "default",
+  "payload": { "from": "5511999999999@c.us", "to": "5521888888888@c.us",
+               "timestamp": 1724400000, "fromMe": false, "type": "chat",
+               "body": "olá, vi o anúncio" } }
+```
+
+Example Z-API payload:
+
+```json
+{ "phone": "5511999999999", "message": "olá, vi o anúncio",
+  "connectedPhone": "5521888888888", "instanceId": "3CXY25DZSUKAPXJYHUGA",
+  "messageId": "3EB0D7...", "timestamp": 1724400000, "fromMe": false,
+  "isGroup": false }
+```

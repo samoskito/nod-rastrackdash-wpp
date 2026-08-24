@@ -1,6 +1,8 @@
 import type { InboundWebhookParser } from "./inbound-webhook-parser";
 import { GupshupV1Parser } from "./gupshup/gupshup-v1.parser";
 import { UmblerV1Parser } from "./umbler/umbler-v1.parser";
+import { WahaV1Parser } from "./waha/waha-v1.parser";
+import { ZapiV1Parser } from "./zapi/zapi-v1.parser";
 
 export type InboundWebhookParserSelector = {
   provider: string;
