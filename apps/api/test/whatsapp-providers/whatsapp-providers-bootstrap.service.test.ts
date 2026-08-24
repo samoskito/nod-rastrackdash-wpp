@@ -5,6 +5,7 @@ import { UazapiByoAdapter } from "../../src/integrations/whatsapp-providers/uaza
 import { WahaWhatsappAdapter } from "../../src/integrations/whatsapp-providers/waha-whatsapp.adapter";
 import { WhatsappProviderRegistry } from "../../src/integrations/whatsapp-providers/whatsapp-provider.registry";
 import { WhatsappProvidersBootstrapService } from "../../src/integrations/whatsapp-providers/whatsapp-providers-bootstrap.service";
+import { ZapiWhatsappAdapter } from "../../src/integrations/whatsapp-providers/zapi-whatsapp.adapter";
 
 function fakeLicenseClient() {
   return { getFingerprint: () => "fp-test" } as ConstructorParameters<
@@ -16,14 +17,16 @@ function makeBootstrap(registry: WhatsappProviderRegistry) {
   const uazapiByo = new UazapiByoAdapter(new UazapiAdapter({}));
   const nodApi = new NodApiWhatsappAdapter(fakeLicenseClient(), {});
   const waha = new WahaWhatsappAdapter({});
+  const zapi = new ZapiWhatsappAdapter({});
   const bootstrap = new WhatsappProvidersBootstrapService(
     registry,
     uazapiByo,
     nodApi,
     waha,
+    zapi,
   );
 
-  return { bootstrap, uazapiByo, nodApi, waha };
+  return { bootstrap, uazapiByo, nodApi, waha, zapi };
 }
 
 describe("WhatsappProvidersBootstrapService", () => {
@@ -54,14 +57,13 @@ describe("WhatsappProvidersBootstrapService", () => {
     expect(registry.get("waha")).toBe(waha);
   });
 
-  it("onModuleInit() does not register zapi (still a stub, no auto-registering broken providers)", () => {
+  it("onModuleInit() also registers zapi unconditionally, for discoverability (health shows disconnected when unconfigured)", () => {
     const registry = new WhatsappProviderRegistry();
-    const { bootstrap } = makeBootstrap(registry);
+    const { bootstrap, zapi } = makeBootstrap(registry);
 
     bootstrap.onModuleInit();
 
-    expect(registry.get("zapi")).toBeUndefined();
-    expect(registry.list()).toHaveLength(3);
+    expect(registry.get("zapi")).toBe(zapi);
   });
 
   it("onModuleInit() is idempotent (calling it twice does not throw)", () => {
@@ -71,6 +73,6 @@ describe("WhatsappProvidersBootstrapService", () => {
     bootstrap.onModuleInit();
 
     expect(() => bootstrap.onModuleInit()).not.toThrow();
-    expect(registry.list()).toHaveLength(3);
+    expect(registry.list()).toHaveLength(4);
   });
 });

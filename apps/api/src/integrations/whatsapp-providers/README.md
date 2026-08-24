@@ -11,18 +11,12 @@ rewriting call sites each time.
 | `uazapi_byo`| **implemented, registered** | F5.1    |
 | `nod_api`   | **implemented, registered** | F5.3b (private repo broker) |
 | `waha`      | **implemented, registered, BYO** | F5.4 |
-| `zapi`      | stub only, not registered   | F5.5    |
+| `zapi`      | **implemented, registered, BYO** | F5.5 |
 
-`uazapi_byo`, `nod_api` and `waha` are registered in
-`WhatsappProvidersModule` today (`WhatsappProvidersBootstrapService`), all
-unconditionally — an unconfigured provider still shows up in the registry
-and reports `disconnected` health instead of being silently absent.
-`zapi` exists as a real class under `./stubs/` that already implements
-`WhatsappProviderAdapter` so a later slice can register it by adding one
-line to the bootstrap service — but it is **not** wired in, so nothing in
-the app can accidentally call a broken provider. Its `getHealth()` returns
-`{ status: "disconnected", message: "not_implemented" }`; every other
-method throws `NotImplementedException`.
+All four providers are registered in `WhatsappProvidersModule` today
+(`WhatsappProvidersBootstrapService`), unconditionally — an unconfigured
+provider still shows up in the registry and reports `disconnected` health
+instead of being silently absent. No stub adapters remain as of F5.5.
 
 ### `waha` (F5.4) — BYO self-hosted WAHA
 
@@ -53,6 +47,36 @@ label catalog. **Inbound webhook parsing for WAHA events is out of scope
 for F5.4** — see the F5.6 / follow-up slice; existing inbound providers
 (uazapi) are untouched by this change.
 
+### `zapi` (F5.5) — BYO Z-API instance
+
+Pure BYO: the student runs (or subscribes to) their own
+[Z-API](https://www.z-api.io/) instance and this adapter talks to it
+directly — no PalmUP broker, no admin tokens.
+
+Contract:
+```
+GET {ZAPI_BASE_URL}/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/status
+```
+
+Env vars: `ZAPI_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN`. Missing any of
+the three → `getHealth()` reports `disconnected` with a clear message
+(never throws). Z-API's documented response field names vary slightly
+across their docs/versions, so the response is read defensively — the
+boolean `connected` field is the primary signal, with `state`/`status`
+strings used only to detect a pending-QR hint when disconnected:
+
+| Response shape                                   | `IntegrationStatus`  |
+|---------------------------------------------------|-----------------------|
+| `connected: true`                                  | `connected`            |
+| `connected: false` + `state`/`status` matching `/qr/i` (e.g. `"qrCode"`, `"pendingQR"`) | `needs_reconnect` |
+| `connected: false`, no qr hint                     | `disconnected`         |
+| HTTP non-2xx / network error                       | `error`                |
+
+`listLabels` is intentionally left `undefined` — Z-API has no
+Uazapi-style label catalog. **Inbound webhook parsing for Z-API events is
+out of scope for F5.5** — see the F5.6 / follow-up slice; existing
+inbound providers (uazapi) are untouched by this change.
+
 ## Interface
 
 `WhatsappProviderAdapter` (see `whatsapp-provider.types.ts`) is
@@ -74,19 +98,19 @@ to keep the interface from becoming an unused superset.
 
 ## Adding a provider
 
-1. Give the stub class in `./stubs/` a real implementation (HTTP calls,
-   config validation, etc.) — its config shape already exists in
-   `whatsapp-provider.types.ts`.
+1. Implement `WhatsappProviderAdapter` for the new backend (HTTP calls,
+   config validation, etc.) — add its config shape to
+   `whatsapp-provider.types.ts` first.
 2. Register it in `WhatsappProvidersBootstrapService.onModuleInit()`.
 3. Only then does `WhatsappProviderRegistry.get(id)` start returning it —
    until that point `get()`/`require()` treat it as absent, not broken.
 
 ## Out of scope for F5.1
 
-- Real HTTP for `nod_api`/`waha`/`zapi` (F5.3-F5.5).
 - Per-workspace provider selection UI.
 - Disconnect alert port (F5.7).
-- Inbound WAHA webhook parser (deferred past F5.4 — see F5.6 / follow-up).
+- Inbound WAHA/Z-API webhook parser (deferred past F5.4/F5.5 — see F5.6 /
+  follow-up).
 
 ## F5.2: call sites now route through the registry
 

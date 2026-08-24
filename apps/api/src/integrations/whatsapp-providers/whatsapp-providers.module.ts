@@ -7,11 +7,13 @@ import { UazapiByoAdapter } from "./uazapi-byo.adapter";
 import { WahaWhatsappAdapter } from "./waha-whatsapp.adapter";
 import { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 import { WhatsappProvidersBootstrapService } from "./whatsapp-providers-bootstrap.service";
+import { ZapiWhatsappAdapter } from "./zapi-whatsapp.adapter";
 
 export { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 export { UazapiByoAdapter } from "./uazapi-byo.adapter";
 export { NodApiWhatsappAdapter } from "./nod-api-whatsapp.adapter";
 export { WahaWhatsappAdapter } from "./waha-whatsapp.adapter";
+export { ZapiWhatsappAdapter } from "./zapi-whatsapp.adapter";
 export type {
   WhatsappProviderAdapter,
   WhatsappProviderConfig,
@@ -22,8 +24,8 @@ export type {
 /**
  * Owns the WhatsApp provider registry and registers the adapters that are
  * actually ready for production use: "uazapi_byo" (F5.1), "nod_api"
- * (F5.3b) and "waha" (F5.4) — see ./stubs for the not-yet-implemented
- * "zapi" provider and ./README.md for the plan. Imports LicenseClientModule
+ * (F5.3b), "waha" (F5.4) and "zapi" (F5.5) — see ./README.md for the
+ * plan. No stub adapters remain as of F5.5. Imports LicenseClientModule
  * because NodApiWhatsappAdapter authenticates against the PalmUP broker
  * with the operator's license (LICENSE_KEY +
  * LicenseClientService.getFingerprint()).
@@ -31,16 +33,17 @@ export type {
 @Module({
   imports: [LicenseClientModule],
   providers: [
-    // UazapiAdapter/WahaWhatsappAdapter need INTEGRATION_ENV and this
-    // module declares no imports of its own (leaf module) — provide it
-    // locally, same pattern as every other module that instantiates an
-    // INTEGRATION_ENV consumer (integrations.module.ts,
-    // inbound-webhooks.module.ts).
+    // UazapiAdapter/WahaWhatsappAdapter/ZapiWhatsappAdapter need
+    // INTEGRATION_ENV and this module declares no imports of its own
+    // (leaf module) — provide it locally, same pattern as every other
+    // module that instantiates an INTEGRATION_ENV consumer
+    // (integrations.module.ts, inbound-webhooks.module.ts).
     { provide: INTEGRATION_ENV, useValue: process.env },
     UazapiAdapter,
     UazapiByoAdapter,
     NodApiWhatsappAdapter,
     WahaWhatsappAdapter,
+    ZapiWhatsappAdapter,
     WhatsappProviderRegistry,
     WhatsappProvidersBootstrapService,
   ],
@@ -50,6 +53,7 @@ export type {
     UazapiAdapter,
     NodApiWhatsappAdapter,
     WahaWhatsappAdapter,
+    ZapiWhatsappAdapter,
   ],
 })
 export class WhatsappProvidersModule {}

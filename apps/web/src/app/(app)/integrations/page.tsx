@@ -520,6 +520,7 @@ function providerTitle(provider: string) {
     uazapi_byo: "WhatsApp (Uazapi BYO)",
     nod_api: "WhatsApp (NOD API / PalmUP)",
     waha: "WhatsApp (WAHA)",
+    zapi: "WhatsApp (Z-API)",
     uazapi: "WhatsApp / NOD API",
     meta: "Meta OAuth",
     asaas: "Asaas",

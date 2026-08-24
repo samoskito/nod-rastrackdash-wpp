@@ -3,9 +3,9 @@ import type { IntegrationStatus } from "../integration.types";
 
 /**
  * Identifiers for every WhatsApp connectivity provider the product plans to
- * support (F5 plan). "uazapi_byo" (F5.1), "nod_api" (F5.3b) and "waha"
- * (F5.4) have real, HTTP-backed adapters — "zapi" is still a stub class
- * exported for a later slice (F5.5).
+ * support (F5 plan). "uazapi_byo" (F5.1), "nod_api" (F5.3b), "waha"
+ * (F5.4) and "zapi" (F5.5) all have real, HTTP-backed adapters — no stubs
+ * remain.
  */
 export type WhatsappProviderId = "uazapi_byo" | "nod_api" | "waha" | "zapi";
 
@@ -31,7 +31,7 @@ export type WahaConfig = {
   session?: string;
 };
 
-/** Stub config for F5.5. */
+/** Config for the real "zapi" adapter (F5.5, pure BYO Z-API instance). */
 export type ZapiConfig = {
   baseUrl: string;
   instanceId: string;

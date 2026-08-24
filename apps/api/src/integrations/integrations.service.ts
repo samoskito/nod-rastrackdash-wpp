@@ -68,17 +68,24 @@ export class IntegrationsService {
   ) {}
 
   async getHealthSummary(): Promise<IntegrationHealthSummaryDto> {
-    const [metaHealth, uazapiByoHealth, nodApiHealth, wahaHealth] =
+    const [metaHealth, uazapiByoHealth, nodApiHealth, wahaHealth, zapiHealth] =
       await Promise.all([
         this.metaAdapter.getHealth(),
         this.getUazapiByoHealth(),
         this.getNodApiHealth(),
         this.getWahaHealth(),
+        this.getZapiHealth(),
       ]);
 
     return {
       checkedAt: new Date().toISOString(),
-      providers: [metaHealth, uazapiByoHealth, nodApiHealth, wahaHealth].filter(
+      providers: [
+        metaHealth,
+        uazapiByoHealth,
+        nodApiHealth,
+        wahaHealth,
+        zapiHealth,
+      ].filter(
         (health): health is NonNullable<typeof health> => health !== null,
       ),
     };
@@ -138,6 +145,29 @@ export class IntegrationsService {
 
     return {
       provider: "waha" as const,
+      status: health.status,
+      checkedAt: health.checkedAt,
+      message: health.message,
+    };
+  }
+
+  /**
+   * Same optional pattern as getWahaHealth() above: zapi is registered
+   * unconditionally by WhatsappProvidersBootstrapService in normal
+   * operation, but older test doubles / registries built without it
+   * should not break the summary — read via `get()` and omit when absent.
+   */
+  private async getZapiHealth() {
+    const adapter = this.whatsappProviders.get("zapi");
+
+    if (!adapter) {
+      return null;
+    }
+
+    const health = await adapter.getHealth();
+
+    return {
+      provider: "zapi" as const,
       status: health.status,
       checkedAt: health.checkedAt,
       message: health.message,
