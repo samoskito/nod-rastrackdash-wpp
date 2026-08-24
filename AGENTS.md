@@ -4,6 +4,8 @@ Ponto de entrada para agentes de IA neste repositório.
 
 **Leia primeiro:** [`docs/AI_AGENTS.md`](docs/AI_AGENTS.md)
 
+**Aluno guiado por IA:** cole o [prompt oficial de onboarding](docs/AI_ONBOARDING_PROMPT.pt-BR.md) — ele pergunta o alvo do deploy antes de qualquer comando e nunca manuseia segredos.
+
 Resumo operacional:
 
 1. `pnpm setup` (ou `--dry-run`) e preencher `.env`

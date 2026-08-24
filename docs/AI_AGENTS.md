@@ -17,11 +17,15 @@ Não confundir:
 
 ## Documentos obrigatórios
 
-1. `docs/superpowers/specs/2026-08-19-nod-rastrackdash-wpp-student-edition-design.md` (spec APROVADA)
-2. `docs/superpowers/plans/2026-08-19-rastrackdash-student-edition-implementation.md` (plano faseado)
-3. `docs/CUSTOMIZATION.md` (o que o aluno pode editar)
-4. `docs/setup/` (guias passo a passo)
-5. `AGENTS.md` / este arquivo
+Leia **nesta ordem** antes de propor qualquer comando:
+
+1. `AGENTS.md` / este arquivo
+2. `docs/AI_ONBOARDING_PROMPT.pt-BR.md` — prompt oficial que o aluno cola; contém as regras de segurança e o formato passo-a-passo que você deve seguir
+3. `docs/GUIA-ALUNO.md` — jornada completa da compra ao primeiro workspace
+4. `docs/setup/README.md` e os guias que ele indexa (`local.md`, `dokploy.md`, `vps.md`, `environment.md`, `troubleshooting.md`, `meta-manual.md`)
+5. `docs/CUSTOMIZATION.md` (o que o aluno pode editar)
+6. `docs/superpowers/specs/2026-08-19-nod-rastrackdash-wpp-student-edition-design.md` (spec APROVADA)
+7. `docs/superpowers/plans/2026-08-19-rastrackdash-student-edition-implementation.md` (plano faseado)
 
 ## Estado atual do repositório (pós F3–F6.2)
 
@@ -35,24 +39,18 @@ Não confundir:
 
 ## Regras inegociáveis
 
-- Nunca commitar `.env` com secrets
-- Nunca remover footer `RastrackDash · powered by PalmUP`
-- Nenhuma chave de serviço no frontend
+- Nunca commitar `.env` com secrets, nunca pedir para o aluno colar um secreto no chat — sempre no `.env` local ou na UI do provedor (Dokploy, Vercel, etc.)
+- Nunca remover footer `RastrackDash · powered by PalmUP` nem sugerir uma forma de escondê-lo
+- Nenhuma chave de serviço no frontend (nunca em `NEXT_PUBLIC_*`)
 - 1 licença = 1 conta de aluno (anti-share); instâncias do mesmo aluno ilimitadas
 - Soft-lock quando licença bloqueada: leitura ok, escrita bloqueada
 - Não hardcodar secrets PalmUP (Asaas, UAZAPI_ADMIN, license private key, Guru)
+- **Fail-closed**: se um comando falhar ou uma verificação não passar, pare e diagnostique (`docs/setup/troubleshooting.md`) antes de propor o próximo passo — nunca avance "torcendo para dar certo"
+- Antes do primeiro comando, pergunte ao aluno o alvo de deploy (Docker local, VPS/Dokploy ou outro) e as decisões não-secretas necessárias (workspaces/leads-dia, provedores de WhatsApp) — nunca assuma
 
 ## Prompt de partida (aluno cola na IA)
 
-```text
-Você vai me ajudar a configurar o RastrackDash.
-1) Leia AGENTS.md e docs/AI_AGENTS.md, a design spec e o plano em docs/superpowers/.
-2) Confirme o estado atual: license client, multi-provider WhatsApp, whitelabel e setup script já existem neste repo; license server PalmUP é externo.
-3) Rode `pnpm setup` (ou --dry-run) e siga docs/setup/ na ordem: env → banco → LICENSE_* → admin → primeiro workspace → Meta manual → WhatsApp → brand opcional → deploy.
-4) Em cada passo, rode a verificação (incl. /backoffice checklist e /backoffice/license) e só avance se passar.
-5) Nunca remova o footer RastrackDash/PalmUP e nunca coloque secrets no frontend.
-Pergunte agora: chave de licença, email da conta, quantos clientes pretendo rodar e leads/dia médios (para recomendar VPS).
-```
+O prompt oficial e completo — com as perguntas obrigatórias antes de qualquer comando, as regras de segredo e o checklist final — vive em [`docs/AI_ONBOARDING_PROMPT.pt-BR.md`](AI_ONBOARDING_PROMPT.pt-BR.md). Use-o como a fonte da verdade; não crie uma versão resumida divergente. Ordem operacional resumida: ambiente → banco/Redis → migrations → `LICENSE_*` → primeiro admin → primeiro workspace → Meta manual → WhatsApp → marca opcional → deploy → verificação pós-deploy.
 
 ## Stack atual
 

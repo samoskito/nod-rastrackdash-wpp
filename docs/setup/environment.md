@@ -1,0 +1,108 @@
+# Variáveis de ambiente
+
+Referência completa das variáveis do `.env` da API (`apps/api`) e do web (`apps/web`), agrupadas por assunto. "Secreto" significa: nunca versione, nunca cole em chat, nunca exponha no frontend.
+
+Convenção de colunas:
+
+- **Obrigatória**: sem ela o recurso correspondente não funciona (algumas são obrigatórias só se você usar aquele provedor específico — indicado na coluna).
+- **Onde obter**: de onde vem o valor.
+- **Onde inserir**: `.env` local, env do serviço no Dokploy/Vercel, ou UI do produto.
+- **Secreto**: se é um valor sensível.
+
+## Core / aplicação
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `NODE_ENV` | Sim | Fixo (`development`/`production`) | `.env` / env do serviço | Não |
+| `WEB_ORIGIN` | Sim | URL pública do seu frontend (CORS) | `.env` da API / env do serviço | Não |
+| `NEXT_PUBLIC_API_URL` | Sim | URL pública da sua API | `.env` do web / env do projeto Vercel | Não (é exposta ao navegador de propósito) |
+| `API_PUBLIC_URL` | Sim | URL pública da sua API | `.env` da API / env do serviço | Não |
+| `API_PORT` | Sim (tem padrão `3333`) | Porta que você expõe para a API | `.env` da API / env do serviço | Não |
+| `INBOUND_WEBHOOKS_ENABLED` e demais `INBOUND_*` | Não (tem padrão) | Flags de feature do produto | `.env` da API | Não |
+| `WPPTRACK_*_MS`, `WPPTRACK_EXTERNAL_SYNC_*`, `WPPTRACK_EXTERNAL_MYSQL_*` | Não (têm padrão) | Tuning de performance/timeout — mantenha o padrão salvo se tiver um motivo específico para ajustar | `.env` da API | Não |
+
+## Banco de dados / autenticação
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `DATABASE_URL` | Sim | Você monta a partir do host/porta/usuário/senha/banco do seu Postgres (local: `docker-compose.yml`; Dokploy: tela de conexão do serviço de banco) | `.env` local / env do serviço | **Sim** |
+| `REDIS_URL` | Sim | Idem, a partir do serviço Redis | `.env` local / env do serviço | **Sim** (contém host/porta; trate como sensível se tiver senha) |
+| `EXTERNAL_CONNECTOR_ENCRYPTION_KEY` | Sim | Você gera (`openssl rand -hex 32` ou similar) | `.env` local / env do serviço | **Sim** |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Sim | Você gera; use valores diferentes em dev e produção | `.env` local / env do serviço | **Sim** |
+| `AUTH_PUBLIC_REGISTRATION_ENABLED` | Não (padrão `false`) | Decisão sua | `.env` da API | Não |
+| `AUTH_GOOGLE_ENABLED` | Não | Decisão sua (login com Google) | `.env` da API | Não |
+| `AUTH_COOKIE_DOMAIN` | Sim em produção | Domínio do seu deploy | `.env` da API / env do serviço | Não |
+| `AUTH_EXPOSE_DEV_TOKENS` | Não — **deixe `false` em produção** | Só para debug local | `.env` local | Não |
+| `WPPTRACK_PLATFORM_ADMIN_EMAILS` | Não | Lista de e-mails com acesso administrativo interno | `.env` da API | Não |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_OAUTH_STATE_SECRET` | Só se `AUTH_GOOGLE_ENABLED=true` | Console do Google Cloud (OAuth) | `.env` da API / env do serviço | `GOOGLE_CLIENT_SECRET` e `GOOGLE_OAUTH_STATE_SECRET` **sim**; `GOOGLE_CLIENT_ID`/`GOOGLE_REDIRECT_URI` não |
+
+## Licença (PalmUP)
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `LICENSE_SERVER_URL` | Sim | Fornecido pela PalmUP (já vem preenchido no `.env.example`) | `.env` / env do serviço | Não |
+| `LICENSE_KEY` | Sim para ativar a licença | E-mail/WhatsApp recebido após a compra na PalmUP | `.env` local ou env do serviço — **nunca** commitado | **Sim** |
+| `LICENSE_ACCOUNT_IDENTITY` | Sim para ativar a licença | O e-mail da **sua conta de aluno**, exatamente igual ao usado na compra | `.env` local ou env do serviço | Não (mas deve corresponder à conta vinculada — um valor errado retorna `403` na ativação) |
+
+Sem `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` preenchidos, o cliente de licença fica em no-op (não trava a aplicação, mas `/backoffice/license` não mostra licença ativa).
+
+## E-mail (SMTP BYO)
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `EMAIL_PROVIDER` | Só se for enviar e-mail | Decisão sua (ex.: `smtp`) | `.env` da API | Não |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Só se for enviar e-mail | Seu provedor SMTP (Brevo, SES, etc.) | `.env` local / env do serviço | Não (host/porta) |
+| `SMTP_USER`, `SMTP_PASSWORD` | Só se for enviar e-mail | Seu provedor SMTP | `.env` local / env do serviço | **Sim** |
+| `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS`, `EMAIL_REPLY_TO` | Recomendado | Sua escolha | `.env` da API | Não |
+
+## Meta Ads
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `META_APP_ID` | Só se for usar integração Meta via App próprio | Meta for Developers | `.env` da API | Não |
+| `META_APP_SECRET` | Idem | Meta for Developers | `.env` local / env do serviço | **Sim** |
+| `META_GRAPH_API_VERSION` | Não (tem padrão) | Documentação Graph API | `.env` da API | Não |
+| `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
+| `META_WEBHOOK_VERIFY_TOKEN` | Só se for usar webhooks Meta | Você define | `.env` local / env do serviço | **Sim** |
+| `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
+| `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
+
+O fluxo de conexão do token do usuário do sistema (por workspace) acontece na UI de **Integrações**, não em variável de ambiente — veja [`meta-manual.md`](meta-manual.md).
+
+## Provedores de WhatsApp
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `UAZAPI_BASE_URL`, `UAZAPI_TOKEN` | Só se usar `uazapi_byo` | Sua própria instância Uazapi | `.env` local / env do serviço | `UAZAPI_TOKEN` **sim** |
+| `UAZAPI_WEBHOOK_AUTH_TOKEN` | Só se usar webhooks inbound Uazapi | Você define, confere com a config do webhook na Uazapi | `.env` local / env do serviço | **Sim** |
+| `WAHA_BASE_URL`, `WAHA_API_KEY` | Só se usar `waha` | Sua própria instância [WAHA](https://github.com/devlikeape/waha) self-hosted | `.env` local / env do serviço | `WAHA_API_KEY` **sim** |
+| `WAHA_SESSION` | Não (padrão `default`) | Nome da sessão na sua instância WAHA | `.env` da API | Não |
+| `ZAPI_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN` | Só se usar `zapi` | Painel [Z-API](https://www.z-api.io/) | `.env` local / env do serviço | `ZAPI_TOKEN` **sim** |
+| `DISCONNECT_ALERTS_ENABLED`, `DISCONNECT_ALERT_STREAK`, `DISCONNECT_ALERT_INTERVAL_MS` | Não (opcional) | Decisão sua | `.env` da API | Não |
+| `OPS_ALERT_WEBHOOK_URL` | Só se `DISCONNECT_ALERTS_ENABLED=true` | Webhook do seu Slack/Discord/etc. | `.env` local / env do serviço | **Sim** (trate a URL como sensível — permite postar no seu canal) |
+
+Nunca defina `UAZAPI_ADMIN_TOKEN` — essa variável não existe neste template e não deve ser reintroduzida (token de frota interno da PalmUP).
+
+## NOD API broker
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `NOD_API_BROKER_URL` | Só se usar o provedor `nod_api` (add-on licenciado) | Fornecido pela PalmUP (já vem preenchido no `.env.example`) | `.env` / env do serviço | Não |
+
+O provedor `nod_api` autentica usando `LICENSE_KEY` + fingerprint da instância — não existe token administrativo separado para configurar aqui.
+
+## Branding (whitelabel)
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `BRAND_NAME` | Não (opcional) | Nome da sua agência | `.env` da API | Não |
+| `BRAND_LOGO_URL`, `BRAND_FAVICON_URL` | Não (opcional) | URL pública da sua logo/favicon | `.env` da API | Não |
+| `BRAND_PRIMARY_COLOR` | Não (opcional, padrão `#0F766E`) | Hex da sua cor de marca (`#rgb` ou `#rrggbb`) | `.env` da API | Não |
+
+Essas variáveis nunca escondem o rodapé residual `RastrackDash · powered by PalmUP` — isso é fixo no produto (veja [`../CUSTOMIZATION.md`](../CUSTOMIZATION.md)).
+
+## Regra: `NEXT_PUBLIC_*` vs. variável só de servidor
+
+- Qualquer variável com prefixo `NEXT_PUBLIC_` é embutida no bundle do navegador e é **pública** — hoje isso é só `NEXT_PUBLIC_API_URL`. Nunca crie uma `NEXT_PUBLIC_*` para um token, senha ou chave.
+- Todas as demais variáveis (`.env` da API, e o restante do `.env` do web) ficam **só no servidor** e nunca são enviadas ao navegador.
+- Se um provedor pedir uma chave/token, ela vai sempre em uma variável de servidor (API) — nunca em `NEXT_PUBLIC_*` nem em código do `apps/web`.
