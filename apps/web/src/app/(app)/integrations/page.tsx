@@ -517,7 +517,8 @@ function providerTitle(provider: string) {
     // F5.2: health summary now reports the WhatsappProviderRegistry id
     // "uazapi_byo" instead of "uazapi" — keep the old key too in case an
     // older API build is still serving traffic during a rolling deploy.
-    uazapi_byo: "WhatsApp / NOD API",
+    uazapi_byo: "WhatsApp (Uazapi BYO)",
+    nod_api: "WhatsApp (NOD API / PalmUP)",
     uazapi: "WhatsApp / NOD API",
     meta: "Meta OAuth",
     asaas: "Asaas",

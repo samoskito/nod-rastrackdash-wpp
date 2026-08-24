@@ -3,8 +3,9 @@ import type { IntegrationStatus } from "../integration.types";
 
 /**
  * Identifiers for every WhatsApp connectivity provider the product plans to
- * support (F5 plan). Only "uazapi_byo" has a real, HTTP-backed adapter as of
- * F5.1 — the rest are stub classes exported for later slices (F5.3-F5.5).
+ * support (F5 plan). "uazapi_byo" (F5.1) and "nod_api" (F5.3b) have real,
+ * HTTP-backed adapters — "waha"/"zapi" are still stub classes exported for
+ * later slices (F5.4-F5.5).
  */
 export type WhatsappProviderId = "uazapi_byo" | "nod_api" | "waha" | "zapi";
 
@@ -56,12 +57,29 @@ export interface WhatsappLabelListResult {
   labels: WhatsappLabelDto[];
 }
 
+export interface NodApiManagedInstanceDto {
+  instanceId: string;
+  instanceToken: string;
+  status: string;
+}
+
+export interface NodApiManagedInstanceStatusDto {
+  status: string;
+  qr?: string | null;
+  phone?: string | null;
+}
+
 /**
  * Minimal surface the product actually calls today across
  * integrations.service.ts and inbound-webhooks. Extracted from
  * UazapiAdapter rather than invented up front — only `getHealth` and
  * `listLabels` have live call sites (see F5.1 done report); everything
  * else stays out of the interface until a real caller needs it.
+ *
+ * `createManagedInstance`/`getManagedInstanceStatus` (F5.3b) are optional
+ * because only the "nod_api" adapter implements them today — they map to
+ * the broker's `POST /nod-api/instances` and
+ * `POST /nod-api/instances/status` endpoints.
  */
 export interface WhatsappProviderAdapter {
   readonly id: WhatsappProviderId;
@@ -70,4 +88,9 @@ export interface WhatsappProviderAdapter {
     instanceRef: string,
     instanceToken?: string | null,
   ): Promise<WhatsappLabelListResult>;
+  createManagedInstance?(name?: string): Promise<NodApiManagedInstanceDto>;
+  getManagedInstanceStatus?(
+    instanceId: string,
+    instanceToken: string,
+  ): Promise<NodApiManagedInstanceStatusDto>;
 }

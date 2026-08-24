@@ -68,12 +68,17 @@ export class IntegrationsService {
   ) {}
 
   async getHealthSummary(): Promise<IntegrationHealthSummaryDto> {
+    const [metaHealth, uazapiByoHealth, nodApiHealth] = await Promise.all([
+      this.metaAdapter.getHealth(),
+      this.getUazapiByoHealth(),
+      this.getNodApiHealth(),
+    ]);
+
     return {
       checkedAt: new Date().toISOString(),
-      providers: await Promise.all([
-        this.metaAdapter.getHealth(),
-        this.getUazapiByoHealth(),
-      ]),
+      providers: nodApiHealth
+        ? [metaHealth, uazapiByoHealth, nodApiHealth]
+        : [metaHealth, uazapiByoHealth],
     };
   }
 
@@ -84,6 +89,30 @@ export class IntegrationsService {
 
     return {
       provider: "uazapi_byo" as const,
+      status: health.status,
+      checkedAt: health.checkedAt,
+      message: health.message,
+    };
+  }
+
+  /**
+   * Unlike uazapi_byo (always registered by WhatsappProvidersBootstrapService,
+   * so `require()` is safe), nod_api is optional here on purpose — older
+   * test doubles and any deployment that hasn't picked up F5.3b's bootstrap
+   * change yet build a registry without it, so this reads via `get()` and
+   * is simply omitted from the summary when absent.
+   */
+  private async getNodApiHealth() {
+    const adapter = this.whatsappProviders.get("nod_api");
+
+    if (!adapter) {
+      return null;
+    }
+
+    const health = await adapter.getHealth();
+
+    return {
+      provider: "nod_api" as const,
       status: health.status,
       checkedAt: health.checkedAt,
       message: health.message,

@@ -6,10 +6,14 @@ import { integrationStatuses } from "../statuses";
 // legacy "uazapi" value so FE can distinguish WhatsApp provider health
 // from other "uazapi"-labelled fields (webhook source, lead source, etc,
 // which use unrelated schemas and are untouched by this enum).
+// "nod_api" (F5.3b) is the WhatsappProviderRegistry id for the managed
+// PalmUP broker adapter — added so the health summary can report its
+// status alongside uazapi_byo.
 export const integrationProviderSchema = z.enum([
   "meta",
   "uazapi",
   "uazapi_byo",
+  "nod_api",
 ]);
 
 export const integrationHealthSchema = z.object({
