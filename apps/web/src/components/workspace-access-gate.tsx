@@ -10,6 +10,7 @@ import {
   getAvailableWorkspaces,
   getCurrentWorkspace,
 } from "../lib/current-workspace";
+import { getBrandConfig } from "../lib/brand";
 import { isApiRequestError } from "../lib/server-api";
 import { getWhatsappDataSource } from "../lib/whatsapp-data-source";
 import { AppShell } from "./app-shell";
@@ -24,10 +25,15 @@ export async function WorkspaceAccessGate({
     getWorkspaceListState(),
     getRequestPathname(),
   ]);
+  const brand = getBrandConfig();
 
   if (workspaceAccess.state === "operational_blocked") {
     return (
-      <AppShell workspace={workspaceAccess.workspace} workspaces={workspaces}>
+      <AppShell
+        workspace={workspaceAccess.workspace}
+        workspaces={workspaces}
+        brand={brand}
+      >
         <section className="page-stack">
           <header className="page-header">
             <div>
@@ -51,7 +57,7 @@ export async function WorkspaceAccessGate({
     const hasMemberships = workspaces.length > 0;
 
     return (
-      <AppShell workspace={null} workspaces={workspaces}>
+      <AppShell workspace={null} workspaces={workspaces} brand={brand}>
         <section className="page-stack">
           <header className="page-header">
             <div>
@@ -93,6 +99,7 @@ export async function WorkspaceAccessGate({
       dataSource={dataSource}
       workspace={workspaceAccess.workspace}
       workspaces={workspaces}
+      brand={brand}
     >
       {children}
     </AppShell>

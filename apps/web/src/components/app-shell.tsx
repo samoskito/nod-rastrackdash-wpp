@@ -28,6 +28,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { LogoutButton } from "./logout-button";
+import { BrandFooter } from "./brand-footer";
 import { DataAutoRefresh } from "./data-auto-refresh";
 import { PresentationMask } from "./presentation-mask";
 import {
@@ -36,6 +37,7 @@ import {
 } from "./presentation-mode-toggle";
 import { exitPlatformSupportAccess } from "../app/actions/platform-support";
 import { switchActiveWorkspace } from "../app/actions/workspaces";
+import { defaultBrandConfig, type BrandConfig } from "../lib/brand";
 
 const sidebarStorageKey = "wpptrack-sidebar-collapsed";
 
@@ -92,16 +94,30 @@ function workspaceRoleLabel(role: WorkspaceListEntryDto["role"]): string {
   return role === "admin" ? "administrador" : "analista";
 }
 
+function BrandMark({ brand }: { brand: BrandConfig }) {
+  if (brand.logoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary
+    // student-provided logo URL, outside next/image's static domain config.
+    return <img className="brand-mark brand-mark-logo" src={brand.logoUrl} alt="" />;
+  }
+
+  return (
+    <span className="brand-mark">{brand.name.trim().charAt(0).toUpperCase() || "R"}</span>
+  );
+}
+
 export function AppShell({
   children,
   dataSource,
   workspace,
   workspaces = [],
+  brand = defaultBrandConfig,
 }: {
   children: ReactNode;
   dataSource?: WhatsappDataSourceDto | null;
   workspace?: CurrentWorkspaceDto | null;
   workspaces?: WorkspaceListEntryDto[];
+  brand?: BrandConfig;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -243,12 +259,12 @@ export function AppShell({
         <Link
           className="brand"
           href="/overview"
-          aria-label="WppTrack - ir para a Visao geral"
+          aria-label={`${brand.name} - ir para a Visao geral`}
           onClick={closeMobileMenu}
         >
-          <span className="brand-mark">W</span>
+          <BrandMark brand={brand} />
           <span className="brand-copy">
-            <strong>WppTrack</strong>
+            <strong>{brand.name}</strong>
           </span>
         </Link>
         <button
@@ -277,12 +293,12 @@ export function AppShell({
           <Link
             className="brand"
             href="/overview"
-            aria-label="WppTrack - ir para a Visao geral"
+            aria-label={`${brand.name} - ir para a Visao geral`}
             onClick={closeMobileMenu}
           >
-            <span className="brand-mark">W</span>
+            <BrandMark brand={brand} />
             <span className="brand-copy">
-              <strong>WppTrack</strong>
+              <strong>{brand.name}</strong>
             </span>
           </Link>
           <button
@@ -493,6 +509,7 @@ export function AppShell({
           <PresentationModeToggle />
           <LogoutButton />
         </section>
+        <BrandFooter brand={brand} />
       </aside>
       <button
         className="mobile-sidebar-backdrop"

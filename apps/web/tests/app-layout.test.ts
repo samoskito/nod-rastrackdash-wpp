@@ -110,7 +110,7 @@ describe("product app layout", () => {
     expect(html).not.toContain("Workspace bloqueado");
   });
 
-  it("blocks product content when package access is suspended", async () => {
+  it("does not reintroduce PalmUP package/subscription gating in the student edition", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
@@ -131,21 +131,15 @@ describe("product app layout", () => {
           );
         }
 
-        if (url.endsWith("/billing/package/access")) {
-          return new Response(
-            JSON.stringify({
-              enforcementEnabled: true,
-              allowed: false,
-              reason: "contract_inactive",
-              contractStatus: "suspended",
-              accessEndsAt: null,
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          );
-        }
-
         if (url.endsWith("/workspaces")) {
           return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/integrations/whatsapp/source")) {
+          return new Response(JSON.stringify({ source: "uazapi" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
@@ -162,19 +156,21 @@ describe("product app layout", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Acesso suspenso");
-    expect(html).toContain("Gerenciar assinatura");
-    expect(html).toContain('href="/subscription"');
-    expect(html).not.toContain("Conteudo privado");
+    // Student edition uses license soft-lock (banner) instead of PalmUP
+    // package/subscription gates — content stays available when workspace is active.
+    expect(html).toContain("Conteudo privado");
+    expect(html).not.toContain("Gerenciar assinatura");
+    expect(html).not.toContain('href="/subscription"');
+    expect(html).toContain("RastrackDash · powered by PalmUP");
     expect(
       fetchSpy.mock.calls.some(([input]) =>
-        String(input).endsWith("/integrations/whatsapp/source"),
+        String(input).includes("/billing/package/access"),
       ),
     ).toBe(false);
   });
 
-  it("keeps the subscription recovery page available while access is suspended", async () => {
-    requestHeaderState.pathname = "/subscription";
+  it("renders residual brand footer even when the product shell has no custom brand name", async () => {
+    requestHeaderState.pathname = "/overview";
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
 
@@ -193,17 +189,11 @@ describe("product app layout", () => {
         );
       }
 
-      if (url.endsWith("/billing/package/access")) {
-        return new Response(
-          JSON.stringify({
-            enforcementEnabled: true,
-            allowed: false,
-            reason: "access_expired",
-            contractStatus: "cancel_at_period_end",
-            accessEndsAt: "2026-07-28T12:00:00.000Z",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
+      if (url.endsWith("/integrations/whatsapp/source")) {
+        return new Response(JSON.stringify({ source: "uazapi" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       return new Response(JSON.stringify([]), {
@@ -213,12 +203,13 @@ describe("product app layout", () => {
     });
 
     const element = await WorkspaceAccessGate({
-      children: createElement("p", null, "Pagina de assinatura"),
+      children: createElement("p", null, "Pagina normal"),
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Pagina de assinatura");
-    expect(html).not.toContain("Acesso suspenso");
+    expect(html).toContain("Pagina normal");
+    expect(html).toContain("RastrackDash");
+    expect(html).toContain("powered by PalmUP");
   });
 
   it("passes only authenticated memberships to the workspace selector", async () => {
@@ -422,4 +413,59 @@ describe("product app layout", () => {
     expect(redirectMock).toHaveBeenCalledWith("/overview");
   });
 
+  it("mounts the residual brand footer in the app shell sidebar", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/components/app-shell.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("<BrandFooter brand={brand} />");
+  });
+
+  it("passes server-computed brand props into the client app shell instead of NEXT_PUBLIC_ env sprawl", () => {
+    const layoutSource = readFileSync(
+      join(process.cwd(), "src/app/(app)/layout.tsx"),
+      "utf8",
+    );
+    const gateSource = readFileSync(
+      join(process.cwd(), "src/components/workspace-access-gate.tsx"),
+      "utf8",
+    );
+
+    expect(layoutSource).toContain("getBrandConfig()");
+    expect(layoutSource).toContain("brand={brand}");
+    expect(gateSource).toContain("getBrandConfig()");
+    expect(gateSource).toContain("brand={brand}");
+  });
+
+  it("mounts the residual brand footer on the login page and the backoffice layout", () => {
+    const loginSource = readFileSync(
+      join(process.cwd(), "src/app/login/page.tsx"),
+      "utf8",
+    );
+    const backofficeLayoutSource = readFileSync(
+      join(process.cwd(), "src/app/(backoffice)/layout.tsx"),
+      "utf8",
+    );
+
+    expect(loginSource).toContain("<BrandFooter");
+    expect(backofficeLayoutSource).toContain("<BrandFooter");
+  });
+
+  it("derives the root layout title/favicon and --brand-primary from env, with no BRAND_HIDE_FOOTER escape hatch anywhere", () => {
+    const rootLayoutSource = readFileSync(
+      join(process.cwd(), "src/app/layout.tsx"),
+      "utf8",
+    );
+
+    expect(rootLayoutSource).toContain("getBrandConfig()");
+    expect(rootLayoutSource).toContain("--brand-primary");
+    expect(rootLayoutSource).not.toMatch(/BRAND_HIDE_FOOTER/i);
+
+    const footerSource = readFileSync(
+      join(process.cwd(), "src/components/brand-footer.tsx"),
+      "utf8",
+    );
+    expect(footerSource).not.toMatch(/BRAND_HIDE_FOOTER/i);
+  });
 });

@@ -22,7 +22,7 @@ describe("login route", () => {
     const element = await LoginPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Entrar no WppTrack");
+    expect(html).toContain("Entrar no RastrackDash");
     expect(html).toContain("Telemetria de conversoes");
     expect(html).not.toContain("Entrar com Google");
     expect(html).not.toContain('href="/login/google"');

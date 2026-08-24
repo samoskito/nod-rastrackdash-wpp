@@ -1,3 +1,5 @@
+import { BrandFooter } from "../../components/brand-footer";
+import { getBrandConfig } from "../../lib/brand";
 import { LoginForm } from "./login-form";
 
 type LoginSearchParams = Record<string, string | string[] | undefined>;
@@ -68,16 +70,23 @@ export default async function LoginPage({
       : null;
   const googleEnabled =
     process.env.AUTH_GOOGLE_ENABLED?.trim().toLowerCase() === "true";
+  const brand = getBrandConfig();
 
   return (
     <main className="standalone-page login-page">
       <section className="login-panel" aria-labelledby="login-title">
         <div>
-          <span className="brand-mark" aria-hidden="true">
-            W
-          </span>
+          {brand.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- arbitrary
+            // student-provided logo URL, outside next/image's static domain config.
+            <img className="brand-mark brand-mark-logo" src={brand.logoUrl} alt="" />
+          ) : (
+            <span className="brand-mark" aria-hidden="true">
+              {brand.name.trim().charAt(0).toUpperCase() || "R"}
+            </span>
+          )}
           <p className="eyebrow">Telemetria de conversoes</p>
-          <h1 id="login-title">Entrar no WppTrack</h1>
+          <h1 id="login-title">Entrar no {brand.name}</h1>
           <p>
             Acesse o painel para acompanhar leads, campanhas, eventos Pixel e
             diagnosticos da sua operacao em uma unica tela de controle.
@@ -117,6 +126,7 @@ export default async function LoginPage({
           redirectTo={redirectTo}
         />
       </section>
+      <BrandFooter brand={brand} className="standalone-footer" />
     </main>
   );
 }
