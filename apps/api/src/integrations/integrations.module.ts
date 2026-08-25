@@ -13,7 +13,6 @@ import { MetaConnectionResolverService } from "./meta/meta-connection-resolver.s
 import { MetaConnectionsService } from "./meta/meta-connections.service";
 import { MetaManualConnectionsService } from "./meta/meta-manual-connections.service";
 import { MetaTokenEncryptionService } from "./meta/meta-token-encryption.service";
-import { UazapiAdapter } from "./uazapi/uazapi.adapter";
 import { WhatsappProvidersModule } from "./whatsapp-providers/whatsapp-providers.module";
 
 export { INTEGRATION_ENV } from "./integration.types";
@@ -49,7 +48,6 @@ export { INTEGRATION_ENV } from "./integration.types";
     MetaTokenEncryptionService,
     MetaConnectionsService,
     MetaManualConnectionsService,
-    UazapiAdapter,
     IntegrationsService,
     WhatsappProvidersModule,
   ],
