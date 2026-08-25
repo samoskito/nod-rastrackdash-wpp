@@ -1425,6 +1425,40 @@ describe("integrations route", () => {
     ).toBe(true);
   });
 
+  it("renders only manual Meta setup when OAuth is disabled", async () => {
+    const { requestedPaths } = mockWave7IntegrationsFetch({ canManage: true });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Conexao manual Meta");
+    expect(html).toContain(
+      "Use o App ID e o token permanente do usuario do sistema.",
+    );
+    expect(html).not.toContain("Login social Facebook");
+    expect(html).not.toContain("Use o OAuth oficial");
+    expect(html).not.toContain("Desconectar OAuth");
+    expect(html).not.toContain("Usar autorizacao OAuth");
+    expect(requestedPaths).not.toContain("/integrations/meta/oauth/advanced");
+  });
+
+  it("fails closed when Meta capabilities are unavailable", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      failMetaCapabilities: true,
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Configuracao Meta indisponivel");
+    expect(html).toContain("Nao foi possivel confirmar os modos de conexao");
+    expect(html).not.toContain("Login social Facebook");
+    expect(html).not.toContain("Use o OAuth oficial");
+    expect(html).not.toContain("Usar autorizacao OAuth");
+    expect(html).not.toContain("Salvar destino");
+  });
+
   it.each([
     ["manager", true],
     ["analyst", false],
@@ -1502,9 +1536,11 @@ describe("integrations route", () => {
 
 function mockWave7IntegrationsFetch({
   canManage,
+  failMetaCapabilities = false,
   failInboundDetails = false,
 }: {
   canManage: boolean;
+  failMetaCapabilities?: boolean;
   failInboundDetails?: boolean;
 }) {
   const requestedPaths: string[] = [];
@@ -1635,6 +1671,10 @@ function mockWave7IntegrationsFetch({
           },
           500,
         );
+      }
+
+      if (failMetaCapabilities && path === "/integrations/meta/capabilities") {
+        return jsonResponse({ message: "unavailable" }, 503);
       }
 
       if (!(path in responses)) {

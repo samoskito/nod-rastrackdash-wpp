@@ -193,8 +193,8 @@ async function getMetaCapabilities(): Promise<
   } catch {
     return {
       data: {
-        enabledModes: ["oauth"],
-        oauthEnabled: true,
+        enabledModes: [],
+        oauthEnabled: false,
         manualEnabled: false,
       },
       state: "error",
@@ -798,10 +798,15 @@ export default async function IntegrationsPage({
   const metaAssets = metaAssetsResult.data;
   const metaCapabilities = metaCapabilitiesResult.data;
   const legacyMetaConnected = metaConnection?.status === "connected";
+  const oauthEnabled =
+    metaCapabilitiesResult.state === "real" && metaCapabilities.oauthEnabled;
+  const manualEnabled =
+    metaCapabilitiesResult.state === "real" && metaCapabilities.manualEnabled;
+  const oauthConnected = legacyMetaConnected && oauthEnabled;
   const metaManualResult =
-    legacyMetaConnected && metaCapabilities.oauthEnabled
+    oauthConnected
       ? await getMetaOAuthAdvancedConfiguration()
-      : metaCapabilities.manualEnabled
+      : manualEnabled
         ? await getMetaManualConfiguration()
         : ({ data: null, state: "empty" } as const);
   const inboundWebhookResult = await getInboundWebhookData();
@@ -824,8 +829,7 @@ export default async function IntegrationsPage({
     pipelineResult.state,
     workspaceResult.state,
     metaCapabilitiesResult.state,
-    ...((legacyMetaConnected && metaCapabilities.oauthEnabled) ||
-    metaCapabilities.manualEnabled
+    ...(oauthConnected || manualEnabled
       ? [metaManualResult.state]
       : []),
     ...(inboundWebhookData?.capabilities.enabled
@@ -848,7 +852,7 @@ export default async function IntegrationsPage({
       .length ?? 0;
   const manualConfigured = manualActiveConnections > 0;
   const oauthAdvancedEnabled = Boolean(
-    legacyMetaConnected && metaManualResult.data?.advancedRoutingEnabled,
+    oauthConnected && metaManualResult.data?.advancedRoutingEnabled,
   );
   const metaRefreshBusinessId =
     metaAssets?.selection.businessId &&
@@ -1107,56 +1111,81 @@ export default async function IntegrationsPage({
         </header>
 
         <div className="integration-domain-content">
-          <div className="connection-callout integration-meta-oauth">
-            <div>
-              <span className="micro-label">Login social Facebook</span>
-              <strong>
-                {metaStatus === "not_connected"
-                  ? "Conectar conta Meta"
-                  : metaConnectionTitle(metaStatus)}
-              </strong>
-              <p className="muted">
-                Use o OAuth oficial para autorizar BM, contas de anuncio e
-                Pixels. O token nasce no backend e fica criptografado.
-              </p>
-            </div>
-            {canManageIntegrations || workspacePermissionsUnavailable ? (
-              <div className="meta-connection-actions">
-                {canManageIntegrations ? (
-                  <form action={refreshMetaAssets}>
-                    <input
-                      type="hidden"
-                      name="businessId"
-                      value={metaRefreshBusinessId}
-                    />
-                    <SubmitButton
-                      disabled={metaStatus !== "connected"}
-                      pendingLabel="Atualizando..."
-                      statusText="Buscando ativos no Meta e salvando snapshot."
-                    >
-                      Atualizar ativos Meta
-                    </SubmitButton>
-                  </form>
-                ) : (
-                  <span className="action-note warn">
-                    Permissoes temporariamente indisponiveis. A API validara a
-                    acao ao continuar.
-                  </span>
-                )}
+          {oauthEnabled ? (
+            <div className="connection-callout integration-meta-oauth">
+              <div>
+                <span className="micro-label">Login social Facebook</span>
+                <strong>
+                  {metaStatus === "not_connected"
+                    ? "Conectar conta Meta"
+                    : metaConnectionTitle(metaStatus)}
+                </strong>
+                <p className="muted">
+                  Use o OAuth oficial para autorizar BM, contas de anuncio e
+                  Pixels. O token nasce no backend e fica criptografado.
+                </p>
               </div>
-            ) : (
-              <span className="event-chip warn">
-                {workspacePermissionsUnavailable
-                  ? "permissoes indisponiveis"
-                  : "sem permissao"}
-              </span>
-            )}
-          </div>
+              {canManageIntegrations || workspacePermissionsUnavailable ? (
+                <div className="meta-connection-actions">
+                  {canManageIntegrations ? (
+                    <form action={refreshMetaAssets}>
+                      <input
+                        type="hidden"
+                        name="businessId"
+                        value={metaRefreshBusinessId}
+                      />
+                      <SubmitButton
+                        disabled={metaStatus !== "connected"}
+                        pendingLabel="Atualizando..."
+                        statusText="Buscando ativos no Meta e salvando snapshot."
+                      >
+                        Atualizar ativos Meta
+                      </SubmitButton>
+                    </form>
+                  ) : (
+                    <span className="action-note warn">
+                      Permissoes temporariamente indisponiveis. A API validara
+                      a acao ao continuar.
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="event-chip warn">
+                  {workspacePermissionsUnavailable
+                    ? "permissoes indisponiveis"
+                    : "sem permissao"}
+                </span>
+              )}
+            </div>
+          ) : manualEnabled ? (
+            <div className="connection-callout integration-meta-manual">
+              <div>
+                <span className="micro-label">Conexao manual Meta</span>
+                <strong>Configure a estrutura Meta manualmente</strong>
+                <p className="muted">
+                  Use o App ID e o token permanente do usuario do sistema.
+                  Depois informe manualmente o BM, Pixel, Pagina e conta de
+                  anuncios.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="connection-callout integration-meta-unavailable">
+              <div>
+                <span className="micro-label">Configuracao Meta indisponivel</span>
+                <strong>Nao foi possivel confirmar os modos de conexao</strong>
+                <p className="muted">
+                  Tente novamente quando a configuracao da Meta estiver
+                  disponivel.
+                </p>
+              </div>
+            </div>
+          )}
           <MetaManualConnectionPanel
             workspaceId={metaConnection?.workspaceId ?? workspace?.id ?? ""}
             capabilities={metaCapabilities}
             initialConfiguration={metaManualResult.data}
-            legacyConnected={legacyMetaConnected}
+            legacyConnected={oauthConnected}
             canManage={canManageIntegrations}
             disconnectOAuthAction={disconnectMetaOAuthAction}
             prepareOAuthCredentialAction={
@@ -1164,44 +1193,44 @@ export default async function IntegrationsPage({
             }
             createCredentialAction={createMetaManualCredentialAction}
             discoverAssetsAction={
-              legacyMetaConnected
+              oauthConnected
                 ? discoverMetaOAuthAdvancedAssetsAction
                 : discoverMetaManualAssetsAction
             }
             createConnectionAction={
-              legacyMetaConnected
+              oauthConnected
                 ? createMetaOAuthAdvancedConnectionAction
                 : createMetaManualConnectionAction
             }
             rotateCredentialAction={rotateMetaManualCredentialAction}
             setConnectionStatusAction={
-              legacyMetaConnected
+              oauthConnected
                 ? setMetaOAuthAdvancedConnectionStatusAction
                 : setMetaManualConnectionStatusAction
             }
             testConnectionAction={
-              legacyMetaConnected
+              oauthConnected
                 ? testMetaOAuthAdvancedConnectionAction
                 : testMetaManualConnectionAction
             }
             removeConnectionAction={
-              legacyMetaConnected
+              oauthConnected
                 ? removeMetaOAuthAdvancedConnectionAction
                 : removeMetaManualConnectionAction
             }
             syncHistoryAction={syncMetaManualHistoryAction}
             setAccountDestinationAction={
-              legacyMetaConnected
+              oauthConnected
                 ? setMetaOAuthAdvancedAccountDestinationAction
                 : setMetaManualAccountDestinationAction
             }
             loadAdRoutingAction={
-              legacyMetaConnected
+              oauthConnected
                 ? getMetaOAuthAdvancedAdRoutingAction
                 : getMetaManualAdRoutingAction
             }
             setAdDestinationAction={
-              legacyMetaConnected
+              oauthConnected
                 ? setMetaOAuthAdvancedAdDestinationAction
                 : setMetaManualAdDestinationAction
             }
@@ -1243,7 +1272,8 @@ export default async function IntegrationsPage({
             </>
           ) : null}
           {metaAssets &&
-          (legacyMetaConnected || !metaCapabilities.manualEnabled) ? (
+          (oauthConnected ||
+            (!manualEnabled && metaCapabilitiesResult.state !== "error")) ? (
             <>
               <div className="meta-config-section">
                 <div>
