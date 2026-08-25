@@ -62,10 +62,34 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    - só depois disso, valide o resultado (ex.: um endpoint de status)
      sem nunca me pedir para reexibir o segredo.
 
-5. Siga a ordem de docs/setup/README.md (local ou Dokploy, conforme minha
-   resposta no passo 3): ambiente → banco/Redis → migrations →
-   `LICENSE_*` → primeiro admin → primeiro workspace → Meta manual →
-   WhatsApp → marca opcional → verificação pós-deploy.
+5. Siga esta ordem obrigatória, linear e sem pular etapas: (1) escolher o
+   alvo e ler os docs do repositório/setup; (2) API, PostgreSQL e Redis;
+   (3) migrations/bootstrap; (4) `LICENSE_*` e validação de
+   `/backoffice/license`; (5) preencher `WPPTRACK_PLATFORM_ADMIN_EMAILS`
+   antes do primeiro login; (6) definir `META_CONNECTION_MODES=manual`
+   antes da Meta; (7) definir `AUTH_COOKIE_DOMAIN` se frontend/API forem
+   subdomínios irmãos; (8) redeploy da API após qualquer mudança de env;
+   (9) criar/entrar com o primeiro admin e validar `/backoffice/clients`;
+   (10) configuração manual da Meta; (11) provedor WhatsApp; (12) marca
+   opcional; (13) health e checklist final de onboarding.
+
+   Use estes formatos sem segredos:
+   `WEB_ORIGIN=https://app.example.com`,
+   `NEXT_PUBLIC_API_URL=https://api.example.com`,
+   `AUTH_COOKIE_DOMAIN=.example.com`,
+   `META_CONNECTION_MODES=manual` e
+   `WPPTRACK_PLATFORM_ADMIN_EMAILS=student-admin@example.com`.
+   Exemplo concreto: frontend `https://wpp.nodinfra.com.br`, API
+   `https://aula.nodinfra.com.br` e
+   `AUTH_COOKIE_DOMAIN=.nodinfra.com.br`. Para `AUTH_COOKIE_DOMAIN`, não
+   use `https://`, barra final nem o hostname completo da API. Nunca use
+   `***` como valor. O e-mail de admin é específico do aluno: ele deve
+   digitá-lo no Dokploy/provedor, nunca commitar ou colar no chat.
+
+   Meta é somente manual no MVP: documente e conduza App ID/token ou token
+   permanente de usuário do sistema, permissões, BM, Pixel, Página,
+   conta de anúncios, validação e seleção de destino. Não apresente login
+   social Facebook/OAuth como alternativa.
 
 6. Para cada passo:
    - explique em 1-3 frases o que vamos fazer e por quê;

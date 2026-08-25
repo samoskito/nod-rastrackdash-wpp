@@ -27,7 +27,7 @@ Você pode rodar o web também na VPS via Dokploy se preferir; os passos de API/
 
 ## Ordem geral
 
-`projeto → PostgreSQL → Redis → armazenamento persistente → envs da API → build/deploy da API → migrations → domínio/HTTPS da API → web → correção do WEB_ORIGIN → licença → Meta/WhatsApp → checagem final`
+`alvo e leitura → API, PostgreSQL e Redis → migrations/bootstrap → licença → admin de plataforma → Meta manual → cookie/origins → redeploy da API → primeiro login/workspace → WhatsApp → marca → validação final`
 
 Siga nessa ordem — pular etapas (ex.: fazer deploy da API antes do banco existir) gera crash-loop evitável.
 
@@ -130,6 +130,8 @@ No serviço da API, abra o **painel/formulário de variáveis de ambiente do ser
 
 - `NODE_ENV=production`
 - **`API_PORT=3000`** — precisa bater exatamente com a "porta interna do container" configurada no passo 5. Sem essa variável, a API sobe na porta padrão `3333` (ver [`environment.md`](environment.md)) e o Dokploy não vai conseguir alcançá-la na porta `3000` configurada — isso aparenta um crash-loop mas na verdade é descompasso de porta.
+- **`WPPTRACK_PLATFORM_ADMIN_EMAILS`** — informe o e-mail real do administrador da sua instância **antes do primeiro login**, diretamente no Dokploy. Não use `***` como valor, não o versione e não o cole em chat.
+- **`META_CONNECTION_MODES=manual`** — defina antes da configuração Meta. O MVP do aluno é somente manual, sem login social Facebook/OAuth.
 - `API_PUBLIC_URL` — a URL pública que você vai apontar para este serviço (ex. `https://api.seudominio.com`), definida no passo 9.
 - `WEB_ORIGIN` — a URL pública do seu frontend. **No primeiro preenchimento você ainda não tem essa URL** (o web só é publicado no passo 10) — use um placeholder temporário (ex. `https://PLACEHOLDER.seudominio.com`) e volte a corrigir no passo 11. Não deixe de voltar: CORS depende deste valor bater exatamente com a URL real do web.
 - Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores **novos** para produção, nunca reutilize os de desenvolvimento local (ex.: `openssl rand -hex 32`).
@@ -184,9 +186,11 @@ Ambos devem responder `200`. Se o certificado ainda não validou, veja [Domínio
 
 **Validação:** a URL pública do web carrega (ainda pode dar erro de CORS neste ponto — corrigido no próximo passo).
 
-## 11. Corrigir o WEB_ORIGIN
+## 11. Corrigir o WEB_ORIGIN e o domínio do cookie
 
-Volte na env `WEB_ORIGIN` da API (passo 6) e troque o placeholder pela URL pública real do web publicada no passo 10 — protocolo, domínio e ausência/presença de barra final precisam bater **exatamente** com o que o navegador usa. Redeploy da API para aplicar.
+Volte na env `WEB_ORIGIN` da API (passo 6) e troque o placeholder pela URL pública real do web publicada no passo 10 — protocolo, domínio e ausência/presença de barra final precisam bater **exatamente** com o que o navegador usa. Se frontend e API são subdomínios irmãos, defina também `AUTH_COOKIE_DOMAIN` como o domínio raiz comum com ponto inicial. Exemplo: frontend `https://wpp.nodinfra.com.br`, API `https://aula.nodinfra.com.br`, `AUTH_COOKIE_DOMAIN=.nodinfra.com.br`.
+
+Em `AUTH_COOKIE_DOMAIN`, não use `https://`, barra final nem o hostname completo da API. Após qualquer mudança de env da API, faça **redeploy da API**; após mudar `NEXT_PUBLIC_API_URL`, faça novo deploy do web.
 
 **Validação:** abrir a URL pública do web carrega a tela de login **sem** erro `blocked by CORS policy` no console do navegador.
 
@@ -202,14 +206,20 @@ Redeploy da API se você editou envs depois do passo 7.
 
 **Validação:** logado no web publicado, `/backoffice/license` mostra licença **utilizável**. Se der `403` ou "não configurada", veja [Licença 403](troubleshooting.md#licença-403não-configurada).
 
-## 13. Meta e WhatsApp
+## 13. Primeiro login, workspace, Meta manual e WhatsApp
 
-- **Meta Ads:** siga [`meta-manual.md`](meta-manual.md) para gerar e conectar o token do usuário do sistema na UI de **Integrações** do workspace (não é variável de ambiente).
+1. Confirme que `WPPTRACK_PLATFORM_ADMIN_EMAILS` já está preenchida e que a API foi redeployada depois da alteração.
+2. Crie ou entre com o primeiro administrador e valide `/backoffice/clients` antes de configurar integrações. Se cair em `/overview`, consulte o troubleshooting; não prossiga supondo que o acesso de plataforma existe.
+3. Para Meta, mantenha `META_CONNECTION_MODES=manual`, siga [`meta-manual.md`](meta-manual.md) e conecte o App ID/token de usuário do sistema (ou token permanente) no workspace. Não há OAuth/social login no MVP.
+4. Só depois conecte o provedor WhatsApp escolhido.
+
 - **WhatsApp:** preencha na env da API as variáveis do provedor escolhido (`UAZAPI_*`, `WAHA_*`, `ZAPI_*` ou `NOD_API_BROKER_URL`) — tabela completa em [`environment.md`](environment.md). Redeploy da API após adicionar.
 
 **Validação:** `/integrations` mostra Meta e o provedor de WhatsApp escolhido como **conectados**.
 
-## 14. Verificação pós-deploy (checklist final)
+## 14. Marca opcional e verificação pós-deploy
+
+Depois das integrações, se desejar, configure `BRAND_*` conforme [`../CUSTOMIZATION.md`](../CUSTOMIZATION.md). O rodapé `RastrackDash · powered by PalmUP` permanece obrigatório.
 
 1. `curl -s https://sua-api.seudominio.com/health` → `200`.
 2. `curl -s https://sua-api.seudominio.com/health/ready` → `200`, todas as dependências `ok`.

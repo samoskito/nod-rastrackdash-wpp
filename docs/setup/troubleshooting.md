@@ -37,6 +37,34 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** alinhe as duas variáveis (sem barra final divergente, mesmo protocolo `http`/`https`) e reinicie a API.
 - **Verificação:** a requisição do web para a API não aparece mais bloqueada no console.
 
+## Login volta para `/login`
+
+- **Diagnóstico:** confira `WEB_ORIGIN`, `NEXT_PUBLIC_API_URL`, `AUTH_COOKIE_DOMAIN`, o domínio exibido no navegador e se houve deploy depois da última alteração de env.
+- **Causa provável:** origem do web diferente da permitida, cookie configurado para o domínio errado, API ainda com env antiga, ou sessão anterior inválida.
+- **Correção:** alinhe origem e URL da API; para subdomínios irmãos use somente o domínio comum com ponto inicial em `AUTH_COOKIE_DOMAIN` (por exemplo, `.nodinfra.com.br`, nunca `https://...`, barra final ou hostname completo da API). Redeploy a API, faça novo deploy do web se `NEXT_PUBLIC_API_URL` mudou, limpe a sessão/cookies do site e entre de novo.
+- **Verificação:** após login, a sessão persiste ao navegar e recarregar a página.
+
+## Login abre `/overview` em vez de `/backoffice/clients`
+
+- **Diagnóstico:** confirme no ambiente da API se `WPPTRACK_PLATFORM_ADMIN_EMAILS` contém o e-mail do usuário que entrou; confira se a API foi redeployada e se a sessão foi criada antes da variável existir.
+- **Causa provável:** a env do administrador de plataforma está ausente, tem outro e-mail, não chegou ao container, ou a sessão é antiga.
+- **Correção:** informe o e-mail específico do aluno diretamente no Dokploy/provedor (não em Git ou chat), redeploy a API, saia e entre novamente. Não use `***` como valor.
+- **Verificação:** o primeiro administrador abre `/backoffice/clients`.
+
+## Aparece UI OAuth/social do Facebook
+
+- **Diagnóstico:** confira `META_CONNECTION_MODES` no ambiente da API e o resultado de `/integrations` após redeploy.
+- **Causa provável:** a variável está ausente/não é `manual`, a API não foi redeployada, ou as capabilities Meta não estão disponíveis.
+- **Correção:** defina exatamente `META_CONNECTION_MODES=manual`, redeploy a API e atualize a página. Se as capabilities estiverem indisponíveis, a UI deve permanecer fechada e mostrar configuração Meta indisponível; não use OAuth como contorno.
+- **Verificação:** `/integrations` exibe apenas a conexão manual Meta, sem login social/OAuth.
+
+## Preview da Vercel com origem divergente
+
+- **Diagnóstico:** compare a URL exata do preview Vercel com `WEB_ORIGIN` da API e veja o console do navegador para CORS/cookie.
+- **Causa provável:** previews usam hostname próprio, diferente do domínio de produção autorizado pela API e pelo cookie.
+- **Correção:** teste no domínio de produção, ou adicione explicitamente a origem de preview necessária conforme a política do seu ambiente e redeploy a API. Não troque `AUTH_COOKIE_DOMAIN` pelo hostname completo do preview.
+- **Verificação:** o preview autorizado autentica sem erro de CORS/cookie; a produção continua usando sua origem pública correta.
+
 ## Licença `403`/"não configurada"
 
 - **Diagnóstico:** `/backoffice/license`; log da API no momento da ativação (`activate()`).

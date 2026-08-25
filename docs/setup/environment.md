@@ -31,9 +31,9 @@ Convenção de colunas:
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Sim | Você gera; use valores diferentes em dev e produção | `.env` local / env do serviço | **Sim** |
 | `AUTH_PUBLIC_REGISTRATION_ENABLED` | Não (padrão `false`) | Decisão sua | `.env` da API | Não |
 | `AUTH_GOOGLE_ENABLED` | Não | Decisão sua (login com Google) | `.env` da API | Não |
-| `AUTH_COOKIE_DOMAIN` | Sim em produção | Domínio do seu deploy | `.env` da API / env do serviço | Não |
+| `AUTH_COOKIE_DOMAIN` | Sim quando web e API usam subdomínios irmãos | Domínio raiz comum, com ponto inicial | `.env` da API / env do serviço | Não |
 | `AUTH_EXPOSE_DEV_TOKENS` | Não — **deixe `false` em produção** | Só para debug local | `.env` local | Não |
-| `WPPTRACK_PLATFORM_ADMIN_EMAILS` | Não | Lista de e-mails com acesso administrativo interno | `.env` da API | Não |
+| `WPPTRACK_PLATFORM_ADMIN_EMAILS` | Sim antes do primeiro login administrativo | E-mail do administrador da sua instância | `.env` da API / env do serviço | Não — mas é específico do aluno e nunca deve ser commitado ou colado em chat |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_OAUTH_STATE_SECRET` | Só se `AUTH_GOOGLE_ENABLED=true` | Console do Google Cloud (OAuth) | `.env` da API / env do serviço | `GOOGLE_CLIENT_SECRET` e `GOOGLE_OAUTH_STATE_SECRET` **sim**; `GOOGLE_CLIENT_ID`/`GOOGLE_REDIRECT_URI` não |
 
 ## Licença (PalmUP)
@@ -61,13 +61,36 @@ Sem `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` preenchidos, o cliente de licença 
 |---|---|---|---|---|
 | `META_APP_ID` | Só se for usar integração Meta via App próprio | Meta for Developers | `.env` da API | Não |
 | `META_APP_SECRET` | Idem | Meta for Developers | `.env` local / env do serviço | **Sim** |
+| `META_CONNECTION_MODES` | Sim para o MVP do aluno | Defina exatamente `manual` | `.env` da API / env do serviço | Não |
 | `META_GRAPH_API_VERSION` | Não (tem padrão) | Documentação Graph API | `.env` da API | Não |
 | `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
 | `META_WEBHOOK_VERIFY_TOKEN` | Só se for usar webhooks Meta | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
 
-O fluxo de conexão do token do usuário do sistema (por workspace) acontece na UI de **Integrações**, não em variável de ambiente — veja [`meta-manual.md`](meta-manual.md).
+Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há login social Facebook nem OAuth como caminho alternativo: o token do usuário do sistema é informado por workspace na UI de **Integrações**, nunca em variável pública — veja [`meta-manual.md`](meta-manual.md).
+
+## URLs, cookie e primeiro administrador
+
+Use estes valores de formato (exemplos sem segredos):
+
+```text
+WEB_ORIGIN=https://app.example.com
+NEXT_PUBLIC_API_URL=https://api.example.com
+AUTH_COOKIE_DOMAIN=.example.com
+META_CONNECTION_MODES=manual
+WPPTRACK_PLATFORM_ADMIN_EMAILS=student-admin@example.com
+```
+
+Quando frontend e API forem subdomínios irmãos, `AUTH_COOKIE_DOMAIN` deve ser somente o domínio raiz comum, com ponto inicial. Exemplo concreto:
+
+```text
+Frontend: https://wpp.nodinfra.com.br
+API: https://aula.nodinfra.com.br
+AUTH_COOKIE_DOMAIN=.nodinfra.com.br
+```
+
+Não use `https://`, barra final nem o hostname completo da API em `AUTH_COOKIE_DOMAIN`. Nunca use `***` como valor: ele serve apenas para redigir algo em logs. Insira o e-mail real do administrador em `WPPTRACK_PLATFORM_ADMIN_EMAILS` diretamente no Dokploy/provedor, antes do primeiro login; ele é específico da sua instância e não deve ser commitado nem enviado em chat. Toda alteração de env da API exige redeploy da API; `NEXT_PUBLIC_API_URL` também exige novo build/deploy do web.
 
 ## Provedores de WhatsApp
 
@@ -117,6 +140,8 @@ NODE_ENV=production
 API_PORT=3000
 API_PUBLIC_URL=https://[SUA-API].seudominio.com
 WEB_ORIGIN=https://[SEU-WEB].seudominio.com
+AUTH_COOKIE_DOMAIN=.seudominio.com
+WPPTRACK_PLATFORM_ADMIN_EMAILS=[E-MAIL DO ADMIN, PREENCHER DIRETO NO DOKPLOY]
 
 # ---- Banco de dados / Redis (montar a partir da tela de conexão do Dokploy) ----
 DATABASE_URL=postgresql://[USUARIO]:[SENHA_URL_ENCODED]@[HOST_INTERNO]:5432/[BANCO]
@@ -148,6 +173,7 @@ NOD_API_BROKER_URL=[já vem preenchido no .env.example — só se tiver o add-on
 META_APP_ID=[PREENCHER]
 META_APP_SECRET=[PREENCHER NO DOKPLOY]
 META_WEBHOOK_VERIFY_TOKEN=[GERAR]
+META_CONNECTION_MODES=manual
 
 # ---- Opcional ----
 BRAND_NAME=[opcional]
