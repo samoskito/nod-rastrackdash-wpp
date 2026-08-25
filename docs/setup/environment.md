@@ -2,6 +2,40 @@
 
 Referência completa das variáveis do `.env` da API (`apps/api`) e do web (`apps/web`), agrupadas por assunto. "Secreto" significa: nunca versione, nunca cole em chat, nunca exponha no frontend.
 
+## Gerar segredos com segurança (`JWT_*`, `*_ENCRYPTION_KEY`, tokens de webhook)
+
+Sempre que este documento disser "gere um valor" para um segredo
+(`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`,
+`META_TOKEN_ENCRYPTION_KEY`, `UAZAPI_WEBHOOK_AUTH_TOKEN`, etc.), use um
+gerador criptograficamente seguro — nunca invente o valor de cabeça nem
+use algo previsível.
+
+**macOS/Linux:**
+
+```bash
+openssl rand -hex 32
+```
+
+**Windows (PowerShell):** use `System.Security.Cryptography.RandomNumberGenerator`
+— **nunca `Get-Random`**, que não é criptograficamente seguro e não deve
+gerar segredos de produção:
+
+```powershell
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+[System.BitConverter]::ToString($bytes).Replace('-', '').ToLower()
+```
+
+Esse comando usa só a API de instância (`.GetBytes(byte[])`), compatível
+tanto com o Windows PowerShell 5.1 (built-in) quanto com o PowerShell 7+ —
+evite o método estático `RandomNumberGenerator.GetBytes(int)`, que só
+existe em runtimes .NET mais novos.
+
+Qualquer um dos dois comandos acima (bash ou PowerShell) produz uma string hex de 64
+caracteres (256 bits), equivalente a `openssl rand -hex 32`. Gere um valor
+**novo e diferente para cada variável e para cada ambiente** (nunca reuse
+o mesmo segredo entre dev e produção, nem entre duas variáveis diferentes).
+
 Convenção de colunas:
 
 - **Obrigatória**: sem ela o recurso correspondente não funciona (algumas são obrigatórias só se você usar aquele provedor específico — indicado na coluna).
@@ -34,6 +68,19 @@ Convenção de colunas:
 | `AUTH_COOKIE_DOMAIN` | Sim quando web e API usam subdomínios irmãos | Domínio raiz comum, com ponto inicial | `.env` da API / env do serviço | Não |
 | `AUTH_EXPOSE_DEV_TOKENS` | Não — **deixe `false` em produção** | Só para debug local | `.env` local | Não |
 | `WPPTRACK_PLATFORM_ADMIN_EMAILS` | Sim antes do primeiro login administrativo | E-mail do administrador da sua instância | `.env` da API / env do serviço | Não — mas é específico do aluno e nunca deve ser commitado ou colado em chat |
+
+⚠️ **`WPPTRACK_PLATFORM_ADMIN_EMAILS` não cria a conta nem a senha do
+administrador.** É só uma allowlist: no login, se o e-mail do usuário
+autenticado (que precisa **já existir** como conta) bater com um dos
+e-mails dessa lista, aquele usuário recebe o papel `platform_owner`
+(confirmado em `auth.service.ts` — a checagem roda contra um usuário já
+carregado, ela nunca cria linha nova). Você ainda precisa criar a própria
+conta (e-mail + senha) por um destes dois caminhos, honestamente
+documentados aqui porque o bootstrap em produção **não é uma etapa única
+e óbvia** no template atual:
+
+- **Local:** `pnpm --filter @wpptrack/api create-user -- --email ... --password ... --role owner` (veja [`local.md`](local.md#5-primeiro-administrador)) — confirmado funcionando localmente.
+- **Dokploy/produção:** este script depende de acesso a um console/terminal dentro do container da API — confirme no seu painel se o serviço oferece essa opção (o rótulo varia por versão do Dokploy; não presuma que existe sem checar a tela). Se não oferecer, a alternativa é habilitar temporariamente `AUTH_PUBLIC_REGISTRATION_ENABLED=true`, redeploy, cadastrar-se pela tela de login do web com o e-mail que está em `WPPTRACK_PLATFORM_ADMIN_EMAILS`, e então voltar a variável para `false` (ou remover — o padrão em produção já é desabilitado) e redeploy de novo. Ambos os caminhos precisam da API já redeployada com `WPPTRACK_PLATFORM_ADMIN_EMAILS` preenchida **antes** do primeiro login desse e-mail, senão o usuário é criado sem o papel de plataforma.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_OAUTH_STATE_SECRET` | Só se `AUTH_GOOGLE_ENABLED=true` | Console do Google Cloud (OAuth) | `.env` da API / env do serviço | `GOOGLE_CLIENT_SECRET` e `GOOGLE_OAUTH_STATE_SECRET` **sim**; `GOOGLE_CLIENT_ID`/`GOOGLE_REDIRECT_URI` não |
 
 ## Licença (PalmUP)
@@ -101,17 +148,42 @@ Não use `https://`, barra final nem o hostname completo da API em `AUTH_COOKIE_
 
 ## Provedores de WhatsApp
 
+Preencher `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` disponibiliza
+**uma única instância daquele provedor para o deployment inteiro** — não
+por workspace, e não existe UI para criar mais de uma (a própria tela de
+Integrações avisa isso ao aluno). O único modelo genuinamente por
+workspace/multi-instância neste template é a conexão de webhook inbound
+(Umbler/Gupshup), criável em `/integrations`. O contrato completo de cada
+provedor — inclusive quais têm webhook inbound confirmado hoje e quais
+ainda são "a confirmar" — está em
+[`whatsapp-providers.md`](whatsapp-providers.md) — leia antes de configurar.
+
 | Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
 |---|---|---|---|---|
 | `UAZAPI_BASE_URL`, `UAZAPI_TOKEN` | Só se usar `uazapi_byo` | Sua própria instância Uazapi | `.env` local / env do serviço | `UAZAPI_TOKEN` **sim** |
-| `UAZAPI_WEBHOOK_AUTH_TOKEN` | Só se usar webhooks inbound Uazapi | Você define, confere com a config do webhook na Uazapi | `.env` local / env do serviço | **Sim** |
+| `UAZAPI_WEBHOOK_AUTH_TOKEN` | Não — só se você optar pelo endpoint global legado `POST /webhooks/uazapi` | Você define | `.env` local / env do serviço | **Sim** |
 | `WAHA_BASE_URL`, `WAHA_API_KEY` | Só se usar `waha` | Sua própria instância [WAHA](https://github.com/devlikeape/waha) self-hosted | `.env` local / env do serviço | `WAHA_API_KEY` **sim** |
 | `WAHA_SESSION` | Não (padrão `default`) | Nome da sessão na sua instância WAHA | `.env` da API | Não |
 | `ZAPI_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN` | Só se usar `zapi` | Painel [Z-API](https://www.z-api.io/) | `.env` local / env do serviço | `ZAPI_TOKEN` **sim** |
 | `DISCONNECT_ALERTS_ENABLED`, `DISCONNECT_ALERT_STREAK`, `DISCONNECT_ALERT_INTERVAL_MS` | Não (opcional) | Decisão sua | `.env` da API | Não |
 | `OPS_ALERT_WEBHOOK_URL` | Só se `DISCONNECT_ALERTS_ENABLED=true` | Webhook do seu Slack/Discord/etc. | `.env` local / env do serviço | **Sim** (trate a URL como sensível — permite postar no seu canal) |
 
+⚠️ **`UAZAPI_WEBHOOK_AUTH_TOKEN` é o segredo do endpoint global legado**
+(`POST /webhooks/uazapi`, um único valor para toda a instância, não por
+workspace). O endpoint continua existindo no código, mas tanto ele quanto
+a rota por instância (`POST /webhooks/uazapi/instances/:instanceId`)
+dependem de um registro `WhatsappInstance` já existente — e este template
+**não tem, hoje, nenhum caminho confirmado (UI ou API) que crie esse
+registro**. Preencher este token sozinho não resolve isso. Prefira a
+conexão inbound genérica (Umbler/Gupshup), que é self-service e tem
+segredo próprio rotacionável. Detalhes, o aviso completo e a matriz de
+webhook em [`whatsapp-providers.md`](whatsapp-providers.md).
+
 Nunca defina `UAZAPI_ADMIN_TOKEN` — essa variável não existe neste template e não deve ser reintroduzida (token de frota interno da PalmUP).
+
+Não existem hoje variáveis de ambiente para Data Crazy ou Zap Responder —
+esses dois provedores não têm adapter, parser nem contrato implementado
+neste código (veja [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy-e-zap-responder)); não invente valores para eles.
 
 ## NOD API broker
 

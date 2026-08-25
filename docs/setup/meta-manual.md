@@ -2,6 +2,8 @@
 
 Este é o único caminho do MVP do aluno: **sem login social Facebook e sem OAuth como alternativa**. Antes de abrir a Meta, defina `META_CONNECTION_MODES=manual` no ambiente da API e faça redeploy. Se as capabilities não carregarem, a tela deve permanecer fechada; não tente contornar isso com OAuth.
 
+O handshake do webhook da Meta usa `META_WEBHOOK_VERIFY_TOKEN` e o roteamento dos eventos é por `page_id` até o workspace certo — contrato confirmado em [`whatsapp-providers.md`](whatsapp-providers.md#matriz-de-autenticação-de-webhook), junto com o dos demais provedores.
+
 ## Pré-requisitos
 
 - Conta do Gerenciador de Negócios (BM) do **cliente final** ou da agência, com acesso ao App, Pixel, Página do Facebook e conta de anúncios corretos

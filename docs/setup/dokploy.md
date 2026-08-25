@@ -110,7 +110,9 @@ Crie um **serviço de aplicação** no mesmo projeto, com estes campos:
 
 ## 6. Variáveis de ambiente da API
 
-No serviço da API, abra o **painel/formulário de variáveis de ambiente do serviço** (é lá — nunca em um arquivo commitado, nunca em chat — que todo valor de produção entra). Preencha a partir da tabela completa em [`environment.md`](environment.md); o esqueleto copiável está na seção "[Esqueleto de produção](environment.md#esqueleto-copiável-de-produção-envs-da-api)" daquele arquivo. No mínimo:
+No serviço da API, abra o **painel/formulário de variáveis de ambiente do serviço** (é lá — nunca em um arquivo commitado, nunca em chat — que todo valor de produção entra). Preencha a partir da tabela completa em [`environment.md`](environment.md); o esqueleto copiável está na seção "[Esqueleto de produção](environment.md#esqueleto-copiável-de-produção-envs-da-api)" daquele arquivo. Preencha em etapas pequenas, nesta ordem:
+
+### 6.1 Banco de dados e Redis
 
 - **`DATABASE_URL`** — monte com os valores do passo 2:
   ```
@@ -128,15 +130,29 @@ No serviço da API, abra o **painel/formulário de variáveis de ambiente do ser
   ```
   Se você definiu senha/auth no Redis, use `redis://:SENHA@HOST-INTERNO:6379` (mesmo cuidado de URL-encoding acima se a senha tiver caracteres especiais).
 
+### 6.2 Núcleo da aplicação
+
 - `NODE_ENV=production`
 - **`API_PORT=3000`** — precisa bater exatamente com a "porta interna do container" configurada no passo 5. Sem essa variável, a API sobe na porta padrão `3333` (ver [`environment.md`](environment.md)) e o Dokploy não vai conseguir alcançá-la na porta `3000` configurada — isso aparenta um crash-loop mas na verdade é descompasso de porta.
-- **`WPPTRACK_PLATFORM_ADMIN_EMAILS`** — informe o e-mail real do administrador da sua instância **antes do primeiro login**, diretamente no Dokploy. Não use `***` como valor, não o versione e não o cole em chat.
-- **`META_CONNECTION_MODES=manual`** — defina antes da configuração Meta. O MVP do aluno é somente manual, sem login social Facebook/OAuth.
 - `API_PUBLIC_URL` — a URL pública que você vai apontar para este serviço (ex. `https://api.seudominio.com`), definida no passo 9.
 - `WEB_ORIGIN` — a URL pública do seu frontend. **No primeiro preenchimento você ainda não tem essa URL** (o web só é publicado no passo 10) — use um placeholder temporário (ex. `https://PLACEHOLDER.seudominio.com`) e volte a corrigir no passo 11. Não deixe de voltar: CORS depende deste valor bater exatamente com a URL real do web.
-- Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores **novos** para produção, nunca reutilize os de desenvolvimento local (ex.: `openssl rand -hex 32`).
-- `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preenchidos no passo 12. Você pode deixar `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` em branco só até lá: sem licença ativa a API bloqueia **toda escrita** com `423` (inclusive criar workspace/cliente no passo 13).
-- Provedores de WhatsApp que você for usar (`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL`) — preenchidos no passo 13.
+
+### 6.3 Administrador e Meta
+
+- **`WPPTRACK_PLATFORM_ADMIN_EMAILS`** — informe o e-mail real do administrador da sua instância **antes do primeiro login**, diretamente no Dokploy. Não use `***` como valor, não o versione e não o cole em chat. ⚠️ Isso **não cria a conta nem a senha** — é só uma allowlist de papel; veja como criar a própria conta em [`environment.md`](environment.md#banco-de-dados--autenticação) e no passo 13 abaixo.
+- **`META_CONNECTION_MODES=manual`** — defina antes da configuração Meta. O MVP do aluno é somente manual, sem login social Facebook/OAuth.
+
+### 6.4 Segredos gerados
+
+Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores **novos** para produção, nunca reutilize os de desenvolvimento local. Use `openssl rand -hex 32` (macOS/Linux) ou o PowerShell com `RandomNumberGenerator` (Windows) — nunca `Get-Random`, que não é criptograficamente seguro. Comandos prontos em [`environment.md`](environment.md#gerar-segredos-com-segurança-jwt_-_encryption_key-tokens-de-webhook).
+
+### 6.5 Licença (placeholder por enquanto)
+
+- `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preenchidos de fato no passo 12. Você pode deixar `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` em branco só até lá: sem licença ativa a API bloqueia **toda escrita** com `423` (inclusive criar workspace/cliente no passo 13).
+
+### 6.6 Provedores de WhatsApp (deixe para o passo 13)
+
+- Provedores de WhatsApp que você for usar (`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL`) — preenchidos no passo 13. Antes de escolher, leia [`whatsapp-providers.md`](whatsapp-providers.md): preencher a env do provedor não cria sozinho uma conexão para nenhum workspace, e nem todo provedor tem webhook inbound confirmado hoje.
 
 **Nunca** cole esses valores em um `.env` commitado no repositório nem em um chat de IA — preencha direto no formulário do Dokploy. Se um agente de IA estiver conduzindo esta etapa, ele deve **pedir para você digitar cada segredo diretamente no Dokploy**, nunca pedir para você colá-lo na conversa.
 
@@ -216,11 +232,14 @@ A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em c
 ## 13. Primeiro login, workspace, Meta manual e WhatsApp
 
 1. Confirme que `WPPTRACK_PLATFORM_ADMIN_EMAILS` já está preenchida e que a API foi redeployada depois da alteração.
-2. Crie ou entre com o primeiro administrador e valide `/backoffice/clients` antes de configurar integrações. Se cair em `/overview`, consulte o troubleshooting; não prossiga supondo que o acesso de plataforma existe.
+2. Crie a conta do primeiro administrador — `WPPTRACK_PLATFORM_ADMIN_EMAILS` **não cria a conta nem a senha**, só concede o papel de plataforma a uma conta que já exista com aquele e-mail no login. Em Dokploy/produção, sem acesso local ao `pnpm`, use um dos dois caminhos honestamente disponíveis hoje (veja [`environment.md`](environment.md#banco-de-dados--autenticação)):
+   - se o painel do Dokploy oferecer console/terminal para o container da API, rode `pnpm --filter @wpptrack/api create-user -- --email ... --password ... --role owner` de dentro dele (confirme na tela se essa opção existe — o rótulo varia por versão);
+   - senão, habilite temporariamente `AUTH_PUBLIC_REGISTRATION_ENABLED=true`, redeploy, cadastre-se pela tela de login do web com o e-mail que está em `WPPTRACK_PLATFORM_ADMIN_EMAILS`, depois volte a variável para `false` (ou remova — o padrão em produção já é desabilitado) e redeploy de novo.
+   Depois de logado, valide `/backoffice/clients`. Se cair em `/overview`, consulte o troubleshooting; não prossiga supondo que o acesso de plataforma existe.
 3. Para Meta, mantenha `META_CONNECTION_MODES=manual`, siga [`meta-manual.md`](meta-manual.md) e conecte o App ID/token de usuário do sistema (ou token permanente) no workspace. Não há OAuth/social login no MVP.
 4. Só depois conecte o provedor WhatsApp escolhido.
 
-- **WhatsApp:** preencha na env da API as variáveis do provedor escolhido (`UAZAPI_*`, `WAHA_*`, `ZAPI_*` ou `NOD_API_BROKER_URL`) — tabela completa em [`environment.md`](environment.md). Redeploy da API após adicionar.
+- **WhatsApp:** preencha na env da API as variáveis do provedor escolhido (`UAZAPI_*`, `WAHA_*`, `ZAPI_*` ou `NOD_API_BROKER_URL`) — tabela completa em [`environment.md`](environment.md). Redeploy da API após adicionar. ⚠️ Isso configura **uma única instância daquele provedor para todo o deployment** — não por workspace; não existe UI para criar mais de uma instância desses quatro provedores (a própria tela de Integrações avisa isso). O único modelo confirmadamente por workspace/multi-instância é a conexão de webhook inbound (Umbler/Gupshup), criada em `/integrations`. Veja o contrato completo, inclusive o que ainda não tem webhook inbound confirmado, em [`whatsapp-providers.md`](whatsapp-providers.md).
 
 **Validação:** `/integrations` mostra Meta e o provedor de WhatsApp escolhido como **conectados**.
 

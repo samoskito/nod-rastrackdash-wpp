@@ -57,6 +57,8 @@ pnpm --filter @wpptrack/api create-user -- --email voce@suaagencia.com --passwor
 
 (`pnpm setup` também oferece este passo automaticamente se `SETUP_ADMIN_EMAIL`/`SETUP_ADMIN_PASSWORD` estiverem definidas antes de rodá-lo.)
 
+⚠️ `WPPTRACK_PLATFORM_ADMIN_EMAILS` (passo 3) **não cria essa conta nem a senha** — ela só concede o papel de administrador de plataforma a uma conta que já exista com aquele e-mail, no momento do login. Em Dokploy/produção, sem `pnpm` local, veja as duas formas honestas de criar a conta em [`setup/environment.md`](setup/environment.md#banco-de-dados--autenticação) e no passo 13.2 de [`setup/dokploy.md`](setup/dokploy.md).
+
 ## 7. Ativar a licença
 
 1. Preencha `LICENSE_SERVER_URL` (já vem no `.env.example`), `LICENSE_KEY` e `LICENSE_ACCOUNT_IDENTITY` — sempre em `.env` local ou env do serviço, nunca commitado.
@@ -76,14 +78,16 @@ Siga o [guia manual de Meta](setup/meta-manual.md): criar/usar um usuário do si
 
 ## 10. Conectar WhatsApp
 
-Escolha ao menos um provedor e configure as variáveis correspondentes (tabela em [`setup/environment.md`](setup/environment.md)):
+Escolha ao menos um provedor e configure as variáveis correspondentes (tabela em [`setup/environment.md`](setup/environment.md)). Antes de decidir, leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) — o contrato completo de cada um, inclusive quais já têm webhook inbound confirmado e quais ainda não:
 
-- **Uazapi BYO** — sua própria instância Uazapi (`UAZAPI_*`).
-- **NOD API** — broker gerenciado pela PalmUP, add-on licenciado (`NOD_API_BROKER_URL`, usa a `LICENSE_KEY`).
-- **WAHA** — sua própria instância self-hosted [WAHA](https://github.com/devlikeape/waha) (`WAHA_*`).
-- **Z-API** — sua própria instância [Z-API](https://www.z-api.io/) (`ZAPI_*`).
+- **Uazapi BYO** — sua própria instância Uazapi (`UAZAPI_*`). ⚠️ É **uma única instância para todo o deployment**, não por workspace — a própria tela de Integrações avisa isso; não existe passo de "criar instância" separado.
+- **NOD API** — broker gerenciado pela PalmUP, add-on licenciado (`NOD_API_BROKER_URL`, usa a `LICENSE_KEY`); mesmo escopo de instância única acima.
+- **WAHA** — sua própria instância self-hosted [WAHA](https://github.com/devlikeape/waha) (`WAHA_*`); mesmo escopo de instância única.
+- **Z-API** — sua própria instância [Z-API](https://www.z-api.io/) (`ZAPI_*`); mesmo escopo de instância única.
+- **Umbler / Gupshup** — este sim é por workspace de verdade: conexão de webhook inbound genérica, criada em `/integrations`, com segredo próprio por conexão (não têm variável de ambiente).
+- **Data Crazy / Zap Responder** — ainda **não implementados** neste código (nenhum adapter, parser ou variável) — não tente configurá-los agora.
 
-Confirme em `/integrations` que o provedor escolhido aparece `connected`.
+Preencher `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` só disponibiliza aquele provedor (uma instância única do deployment todo) no backend — não cria nada por workspace. Só a conexão de webhook inbound (Umbler/Gupshup) é criada por workspace em `/integrations`. Confirme depois em `/integrations` que o provedor escolhido aparece `connected`.
 
 ## 11. Marca (whitelabel) — opcional
 
@@ -105,7 +109,7 @@ Repita, no ambiente publicado (não só localmente):
 - [Índice de guias de instalação](setup/README.md)
 - [Local (Docker Compose)](setup/local.md) · [VPS — dimensionamento](setup/vps.md) · [Deploy com Dokploy](setup/dokploy.md)
 - [Variáveis de ambiente](setup/environment.md) · [Troubleshooting](setup/troubleshooting.md)
-- [Meta manual](setup/meta-manual.md) · [Cobrança BYO](setup/billing/README.md)
+- [Meta manual](setup/meta-manual.md) · [Provedores de WhatsApp (BYO)](setup/whatsapp-providers.md) · [Cobrança BYO](setup/billing/README.md)
 - [Personalização permitida](CUSTOMIZATION.md)
 - [Matriz de aceite v1](release/ACCEPTANCE-v1.pt-BR.md) — o que já foi verificado nesta versão
 

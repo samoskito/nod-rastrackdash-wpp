@@ -53,7 +53,7 @@ Se preferir manualmente:
 cp .env.example .env
 ```
 
-Abra o `.env` e preencha, no mínimo, os placeholders `replace-me-*` com valores aleatórios locais (podem ser gerados com `openssl rand -hex 32`, por exemplo) e confirme `DATABASE_URL`/`REDIS_URL` (os valores padrão do `.env.example` já casam com o `docker-compose.yml` acima). Para a tabela completa de variáveis, use [`environment.md`](environment.md).
+Abra o `.env` e preencha, no mínimo, os placeholders `replace-me-*` com valores aleatórios locais — `openssl rand -hex 32` no macOS/Linux, ou o PowerShell com `RandomNumberGenerator` no Windows (nunca `Get-Random`, que não é criptograficamente seguro); comandos prontos em [`environment.md`](environment.md#gerar-segredos-com-segurança-jwt_-_encryption_key-tokens-de-webhook). Confirme também `DATABASE_URL`/`REDIS_URL` (os valores padrão do `.env.example` já casam com o `docker-compose.yml` acima). Para a tabela completa de variáveis, use [`environment.md`](environment.md).
 
 **Nunca versione o `.env`.** Ele já está no `.gitignore`.
 
@@ -77,6 +77,8 @@ pnpm --filter @wpptrack/api create-user -- --email voce@suaagencia.com --passwor
 ```
 
 O `pnpm setup` também oferece esse passo automaticamente se as variáveis `SETUP_ADMIN_EMAIL`/`SETUP_ADMIN_PASSWORD` estiverem definidas no ambiente antes de rodá-lo.
+
+Se você quer que esse usuário também tenha acesso de **plataforma** (`/backoffice/clients`), preencha `WPPTRACK_PLATFORM_ADMIN_EMAILS` com o mesmo e-mail no `.env` **antes** de logar pela primeira vez — essa variável não cria conta nem senha, só concede o papel a uma conta que já existe (veja [`environment.md`](environment.md#banco-de-dados--autenticação)).
 
 **Validação:** o comando retorna sucesso (sem imprimir a senha) e você consegue logar depois com esse e-mail.
 

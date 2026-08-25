@@ -47,9 +47,17 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 ## Login abre `/overview` em vez de `/backoffice/clients`
 
 - **Diagnóstico:** confirme no ambiente da API se `WPPTRACK_PLATFORM_ADMIN_EMAILS` contém o e-mail do usuário que entrou; confira se a API foi redeployada e se a sessão foi criada antes da variável existir.
-- **Causa provável:** a env do administrador de plataforma está ausente, tem outro e-mail, não chegou ao container, ou a sessão é antiga.
+- **Causa provável:** a env do administrador de plataforma está ausente, tem outro e-mail, não chegou ao container, ou a sessão é antiga. Lembre-se: `WPPTRACK_PLATFORM_ADMIN_EMAILS` só concede o papel a uma conta que **já existe** — se a conta nunca foi criada com esse e-mail, o login falha antes de chegar a essa checagem (veja [`environment.md`](environment.md#banco-de-dados--autenticação) para os caminhos confirmados de criar a conta).
 - **Correção:** informe o e-mail específico do aluno diretamente no Dokploy/provedor (não em Git ou chat), redeploy a API, saia e entre novamente. Não use `***` como valor.
 - **Verificação:** o primeiro administrador abre `/backoffice/clients`.
+
+## Webhook Uazapi "não autorizado" (401)
+
+- **Diagnóstico:** identifique qual rota está sendo chamada — `POST /webhooks/uazapi` (global) ou `POST /webhooks/uazapi/instances/:instanceId` (por instância). Os dois exigem, além do token, um registro `WhatsappInstance` já existente cujo `providerInstanceId` bata com o payload recebido (o backend faz esse lookup antes de aceitar o evento).
+- **Causa provável mais comum:** não é só token errado — **este template não tem, hoje, nenhum caminho confirmado (UI ou API) que crie esse registro `WhatsappInstance`**. Sem ele, as duas rotas sempre respondem `401`, mesmo com o token certo. Veja o aviso confirmado em [`whatsapp-providers.md`](whatsapp-providers.md#aviso-confirmado-sobre-uazapi-no-modelo-de-webhook-inbound) antes de gastar tempo tentando "corrigir" o token.
+- **Causa secundária (se o registro existir por outro meio):** no endpoint global, o token enviado não bate com `UAZAPI_WEBHOOK_AUTH_TOKEN` da env; no endpoint por instância, o Bearer enviado não bate com `WhatsappInstance.webhookTokenHash`.
+- **Correção:** se você não provisionou o `WhatsappInstance` por algum caminho fora deste repositório (script interno, acesso direto ao banco), trate isso como um bloqueio de produto — não um passo de configuração — e não invente uma solução; registre a lacuna. Se o registro existe e ainda assim dá `401`, confirme o token correspondente à rota usada.
+- **Verificação:** o próximo evento de teste chega sem `401` nos logs da API.
 
 ## Aparece UI OAuth/social do Facebook
 
@@ -89,7 +97,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
   - `needs_reconnect`: sessão/instância precisa escanear QR de novo na sua própria instância Uazapi/WAHA/Z-API (fora deste template).
   - `disconnected`: variáveis do provedor ausentes ou instância parada.
   - `error`: URL/token errados ou instância inacessível pela rede onde a API roda.
-- **Correção:** reconecte diretamente no painel/instância do provedor; confirme host/porta acessíveis a partir do servidor da API (não só do seu navegador).
+- **Correção:** reconecte diretamente no painel/instância do provedor; confirme host/porta acessíveis a partir do servidor da API (não só do seu navegador). Lembre que Uazapi BYO/WAHA/Z-API/NOD API são **uma única instância para todo o deployment**, configurada pela env — não existe uma instância "por workspace" nem uma tela para criar mais de uma; se o status aparece igual em todos os workspaces, isso é o comportamento esperado, não um bug (veja [`whatsapp-providers.md`](whatsapp-providers.md)).
 - **Verificação:** `/integrations` volta a mostrar `connected` para o provedor.
 
 ## Meta não conectado / relatórios falham com "meta not configured"

@@ -30,7 +30,7 @@ Os dois caminhos convergem nos mesmos passos de produto: licença, admin, worksp
 4. **Cliente de licença** — `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` → confira `/backoffice/license`.
 5. Crie o primeiro administrador e o primeiro workspace/cliente.
 6. [Meta manual](meta-manual.md) (usuário do sistema).
-7. WhatsApp: Uazapi BYO / NOD API / WAHA / Z-API (consulte [`environment.md`](environment.md) e `apps/api/src/integrations/whatsapp-providers/README.md`).
+7. WhatsApp: Uazapi BYO / NOD API / WAHA / Z-API / Umbler / Gupshup — leia o contrato de cada um, inclusive a matriz de autenticação de webhook, em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
 8. Personalização de marca opcional: `BRAND_*` (rodapé residual não removível).
 9. Deploy Dokploy (API) + Vercel (web) — ou permaneça local.
 10. [Guia de cobrança](billing/README.md) — opcional, gateway BYO do aluno.
@@ -60,6 +60,7 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [Variáveis de ambiente](environment.md)
 - [Troubleshooting](troubleshooting.md)
 - [Meta manual](meta-manual.md)
+- [Provedores de WhatsApp (BYO) e matriz de webhook](whatsapp-providers.md)
 - [Guia de cobrança (BYO)](billing/README.md)
 
 ## Release

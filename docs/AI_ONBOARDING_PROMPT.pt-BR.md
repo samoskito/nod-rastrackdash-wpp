@@ -37,7 +37,8 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    (docs/AI_ONBOARDING_PROMPT.pt-BR.md), docs/GUIA-ALUNO.md, o índice
    docs/setup/README.md, e os guias específicos relevantes para minhas
    respostas no passo 3 (docs/setup/local.md ou docs/setup/dokploy.md,
-   docs/setup/environment.md, docs/setup/troubleshooting.md). Não presuma
+   docs/setup/environment.md, docs/setup/troubleshooting.md,
+   docs/setup/whatsapp-providers.md quando o passo 11 chegar). Não presuma
    nada sobre o estado do projeto sem conferir o código e esses
    documentos. Eu não preciso abrir esses arquivos manualmente — você lê
    por mim antes de começar a me entrevistar.
@@ -49,7 +50,11 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    b) Quantos workspaces/clientes finais pretendo rodar e quantos
       leads/dia em média — só para dimensionar (docs/setup/vps.md).
    c) Quais provedores de WhatsApp pretendo usar: Uazapi BYO, NOD API
-      (add-on licenciado PalmUP), WAHA (self-host) e/ou Z-API.
+      (add-on licenciado PalmUP), WAHA (self-host), Z-API e/ou webhook
+      inbound genérico (Umbler/Gupshup). Data Crazy e Zap Responder ainda
+      não têm contrato implementado neste código — se eu pedir um desses
+      dois, diga isso claramente em vez de fingir que existe suporte
+      (docs/setup/whatsapp-providers.md).
    d) Se quero personalizar marca (whitelabel) desde já ou depois.
    Não avance para comandos até eu responder essas perguntas.
 
@@ -68,12 +73,24 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    (`POST /license-client/activate`) e validação de
    `/backoffice/license` — sem licença ativa a API bloqueia toda escrita
    com `423`, então isso vem **antes** de criar qualquer workspace/cliente; (5) preencher `WPPTRACK_PLATFORM_ADMIN_EMAILS`
-   antes do primeiro login; (6) definir `META_CONNECTION_MODES=manual`
+   antes do primeiro login — **essa variável não cria a conta nem a
+   senha**, só concede o papel de plataforma a uma conta que já exista com
+   aquele e-mail; se a conta ainda não existir, explique como criá-la
+   (script `create-user` local, ou cadastro temporário com
+   `AUTH_PUBLIC_REGISTRATION_ENABLED=true` em produção — nunca invente um
+   terceiro caminho); (6) definir `META_CONNECTION_MODES=manual`
    antes da Meta; (7) definir `AUTH_COOKIE_DOMAIN` se frontend/API forem
    subdomínios irmãos; (8) redeploy da API após qualquer mudança de env;
    (9) criar/entrar com o primeiro admin e validar `/backoffice/clients`;
-   (10) configuração manual da Meta; (11) provedor WhatsApp; (12) marca
-   opcional; (13) health e checklist final de onboarding.
+   (10) configuração manual da Meta; (11) provedor WhatsApp — Uazapi BYO,
+   NOD API, WAHA e Z-API são **uma única instância para todo o
+   deployment**, configurada só pela env (redeploy e pronto — não existe
+   passo de "criar instância" nem uma por workspace, a própria tela de
+   Integrações avisa isso); só a conexão de webhook inbound
+   (Umbler/Gupshup) é criada por workspace em `/integrations`, com
+   segredo próprio. Não confunda os dois modelos
+   (docs/setup/whatsapp-providers.md); (12) marca opcional; (13) health e
+   checklist final de onboarding.
 
    Use estes formatos sem segredos:
    `WEB_ORIGIN=https://app.example.com`,
