@@ -33,7 +33,10 @@ const licenseKeyText = z
   .trim()
   .min(8)
   .max(80)
-  .refine((value) => !/[\r\n]/.test(value), "Control characters are not allowed");
+  .refine(
+    (value) => !/[\r\n]/.test(value),
+    "Control characters are not allowed",
+  );
 const repoUrl = z.string().trim().url().max(500);
 const supportEmail = z.string().trim().email().max(320);
 
@@ -83,6 +86,15 @@ const transactionalEmailEnvelopeSchema = z.discriminatedUnion("template", [
     data: z.object({
       recipientName: shortText.optional(),
       workspaceName: shortText,
+    }),
+  }),
+  z.object({
+    to: recipient,
+    template: z.literal("platform_operator_activation"),
+    data: z.object({
+      recipientName: shortText.optional(),
+      token,
+      expiresAt: expiry,
     }),
   }),
   z.object({

@@ -42,7 +42,10 @@ import {
   type RuntimeFetch,
 } from "../common/runtime/runtime.module";
 import { EmailQueueService } from "../email/email-queue.service";
-import { PasswordService } from "./password.service";
+import {
+  assertBcryptCompatiblePassword,
+  PasswordService,
+} from "./password.service";
 import type { AuthenticatedUser } from "./session.types";
 
 const refreshTokenBytes = 32;
@@ -657,6 +660,7 @@ export class AuthService {
     input: AccountActivationConfirmInputDto,
     context: AuthRequestContext = {},
   ): Promise<AccountActivationResult> {
+    assertBcryptCompatiblePassword(input.password);
     await this.assertAccountActivationCandidate(input.token);
     const passwordHash = await this.passwordService.hash(input.password);
     const now = new Date();
@@ -667,6 +671,65 @@ export class AuthService {
         input.token,
         now,
       );
+
+      const user = await tx.user.findUnique({
+        where: { id: token.userId },
+        select: {
+          id: true,
+          emailVerifiedAt: true,
+          passwordHash: true,
+          platformRole: true,
+        },
+      });
+
+      if (
+        !token.workspaceId &&
+        user?.platformRole === "platform_operator" &&
+        user.passwordHash === null
+      ) {
+        const activated = await tx.user.updateMany({
+          where: {
+            id: user.id,
+            platformRole: "platform_operator",
+            passwordHash: null,
+          },
+          data: {
+            passwordHash,
+            emailVerifiedAt: user.emailVerifiedAt ?? now,
+          },
+        });
+
+        if (activated.count !== 1) {
+          throw this.invalidAccountActivation();
+        }
+
+        await tx.authActionToken.updateMany({
+          where: {
+            userId: user.id,
+            type: "account_activation",
+            usedAt: null,
+          },
+          data: { usedAt: now },
+        });
+        await tx.auditLog.create({
+          data: {
+            workspaceId: null,
+            actorUserId: user.id,
+            actorType: "user",
+            action: "auth.platform_operator_activated",
+            targetType: "User",
+            targetId: user.id,
+            resultStatus: "success",
+            beforeSummary: { platformRole: "platform_operator" },
+            afterSummary: { emailVerified: true },
+          },
+        });
+
+        return this.createSessionForUser(user.id, context, {
+          activeWorkspaceId: null,
+          transaction: tx,
+        });
+      }
 
       if (!token.workspaceId) {
         throw this.invalidAccountActivation();
@@ -682,14 +745,6 @@ export class AuthService {
         select: {
           id: true,
           role: true,
-        },
-      });
-      const user = await tx.user.findUnique({
-        where: { id: token.userId },
-        select: {
-          id: true,
-          emailVerifiedAt: true,
-          passwordHash: true,
         },
       });
 
@@ -1332,14 +1387,10 @@ export class AuthService {
       return user.platformRole;
     }
 
-    const email = this.normalizeEmail(user.email);
-    const isAllowlisted = (this.env.WPPTRACK_PLATFORM_ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((candidate) => this.normalizeEmail(candidate))
-      .filter(Boolean)
-      .includes(email);
-
-    return isAllowlisted ? "platform_owner" : null;
+    // Platform authorization is persistent. The legacy email allowlist is
+    // intentionally not an authorization fallback: an env change must never
+    // create or promote an account on its own.
+    return null;
   }
 
   private normalizeEmail(email: string): string {
@@ -1810,12 +1861,23 @@ export class AuthService {
         userId: true,
         workspaceId: true,
         user: {
-          select: { passwordHash: true },
+          select: { passwordHash: true, platformRole: true },
         },
       },
     });
 
-    if (!record?.workspaceId || record.user.passwordHash) {
+    if (!record || record.user.passwordHash) {
+      throw this.invalidAccountActivation();
+    }
+
+    if (
+      !record.workspaceId &&
+      record.user.platformRole === "platform_operator"
+    ) {
+      return;
+    }
+
+    if (!record.workspaceId) {
       throw this.invalidAccountActivation();
     }
 

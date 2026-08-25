@@ -10,7 +10,7 @@
     "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
     "gupshup:ctwa-audit": "node dist/apps/api/src/scripts/audit-gupshup-ctwa.js",
-    "platform-admin:create": "node dist/apps/api/src/scripts/create-platform-admin.js",
+    "platform-admin:create": "node dist/src/scripts/create-platform-admin.js",
     "platform-owner:promote": "node dist/apps/api/src/scripts/promote-platform-owner.js",
     "create-user": "ts-node --project tsconfig.json src/scripts/create-user.ts",
     "test": "vitest run",

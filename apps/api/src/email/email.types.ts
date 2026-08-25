@@ -6,6 +6,7 @@ export const transactionalEmailTemplateNames = [
   "email_verification",
   "client_owner_activation",
   "workspace_access_granted",
+  "platform_operator_activation",
   "license_key_delivery",
 ] as const;
 
@@ -49,6 +50,12 @@ export type WorkspaceAccessGrantedEmailData = {
   workspaceName: string;
 };
 
+export type PlatformOperatorActivationEmailData = {
+  recipientName?: string;
+  token: string;
+  expiresAt: string;
+};
+
 /** raw key only ever travels inside the encrypted envelope / rendered email body. */
 export type LicenseKeyDeliveryEmailData = {
   recipientName?: string;
@@ -85,6 +92,11 @@ export type TransactionalEmailEnvelope =
       to: EmailRecipient;
       template: "workspace_access_granted";
       data: WorkspaceAccessGrantedEmailData;
+    }
+  | {
+      to: EmailRecipient;
+      template: "platform_operator_activation";
+      data: PlatformOperatorActivationEmailData;
     }
   | {
       to: EmailRecipient;

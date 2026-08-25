@@ -128,6 +128,28 @@ export class EmailMessageRenderer {
       };
     }
 
+    if (envelope.template === "platform_operator_activation") {
+      return {
+        subject: "Ative seu acesso de operador da plataforma WppTrack",
+        body: {
+          preheader: "Seu acesso de operador esta pronto para ser ativado.",
+          heading: this.personalizedHeading(
+            envelope.data.recipientName,
+            "Ative seu acesso de operador",
+          ),
+          paragraphs: [
+            "Voce recebeu acesso operacional ao backoffice da plataforma WppTrack.",
+            `Este link expira em ${this.formatExpiry(envelope.data.expiresAt)} e so pode ser usado uma vez.`,
+            "Crie sua senha pelo link. Nenhuma senha foi criada ou enviada pela plataforma.",
+          ],
+          actionLabel: "Criar senha e acessar",
+          actionUrl: this.actionUrl("/login/activate", envelope.data.token),
+          footerNote:
+            "Se voce nao esperava este acesso, ignore esta mensagem e fale com o proprietario da plataforma.",
+        },
+      };
+    }
+
     if (envelope.template === "license_key_delivery") {
       const productName = envelope.data.productName;
       const support =
@@ -182,9 +204,7 @@ export class EmailMessageRenderer {
       body.heading,
       "",
       ...body.paragraphs.flatMap((paragraph) => [paragraph, ""]),
-      ...(body.codeBlock
-        ? ["Sua chave:", body.codeBlock, ""]
-        : []),
+      ...(body.codeBlock ? ["Sua chave:", body.codeBlock, ""] : []),
       `${body.actionLabel}: ${body.actionUrl}`,
       "",
       body.footerNote,
