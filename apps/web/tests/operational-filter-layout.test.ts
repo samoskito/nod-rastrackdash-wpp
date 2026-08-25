@@ -26,18 +26,18 @@ describe("operational filter layout", () => {
     );
   });
 
-  it("uses design-system controls throughout the inbound operations workspace", () => {
+  it("keeps the inbound backoffice page on the design system without the private delivery filters", () => {
     const page = readSource(
       "../src/app/(backoffice)/backoffice/inbound-webhooks/page.tsx",
     );
     const css = readSource("../src/styles/globals.css");
 
-    expect(
-      page.match(/className="filter-control"/g)?.length ?? 0,
-    ).toBeGreaterThanOrEqual(8);
-    expect(
-      page.match(/className="input-field"/g)?.length ?? 0,
-    ).toBeGreaterThanOrEqual(3);
+    expect(page).toContain("standalone-page inbound-deliveries-page");
+    // The delivery search/replay console needs `backoffice/inbound-webhooks`
+    // API controllers that this template does not ship, so the student
+    // edition renders no filter form at all instead of inert controls.
+    expect(page.match(/className="filter-control"/g)?.length ?? 0).toBe(0);
+    expect(page.match(/className="input-field"/g)?.length ?? 0).toBe(0);
     expect(css).toContain(".filter-control option {");
     expect(css).toContain(".inbound-deliveries-page .filter-control,");
     expect(css).toContain("background-color: var(--graphite-950);");
