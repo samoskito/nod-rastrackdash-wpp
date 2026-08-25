@@ -6,15 +6,11 @@ import type {
   InboundWebhookChannelDto,
   InboundWebhookConnectionDto,
   ProviderConversionRuleDto,
-  WhatsappLabelDto,
   WorkspaceOpsAlertSettings,
   WorkspaceInviteDto,
   WorkspaceMemberDto,
 } from "@wpptrack/shared";
-import {
-  conversionEventDisplayLabels,
-  workspaceOpsAlertSettingsSchema,
-} from "@wpptrack/shared";
+import { workspaceOpsAlertSettingsSchema } from "@wpptrack/shared";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import {
@@ -31,7 +27,6 @@ import {
   BackofficeActionForm,
   type BackofficeActionState,
 } from "../../../components/backoffice-action-form";
-import { ConversionRuleBuilder } from "../../../components/conversion-rule-builder";
 import { CopyLinkButton } from "../../../components/copy-link-button";
 import { LinkResultActionForm } from "../../../components/link-result-action-form";
 import { OpsAlertPhonesEditor } from "../../../components/ops-alert-phones-editor";
@@ -44,7 +39,6 @@ import { getCurrentWorkspace } from "../../../lib/current-workspace";
 import { ProviderConversionRulePanel } from "../integrations/provider-conversion-rule-panel";
 import { saveOpsAlertSettingsAction } from "./ops-alert-settings-actions";
 import {
-  adaptProviderConversionRuleAction,
   createProviderConversionRuleAction,
   loadProviderConversionAutomationAuditAction,
   loadProviderConversionAutomationPayloadAction,
@@ -56,10 +50,6 @@ import {
   testProviderCatalogMessageAction,
   updateProviderConversionRuleAction,
 } from "../integrations/provider-conversion-rule-actions";
-import {
-  LegacyRuleAdaptForm,
-  type LegacyRuleAdaptConnection,
-} from "./legacy-rule-adapt-form";
 
 type AccountUserDto = {
   id: string;
@@ -116,8 +106,13 @@ type ConversionRulesResult = {
   state: "real" | "empty" | "error";
 };
 
+type InboundConnectionWithChannels = {
+  connection: InboundWebhookConnectionDto;
+  channels: InboundWebhookChannelDto[];
+};
+
 type ProviderConversionSettingsResult = {
-  connections: LegacyRuleAdaptConnection[];
+  connections: InboundConnectionWithChannels[];
   rules: ProviderConversionRuleDto[];
   enabled: boolean;
   state: "real" | "empty" | "error";
@@ -135,28 +130,6 @@ type WorkspaceSettingsResult = {
   state: "real" | "empty" | "error";
 };
 
-type WhatsappLabelSuggestionsResult = {
-  labels: string[];
-  state: "real" | "empty" | "error";
-};
-
-const supportedConversionEventNames = [
-  "LeadSubmitted",
-  "QualifiedLead",
-  "OrderShipped",
-  "OrderDelivered",
-  "OrderCanceled",
-  "OrderReturned",
-  "RatingProvided",
-  "ReviewProvided",
-  "ViewContent",
-  "AddToCart",
-  "CartAbandoned",
-  "InitiateCheckout",
-  "Purchase",
-  "OrderCreated",
-] as const;
-
 const eventsWithCommercialValue = new Set<ConversionEventNameDto>([
   "Purchase",
   "OrderCreated",
@@ -171,10 +144,6 @@ function settingsActionState(
     message,
     nonce: Date.now(),
   };
-}
-
-function eventDisplayLabel(eventName: ConversionEventNameDto): string {
-  return conversionEventDisplayLabels[eventName];
 }
 
 function eventSupportsCommercialValue(eventName: string): boolean {
@@ -237,46 +206,10 @@ function parseMoneyToCents(value: FormDataEntryValue | null): number | null {
     : null;
 }
 
-function productItems(productName: string, valueCents: number | null) {
-  if (!productName) {
-    return null;
-  }
-
-  const id =
-    productName
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "produto";
-
-  return [
-    {
-      id,
-      quantity: 1,
-      ...(valueCents === null ? {} : { item_price: valueCents / 100 }),
-    },
-  ];
-}
-
 function moneyInputValue(valueCents: number | null | undefined): string {
   return valueCents == null
     ? ""
     : (valueCents / 100).toFixed(2).replace(".", ",");
-}
-
-function moneyLabel(
-  valueCents: number | null | undefined,
-  currency?: string | null,
-): string {
-  if (valueCents == null) {
-    return "Valor nao informado";
-  }
-
-  return (valueCents / 100).toLocaleString("pt-BR", {
-    currency: currency ?? "BRL",
-    style: "currency",
-  });
 }
 
 async function getAccountSettings(): Promise<AccountSettingsResult> {
@@ -433,73 +366,6 @@ async function getWorkspaceSettings(): Promise<WorkspaceSettingsResult> {
   }
 }
 
-// rastrackdash sanitize (rewrite_rules.web-billing-subscription-ui-removal):
-// WhatsappInstanceSummaryDto lived in the billing schema (stripped in this
-// edition). This function only ever read id/provider/billingStatus off the
-// listInstances() response, so a local structural type keeps the label-
-// suggestion lookup intact instead of deleting it; the underlying
-// /integrations/whatsapp/instances endpoint (WhatsappConnectionsController)
-// is also stripped, so this now always falls into the catch below and
-// degrades to an empty label list rather than throwing.
-type WhatsappInstanceSummaryLocal = {
-  id: string;
-  provider: string;
-  billingStatus: string;
-};
-
-async function getWhatsappLabelSuggestions(): Promise<WhatsappLabelSuggestionsResult> {
-  try {
-    const instances = await serverApiFetch<WhatsappInstanceSummaryLocal[]>(
-      "/integrations/whatsapp/instances",
-    );
-    const activeUazapiInstances = instances.filter(
-      (instance) =>
-        instance.provider === "uazapi" && instance.billingStatus === "active",
-    );
-    const configuredTimeout = Number(
-      process.env.WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS ?? 2000,
-    );
-    const timeoutMs =
-      Number.isFinite(configuredTimeout) && configuredTimeout > 0
-        ? configuredTimeout
-        : 2000;
-    const labelLists = await Promise.all(
-      activeUazapiInstances.map(async (instance) => {
-        try {
-          return await serverApiFetch<WhatsappLabelDto[]>(
-            `/integrations/whatsapp/instances/${instance.id}/labels`,
-            { signal: AbortSignal.timeout(timeoutMs) },
-          );
-        } catch {
-          return [];
-        }
-      }),
-    );
-    const labels = Array.from(
-      new Set(
-        labelLists
-          .flat()
-          .map((label) => label.name.trim())
-          .filter(Boolean),
-      ),
-    ).sort((left, right) => left.localeCompare(right, "pt-BR"));
-
-    return {
-      labels,
-      state: labels.length > 0 ? "real" : "empty",
-    };
-  } catch {
-    return {
-      labels: [],
-      state: "error",
-    };
-  }
-}
-
-function triggerLabel(rule: Pick<ConversionRuleDto, "triggerType">): string {
-  return rule.triggerType === "keyword" ? "Palavra-chave" : "Etiqueta WhatsApp";
-}
-
 function inboundProviderLabel(provider: string): string {
   const labels: Record<string, string> = {
     umbler: "Umbler Talk",
@@ -507,13 +373,6 @@ function inboundProviderLabel(provider: string): string {
     uazapi: "UAZAPI",
   };
   return labels[provider] ?? provider;
-}
-
-function matchLabel(
-  rule: Pick<ConversionRuleDto, "matchMode" | "triggerValue">,
-): string {
-  const mode = rule.matchMode === "exact" ? "igual a" : "contem";
-  return `${mode}: ${rule.triggerValue}`;
 }
 
 function shortDate(value: string): string {
@@ -547,111 +406,6 @@ function inviteStatusLabel(status: WorkspaceInviteDto["status"]): string {
   }
 
   return "Pendente";
-}
-
-async function createConversionRule(
-  _previousState: BackofficeActionState,
-  formData: FormData,
-): Promise<BackofficeActionState> {
-  "use server";
-
-  const requestedName = String(formData.get("name") ?? "").trim();
-  const triggerType = String(formData.get("triggerType") ?? "keyword");
-  const triggerValue = String(formData.get("triggerValue") ?? "").trim();
-  const matchMode = String(formData.get("matchMode") ?? "contains");
-  const requestedEventName = String(
-    formData.get("eventName") ?? "LeadSubmitted",
-  );
-  const eventName = supportedConversionEventNames.includes(
-    requestedEventName as (typeof supportedConversionEventNames)[number],
-  )
-    ? (requestedEventName as ConversionEventNameDto)
-    : "LeadSubmitted";
-  const acceptsCommercialValue = eventSupportsCommercialValue(eventName);
-  const productName = acceptsCommercialValue
-    ? String(formData.get("productName") ?? "").trim()
-    : "";
-  const defaultValueCents = acceptsCommercialValue
-    ? parseMoneyToCents(formData.get("defaultValue"))
-    : null;
-  const defaultCurrency = String(formData.get("defaultCurrency") ?? "BRL")
-    .trim()
-    .toUpperCase();
-
-  if (!triggerValue) {
-    return settingsActionState(
-      "error",
-      "Informe a palavra, frase ou etiqueta do gatilho.",
-    );
-  }
-
-  const name =
-    requestedName ||
-    `${eventDisplayLabel(eventName)} por ${triggerValue}`.slice(0, 120);
-
-  try {
-    await serverApiFetch("/conversion-rules", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        triggerType,
-        triggerValue,
-        matchMode,
-        eventName,
-        pixelId: null,
-        defaultValueCents,
-        defaultCurrency:
-          acceptsCommercialValue && defaultValueCents !== null
-            ? defaultCurrency
-            : null,
-        defaultContentName: productName || null,
-        defaultItems: productItems(productName, defaultValueCents),
-        active: true,
-      }),
-    });
-    revalidatePath("/settings");
-    revalidatePath("/overview");
-    revalidatePath("/reports");
-
-    return settingsActionState("success", "Regra de conversao criada.");
-  } catch {
-    return settingsActionState("error", "Nao foi possivel criar a regra.");
-  }
-}
-
-async function updateConversionRuleDetails(
-  _previousState: BackofficeActionState,
-  formData: FormData,
-): Promise<BackofficeActionState> {
-  "use server";
-
-  const ruleId = String(formData.get("ruleId") ?? "").trim();
-  const productName = String(formData.get("productName") ?? "").trim();
-  const defaultValueCents = parseMoneyToCents(formData.get("defaultValue"));
-  const defaultCurrency = String(formData.get("defaultCurrency") ?? "BRL")
-    .trim()
-    .toUpperCase();
-
-  if (!ruleId) {
-    return settingsActionState("error", "Regra de conversao nao identificada.");
-  }
-
-  try {
-    await serverApiFetch(`/conversion-rules/${ruleId}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        defaultValueCents,
-        defaultCurrency: defaultValueCents === null ? null : defaultCurrency,
-        defaultContentName: productName || null,
-        defaultItems: productItems(productName, defaultValueCents),
-      }),
-    });
-    revalidatePath("/settings");
-
-    return settingsActionState("success", "Produto e valor atualizados.");
-  } catch {
-    return settingsActionState("error", "Nao foi possivel atualizar a regra.");
-  }
 }
 
 async function saveFunnelConfiguration(
@@ -894,27 +648,6 @@ async function updateWorkspaceProfile(formData: FormData) {
   }
 }
 
-async function updateConversionRuleStatus(formData: FormData) {
-  "use server";
-
-  const ruleId = String(formData.get("ruleId") ?? "");
-  const active = String(formData.get("active") ?? "") === "true";
-
-  if (!ruleId) {
-    return;
-  }
-
-  try {
-    await serverApiFetch(`/conversion-rules/${ruleId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ active }),
-    });
-    revalidatePath("/settings");
-  } catch {
-    return;
-  }
-}
-
 async function requestEmailVerification() {
   "use server";
 
@@ -935,7 +668,6 @@ export default async function SettingsPage() {
     providerConversionSettings,
     funnelConfiguration,
     accountSettings,
-    whatsappLabelSuggestions,
     opsAlertSettings,
   ] = await Promise.all([
     getWorkspaceSettings(),
@@ -943,27 +675,14 @@ export default async function SettingsPage() {
     getProviderConversionSettings(),
     getFunnelConfiguration(),
     getAccountSettings(),
-    getWhatsappLabelSuggestions(),
     getOpsAlertSettings(),
   ]);
   const { rules } = conversionRules;
   const providerRules = providerConversionSettings.rules;
-  const providerRuleIds = new Set(
-    providerRules.map((rule) => rule.conversionRule.id),
-  );
-  const legacyRules = rules.filter(
-    (rule) =>
-      !providerRuleIds.has(rule.id) &&
-      ["keyword", "whatsapp_label"].includes(rule.triggerType),
-  );
   const inboundConnections = providerConversionSettings.connections;
   const { workspace, members, invites } = workspaceSettings;
   const accountUser = accountSettings.user;
-  const whatsappLabels = whatsappLabelSuggestions.labels;
   const funnelStages = funnelConfiguration.configuration.stages;
-  const funnelLabelByEvent = new Map(
-    funnelStages.map((stage) => [stage.eventName, stage.label]),
-  );
   const canManageConversionRules = Boolean(
     workspace?.permissions.canManageIntegrations,
   );
@@ -1011,21 +730,6 @@ export default async function SettingsPage() {
           workspace.permissions.canManageMembers,
         )
       : "Nao foi possivel consultar as permissoes";
-  const conversionRuleBuilderEvents = supportedConversionEventNames.map(
-    (eventName) => ({
-      label: eventDisplayLabel(eventName),
-      supportsValue: eventSupportsCommercialValue(eventName),
-      value: eventName,
-    }),
-  );
-  const emptyTitle =
-    conversionRules.state === "error"
-      ? "Nao foi possivel carregar regras"
-      : "Nenhuma regra configurada";
-  const emptyDescription =
-    conversionRules.state === "error"
-      ? "Confira a API antes de alterar mapeamentos de evento."
-      : "Crie uma regra por palavra-chave ou etiqueta para iniciar o envio de eventos.";
 
   return (
     <section className="page-stack page-standard settings-page">
@@ -1827,214 +1531,6 @@ export default async function SettingsPage() {
                     </Link>
                   </div>
                 )}
-              </section>
-
-              <section className="legacy-trigger-section">
-                <header className="trigger-center-section-heading">
-                  <div>
-                    <span className="eyebrow">Compatibilidade</span>
-                    <h3>Regras antigas sem conexao</h3>
-                    <p className="muted">
-                      Regras legadas (keyword/etiqueta sem canal) ficam aqui ate
-                      serem adaptadas para uma conexao acima. O fluxo novo de
-                      checkout/compra por mensagem e catalogo e o bloco de
-                      origens conectadas.
-                    </p>
-                  </div>
-                  <span className="status-chip">
-                    {legacyRules.length} regra(s)
-                  </span>
-                </header>
-
-                {canManageConversionRules ? (
-                  <details
-                    className="legacy-trigger-create"
-                    open={
-                      inboundConnections.length === 0 && legacyRules.length === 0
-                    }
-                  >
-                    <summary>
-                      <span>Criar regra legada (sem conexao)</span>
-                      <ChevronDown size={16} aria-hidden="true" />
-                    </summary>
-                    <p className="muted">
-                      Preferira o bloco de origens conectadas. Use isto so para
-                      fontes que ainda nao tem conexao inbound no workspace.
-                    </p>
-                    <ConversionRuleBuilder
-                      action={createConversionRule}
-                      events={conversionRuleBuilderEvents}
-                      whatsappLabels={whatsappLabels}
-                      whatsappLabelsState={whatsappLabelSuggestions.state}
-                    />
-                  </details>
-                ) : (
-                  <p className="muted">Sem permissao para editar regras</p>
-                )}
-
-                <div className="table-wrap conversion-rules-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Regra</th>
-                        <th>Gatilho</th>
-                        <th>Evento Meta</th>
-                        <th>Produto / valor</th>
-                        <th>Status</th>
-                        <th>Acao</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {legacyRules.length > 0 ? (
-                        legacyRules.map((rule) => (
-                          <tr key={rule.id}>
-                            <td data-label="Regra">
-                              <strong>{rule.name}</strong>
-                              <span>{triggerLabel(rule)}</span>
-                            </td>
-                            <td data-label="Gatilho">
-                              <strong>{rule.triggerValue}</strong>
-                              <span>{matchLabel(rule)}</span>
-                            </td>
-                            <td data-label="Evento">
-                              <strong>
-                                {funnelLabelByEvent.get(rule.eventName) ??
-                                  eventDisplayLabel(rule.eventName)}
-                              </strong>
-                              <span>{rule.eventName}</span>
-                            </td>
-                            <td data-label="Produto / valor">
-                              {eventSupportsCommercialValue(rule.eventName) ? (
-                                <>
-                                  <strong>
-                                    {rule.defaultContentName ?? "Sem produto"}
-                                  </strong>
-                                  <span>
-                                    {moneyLabel(
-                                      rule.defaultValueCents,
-                                      rule.defaultCurrency,
-                                    )}
-                                  </span>
-                                </>
-                              ) : (
-                                <span>Nao se aplica</span>
-                              )}
-                            </td>
-                            <td data-label="Status">
-                              <span
-                                className={`event-chip${rule.active ? "" : " warn"}`}
-                              >
-                                {rule.active ? "ativo" : "pausado"}
-                              </span>
-                            </td>
-                            <td data-label="Acao">
-                              {canManageConversionRules ? (
-                                <div className="rule-action-stack">
-                                  {rule.triggerType === "keyword" &&
-                                  rule.eventName === "Purchase" &&
-                                  rule.defaultValueCents != null &&
-                                  rule.defaultValueCents > 0 &&
-                                  rule.defaultCurrency &&
-                                  inboundConnections.length > 0 ? (
-                                    <LegacyRuleAdaptForm
-                                      action={adaptProviderConversionRuleAction}
-                                      connections={inboundConnections}
-                                      rule={rule}
-                                    />
-                                  ) : null}
-                                  {eventSupportsCommercialValue(
-                                    rule.eventName,
-                                  ) ? (
-                                    <details className="rule-edit-details">
-                                      <summary className="button">
-                                        Editar valor
-                                      </summary>
-                                      <BackofficeActionForm
-                                        action={updateConversionRuleDetails}
-                                        className="rule-edit-form"
-                                      >
-                                        <input
-                                          type="hidden"
-                                          name="ruleId"
-                                          value={rule.id}
-                                        />
-                                        <label>
-                                          <span>Produto ou servico</span>
-                                          <input
-                                            defaultValue={
-                                              rule.defaultContentName ?? ""
-                                            }
-                                            name="productName"
-                                            placeholder="Produto ou servico"
-                                          />
-                                        </label>
-                                        <label>
-                                          <span>Valor</span>
-                                          <input
-                                            defaultValue={moneyInputValue(
-                                              rule.defaultValueCents,
-                                            )}
-                                            inputMode="decimal"
-                                            name="defaultValue"
-                                            placeholder="0,00"
-                                          />
-                                        </label>
-                                        <label>
-                                          <span>Moeda</span>
-                                          <select
-                                            defaultValue={
-                                              rule.defaultCurrency ?? "BRL"
-                                            }
-                                            name="defaultCurrency"
-                                          >
-                                            <option value="BRL">BRL</option>
-                                            <option value="USD">USD</option>
-                                            <option value="EUR">EUR</option>
-                                          </select>
-                                        </label>
-                                        <PendingSubmitButton
-                                          className="button primary"
-                                          label="Salvar valor"
-                                          pendingLabel="Salvando..."
-                                        />
-                                      </BackofficeActionForm>
-                                    </details>
-                                  ) : null}
-                                  <form action={updateConversionRuleStatus}>
-                                    <input
-                                      type="hidden"
-                                      name="ruleId"
-                                      value={rule.id}
-                                    />
-                                    <input
-                                      type="hidden"
-                                      name="active"
-                                      value={String(!rule.active)}
-                                    />
-                                    <button className="button" type="submit">
-                                      {rule.active ? "Pausar" : "Ativar"}
-                                    </button>
-                                  </form>
-                                </div>
-                              ) : (
-                                <span className="event-chip warn">
-                                  sem permissao
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={6}>
-                            <strong>{emptyTitle}</strong>
-                            <span>{emptyDescription}</span>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
               </section>
             </div>
           </details>

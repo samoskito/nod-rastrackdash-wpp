@@ -18,7 +18,6 @@ vi.mock("../src/lib/server-api", () => ({
 }));
 
 import {
-  adaptProviderConversionRuleAction,
   createProviderConversionRuleAction,
   loadProviderConversionAutomationAuditAction,
   loadProviderConversionAutomationPayloadAction,
@@ -118,55 +117,6 @@ describe("provider conversion rule server actions", () => {
     expect(result.message).not.toContain("secret");
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
     expect(revalidatePath).toHaveBeenCalledWith("/settings");
-  });
-
-  it("adapts the same legacy rule to selected Umbler channels in observation", async () => {
-    const adaptedRule = {
-      ...providerRule,
-      conversionRule: {
-        ...providerRule.conversionRule,
-        id: "legacy_rule_1",
-        name: "Compra por aviso",
-        triggerType: "message_phrase",
-        triggerValue: "aviso de compra",
-        matchMode: "contains",
-        eventName: "Purchase",
-        defaultValueCents: 9990,
-        defaultCurrency: "BRL",
-      },
-      triggerPhrases: ["aviso de compra"],
-      messageAuthorScope: "team",
-    };
-    serverApiFetch.mockResolvedValueOnce(adaptedRule);
-    const payload = {
-      connectionId: "connection_1",
-      channelIds: ["channel_1"],
-      triggerPhrases: ["aviso de compra"],
-      messageAuthorScope: "team",
-    };
-
-    const result = await adaptProviderConversionRuleAction(
-      form({
-        legacyRuleId: "legacy_rule_1",
-        payload: JSON.stringify(payload),
-      }),
-    );
-
-    expect(serverApiFetch).toHaveBeenCalledWith(
-      "/conversion-rules/providers/adapt/legacy_rule_1",
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      },
-    );
-    expect(result).toEqual({
-      ok: true,
-      message: "Regra vinculada aos canais Umbler e mantida em observacao.",
-    });
-    expect(revalidatePath.mock.calls.map(([path]) => path)).toEqual([
-      "/integrations",
-      "/settings",
-    ]);
   });
 
   it("updates, rotates and removes only through provider-rule endpoints", async () => {

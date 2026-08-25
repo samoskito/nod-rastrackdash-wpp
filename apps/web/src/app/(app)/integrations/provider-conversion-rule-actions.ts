@@ -7,7 +7,6 @@ import {
   providerConversionAutomationReprocessBatchResultSchema,
   providerConversionAutomationReprocessResultSchema,
   providerConversionEndpointSecretResultSchema,
-  providerConversionRuleAdaptInputSchema,
   providerConversionRuleCreateInputSchema,
   providerConversionRuleCreateResultSchema,
   providerConversionRuleExecutionAuditSchema,
@@ -420,43 +419,6 @@ export async function removeProviderConversionRuleAction(
     };
   } catch {
     return failure("Nao foi possivel remover a regra de conversao.");
-  }
-}
-
-export async function adaptProviderConversionRuleAction(
-  formData: FormData,
-): Promise<ProviderConversionRuleActionResult> {
-  const legacyRuleId = formId(formData, "legacyRuleId");
-  const input = parsePayload(
-    formData,
-    providerConversionRuleAdaptInputSchema.safeParse,
-  );
-
-  if (!legacyRuleId || !input) {
-    return failure(invalidFormMessage);
-  }
-
-  try {
-    const response = await serverApiFetch<unknown>(
-      `/conversion-rules/providers/adapt/${encodeURIComponent(legacyRuleId)}`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      },
-    );
-    const result = providerConversionRuleSchema.safeParse(response);
-
-    if (!result.success || result.data.conversionRule.id !== legacyRuleId) {
-      return failure("Nao foi possivel adaptar esta regra para a Umbler.");
-    }
-
-    revalidateConversionRulePaths();
-    return {
-      ok: true,
-      message: "Regra vinculada aos canais Umbler e mantida em observacao.",
-    };
-  } catch {
-    return failure("Nao foi possivel adaptar esta regra para a Umbler.");
   }
 }
 
