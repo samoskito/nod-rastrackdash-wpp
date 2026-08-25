@@ -3,7 +3,7 @@ import { HttpException } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LicenseSoftlockGuard } from "../../src/licensing-client/license-softlock.guard";
 import type { LicenseClientService } from "../../src/licensing-client/license-client.service";
-import type { LicenseRuntimeState } from "../../src/licensing-client/license-client.types";
+import type { LicenseLockState, LicenseRuntimeState } from "../../src/licensing-client/license-client.types";
 
 function blockedState(reason: LicenseRuntimeState["reason"] = "revoked"): LicenseRuntimeState {
   return {
@@ -15,6 +15,23 @@ function blockedState(reason: LicenseRuntimeState["reason"] = "revoked"): Licens
     validUntil: null,
     source: "cache",
     reason,
+    interval: null,
+  };
+}
+
+function neverActivatedState(
+  reason: Extract<LicenseRuntimeState["reason"], "license_required" | "activation_failed">,
+): LicenseRuntimeState {
+  return {
+    status: "unlicensed",
+    softLock: true,
+    hardLock: true,
+    usable: false,
+    expiresAt: null,
+    validUntil: null,
+    source: "cache",
+    reason,
+    interval: null,
   };
 }
 
@@ -28,13 +45,25 @@ function activeState(): LicenseRuntimeState {
     validUntil: null,
     source: "cache",
     reason: null,
+    interval: null,
   };
 }
 
+/**
+ * Mirrors LicenseClientService.getLockState(): inert never locks, otherwise
+ * anything not usable locks with the state's own reason.
+ */
 function fakeService(overrides: { isInert?: boolean; state?: LicenseRuntimeState } = {}) {
-  const isInert = vi.fn().mockResolvedValue(overrides.isInert ?? false);
-  const getState = vi.fn().mockResolvedValue(overrides.state ?? activeState());
-  return { isInert, getState } as unknown as LicenseClientService;
+  const inert = overrides.isInert ?? false;
+  const state = overrides.state ?? activeState();
+  const lockState: LicenseLockState = {
+    inert,
+    locked: !inert && !state.usable,
+    reason: !inert && !state.usable ? (state.reason ?? "revoked") : null,
+    state,
+  };
+  const getLockState = vi.fn().mockResolvedValue(lockState);
+  return { getLockState } as unknown as LicenseClientService;
 }
 
 function makeContext(request: { method: string; path: string }): ExecutionContext {
@@ -131,7 +160,7 @@ describe("LicenseSoftlockGuard", () => {
     await expect(
       guard.canActivate(makeContext({ method: "POST", path })),
     ).resolves.toBe(true);
-    expect(service.getState).not.toHaveBeenCalled();
+    expect(service.getLockState).not.toHaveBeenCalled();
   });
 
   it("passes every mutating request when the guard is inert", async () => {
@@ -141,7 +170,70 @@ describe("LicenseSoftlockGuard", () => {
     await expect(
       guard.canActivate(makeContext({ method: "POST", path: "/leads" })),
     ).resolves.toBe(true);
-    expect(service.getState).not.toHaveBeenCalled();
+  });
+
+  it("blocks a mutating request with 'license_required' when the license was never activated", async () => {
+    const service = fakeService({ state: neverActivatedState("license_required") });
+    const guard = new LicenseSoftlockGuard(service);
+
+    try {
+      await guard.canActivate(makeContext({ method: "POST", path: "/leads" }));
+      throw new Error("expected canActivate to throw");
+    } catch (error) {
+      const httpError = error as HttpException;
+      expect(httpError.getStatus()).toBe(423);
+      expect(httpError.getResponse()).toMatchObject({
+        statusCode: 423,
+        error: "License Locked",
+        reason: "license_required",
+        licenseStatus: "unlicensed",
+      });
+      expect((httpError.getResponse() as { message: string }).message).toContain("Licença não ativada");
+    }
+  });
+
+  it("blocks a mutating request with 'activation_failed' when the last activation attempt failed", async () => {
+    const service = fakeService({ state: neverActivatedState("activation_failed") });
+    const guard = new LicenseSoftlockGuard(service);
+
+    try {
+      await guard.canActivate(makeContext({ method: "POST", path: "/workspaces" }));
+      throw new Error("expected canActivate to throw");
+    } catch (error) {
+      const httpError = error as HttpException;
+      expect(httpError.getStatus()).toBe(423);
+      expect(httpError.getResponse()).toMatchObject({
+        reason: "activation_failed",
+        licenseStatus: "unlicensed",
+      });
+      expect((httpError.getResponse() as { message: string }).message).toContain("LICENSE_KEY");
+    }
+  });
+
+  it("still allows reads while the license was never activated", async () => {
+    const service = fakeService({ state: neverActivatedState("license_required") });
+    const guard = new LicenseSoftlockGuard(service);
+
+    await expect(guard.canActivate(makeContext({ method: "GET", path: "/leads" }))).resolves.toBe(true);
+  });
+
+  it.each([
+    ["/health", "/health"],
+    ["/license-client activate", "/license-client/activate"],
+    ["/auth", "/auth/login"],
+  ])("keeps %s reachable while the license was never activated", async (_label, path) => {
+    const service = fakeService({ state: neverActivatedState("license_required") });
+    const guard = new LicenseSoftlockGuard(service);
+
+    await expect(guard.canActivate(makeContext({ method: "POST", path }))).resolves.toBe(true);
+    expect(service.getLockState).not.toHaveBeenCalled();
+  });
+
+  it("passes mutating requests when licensing is inert (no LICENSE_SERVER_URL), even with no activation", async () => {
+    const service = fakeService({ isInert: true, state: neverActivatedState("license_required") });
+    const guard = new LicenseSoftlockGuard(service);
+
+    await expect(guard.canActivate(makeContext({ method: "POST", path: "/leads" }))).resolves.toBe(true);
   });
 
   it("caches the inert/state decision for the TTL window instead of hitting the service every request", async () => {
@@ -154,8 +246,7 @@ describe("LicenseSoftlockGuard", () => {
     now += 30_000; // still within the 60s TTL
     await guard.canActivate(makeContext({ method: "POST", path: "/leads" }));
 
-    expect(service.isInert).toHaveBeenCalledTimes(1);
-    expect(service.getState).toHaveBeenCalledTimes(1);
+    expect(service.getLockState).toHaveBeenCalledTimes(1);
 
     Date.now = realDateNow;
   });
@@ -170,8 +261,7 @@ describe("LicenseSoftlockGuard", () => {
     now += 61_000; // past the 60s TTL
     await guard.canActivate(makeContext({ method: "POST", path: "/leads" }));
 
-    expect(service.isInert).toHaveBeenCalledTimes(2);
-    expect(service.getState).toHaveBeenCalledTimes(2);
+    expect(service.getLockState).toHaveBeenCalledTimes(2);
 
     Date.now = realDateNow;
   });

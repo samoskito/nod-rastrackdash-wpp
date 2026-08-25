@@ -64,8 +64,10 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
 
 5. Siga esta ordem obrigatória, linear e sem pular etapas: (1) escolher o
    alvo e ler os docs do repositório/setup; (2) API, PostgreSQL e Redis;
-   (3) migrations/bootstrap; (4) `LICENSE_*` e validação de
-   `/backoffice/license`; (5) preencher `WPPTRACK_PLATFORM_ADMIN_EMAILS`
+   (3) migrations/bootstrap; (4) `LICENSE_*`, ativação da licença
+   (`POST /license-client/activate`) e validação de
+   `/backoffice/license` — sem licença ativa a API bloqueia toda escrita
+   com `423`, então isso vem **antes** de criar qualquer workspace/cliente; (5) preencher `WPPTRACK_PLATFORM_ADMIN_EMAILS`
    antes do primeiro login; (6) definir `META_CONNECTION_MODES=manual`
    antes da Meta; (7) definir `AUTH_COOKIE_DOMAIN` se frontend/API forem
    subdomínios irmãos; (8) redeploy da API após qualquer mudança de env;

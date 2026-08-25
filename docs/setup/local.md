@@ -107,7 +107,14 @@ Ambos devem responder com status HTTP 200/JSON de saúde (`/health/ready` retorn
 
 1. Logue com o admin criado no passo 5.
 2. Abra `/backoffice` e confira o checklist de onboarding (banco, licença, Meta, workspace).
-3. Abra `/backoffice/license` — sem `LICENSE_KEY` preenchida, o cliente de licença fica em no-op; preencha `LICENSE_*` (veja [`environment.md`](environment.md)) quando tiver a chave da PalmUP e confirme "utilizável".
+3. Abra `/backoffice/license` — com `LICENSE_SERVER_URL` preenchido e sem ativação, a instância fica **bloqueada para escrita** (`423`) e a página mostra o que fazer. Preencha `LICENSE_*` (veja [`environment.md`](environment.md)), reinicie a API, ative a licença e confirme "utilizável":
+
+   ```bash
+   curl -s -X POST http://localhost:3333/license-client/activate \
+     -H 'content-type: application/json' -d '{}'
+   ```
+
+   (a rota de ativação continua liberada durante o bloqueio; a chave sai do `.env`, nunca do corpo do comando em chat)
 4. Abra `/integrations` para conectar Meta ([`meta-manual.md`](meta-manual.md)) e um provedor de WhatsApp.
 
 ## Próximos passos

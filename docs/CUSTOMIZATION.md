@@ -50,9 +50,11 @@ BRAND_PRIMARY_COLOR=#0F766E
   backoffice — sao ferramentas internas da equipe PalmUP, sem uso para o
   aluno.
 - A aba **Licenca** (`/backoffice/license`) e somente leitura: mostra
-  `status`, `usable`, `softLock`, `hardLock`, `expiresAt`, `validUntil` e
-  `source` vindos de `GET /license-client/status`. Nunca exibe
-  `LICENSE_KEY`, identidade de conta ou tokens.
+  `status`, `usable`, `softLock`, `hardLock`, tipo de licenca (`interval`),
+  `expiresAt`, `validUntil`, `source` e, quando a escrita esta bloqueada,
+  `locked`/`lockReason` vindos de `GET /license-client/status` — com as
+  instrucoes de ativacao. Nunca exibe `LICENSE_KEY`, identidade de conta ou
+  tokens.
 - O link de ativacao para o dono do cliente
   (`clientOwnerActivationLinkResultSchema`) so existe hoje como contrato em
   `@wpptrack/shared`; o endpoint que o implementava foi removido na

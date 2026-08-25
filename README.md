@@ -8,7 +8,7 @@
 
 **Student edition F3–F6.2 landed** on this public template (sanitized export of private WppTrack):
 
-- License **client** (activate / heartbeat / soft-lock / status UI)
+- License **client** (activate / heartbeat / status UI) — fail-closed: without a valid activation, reads stay open and every write answers `423`
 - WhatsApp multi-provider registry: `uazapi_byo`, `nod_api` (PalmUP broker), `waha`, `zapi`
 - Inbound webhook parsers (Umbler, Gupshup, WAHA, Z-API)
 - Disconnect alerts (optional webhook)

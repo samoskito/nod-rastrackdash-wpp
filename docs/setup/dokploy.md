@@ -135,7 +135,7 @@ No serviço da API, abra o **painel/formulário de variáveis de ambiente do ser
 - `API_PUBLIC_URL` — a URL pública que você vai apontar para este serviço (ex. `https://api.seudominio.com`), definida no passo 9.
 - `WEB_ORIGIN` — a URL pública do seu frontend. **No primeiro preenchimento você ainda não tem essa URL** (o web só é publicado no passo 10) — use um placeholder temporário (ex. `https://PLACEHOLDER.seudominio.com`) e volte a corrigir no passo 11. Não deixe de voltar: CORS depende deste valor bater exatamente com a URL real do web.
 - Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores **novos** para produção, nunca reutilize os de desenvolvimento local (ex.: `openssl rand -hex 32`).
-- `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preenchidos no passo 12; pode deixar em branco por enquanto se ainda não tiver a chave.
+- `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preenchidos no passo 12. Você pode deixar `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` em branco só até lá: sem licença ativa a API bloqueia **toda escrita** com `423` (inclusive criar workspace/cliente no passo 13).
 - Provedores de WhatsApp que você for usar (`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL`) — preenchidos no passo 13.
 
 **Nunca** cole esses valores em um `.env` commitado no repositório nem em um chat de IA — preencha direto no formulário do Dokploy. Se um agente de IA estiver conduzindo esta etapa, ele deve **pedir para você digitar cada segredo diretamente no Dokploy**, nunca pedir para você colá-lo na conversa.
@@ -202,9 +202,16 @@ Preencha na env da API (passo 6), se ainda não preencheu:
 - `LICENSE_ACCOUNT_IDENTITY` — o e-mail **exato** da sua conta de compra (um valor diferente retorna `403` na ativação).
 - `LICENSE_SERVER_URL` — normalmente já vem preenchido a partir do `.env.example`; não altere sem orientação da PalmUP.
 
-Redeploy da API se você editou envs depois do passo 7.
+Redeploy da API se você editou envs depois do passo 7. Depois do redeploy, ative a licença (a rota fica liberada mesmo com a instância bloqueada):
 
-**Validação:** logado no web publicado, `/backoffice/license` mostra licença **utilizável**. Se der `403` ou "não configurada", veja [Licença 403](troubleshooting.md#licença-403não-configurada).
+```bash
+curl -s -X POST https://api.seudominio.com/license-client/activate \
+  -H 'content-type: application/json' -d '{}'
+```
+
+A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em chat.
+
+**Validação:** logado no web publicado, `/backoffice/license` mostra licença **utilizável**. Enquanto não estiver, o passo 13 (workspace/cliente) falha com `423` — isso é esperado, é o bloqueio de licença. Se der `403` ou "não configurada", veja [Licença 403](troubleshooting.md#licença-403não-configurada).
 
 ## 13. Primeiro login, workspace, Meta manual e WhatsApp
 

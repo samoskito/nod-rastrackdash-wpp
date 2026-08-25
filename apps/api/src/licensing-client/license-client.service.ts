@@ -12,21 +12,25 @@ import {
 } from "./license-client.constants";
 import type {
   LicenseActionResult,
-  LicenseBlockReason,
+  LicenseLockReason,
+  LicenseLockState,
   LicensePublicKeyResult,
   LicenseRuntimeState,
 } from "./license-client.types";
 
-const UNLICENSED_STATE: LicenseRuntimeState = {
-  status: "unlicensed",
-  softLock: true,
-  hardLock: true,
-  usable: false,
-  expiresAt: null,
-  validUntil: null,
-  source: "cache",
-  reason: null,
-};
+function unlicensedState(reason: LicenseLockReason, interval: string | null): LicenseRuntimeState {
+  return {
+    status: "unlicensed",
+    softLock: true,
+    hardLock: true,
+    usable: false,
+    expiresAt: null,
+    validUntil: null,
+    source: "cache",
+    reason,
+    interval,
+  };
+}
 
 /**
  * Client for the private PalmUP license server. Talks over HTTP only — this
@@ -38,6 +42,16 @@ const UNLICENSED_STATE: LicenseRuntimeState = {
 export class LicenseClientService {
   private readonly logger = new Logger(LicenseClientService.name);
   private publicKeyCache: KeyLike | null = null;
+  /**
+   * Set when the most recent activation attempt failed with a key present,
+   * cleared on the next success. Process-local on purpose: LicenseState has
+   * no column for it and this template must not add a migration, so a restart
+   * degrades the lock reason from "activation_failed" back to the equally
+   * locked "license_required".
+   */
+  private lastActivationError: string | null = null;
+  /** Subscription period from the last verified server response, when it reports one. */
+  private lastKnownInterval: string | null = null;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -63,44 +77,69 @@ export class LicenseClientService {
     }
 
     const fingerprint = this.getFingerprint();
-    const response = await this.fetchFn(this.serverUrl("/license/activate"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        key,
-        fingerprint,
-        accountIdentity,
-        appVersion: options?.appVersion,
-        deployLabel: options?.deployLabel,
-      }),
-    });
-    if (!response.ok) {
-      // The private license server responds 403/409 specifically when the
-      // key is already bound to a different accountIdentity — single
-      // attempt, no retry loop (see .claude-task-f4-2-softlock.md #3).
-      if (response.status === 403 || response.status === 409) {
-        throw new LicenseAccountMismatchError();
+    try {
+      const response = await this.fetchFn(this.serverUrl("/license/activate"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          key,
+          fingerprint,
+          accountIdentity,
+          appVersion: options?.appVersion,
+          deployLabel: options?.deployLabel,
+        }),
+      });
+      if (!response.ok) {
+        // The private license server responds 403/409 specifically when the
+        // key is already bound to a different accountIdentity — single
+        // attempt, no retry loop (see .claude-task-f4-2-softlock.md #3).
+        if (response.status === 403 || response.status === 409) {
+          throw new LicenseAccountMismatchError();
+        }
+        throw new Error(`license_activate_failed:${response.status}`);
       }
-      throw new Error(`license_activate_failed:${response.status}`);
+      const result = (await response.json()) as LicenseActionResult;
+      const state = await this.persistVerifiedResult(result, fingerprint, accountIdentity);
+      this.lastActivationError = null;
+      return state;
+    } catch (error) {
+      // Fail closed: a key that is configured but never activated cleanly
+      // must not leave the install usable (see .claude-task-license-hard-lock.md #2).
+      this.lastActivationError = error instanceof Error ? error.message : "license_activate_failed";
+      this.logger.warn(`license_activate_error:${this.lastActivationError}`);
+      throw error;
     }
-    const result = (await response.json()) as LicenseActionResult;
-    return this.persistVerifiedResult(result, fingerprint, accountIdentity);
   }
 
   /**
-   * True when the soft-lock guard should be a no-op: no license server
-   * configured, or nothing has ever been activated and no key is set either
-   * (fresh template checkout / dev without license envs).
+   * True when licensing is switched off entirely: no LICENSE_SERVER_URL
+   * configured (local development of this template). With a server
+   * configured, an install that never activated is LOCKED, not inert — the
+   * student edition is unusable until a license is activated.
    */
   async isInert(): Promise<boolean> {
-    if (!this.env.LICENSE_SERVER_URL?.trim()) {
-      return true;
+    return !this.env.LICENSE_SERVER_URL?.trim();
+  }
+
+  /**
+   * Single source of truth for "may this install write?", shared by the
+   * soft-lock guard and the public status endpoint.
+   */
+  async getLockState(): Promise<LicenseLockState> {
+    if (await this.isInert()) {
+      return {
+        inert: true,
+        locked: false,
+        reason: null,
+        state: unlicensedState("license_required", this.lastKnownInterval),
+      };
     }
-    if (this.env.LICENSE_KEY?.trim()) {
-      return false;
+
+    const state = await this.getState();
+    if (state.usable) {
+      return { inert: false, locked: false, reason: null, state };
     }
-    const row = await this.prisma.licenseState.findUnique({ where: { id: LICENSE_STATE_ID } });
-    return !row;
+    return { inert: false, locked: true, reason: state.reason ?? "revoked", state };
   }
 
   async heartbeat(): Promise<LicenseRuntimeState> {
@@ -150,7 +189,12 @@ export class LicenseClientService {
   async getState(): Promise<LicenseRuntimeState> {
     const row = await this.prisma.licenseState.findUnique({ where: { id: LICENSE_STATE_ID } });
     if (!row) {
-      return UNLICENSED_STATE;
+      // Never activated: a configured key whose activation failed is reported
+      // separately so the UI can tell "activate it" from "fix the key".
+      return unlicensedState(
+        this.lastActivationError ? "activation_failed" : "license_required",
+        this.lastKnownInterval,
+      );
     }
 
     const { status, reason } = this.deriveStatus(row.status, row.expiresAt, row.cacheValidUntil, row.lastCheckedAt);
@@ -163,6 +207,7 @@ export class LicenseClientService {
       validUntil: row.cacheValidUntil ? row.cacheValidUntil.toISOString() : null,
       source: "cache",
       reason,
+      interval: this.lastKnownInterval,
     };
   }
 
@@ -178,10 +223,10 @@ export class LicenseClientService {
     expiresAt: Date | null,
     cacheValidUntil: Date | null,
     lastCheckedAt: Date | null,
-  ): { status: LicenseRuntimeState["status"]; reason: LicenseBlockReason | null } {
+  ): { status: LicenseRuntimeState["status"]; reason: LicenseLockReason | null } {
     const now = Date.now();
     if (storedStatus === "blocked") {
-      const reason: LicenseBlockReason = expiresAt && expiresAt.getTime() <= now ? "expired" : "revoked";
+      const reason: LicenseLockReason = expiresAt && expiresAt.getTime() <= now ? "expired" : "revoked";
       return { status: "blocked", reason };
     }
     if (cacheValidUntil && cacheValidUntil.getTime() > now) {
@@ -208,6 +253,10 @@ export class LicenseClientService {
       throw new Error(`license_cache_token_invalid:${verification.reason ?? "unknown"}`);
     }
 
+    if (result.interval !== undefined) {
+      this.lastKnownInterval = result.interval;
+    }
+
     const data = {
       fingerprint,
       accountIdentity,
@@ -226,7 +275,7 @@ export class LicenseClientService {
       update: data,
     });
 
-    const reason: LicenseBlockReason | null =
+    const reason: LicenseLockReason | null =
       result.status === "blocked"
         ? result.expiresAt && new Date(result.expiresAt).getTime() <= Date.now()
           ? "expired"
@@ -241,6 +290,7 @@ export class LicenseClientService {
       validUntil: result.validUntil,
       source: "server",
       reason,
+      interval: this.lastKnownInterval,
     };
   }
 

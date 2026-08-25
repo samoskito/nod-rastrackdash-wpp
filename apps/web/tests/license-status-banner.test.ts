@@ -58,6 +58,55 @@ describe("LicenseStatusBanner", () => {
     expect(html).toContain("error");
   });
 
+  it("renders a persistent banner linking to the license page when activation is required", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "unlicensed",
+        softLock: true,
+        hardLock: true,
+        usable: false,
+        expiresAt: null,
+        validUntil: null,
+        source: "cache",
+        locked: true,
+        lockReason: "license_required",
+        interval: null,
+      }),
+    );
+
+    const element = await LicenseStatusBanner();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Licença não ativada");
+    expect(html).toContain("/backoffice/license");
+    expect(html).toContain("feedback-banner");
+    expect(html).toContain("error");
+  });
+
+  it("renders a banner pointing at the license envs when the activation attempt failed", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "unlicensed",
+        softLock: true,
+        hardLock: true,
+        usable: false,
+        expiresAt: null,
+        validUntil: null,
+        source: "cache",
+        locked: true,
+        lockReason: "activation_failed",
+        interval: null,
+      }),
+    );
+
+    const element = await LicenseStatusBanner();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Falha ao ativar a licença");
+    expect(html).toContain("LICENSE_KEY");
+    expect(html).toContain("/backoffice/license");
+  });
+
   it("renders nothing when the license is active", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse({
@@ -77,7 +126,7 @@ describe("LicenseStatusBanner", () => {
     expect(html.trim()).toBe("<div></div>");
   });
 
-  it("renders nothing (dev-friendly) when the license is unlicensed", async () => {
+  it("renders nothing (dev-friendly) when licensing is inert — unlicensed but not locked", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse({
         status: "unlicensed",

@@ -5292,6 +5292,13 @@ body {
   line-height: 1.45;
 }
 
+.feedback-banner a {
+  justify-self: start;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .feedback-banner.warn {
   border-color: rgba(234, 179, 8, 0.4);
   background:

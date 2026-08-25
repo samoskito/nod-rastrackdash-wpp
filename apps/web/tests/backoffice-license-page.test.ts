@@ -37,6 +37,81 @@ describe("backoffice license page", () => {
     expect(html).not.toContain("LICENSE_KEY");
   });
 
+  it("shows the license interval and expiration date when activated", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "active",
+        softLock: false,
+        hardLock: false,
+        usable: true,
+        expiresAt: "2027-06-15T12:00:00.000Z",
+        validUntil: null,
+        source: "server",
+        locked: false,
+        lockReason: null,
+        interval: "annual",
+      }),
+    );
+
+    const element = await LicensePage();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Tipo de licença");
+    expect(html).toContain("Anual");
+    expect(html).toContain("Expira em");
+    expect(html).toContain("15/06/2027");
+  });
+
+  it("explains how to activate when the instance is locked for lack of a license", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "unlicensed",
+        softLock: true,
+        hardLock: true,
+        usable: false,
+        expiresAt: null,
+        validUntil: null,
+        source: "cache",
+        locked: true,
+        lockReason: "license_required",
+        interval: null,
+      }),
+    );
+
+    const element = await LicensePage();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Licença não ativada");
+    expect(html).toContain("escrita");
+    expect(html).toContain("LICENSE_KEY");
+    expect(html).toContain("LICENSE_ACCOUNT_IDENTITY");
+    expect(html).toContain("/license-client/activate");
+    expect(html).not.toMatch(/lic_[a-zA-Z0-9]/);
+  });
+
+  it("explains how to fix a failed activation attempt", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "unlicensed",
+        softLock: true,
+        hardLock: true,
+        usable: false,
+        expiresAt: null,
+        validUntil: null,
+        source: "cache",
+        locked: true,
+        lockReason: "activation_failed",
+        interval: null,
+      }),
+    );
+
+    const element = await LicensePage();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Falha ao ativar a licença");
+    expect(html).toContain("LICENSE_ACCOUNT_IDENTITY");
+  });
+
   it("shows the grace-period tolerance window", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse({

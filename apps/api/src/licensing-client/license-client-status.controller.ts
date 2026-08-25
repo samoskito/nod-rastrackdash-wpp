@@ -1,15 +1,19 @@
 import { Body, Controller, ForbiddenException, Get, HttpCode, HttpException, HttpStatus, Inject, Post } from "@nestjs/common";
 import { LicenseAccountMismatchError } from "./license-client-errors";
 import { LicenseClientService } from "./license-client.service";
-import type { LicenseRuntimeState } from "./license-client.types";
+import type { LicenseLockReason, LicenseLockState, LicenseRuntimeState } from "./license-client.types";
 
 /** Minimum time between two activation attempts — light in-memory throttle (see #3 in the task spec). */
 const ACTIVATE_MIN_INTERVAL_MS = 5_000;
 
 type PublicLicenseStatus = Pick<
   LicenseRuntimeState,
-  "status" | "softLock" | "hardLock" | "usable" | "expiresAt" | "validUntil" | "source"
->;
+  "status" | "softLock" | "hardLock" | "usable" | "expiresAt" | "validUntil" | "source" | "interval"
+> & {
+  /** True when writes are locked — lets the web UI show the hard-lock banner. */
+  locked: boolean;
+  lockReason: LicenseLockReason | null;
+};
 
 /**
  * Public (no auth) — coarse license status only, no key material or account
@@ -24,8 +28,8 @@ export class LicenseClientStatusController {
 
   @Get("status")
   async getStatus(): Promise<PublicLicenseStatus> {
-    const state = await this.licenseClientService.getState();
-    return toPublicStatus(state);
+    const lock = await this.licenseClientService.getLockState();
+    return toPublicStatus(lock.state, lock);
   }
 
   @Post("activate")
@@ -34,7 +38,8 @@ export class LicenseClientStatusController {
     this.enforceRateLimit();
     try {
       const state = await this.licenseClientService.activate({ key: body?.key });
-      return toPublicStatus(state);
+      const lock = await this.licenseClientService.getLockState();
+      return toPublicStatus(state, lock);
     } catch (error) {
       if (error instanceof LicenseAccountMismatchError) {
         throw new ForbiddenException(error.message);
@@ -52,7 +57,7 @@ export class LicenseClientStatusController {
   }
 }
 
-function toPublicStatus(state: LicenseRuntimeState): PublicLicenseStatus {
+function toPublicStatus(state: LicenseRuntimeState, lock: LicenseLockState): PublicLicenseStatus {
   return {
     status: state.status,
     softLock: state.softLock,
@@ -61,5 +66,8 @@ function toPublicStatus(state: LicenseRuntimeState): PublicLicenseStatus {
     expiresAt: state.expiresAt,
     validUntil: state.validUntil,
     source: state.source,
+    interval: state.interval,
+    locked: lock.locked,
+    lockReason: lock.reason,
   };
 }

@@ -53,6 +53,7 @@ function actionResultFixture(
     validUntil,
     bound: overrides.bound ?? true,
     keyPrefix: overrides.keyPrefix ?? "RTD-1234",
+    interval: overrides.interval ?? null,
     cacheToken: signCompactToken(payload, privateKey),
   };
 }
@@ -261,11 +262,11 @@ describe("LicenseClientService", () => {
       expect(await service.isInert()).toBe(true);
     });
 
-    it("is inert when no LicenseState row exists and LICENSE_KEY is empty", async () => {
+    it("is NOT inert when the server is configured but nothing was ever activated and no key is set", async () => {
       const { prisma } = createFakePrisma(); // no initial row -> findUnique() resolves null
       const service = new LicenseClientService(prisma, baseEnv({ LICENSE_KEY: undefined }));
 
-      expect(await service.isInert()).toBe(true);
+      expect(await service.isInert()).toBe(false);
     });
 
     it("is not inert when LICENSE_KEY is set, even without a LicenseState row yet", async () => {
@@ -280,6 +281,192 @@ describe("LicenseClientService", () => {
       const service = new LicenseClientService(prisma, baseEnv({ LICENSE_KEY: undefined }));
 
       expect(await service.isInert()).toBe(false);
+    });
+
+    it("stays inert without LICENSE_SERVER_URL even when LICENSE_KEY is set", async () => {
+      const { prisma } = createFakePrisma();
+      const service = new LicenseClientService(prisma, baseEnv({ LICENSE_SERVER_URL: undefined }));
+
+      expect(await service.isInert()).toBe(true);
+    });
+  });
+
+  describe("getLockState()", () => {
+    function offlineFetch(): typeof fetch {
+      return (async () => {
+        throw new Error("no network calls expected");
+      }) as typeof fetch;
+    }
+
+    it("does not lock when inert (no license server configured)", async () => {
+      const { prisma } = createFakePrisma();
+      const service = new LicenseClientService(
+        prisma,
+        baseEnv({ LICENSE_SERVER_URL: undefined }),
+        offlineFetch(),
+      );
+
+      const lock = await service.getLockState();
+
+      expect(lock).toMatchObject({ inert: true, locked: false, reason: null });
+    });
+
+    it("locks with 'license_required' when the server is configured and nothing was ever activated", async () => {
+      const { prisma } = createFakePrisma();
+      const service = new LicenseClientService(prisma, baseEnv({ LICENSE_KEY: undefined }), offlineFetch());
+
+      const lock = await service.getLockState();
+
+      expect(lock.locked).toBe(true);
+      expect(lock.reason).toBe("license_required");
+      expect(lock.state.status).toBe("unlicensed");
+    });
+
+    it("locks with 'license_required' when LICENSE_KEY is set but activation was never attempted", async () => {
+      const { prisma } = createFakePrisma();
+      const service = new LicenseClientService(prisma, baseEnv(), offlineFetch());
+
+      const lock = await service.getLockState();
+
+      expect(lock.locked).toBe(true);
+      expect(lock.reason).toBe("license_required");
+    });
+
+    it("locks with 'activation_failed' after an activation attempt with LICENSE_KEY fails", async () => {
+      const { prisma } = createFakePrisma();
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () => new Response(null, { status: 500 }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      await expect(service.activate()).rejects.toThrow();
+      const lock = await service.getLockState();
+
+      expect(lock.locked).toBe(true);
+      expect(lock.reason).toBe("activation_failed");
+    });
+
+    it("locks with 'activation_failed' when the key is bound to another account", async () => {
+      const { prisma } = createFakePrisma();
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () => new Response(null, { status: 403 }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      await expect(service.activate()).rejects.toBeInstanceOf(LicenseAccountMismatchError);
+
+      expect((await service.getLockState()).reason).toBe("activation_failed");
+    });
+
+    it("keeps 'license_required' when activation is refused for missing configuration", async () => {
+      const { prisma } = createFakePrisma();
+      const service = new LicenseClientService(prisma, baseEnv({ LICENSE_KEY: undefined }), offlineFetch());
+
+      await expect(service.activate()).rejects.toThrow("license_client_not_configured");
+
+      expect((await service.getLockState()).reason).toBe("license_required");
+    });
+
+    it("unlocks once activation succeeds, clearing a previous failure", async () => {
+      const { prisma } = createFakePrisma();
+      let activateStatus = 500;
+      const activateResult = actionResultFixture(privateKey, { status: "active" });
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () =>
+          activateStatus === 200 ? Response.json(activateResult) : new Response(null, { status: activateStatus }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      await expect(service.activate()).rejects.toThrow();
+      expect((await service.getLockState()).reason).toBe("activation_failed");
+
+      activateStatus = 200;
+      await service.activate();
+      const lock = await service.getLockState();
+
+      expect(lock.locked).toBe(false);
+      expect(lock.reason).toBeNull();
+    });
+
+    it("does not lock while the license is active", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        cacheValidUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
+        lastCheckedAt: new Date(),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), offlineFetch());
+
+      expect(await service.getLockState()).toMatchObject({ locked: false, reason: null });
+    });
+
+    it("does not lock while the license is in the grace window", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        cacheValidUntil: new Date(Date.now() - 60_000),
+        lastCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), offlineFetch());
+
+      const lock = await service.getLockState();
+
+      expect(lock.locked).toBe(false);
+      expect(lock.state.status).toBe("grace");
+    });
+
+    it("locks with the verified 'revoked' reason for a blocked license", async () => {
+      const { prisma } = createFakePrisma({
+        status: "blocked",
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        cacheValidUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
+        lastCheckedAt: new Date(),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), offlineFetch());
+
+      expect(await service.getLockState()).toMatchObject({ locked: true, reason: "revoked" });
+    });
+
+    it("locks with 'grace_exceeded' once the 72h no-contact window lapses", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        cacheValidUntil: new Date(Date.now() - 60_000),
+        lastCheckedAt: new Date(Date.now() - (LICENSE_GRACE_WINDOW_MS + 60_000)),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), offlineFetch());
+
+      expect(await service.getLockState()).toMatchObject({ locked: true, reason: "grace_exceeded" });
+    });
+  });
+
+  describe("license interval", () => {
+    it("exposes the interval reported by the license server after activation", async () => {
+      const { prisma } = createFakePrisma();
+      const activateResult = actionResultFixture(privateKey, { status: "active", interval: "annual" });
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/activate": () => Response.json(activateResult),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      const state = await service.activate();
+
+      expect(state.interval).toBe("annual");
+      expect((await service.getState()).interval).toBe("annual");
+    });
+
+    it("reports a null interval when the license server does not send one", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        cacheValidUntil: new Date(Date.now() + 6 * 60 * 60 * 1000),
+        lastCheckedAt: new Date(),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), (async () => {
+        throw new Error("no network calls expected");
+      }) as typeof fetch);
+
+      expect((await service.getState()).interval).toBeNull();
     });
   });
 

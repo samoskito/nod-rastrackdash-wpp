@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { serverApiFetch } from "../src/lib/server-api";
+import {
+  isLicenseLockedError,
+  serverApiFetch,
+  type LicenseLockedError,
+} from "../src/lib/server-api";
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({
@@ -34,6 +38,44 @@ describe("server api client", () => {
         }),
       }),
     );
+  });
+
+  it("surfaces a 423 license lock with its reason and pt-BR message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          statusCode: 423,
+          error: "License Locked",
+          message: "Licença não ativada — ative a licença em /backoffice/license.",
+          reason: "license_required",
+          licenseStatus: "unlicensed",
+        }),
+        { status: 423, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const error = await serverApiFetch("/workspaces", { method: "POST" }).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(isLicenseLockedError(error)).toBe(true);
+    expect((error as LicenseLockedError).status).toBe(423);
+    expect((error as LicenseLockedError).reason).toBe("license_required");
+    expect((error as LicenseLockedError).message).toContain("Licença não ativada");
+  });
+
+  it("falls back to a clear pt-BR message when a 423 body carries no message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 423 }),
+    );
+
+    const error = await serverApiFetch("/workspaces", { method: "POST" }).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(isLicenseLockedError(error)).toBe(true);
+    expect((error as LicenseLockedError).message).toContain("Licença");
+    expect((error as LicenseLockedError).message).not.toContain("API request failed");
   });
 
   it("accepts successful responses without a JSON body", async () => {

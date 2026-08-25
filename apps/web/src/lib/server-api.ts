@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { apiBaseUrl } from "./api";
+import type { LicenseLockReason } from "./license-status";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -11,8 +12,35 @@ export class ApiRequestError extends Error {
   }
 }
 
+const LICENSE_LOCKED_STATUS = 423;
+
+const LICENSE_LOCKED_FALLBACK =
+  "Licença não utilizável — operações de escrita bloqueadas. Verifique /backoffice/license.";
+
+/**
+ * HTTP 423 from the license guard. Extends ApiRequestError on purpose, so
+ * every existing `isApiRequestError(error)` handler keeps working (and keeps
+ * showing the API's pt-BR message) while callers that care can branch on the
+ * machine-readable reason.
+ */
+export class LicenseLockedError extends ApiRequestError {
+  constructor(
+    message: string,
+    readonly reason: LicenseLockReason,
+  ) {
+    super(message, LICENSE_LOCKED_STATUS);
+    this.name = "LicenseLockedError";
+  }
+}
+
 export function isApiRequestError(error: unknown): error is ApiRequestError {
   return error instanceof ApiRequestError;
+}
+
+export function isLicenseLockedError(
+  error: unknown,
+): error is LicenseLockedError {
+  return error instanceof LicenseLockedError;
 }
 
 export async function serverApiFetch<T>(
@@ -46,6 +74,10 @@ export async function serverApiFetch<T>(
   logSlowApiRequest(path, Date.now() - startedAt, response.status);
 
   if (!response.ok) {
+    if (response.status === LICENSE_LOCKED_STATUS) {
+      throw await licenseLockedError(response);
+    }
+
     throw new ApiRequestError(
       await responseErrorMessage(response),
       response.status,
@@ -76,6 +108,32 @@ function logSlowApiRequest(
     status,
     durationMs,
   });
+}
+
+async function licenseLockedError(
+  response: Response,
+): Promise<LicenseLockedError> {
+  let reason: LicenseLockReason = "revoked";
+  let message = LICENSE_LOCKED_FALLBACK;
+
+  try {
+    const body = (await response.json()) as {
+      message?: unknown;
+      reason?: unknown;
+    };
+
+    if (typeof body.message === "string" && body.message.trim()) {
+      message = body.message;
+    }
+
+    if (typeof body.reason === "string") {
+      reason = body.reason as LicenseLockReason;
+    }
+  } catch {
+    // Keep the pt-BR fallback: a 423 without a parsable body is still a lock.
+  }
+
+  return new LicenseLockedError(message, reason);
 }
 
 async function responseErrorMessage(response: Response): Promise<string> {

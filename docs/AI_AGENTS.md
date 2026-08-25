@@ -30,7 +30,7 @@ Leia **nesta ordem** antes de propor qualquer comando:
 ## Estado atual do repositório (pós F3–F6.2)
 
 - Código sanitizado do produto presente (G4+)
-- **License client** no template (activate/heartbeat/soft-lock/status) — server PalmUP privado
+- **License client** no template (activate/heartbeat/lock/status) — server PalmUP privado; **fail-closed**: sem ativação válida a escrita responde `423`
 - WhatsApp providers: `uazapi_byo`, `nod_api`, `waha`, `zapi` + parsers inbound
 - Backoffice aluno sem billing PalmUP; aba Licença RO
 - Whitelabel `BRAND_*` com footer residual fixo

@@ -60,8 +60,11 @@ pnpm --filter @wpptrack/api create-user -- --email voce@suaagencia.com --passwor
 ## 7. Ativar a licença
 
 1. Preencha `LICENSE_SERVER_URL` (já vem no `.env.example`), `LICENSE_KEY` e `LICENSE_ACCOUNT_IDENTITY` — sempre em `.env` local ou env do serviço, nunca commitado.
-2. Abra `/backoffice/license` e confirme que a licença aparece como **utilizável**.
-3. Se ver `403`, confira se `LICENSE_ACCOUNT_IDENTITY` é exatamente o e-mail vinculado à sua compra ([`setup/troubleshooting.md`](setup/troubleshooting.md)).
+2. Reinicie a API e ative a licença: `POST /license-client/activate` (rota liberada mesmo com a instância bloqueada; a chave sai do `.env`, você não cola nada em chat).
+3. Abra `/backoffice/license` e confirme que a licença aparece como **utilizável**.
+4. Se ver `403`, confira se `LICENSE_ACCOUNT_IDENTITY` é exatamente o e-mail vinculado à sua compra ([`setup/troubleshooting.md`](setup/troubleshooting.md)).
+
+Sem licença ativa a instância fica **bloqueada para escrita** (`423`): você consegue logar e navegar, mas não criar workspace/cliente no passo 8. Ative antes de seguir.
 
 ## 8. Primeiro workspace (cliente)
 

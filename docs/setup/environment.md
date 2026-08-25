@@ -44,7 +44,14 @@ Convenção de colunas:
 | `LICENSE_KEY` | Sim para ativar a licença | E-mail/WhatsApp recebido após a compra na PalmUP | `.env` local ou env do serviço — **nunca** commitado | **Sim** |
 | `LICENSE_ACCOUNT_IDENTITY` | Sim para ativar a licença | O e-mail da **sua conta de aluno**, exatamente igual ao usado na compra | `.env` local ou env do serviço | Não (mas deve corresponder à conta vinculada — um valor errado retorna `403` na ativação) |
 
-Sem `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` preenchidos, o cliente de licença fica em no-op (não trava a aplicação, mas `/backoffice/license` não mostra licença ativa).
+O template é **fail-closed**: com `LICENSE_SERVER_URL` preenchido (o padrão do
+`.env.example`), enquanto não houver uma ativação válida a leitura continua
+liberada, mas toda operação de escrita responde `423` — inclusive criar
+workspace/cliente. Preencha `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY`, reinicie a
+API e ative a licença (`POST /license-client/activate`) antes de criar seus
+clientes. O cliente de licença só fica inerte (sem travar nada) quando
+`LICENSE_SERVER_URL` está **vazio** — cenário de desenvolvimento local do
+template, não de uso do produto.
 
 ## E-mail (SMTP BYO)
 
