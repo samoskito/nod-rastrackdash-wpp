@@ -93,43 +93,41 @@ describe("/backoffice", () => {
 });
 
 describe("/backoffice/clients", () => {
-  it("renders a status page instead of inventing client records", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+  // Full coverage (create/list/empty/error/activation actions) lives in
+  // backoffice-clients-page.test.ts; this is a smoke test confirming the
+  // route wires the real multi-client workspaces API and keeps the shared
+  // backoffice navigation.
+  it("renders real workspaces from the API instead of a placeholder", async () => {
+    mockApi({
+      "/backoffice/workspaces": async () =>
+        jsonResponse([
+          {
+            id: "ws_1",
+            name: "Cliente Exemplo",
+            slug: "cliente-exemplo",
+            operationalStatus: "active",
+            createdAt: "2026-08-01T12:00:00.000Z",
+            responsible: {
+              id: "user_1",
+              name: "Fulano",
+              email: "fulano@cliente.com",
+              role: "owner",
+              status: "active",
+            },
+          },
+        ]),
+    });
 
-    const html = await renderPage(BackofficeClientsPage());
+    const html = await renderPage(await BackofficeClientsPage());
 
-    expect(fetchSpy).not.toHaveBeenCalled();
     expect(html).toContain("Clientes e acessos");
-    expect(html).toContain("Sem backend multi-cliente neste template");
-    // No client rows, no counters, no mutation forms.
-    expect(html).not.toContain("<table");
-    expect(html).not.toContain("<form");
-    expect(html).not.toContain("<input");
-    expect(html).not.toMatch(/\d+\s*(workspaces|clientes|leads)/iu);
-  });
-
-  it("names the areas that are missing and links only to real ones", async () => {
-    const html = await renderPage(BackofficeClientsPage());
-
-    expect(html).toContain("Painel de workspaces");
-    expect(html).toContain("Equipe da plataforma");
-    expect(html).toContain("Conectores externos");
-
-    expect(html).toContain('href="/settings"');
-    expect(html).toContain('href="/integrations"');
-    expect(html).toContain('href="/backoffice/license"');
-    expect(html).toContain('href="/backoffice/inbound-webhooks"');
-    expect(html).not.toContain("/backoffice/workspaces");
-    expect(html).not.toContain("/backoffice/platform-users");
-    expect(html).not.toContain("/backoffice/external-data");
-  });
-
-  it("keeps the backoffice navigation so the route is not a dead end", async () => {
-    const html = await renderPage(BackofficeClientsPage());
-
+    expect(html).toContain("Cliente Exemplo");
+    expect(html).toContain("cliente-exemplo");
+    expect(html).toContain("fulano@cliente.com");
     expect(html).toContain('href="/backoffice"');
     expect(html).toContain('aria-label="Areas do backoffice"');
     expect(html).toContain('aria-current="page"');
+    expect(html).not.toContain("Sem backend multi-cliente neste template");
   });
 });
 
