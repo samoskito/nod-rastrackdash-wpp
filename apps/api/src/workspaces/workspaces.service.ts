@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
@@ -39,6 +40,8 @@ import {
   type WorkspacePolicySubject,
 } from "./workspace-access-policy.service";
 import { WorkspaceContextService } from "./workspace-context.service";
+import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
+import { parseWebOrigin } from "../config/deployment-config";
 
 const inviteTtlMs = 1000 * 60 * 60 * 24 * 7;
 const actionableInviteStatuses = ["pending", "sent", "failed"] as const;
@@ -50,6 +53,8 @@ export type NewUserInviteAcceptanceResult = {
 
 @Injectable()
 export class WorkspacesService {
+  private readonly logger = new Logger(WorkspacesService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Optional()
@@ -67,6 +72,9 @@ export class WorkspacesService {
     @Optional()
     @Inject(EmailQueueService)
     private readonly emailQueue?: EmailQueueService,
+    @Optional()
+    @Inject(RUNTIME_ENV)
+    private readonly env: RuntimeEnv = process.env,
   ) {}
 
   getPermissions(
@@ -1033,10 +1041,7 @@ export class WorkspacesService {
   }
 
   private getWebOrigin(): string {
-    return (process.env.WEB_ORIGIN ?? "http://localhost:3000").replace(
-      /\/$/,
-      "",
-    );
+    return parseWebOrigin(this.env);
   }
 
   private buildWebUrl(path: string, token: string): string {
@@ -1105,7 +1110,9 @@ export class WorkspacesService {
         },
       });
     } catch {
-      return;
+      this.logger.error(
+        `Falha ao registrar auditoria de workspace; workspaceId=${input.workspaceId} action=${input.action} targetId=${input.targetId}`,
+      );
     }
   }
 }

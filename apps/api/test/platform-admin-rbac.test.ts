@@ -652,7 +652,7 @@ type ActivationState = {
   token: {
     id: string;
     userId: string;
-    workspaceId: null;
+    workspaceId: string | null;
     type: "account_activation";
     tokenHash: string;
     expiresAt: Date;
@@ -664,12 +664,17 @@ type ActivationState = {
 function activationAuth(
   token: string,
   expiresAt = new Date(Date.now() + 60_000),
+  options: {
+    workspaceId?: string | null;
+    platformRole?: "platform_operator" | null;
+  } = {},
 ) {
+  const events: string[] = [];
   const state: ActivationState = {
     token: {
       id: "token_1",
       userId: "operator_1",
-      workspaceId: null,
+      workspaceId: options.workspaceId ?? null,
       type: "account_activation",
       tokenHash: "",
       expiresAt,
@@ -679,7 +684,7 @@ function activationAuth(
       ...owner("operator_1"),
       email: "operator@example.com",
       passwordHash: null,
-      platformRole: "platform_operator",
+      platformRole: options.platformRole ?? "platform_operator",
       emailVerifiedAt: null,
     },
   };
@@ -687,13 +692,14 @@ function activationAuth(
   const prisma: any = {
     authActionToken: {
       findFirst: vi.fn(async ({ select }: any) => {
+        events.push("activation-token-read");
         if (state.token.usedAt || state.token.expiresAt <= new Date()) {
           return null;
         }
         if (select?.user) {
           return {
             userId: state.token.userId,
-            workspaceId: null,
+            workspaceId: state.token.workspaceId,
             user: {
               passwordHash: state.user.passwordHash,
               platformRole: state.user.platformRole,
@@ -703,6 +709,7 @@ function activationAuth(
         return state.token;
       }),
       updateMany: vi.fn(async ({ data }: any) => {
+        events.push("activation-token-consume");
         if (data.usedAt) state.token.usedAt = data.usedAt;
         return { count: 1 };
       }),
@@ -710,7 +717,24 @@ function activationAuth(
     user: {
       findUnique: vi.fn(async ({ include }: any) =>
         include
-          ? { ...state.user, authProvider: "email", memberships: [] }
+          ? {
+              ...state.user,
+              authProvider: "email",
+              memberships: state.token.workspaceId
+                ? [
+                    {
+                      role: "owner",
+                      canManageMembers: false,
+                      workspace: {
+                        id: state.token.workspaceId,
+                        name: "Client workspace",
+                        slug: "client-workspace",
+                        operationalStatus: "active",
+                      },
+                    },
+                  ]
+                : [],
+            }
           : state.user,
       ),
       updateMany: vi.fn(async ({ data }: any) => {
@@ -718,9 +742,25 @@ function activationAuth(
         state.user.emailVerifiedAt = data.emailVerifiedAt;
         return { count: 1 };
       }),
+      update: vi.fn(async ({ data }: any) => {
+        Object.assign(state.user, data);
+        return state.user;
+      }),
+    },
+    workspaceMember: {
+      findUnique: vi.fn(async ({ where }: any) =>
+        state.token.workspaceId === where.workspaceId_userId?.workspaceId &&
+        state.token.userId === where.workspaceId_userId?.userId
+          ? { id: "member_1", role: "owner" }
+          : null,
+      ),
     },
     authSession: { create: vi.fn() },
     auditLog: { create: vi.fn() },
+    $queryRaw: vi.fn(async () => {
+      events.push("activation-lock");
+      return [];
+    }),
   };
   prisma.$transaction = vi.fn(async (callback: (value: any) => unknown) =>
     callback(prisma),
@@ -731,7 +771,7 @@ function activationAuth(
     passwordService as never,
     { NODE_ENV: "test" } as never,
   );
-  return { auth, state, passwordService };
+  return { auth, state, passwordService, events };
 }
 
 function createHash(value: string): string {
@@ -762,6 +802,54 @@ describe("platform operator activation", () => {
       expired.auth.activateProvisionedAccount({
         token: "expired-token",
         password: "operator-password",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("takes the canonical activation lock before consuming the token", async () => {
+    const invitation = activationAuth("activation-token");
+
+    await invitation.auth.activateProvisionedAccount({
+      token: "activation-token",
+      password: "operator-password",
+    });
+
+    const lockIndex = invitation.events.indexOf("activation-lock");
+    const consumeIndex = invitation.events.indexOf("activation-token-consume");
+    expect(lockIndex).toBeGreaterThanOrEqual(0);
+    expect(consumeIndex).toBeGreaterThan(lockIndex);
+  });
+
+  it("consumes a client-owner activation once and rejects an expired token", async () => {
+    const first = activationAuth("client-activation-token", undefined, {
+      workspaceId: "workspace_1",
+      platformRole: null,
+    });
+    const result = await first.auth.activateProvisionedAccount({
+      token: "client-activation-token",
+      password: "client-password",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(first.state.token.usedAt).toBeInstanceOf(Date);
+    expect(first.state.user.passwordHash).toBe("activated-hash");
+
+    await expect(
+      first.auth.activateProvisionedAccount({
+        token: "client-activation-token",
+        password: "client-password",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const expired = activationAuth(
+      "expired-client-token",
+      new Date(Date.now() - 1),
+      { workspaceId: "workspace_1", platformRole: null },
+    );
+    await expect(
+      expired.auth.activateProvisionedAccount({
+        token: "expired-client-token",
+        password: "client-password",
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

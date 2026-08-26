@@ -11,6 +11,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   UnauthorizedException,
@@ -42,6 +43,11 @@ import {
   type RuntimeFetch,
 } from "../common/runtime/runtime.module";
 import { EmailQueueService } from "../email/email-queue.service";
+import {
+  acquirePlatformWorkspaceWriteLocks,
+  withWorkspaceUniqueRetry,
+} from "../common/prisma/workspace-write-concurrency";
+import { acquirePlatformRoleLock } from "../common/prisma/platform-role-concurrency";
 import {
   assertBcryptCompatiblePassword,
   PasswordService,
@@ -169,6 +175,8 @@ export type AccountActivationResult = AccountActivationConfirmDto & {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwordService: PasswordService,
@@ -200,38 +208,50 @@ export class AuthService {
     const name = input.name.trim();
     const workspaceName = input.workspaceName.trim();
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const slug = await this.resolveWorkspaceSlug(workspaceName, tx);
-      const workspace = await tx.workspace.create({
-        data: {
-          name: workspaceName,
-          slug,
-        },
-      });
-      const user = await tx.user.create({
-        data: {
-          email,
-          name,
-          passwordHash,
-        },
-      });
+    const created = await withWorkspaceUniqueRetry(() =>
+      this.prisma.$transaction(async (tx) => {
+        await acquirePlatformWorkspaceWriteLocks(tx);
+        const currentUser = await tx.user.findUnique({
+          where: { email },
+          select: { id: true },
+        });
 
-      const member = await tx.workspaceMember.create({
-        data: {
-          workspaceId: workspace.id,
+        if (currentUser) {
+          throw new ConflictException("Email ja cadastrado");
+        }
+
+        const slug = await this.resolveWorkspaceSlug(workspaceName, tx);
+        const workspace = await tx.workspace.create({
+          data: {
+            name: workspaceName,
+            slug,
+          },
+        });
+        const user = await tx.user.create({
+          data: {
+            email,
+            name,
+            passwordHash,
+          },
+        });
+
+        const member = await tx.workspaceMember.create({
+          data: {
+            workspaceId: workspace.id,
+            userId: user.id,
+            role: "owner",
+          },
+        });
+
+        return {
           userId: user.id,
-          role: "owner",
-        },
-      });
-
-      return {
-        userId: user.id,
-        workspaceId: workspace.id,
-        workspaceName: workspace.name,
-        workspaceSlug: workspace.slug,
-        memberId: member.id,
-      };
-    });
+          workspaceId: workspace.id,
+          workspaceName: workspace.name,
+          workspaceSlug: workspace.slug,
+          memberId: member.id,
+        };
+      }),
+    );
     await this.recordInitialWorkspaceOwnership(created, context);
 
     return this.createSessionForUser(created.userId, context);
@@ -665,6 +685,10 @@ export class AuthService {
     const passwordHash = await this.passwordService.hash(input.password);
     const now = new Date();
     const session = await this.prisma.$transaction(async (tx) => {
+      // Token rotation and activation must share the same transaction-scoped
+      // installation lock. Otherwise activation can validate an old token
+      // while a concurrent issuer replaces it with a newer one.
+      await acquirePlatformRoleLock(tx);
       const token = await this.consumeActionTokenInTransaction(
         tx,
         "account_activation",
@@ -1290,7 +1314,7 @@ export class AuthService {
 
   private async resolveWorkspaceSlug(
     workspaceName: string,
-    tx: Pick<PrismaService, "workspace">,
+    tx: Prisma.TransactionClient,
   ): Promise<string> {
     const baseSlug = this.slugify(workspaceName);
     let candidate = baseSlug;
@@ -1639,7 +1663,9 @@ export class AuthService {
         },
       });
     } catch {
-      return;
+      this.logger.error(
+        `Falha ao registrar auditoria de autenticacao; action=${input.action} targetType=${input.targetType} targetId=${input.targetId}`,
+      );
     }
   }
 

@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Optional,
   ServiceUnavailableException,
+  Logger,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import type { PlatformRole, Prisma } from "@prisma/client";
@@ -61,6 +62,8 @@ type MutationKind = "invite" | "role";
 
 @Injectable()
 export class PlatformAdminService {
+  private readonly logger = new Logger(PlatformAdminService.name);
+
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
     private readonly prisma: PrismaService,
@@ -499,7 +502,9 @@ export class PlatformAdminService {
         },
       });
     } catch {
-      // The active token remains reissuable even if secondary audit fails.
+      this.logger.error(
+        `Falha ao auditar delivery de convite; userId=${userId}`,
+      );
     }
   }
 

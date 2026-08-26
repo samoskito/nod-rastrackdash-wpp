@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { Inject } from "@nestjs/common";
+import { Inject, Logger } from "@nestjs/common";
 import { UnrecoverableError, type Job } from "bullmq";
 import {
   classifyEmailDeliveryError,
@@ -19,6 +19,8 @@ import { EmailActionStatusService } from "./email-action-status.service";
 
 @Processor(EMAIL_DELIVERY_QUEUE)
 export class EmailProcessor extends WorkerHost {
+  private readonly logger = new Logger(EmailProcessor.name);
+
   constructor(
     private readonly crypto: EmailEnvelopeCryptoService,
     private readonly renderer: EmailMessageRenderer,
@@ -165,7 +167,9 @@ export class EmailProcessor extends WorkerHost {
     try {
       await this.audit.record(input);
     } catch {
-      // Observability failures must not retry a completed provider side effect.
+      this.logger.error(
+        `Falha ao registrar auditoria de delivery processado; deliveryId=${input.deliveryId} template=${input.template} status=${input.status}`,
+      );
     }
   }
 
@@ -182,7 +186,9 @@ export class EmailProcessor extends WorkerHost {
         status,
       });
     } catch {
-      // Delivery state is observable, but must never duplicate a provider send.
+      this.logger.error(
+        `Falha ao registrar estado de delivery; deliveryId=${payload.deliveryId} status=${status}`,
+      );
     }
   }
 }

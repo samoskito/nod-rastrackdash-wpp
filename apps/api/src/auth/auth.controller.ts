@@ -30,6 +30,7 @@ import {
   type SessionCookieResponse,
 } from "./session-cookie";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
+import { parseWebOrigin } from "../config/deployment-config";
 
 type HeaderValue = string | string[] | undefined;
 
@@ -231,10 +232,7 @@ export class AuthController {
     action: string;
     redirectTo: string;
   }): string {
-    const webOrigin = (this.env.WEB_ORIGIN ?? "http://localhost:3000").replace(
-      /\/$/,
-      "",
-    );
+    const webOrigin = parseWebOrigin(this.env);
 
     if (result.action === "authenticated") {
       return new URL(this.safeAppPath(result.redirectTo), webOrigin).toString();

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { InjectQueue } from "@nestjs/bullmq";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import { ZodError } from "zod";
 import { createBullJobId } from "../common/queue/job-id";
@@ -19,6 +19,8 @@ const emailRetentionSeconds = 60 * 60 * 24 * 14;
 
 @Injectable()
 export class EmailQueueService {
+  private readonly logger = new Logger(EmailQueueService.name);
+
   constructor(
     @InjectQueue(EMAIL_DELIVERY_QUEUE)
     private readonly queue: Queue<EmailDeliveryJobPayload>,
@@ -58,7 +60,8 @@ export class EmailQueueService {
         template: context.template,
         recipientHash: context.recipientHash,
         status: "failed",
-        errorCode: error instanceof ZodError ? "zod_envelope" : "encrypt_failed",
+        errorCode:
+          error instanceof ZodError ? "zod_envelope" : "encrypt_failed",
       });
       throw error;
     }
@@ -142,7 +145,9 @@ export class EmailQueueService {
     try {
       await this.audit.record(input);
     } catch {
-      // A queued job remains authoritative when observability is unavailable.
+      this.logger.error(
+        `Falha ao registrar auditoria de delivery enfileirado; deliveryId=${input.deliveryId} template=${input.template} status=${input.status}`,
+      );
     }
   }
 }

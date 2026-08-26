@@ -37,24 +37,25 @@ export class EmailDeliveryAuditService {
         : undefined,
     };
 
-    try {
-      await this.prisma.auditLog.create({
-        data: {
-          workspaceId: input.workspaceId,
-          actorUserId: null,
-          actorType: "system",
-          action: `email.delivery_${input.status}`,
-          targetType: "EmailDelivery",
-          targetId: input.deliveryId,
-          reason: input.errorCode ?? null,
-          sourceIp: null,
-          resultStatus: input.status,
-          afterSummary: this.toJsonSummary(summary),
-        },
-      });
-    } catch {
-      // Observability must not duplicate or block an email provider side effect.
-    }
+    // Transactional mutations call this before their transaction can commit,
+    // so an audit failure rolls the mutation back. Queue/provider callers call
+    // it after an irreversible side effect and must log the failure without
+    // retrying that side effect; otherwise an audit outage could duplicate an
+    // email. This is the explicit fail-closed boundary for delivery audit.
+    await this.prisma.auditLog.create({
+      data: {
+        workspaceId: input.workspaceId,
+        actorUserId: null,
+        actorType: "system",
+        action: `email.delivery_${input.status}`,
+        targetType: "EmailDelivery",
+        targetId: input.deliveryId,
+        reason: input.errorCode ?? null,
+        sourceIp: null,
+        resultStatus: input.status,
+        afterSummary: this.toJsonSummary(summary),
+      },
+    });
   }
 
   private hash(value: string): string {

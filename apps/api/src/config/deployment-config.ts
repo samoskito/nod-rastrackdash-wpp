@@ -245,7 +245,7 @@ function isLocalhost(hostname: string): boolean {
   );
 }
 
-function parseWebOrigin(env: Environment): string {
+export function parseWebOrigin(env: Environment): string {
   const value = env.WEB_ORIGIN?.trim();
 
   if (!value) {
@@ -262,6 +262,16 @@ function parseWebOrigin(env: Environment): string {
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     invalid("WEB_ORIGIN", "expected an absolute HTTP or HTTPS URL");
+  }
+
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    invalid("WEB_ORIGIN", "expected an origin without path or credentials");
   }
 
   const nodeEnv = env.NODE_ENV?.trim().toLowerCase();

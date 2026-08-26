@@ -1,5 +1,11 @@
 import { PrismaClient, type WorkspaceRole } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
+import {
+  acquirePlatformWorkspaceWriteLocks,
+  withWorkspaceUniqueRetry,
+} from "../common/prisma/workspace-write-concurrency";
+import { assertBcryptCompatiblePassword } from "../auth/password.service";
+import { assertCliUserIsNotPlatformAdmin } from "./create-user-guards";
 
 const ALLOWED_ROLES = new Set<WorkspaceRole>(["owner", "admin", "member"]);
 
@@ -31,11 +37,15 @@ function parseArgs(args: string[]): Record<string, string> {
 }
 
 function slugify(value: string): string {
-  return value
+  const slug = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .substring(0, 50);
+
+  return slug || "workspace";
 }
 
 async function main() {
@@ -62,67 +72,105 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
+    assertBcryptCompatiblePassword(args.password);
     const passwordHash = await bcrypt.hash(args.password, 12);
-    let user = await prisma.user.findUnique({ where: { email } });
+    const result = await withWorkspaceUniqueRetry(() =>
+      prisma.$transaction(async (tx) => {
+        await acquirePlatformWorkspaceWriteLocks(tx);
 
-    if (user) {
-      if (user.passwordHash && args.force !== "true") {
-        throw new Error(
-          "Usuario ja possui senha. Use --force para redefinir.",
-        );
-      }
+        let user = await tx.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            email: true,
+            passwordHash: true,
+            emailVerifiedAt: true,
+            platformRole: true,
+          },
+        });
 
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash,
-          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
-        },
-      });
-    } else {
-      user = await prisma.user.create({
-        data: {
-          email,
-          name,
-          passwordHash,
-          authProvider: "email",
-          emailVerifiedAt: new Date(),
-        },
-      });
-    }
+        assertCliUserIsNotPlatformAdmin(user);
 
-    let workspace = await prisma.workspace.findUnique({
-      where: { slug: workspaceSlug },
-    });
+        if (user) {
+          if (user.passwordHash && args.force !== "true") {
+            throw new Error(
+              "Usuario ja possui senha. Use --force para redefinir.",
+            );
+          }
 
-    if (!workspace) {
-      workspace = await prisma.workspace.create({
-        data: { name: workspaceName, slug: workspaceSlug },
-      });
-    }
+          user = await tx.user.update({
+            where: { id: user.id },
+            data: {
+              passwordHash,
+              emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+            },
+            select: {
+              id: true,
+              email: true,
+              passwordHash: true,
+              emailVerifiedAt: true,
+              platformRole: true,
+            },
+          });
+        } else {
+          user = await tx.user.create({
+            data: {
+              email,
+              name,
+              passwordHash,
+              authProvider: "email",
+              emailVerifiedAt: new Date(),
+            },
+            select: {
+              id: true,
+              email: true,
+              passwordHash: true,
+              emailVerifiedAt: true,
+              platformRole: true,
+            },
+          });
+        }
 
-    const existingMember = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId: workspace.id, userId: user.id },
-      },
-    });
+        let workspace = await tx.workspace.findUnique({
+          where: { slug: workspaceSlug },
+        });
 
-    if (!existingMember) {
-      await prisma.workspaceMember.create({
-        data: {
-          workspaceId: workspace.id,
+        if (!workspace) {
+          workspace = await tx.workspace.create({
+            data: { name: workspaceName, slug: workspaceSlug },
+          });
+        }
+
+        const existingMember = await tx.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: { workspaceId: workspace.id, userId: user.id },
+          },
+        });
+
+        if (!existingMember) {
+          await tx.workspaceMember.create({
+            data: {
+              workspaceId: workspace.id,
+              userId: user.id,
+              role: requestedRole,
+            },
+          });
+        }
+
+        return {
           userId: user.id,
-          role: requestedRole,
-        },
-      });
-    }
+          workspaceId: workspace.id,
+          role: existingMember?.role ?? requestedRole,
+        };
+      }),
+    );
 
     console.log(
       JSON.stringify({
         ok: true,
-        userId: user.id,
-        workspaceId: workspace.id,
-        role: existingMember?.role ?? requestedRole,
+        userId: result.userId,
+        workspaceId: result.workspaceId,
+        role: result.role,
       }),
     );
   } finally {
@@ -131,6 +179,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "Falha ao criar usuario");
+  console.error(
+    error instanceof Error ? error.message : "Falha ao criar usuario",
+  );
   process.exit(1);
 });
