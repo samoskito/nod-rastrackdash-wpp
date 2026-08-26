@@ -26,13 +26,6 @@ describe("shared hardening", () => {
 
   it("takes platform-role before workspace lock and never bypasses PostgreSQL", async () => {
     const values: number[] = [];
-    const queryRaw = vi.fn(
-      async (_strings: TemplateStringsArray, ...queryValues: unknown[]) => {
-        values.push(...(queryValues as number[]));
-        return 1;
-      },
-    );
-
     const executeRaw = vi.fn(
       async (_strings: TemplateStringsArray, ...queryValues: unknown[]) => {
         values.push(...(queryValues as number[]));
@@ -40,12 +33,10 @@ describe("shared hardening", () => {
     );
 
     await acquirePlatformWorkspaceWriteLocks({
-      $queryRaw: queryRaw,
       $executeRaw: executeRaw,
     } as never);
 
-    expect(executeRaw).toHaveBeenCalledTimes(1);
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(executeRaw).toHaveBeenCalledTimes(2);
     expect(values).toEqual([
       147_203_911, 619_470_281, 147_203_911, 731_884_217,
     ]);

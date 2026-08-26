@@ -6,21 +6,21 @@ const workspaceSlugLockNamespace = 147_203_911;
 const workspaceSlugLockKey = 731_884_217;
 const workspaceSlugRetryLimit = 3;
 
-type QueryRawTransaction = Pick<
+type WorkspaceWriteTransaction = Pick<
   Prisma.TransactionClient,
-  "$queryRaw" | "$executeRaw"
+  "$executeRaw"
 >;
 
 export async function acquireWorkspaceSlugLock(
-  transaction: QueryRawTransaction,
+  transaction: WorkspaceWriteTransaction,
 ): Promise<void> {
   // Keep slug allocation serialized across registration and backoffice writes.
   // The lock is transaction-scoped, so it is released on commit or rollback.
-  if (typeof transaction.$queryRaw !== "function") {
+  if (typeof transaction.$executeRaw !== "function") {
     throw new Error("PostgreSQL transaction is required for workspace writes");
   }
 
-  await transaction.$queryRaw`
+  await transaction.$executeRaw`
     SELECT pg_advisory_xact_lock(
       CAST(${workspaceSlugLockNamespace} AS integer),
       CAST(${workspaceSlugLockKey} AS integer)
@@ -35,7 +35,7 @@ export async function acquireWorkspaceSlugLock(
  * boundary with platform-admin mutations.
  */
 export async function acquirePlatformWorkspaceWriteLocks(
-  transaction: QueryRawTransaction,
+  transaction: WorkspaceWriteTransaction,
 ): Promise<void> {
   await acquirePlatformRoleLock(transaction);
   await acquireWorkspaceSlugLock(transaction);
