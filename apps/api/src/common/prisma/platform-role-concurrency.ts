@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
 
-type PlatformRoleLockTransaction = Pick<Prisma.TransactionClient, "$queryRaw">;
+type PlatformRoleLockTransaction = Pick<
+  Prisma.TransactionClient,
+  "$executeRaw"
+>;
 
 const platformRoleLockNamespace = 147_203_911;
 const platformRoleLockKey = 619_470_281;
@@ -13,13 +16,13 @@ const platformRoleLockKey = 619_470_281;
 export async function acquirePlatformRoleLock(
   transaction: PlatformRoleLockTransaction,
 ): Promise<void> {
-  if (typeof transaction.$queryRaw !== "function") {
+  if (typeof transaction.$executeRaw !== "function") {
     throw new Error(
       "PostgreSQL transaction is required for platform-role writes",
     );
   }
 
-  await transaction.$queryRaw`
+  await transaction.$executeRaw`
     SELECT pg_advisory_xact_lock(
       CAST(${platformRoleLockNamespace} AS integer),
       CAST(${platformRoleLockKey} AS integer)

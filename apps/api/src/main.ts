@@ -4,6 +4,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { parseDeploymentConfig } from "./config/deployment-config";
 import { getApiPort } from "./config/env";
 import { loadLocalEnv } from "./config/load-env";
+import { PlatformAdminEnvBootstrapService } from "./auth/platform-admin-env-bootstrap.service";
 import { INBOUND_WEBHOOK_BODY_LIMIT } from "./inbound-webhooks/inbound-webhook-limits";
 
 async function bootstrap() {
@@ -16,8 +17,10 @@ async function bootstrap() {
   app.useBodyParser("json", { limit: INBOUND_WEBHOOK_BODY_LIMIT });
   app.enableCors({
     origin: deploymentConfig.webOrigin,
-    credentials: true
+    credentials: true,
   });
+
+  await app.get(PlatformAdminEnvBootstrapService).bootstrap();
 
   await app.listen(getApiPort());
 }

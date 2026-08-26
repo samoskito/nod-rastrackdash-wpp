@@ -16,11 +16,11 @@ import { assertCliUserIsNotPlatformAdmin } from "../src/scripts/create-user-guar
 
 describe("shared hardening", () => {
   it("uses one transaction-scoped lock for platformRole writes", async () => {
-    const queryRaw = vi.fn(async () => []);
+    const executeRaw = vi.fn(async () => 1);
 
-    await acquirePlatformRoleLock({ $queryRaw: queryRaw } as never);
+    await acquirePlatformRoleLock({ $executeRaw: executeRaw } as never);
 
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(platformRoleTransactionOptions.isolationLevel).toBe("Serializable");
   });
 
@@ -29,12 +29,23 @@ describe("shared hardening", () => {
     const queryRaw = vi.fn(
       async (_strings: TemplateStringsArray, ...queryValues: unknown[]) => {
         values.push(...(queryValues as number[]));
+        return 1;
       },
     );
 
-    await acquirePlatformWorkspaceWriteLocks({ $queryRaw: queryRaw } as never);
+    const executeRaw = vi.fn(
+      async (_strings: TemplateStringsArray, ...queryValues: unknown[]) => {
+        values.push(...(queryValues as number[]));
+      },
+    );
 
-    expect(queryRaw).toHaveBeenCalledTimes(2);
+    await acquirePlatformWorkspaceWriteLocks({
+      $queryRaw: queryRaw,
+      $executeRaw: executeRaw,
+    } as never);
+
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
     expect(values).toEqual([
       147_203_911, 619_470_281, 147_203_911, 731_884_217,
     ]);

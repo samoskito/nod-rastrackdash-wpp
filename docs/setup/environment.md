@@ -68,6 +68,17 @@ Convenção de colunas:
 | `AUTH_COOKIE_DOMAIN` | Sim quando web e API usam subdomínios irmãos | Domínio raiz comum, com ponto inicial | `.env` da API / env do serviço | Não |
 | `AUTH_EXPOSE_DEV_TOKENS` | Não — **deixe `false` em produção** | Só para debug local | `.env` local | Não |
 | `WPPTRACK_PLATFORM_ADMIN_EMAILS` | Sim antes do primeiro login administrativo | E-mail do administrador da sua instância | `.env` da API / env do serviço | Não — mas é específico do aluno e nunca deve ser commitado ou colado em chat |
+| `SETUP_PLATFORM_ADMIN_EMAIL` | Não | E-mail do primeiro `platform_owner` | Env do serviço da API (ex.: Dokploy) | Não |
+| `SETUP_PLATFORM_ADMIN_PASSWORD` | Não | Senha forte do primeiro `platform_owner` | Env do serviço da API (ex.: Dokploy) | **Sim** |
+| `SETUP_PLATFORM_ADMIN_CONFIRM_EXISTING` | Não | Use exatamente `true` somente para promover uma conta existente de propósito | Env do serviço da API | Não |
+
+### Bootstrap do primeiro administrador por env
+
+No Dokploy, defina `SETUP_PLATFORM_ADMIN_EMAIL` e
+`SETUP_PLATFORM_ADMIN_PASSWORD` no provedor e reinicie a API. O administrador
+é criado no boot; se o e-mail já pertencer a uma conta, ela só será promovida
+quando `SETUP_PLATFORM_ADMIN_CONFIRM_EXISTING=true`. Depois do primeiro acesso,
+remova ou limpe a variável de senha se desejar.
 
 ⚠️ **`WPPTRACK_PLATFORM_ADMIN_EMAILS` não cria a conta nem a senha do
 administrador.** É só uma allowlist: no login, se o e-mail do usuário

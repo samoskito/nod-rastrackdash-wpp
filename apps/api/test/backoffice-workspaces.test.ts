@@ -189,8 +189,11 @@ function makeHarness(initialUsers: UserState[] = []) {
       }),
     },
     $queryRaw: vi.fn(async () => {
-      events.push("activation-lock");
       return [];
+    }),
+    $executeRaw: vi.fn(async () => {
+      events.push("activation-lock");
+      return 1;
     }),
   };
   prisma.$transaction = vi.fn(async (callback: (tx: any) => unknown) => {

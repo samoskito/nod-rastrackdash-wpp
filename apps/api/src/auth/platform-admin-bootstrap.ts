@@ -20,7 +20,7 @@ type BootstrapPrisma = {
     callback: (tx: BootstrapPrisma) => Promise<T>,
     options?: unknown,
   ) => Promise<T>;
-  $queryRaw: (...args: unknown[]) => Promise<unknown>;
+  $executeRaw: (...args: unknown[]) => Promise<unknown>;
   user: {
     findUnique: (args: unknown) => Promise<BootstrapUser | null>;
     create: (args: unknown) => Promise<BootstrapUser>;
@@ -47,6 +47,19 @@ export type PlatformAdminBootstrapResult = {
   passwordPreserved: boolean;
 };
 
+export function validatePlatformAdminBootstrapInput(
+  input: PlatformAdminBootstrapInput,
+): string {
+  const email = normalizeEmail(input.email);
+
+  if (!isEmail(email) || input.password.length < 8) {
+    throw new Error("Informe email valido e senha com 8+ caracteres.");
+  }
+  assertBcryptCompatiblePassword(input.password);
+
+  return email;
+}
+
 /**
  * Creates the persistent first platform owner without creating a workspace.
  * Existing accounts are intentionally left untouched unless the caller
@@ -57,12 +70,7 @@ export async function bootstrapPlatformAdminUser(
   input: PlatformAdminBootstrapInput,
   passwordService = new PasswordService(),
 ): Promise<PlatformAdminBootstrapResult> {
-  const email = normalizeEmail(input.email);
-
-  if (!isEmail(email) || input.password.length < 8) {
-    throw new Error("Informe email valido e senha com 8+ caracteres.");
-  }
-  assertBcryptCompatiblePassword(input.password);
+  const email = validatePlatformAdminBootstrapInput(input);
 
   return prisma.$transaction(async (tx) => {
     await acquirePlatformAdminLock(tx as never);

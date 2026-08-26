@@ -48,7 +48,7 @@ describe("platform advisory lock SQL", () => {
   it("submits a parameterized PostgreSQL transaction advisory lock query", async () => {
     let strings: TemplateStringsArray | undefined;
     let values: unknown[] = [];
-    const queryRaw = vi.fn(
+    const executeRaw = vi.fn(
       async (queryStrings: TemplateStringsArray, ...queryValues: unknown[]) => {
         strings = queryStrings;
         values = queryValues;
@@ -56,9 +56,9 @@ describe("platform advisory lock SQL", () => {
       },
     );
 
-    await acquirePlatformAdminLock({ $queryRaw: queryRaw } as never);
+    await acquirePlatformAdminLock({ $executeRaw: executeRaw } as never);
 
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(strings?.join("$")).toContain("SELECT pg_advisory_xact_lock(");
     expect(strings?.join("$")).not.toContain("AS text");
     expect(values).toEqual([147_203_911, 619_470_281]);
@@ -129,10 +129,10 @@ function concurrentBootstrapPrisma(initial: UserState[] = []) {
       });
       const transaction = {
         ...prisma,
-        $queryRaw: vi.fn(async () => {
+        $executeRaw: vi.fn(async () => {
           lockCalls();
           await previous;
-          return [{ lockAcquired: "" }];
+          return 1;
         }),
       };
       try {
@@ -227,10 +227,10 @@ function platformPrisma(
       });
       const transaction = {
         ...prisma,
-        $queryRaw: vi.fn(async () => {
+        $executeRaw: vi.fn(async () => {
           lockCalls();
           await previous;
-          return [{ lockAcquired: "" }];
+          return 1;
         }),
       };
       try {
@@ -757,9 +757,9 @@ function activationAuth(
     },
     authSession: { create: vi.fn() },
     auditLog: { create: vi.fn() },
-    $queryRaw: vi.fn(async () => {
+    $executeRaw: vi.fn(async () => {
       events.push("activation-lock");
-      return [];
+      return 1;
     }),
   };
   prisma.$transaction = vi.fn(async (callback: (value: any) => unknown) =>

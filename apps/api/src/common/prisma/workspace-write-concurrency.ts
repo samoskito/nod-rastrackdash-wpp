@@ -6,7 +6,10 @@ const workspaceSlugLockNamespace = 147_203_911;
 const workspaceSlugLockKey = 731_884_217;
 const workspaceSlugRetryLimit = 3;
 
-type QueryRawTransaction = Pick<Prisma.TransactionClient, "$queryRaw">;
+type QueryRawTransaction = Pick<
+  Prisma.TransactionClient,
+  "$queryRaw" | "$executeRaw"
+>;
 
 export async function acquireWorkspaceSlugLock(
   transaction: QueryRawTransaction,
