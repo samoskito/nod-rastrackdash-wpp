@@ -78,7 +78,12 @@ export const backofficeWorkspaceListSchema = z.array(backofficeWorkspaceSchema);
 export const backofficeWorkspaceCreateResultSchema = backofficeWorkspaceSchema
   .extend({
     reusedExistingUser: z.boolean(),
-    deliveryStatus: z.enum(["queued", "failed", "not_required"]),
+    deliveryStatus: z.enum([
+      "queued",
+      "failed",
+      "manual_link_required",
+      "not_required",
+    ]),
   })
   .strict();
 

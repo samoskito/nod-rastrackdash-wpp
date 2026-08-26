@@ -145,12 +145,6 @@ export class PlatformWorkspaceAccessService {
 
     this.assertResponsibleCanBeProvisioned(existing, input.reuseExistingUser);
 
-    if ((!existing || !existing.passwordHash) && !this.emailQueue.isEnabled()) {
-      throw new ServiceUnavailableException(
-        "Entrega de ativacao do responsavel indisponivel",
-      );
-    }
-
     const created = await withWorkspaceUniqueRetry(() =>
       this.prisma.$transaction(async (tx) => {
         await acquirePlatformWorkspaceWriteLocks(tx);
@@ -295,37 +289,42 @@ export class PlatformWorkspaceAccessService {
       }),
     );
 
-    let deliveryStatus: "queued" | "failed" | "not_required" = "not_required";
+    let deliveryStatus: BackofficeWorkspaceCreateResultDto["deliveryStatus"] =
+      "not_required";
     if (created.pendingDelivery) {
-      try {
-        await this.emailQueue.enqueue({
-          workspaceId: created.workspace.id,
-          action: {
-            type: "AuthActionToken",
-            id: created.pendingDelivery.tokenId,
-            version: "1",
-          },
-          envelope: {
-            to: {
-              address: created.user.email,
-              name: created.user.name ?? undefined,
+      if (!this.emailQueue.isEnabled()) {
+        deliveryStatus = "manual_link_required";
+      } else {
+        try {
+          await this.emailQueue.enqueue({
+            workspaceId: created.workspace.id,
+            action: {
+              type: "AuthActionToken",
+              id: created.pendingDelivery.tokenId,
+              version: "1",
             },
-            template: "client_owner_activation",
-            data: {
-              recipientName: created.user.name ?? undefined,
-              workspaceName: created.workspace.name,
-              token: created.pendingDelivery.token,
-              expiresAt: created.pendingDelivery.expiresAt.toISOString(),
+            envelope: {
+              to: {
+                address: created.user.email,
+                name: created.user.name ?? undefined,
+              },
+              template: "client_owner_activation",
+              data: {
+                recipientName: created.user.name ?? undefined,
+                workspaceName: created.workspace.name,
+                token: created.pendingDelivery.token,
+                expiresAt: created.pendingDelivery.expiresAt.toISOString(),
+              },
             },
-          },
-        });
-        deliveryStatus = "queued";
-      } catch {
-        deliveryStatus = "failed";
-        await this.recordDeliveryFailure(
-          created.workspace.id,
-          created.pendingDelivery.tokenId,
-        );
+          });
+          deliveryStatus = "queued";
+        } catch {
+          deliveryStatus = "failed";
+          await this.recordDeliveryFailure(
+            created.workspace.id,
+            created.pendingDelivery.tokenId,
+          );
+        }
       }
     }
 

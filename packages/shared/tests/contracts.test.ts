@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   adReportOverviewSchema,
   adSetReportOverviewSchema,
+  backofficeWorkspaceCreateResultSchema,
   canManageIntegrations,
   canManageWorkspaceBilling,
   canViewReports,
@@ -280,6 +281,29 @@ describe("shared contracts", () => {
         extra: true,
       }),
     ).toThrow();
+  });
+
+  it("supports an explicit manual activation-link requirement after workspace creation", () => {
+    const result = backofficeWorkspaceCreateResultSchema.parse({
+      id: "workspace_1",
+      name: "Empresa Cliente",
+      slug: "empresa-cliente",
+      operationalStatus: "active",
+      createdAt: "2026-08-26T03:00:00.000Z",
+      responsible: {
+        id: "user_owner",
+        name: "Owner",
+        email: "owner@empresa.com",
+        role: "owner",
+        status: "pending_activation",
+      },
+      reusedExistingUser: false,
+      deliveryStatus: "manual_link_required",
+    });
+
+    expect(result.deliveryStatus).toBe("manual_link_required");
+    expect(result).not.toHaveProperty("token");
+    expect(result).not.toHaveProperty("activationUrl");
   });
 
   it("validates campaign report rows", () => {

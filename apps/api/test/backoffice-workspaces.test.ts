@@ -284,6 +284,7 @@ describe("platform workspace access", () => {
     expect(result).not.toHaveProperty("passwordHash");
     expect(result).not.toHaveProperty("token");
     expect(result).not.toHaveProperty("secret");
+    expect(result.deliveryStatus).toBe("queued");
     expect(harness.state.workspaces).toHaveLength(1);
     expect(harness.state.members[0]?.role).toBe("owner");
     expect(harness.state.tokens).toHaveLength(1);
@@ -299,6 +300,37 @@ describe("platform workspace access", () => {
       "backoffice.workspace_created",
       "backoffice.workspace_responsible_invited",
     ]);
+  });
+
+  it("creates a pending owner without SMTP and requires a manual link without exposing its token", async () => {
+    const harness = makeHarness();
+    emailQueue.isEnabled.mockReturnValue(false);
+    const service = new PlatformWorkspaceAccessService(
+      harness.prisma as never,
+      emailQueue as never,
+    );
+    const loggerError = vi.spyOn((service as any).logger, "error");
+
+    const result = await service.createWorkspace(input(), owner);
+
+    expect(result.deliveryStatus).toBe("manual_link_required");
+    expect(result.responsible?.status).toBe("pending_activation");
+    expect(harness.state.workspaces).toHaveLength(1);
+    expect(harness.state.members).toHaveLength(1);
+    expect(harness.state.tokens).toHaveLength(1);
+    expect(harness.state.tokens[0]?.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(emailQueue.enqueue).not.toHaveBeenCalled();
+    expect(result).not.toHaveProperty("token");
+    expect(result).not.toHaveProperty("activationUrl");
+    expect(JSON.stringify(result)).not.toContain("token");
+    expect(JSON.stringify(result)).not.toContain(
+      harness.state.tokens[0]!.tokenHash,
+    );
+    expect(JSON.stringify(harness.state.audits)).not.toContain("token");
+    expect(JSON.stringify(harness.state.audits)).not.toContain(
+      harness.state.tokens[0]!.tokenHash,
+    );
+    expect(loggerError).not.toHaveBeenCalled();
   });
 
   it("does not reuse an existing user without explicit confirmation", async () => {
@@ -334,6 +366,9 @@ describe("platform workspace access", () => {
 
     expect(result.deliveryStatus).toBe("failed");
     expect(result).not.toHaveProperty("token");
+    expect(harness.state.workspaces).toHaveLength(1);
+    expect(harness.state.members).toHaveLength(1);
+    expect(harness.state.tokens).toHaveLength(1);
     expect(harness.state.audits.at(-1)?.action).toBe(
       "backoffice.workspace_responsible_delivery_failed",
     );
@@ -411,6 +446,7 @@ describe("platform workspace access", () => {
 
   it("returns a manual activation link without SMTP and persists only its hash", async () => {
     const harness = makeHarness();
+    emailQueue.isEnabled.mockReturnValue(false);
     const service = new PlatformWorkspaceAccessService(
       harness.prisma as never,
       emailQueue as never,
@@ -418,8 +454,9 @@ describe("platform workspace access", () => {
     );
     const created = await service.createWorkspace(input(), owner);
     const previousToken = harness.state.tokens[0]!;
-    emailQueue.isEnabled.mockReturnValue(false);
-    emailQueue.enqueue.mockClear();
+
+    expect(created.deliveryStatus).toBe("manual_link_required");
+    expect(emailQueue.enqueue).not.toHaveBeenCalled();
 
     const result = await service.createClientOwnerActivationLink(
       created.id,
