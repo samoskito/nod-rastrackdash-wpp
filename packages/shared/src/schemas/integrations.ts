@@ -20,6 +20,110 @@ export const integrationProviderSchema = z.enum([
   "zapi",
 ]);
 
+export const whatsappConnectionProviderSchema = z.enum([
+  "uazapi_byo",
+  "waha",
+  "zapi",
+  "nod_api",
+]);
+
+export const whatsappConnectionStatusSchema = z.enum([
+  "pending_payment",
+  "active",
+  "disconnected",
+  "suspended",
+  "error",
+]);
+
+export const whatsappConnectionsSchema = z.array(
+  z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    displayName: z.string().min(1).nullable(),
+    provider: whatsappConnectionProviderSchema,
+    status: whatsappConnectionStatusSchema,
+    lastHealthStatus: z.string().min(1).nullable(),
+    lastHealthCheckedAt: z.string().datetime().nullable(),
+    connectedPhone: z.string().min(1).nullable().optional(),
+    createdAt: z.string().datetime(),
+  }),
+);
+
+const whatsappConnectionMetadataSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  displayName: z.string().trim().min(1).max(120).optional(),
+});
+
+const uazapiCredentialsSchema = z.object({
+  baseUrl: z.string().trim().url(),
+  token: z.string().trim().min(1).max(4096),
+  instanceId: z.string().trim().min(1).max(200).optional(),
+});
+
+const wahaCredentialsSchema = z.object({
+  baseUrl: z.string().trim().url(),
+  apiKey: z.string().trim().min(1).max(4096),
+  session: z.string().trim().min(1).max(200).optional(),
+});
+
+const zapiCredentialsSchema = z.object({
+  baseUrl: z.string().trim().url(),
+  instanceId: z.string().trim().min(1).max(200),
+  token: z.string().trim().min(1).max(4096),
+});
+
+const nodApiCredentialsSchema = z.object({
+  instanceId: z.string().trim().min(1).max(200).optional(),
+  instanceToken: z.string().trim().min(1).max(4096).optional(),
+}).superRefine((value, context) => {
+  if (Boolean(value.instanceId) !== Boolean(value.instanceToken)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Informe instanceId e instanceToken juntos",
+    });
+  }
+});
+
+export const whatsappConnectionCreateInputSchema = z.discriminatedUnion("provider", [
+  whatsappConnectionMetadataSchema.extend({
+    provider: z.literal("uazapi_byo"),
+    credentials: uazapiCredentialsSchema,
+  }),
+  whatsappConnectionMetadataSchema.extend({
+    provider: z.literal("waha"),
+    credentials: wahaCredentialsSchema,
+  }),
+  whatsappConnectionMetadataSchema.extend({
+    provider: z.literal("zapi"),
+    credentials: zapiCredentialsSchema,
+  }),
+  whatsappConnectionMetadataSchema.extend({
+    provider: z.literal("nod_api"),
+    credentials: nodApiCredentialsSchema.optional(),
+  }),
+]);
+
+export const whatsappConnectionUpdateInputSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  displayName: z.string().trim().min(1).max(120).nullable().optional(),
+  webhookUrl: z.string().trim().url().nullable().optional(),
+}).refine((value) => Object.keys(value).length > 0, "Informe ao menos um campo para atualizar");
+
+export const whatsappConnectionCredentialsUpdateSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("uazapi_byo"), credentials: uazapiCredentialsSchema }),
+  z.object({ provider: z.literal("waha"), credentials: wahaCredentialsSchema }),
+  z.object({ provider: z.literal("zapi"), credentials: zapiCredentialsSchema }),
+  z.object({ provider: z.literal("nod_api"), credentials: nodApiCredentialsSchema }),
+]);
+
+export const whatsappConnectionTestResultSchema = z.object({
+  connectionId: z.string().min(1),
+  provider: whatsappConnectionProviderSchema,
+  status: z.string().min(1),
+  checkedAt: z.string().datetime(),
+  message: z.string().min(1).optional(),
+});
+
 export const integrationHealthSchema = z.object({
   provider: integrationProviderSchema,
   status: z.enum(integrationStatuses),
@@ -471,6 +575,22 @@ export const metaManualConfigurationSchema = z.object({
 });
 
 export type IntegrationProvider = z.infer<typeof integrationProviderSchema>;
+export type WhatsappConnectionDto = z.infer<
+  typeof whatsappConnectionsSchema
+>[number];
+export type WhatsappConnectionsDto = z.infer<typeof whatsappConnectionsSchema>;
+export type WhatsappConnectionCreateInputDto = z.infer<
+  typeof whatsappConnectionCreateInputSchema
+>;
+export type WhatsappConnectionUpdateInputDto = z.infer<
+  typeof whatsappConnectionUpdateInputSchema
+>;
+export type WhatsappConnectionCredentialsUpdateDto = z.infer<
+  typeof whatsappConnectionCredentialsUpdateSchema
+>;
+export type WhatsappConnectionTestResultDto = z.infer<
+  typeof whatsappConnectionTestResultSchema
+>;
 export type IntegrationHealthDto = z.infer<typeof integrationHealthSchema>;
 export type IntegrationHealthSummaryDto = z.infer<
   typeof integrationHealthSummarySchema

@@ -8,6 +8,7 @@ import type { IntegrationEnv } from "../integration.types";
 import type { IntegrationStatus } from "@wpptrack/shared";
 import type {
   WhatsappProviderAdapter,
+  WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
 
@@ -44,11 +45,14 @@ export class ZapiWhatsappAdapter implements WhatsappProviderAdapter {
     private readonly fetchImpl: RuntimeFetch = fetch,
   ) {}
 
-  async getHealth(): Promise<WhatsappProviderHealthDto> {
+  async getHealth(
+    config?: WhatsappProviderConfig,
+  ): Promise<WhatsappProviderHealthDto> {
     const checkedAt = new Date().toISOString();
-    const baseUrl = this.env.ZAPI_BASE_URL?.trim();
-    const instanceId = this.env.ZAPI_INSTANCE_ID?.trim();
-    const token = this.env.ZAPI_TOKEN?.trim();
+    const saved = config?.provider === this.id ? config.config : null;
+    const baseUrl = saved?.baseUrl.trim() ?? this.env.ZAPI_BASE_URL?.trim();
+    const instanceId = saved?.instanceId.trim() ?? this.env.ZAPI_INSTANCE_ID?.trim();
+    const token = saved?.token.trim() ?? this.env.ZAPI_TOKEN?.trim();
 
     if (!baseUrl || !instanceId || !token) {
       return {

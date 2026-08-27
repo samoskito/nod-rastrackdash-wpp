@@ -510,8 +510,15 @@ model WhatsappInstance {
   providerTokenEncrypted String?
   providerTokenIv        String?
   providerTokenTag       String?
+  configEncrypted        String?
+  configIv               String?
+  configTag              String?
+  displayName            String?
+  lastHealthCheckedAt    DateTime?
+  lastHealthStatus       String?
+  webhookUrl             String?
   webhookTokenHash       String?
-  status                 WhatsappInstanceStatus @default(pending_payment)
+  status                 WhatsappInstanceStatus @default(active)
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
@@ -522,6 +529,7 @@ model WhatsappInstance {
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
+  @@index([workspaceId, provider])
   @@index([providerInstanceId])
 }
 

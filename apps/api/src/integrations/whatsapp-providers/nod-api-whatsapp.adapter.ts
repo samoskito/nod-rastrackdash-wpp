@@ -11,6 +11,7 @@ import type {
   NodApiManagedInstanceDto,
   NodApiManagedInstanceStatusDto,
   WhatsappProviderAdapter,
+  WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
 
@@ -44,8 +45,35 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
     private readonly fetchImpl: RuntimeFetch = fetch,
   ) {}
 
-  async getHealth(): Promise<WhatsappProviderHealthDto> {
+  async getHealth(
+    config?: WhatsappProviderConfig,
+  ): Promise<WhatsappProviderHealthDto> {
     const checkedAt = new Date().toISOString();
+    if (
+      config?.provider === this.id &&
+      config.config.instanceId &&
+      config.config.instanceToken
+    ) {
+      try {
+        const instance = await this.getManagedInstanceStatus(
+          config.config.instanceId,
+          config.config.instanceToken,
+        );
+        return {
+          provider: this.id,
+          status: this.managedInstanceStatus(instance.status),
+          checkedAt,
+        };
+      } catch (error) {
+        return {
+          provider: this.id,
+          status: "error",
+          checkedAt,
+          message: error instanceof Error ? error.message : "Erro ao consultar NOD API",
+        };
+      }
+    }
+
     const licenseKey = this.env.LICENSE_KEY?.trim();
 
     if (!licenseKey) {
@@ -225,6 +253,19 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
       default:
         return "error";
     }
+  }
+
+  private managedInstanceStatus(status: string): IntegrationStatus {
+    if (/connected|working|active/i.test(status)) {
+      return "connected";
+    }
+    if (/qr|reconnect|pending/i.test(status)) {
+      return "needs_reconnect";
+    }
+    if (/disconnected|stopped/i.test(status)) {
+      return "disconnected";
+    }
+    return "error";
   }
 
   private brokerErrorMessage(

@@ -22,6 +22,8 @@ export type UazapiByoConfig = {
  */
 export type NodApiConfig = {
   enabled: boolean;
+  instanceId?: string;
+  instanceToken?: string;
 };
 
 /** Config for the real "waha" adapter (F5.4, pure BYO self-host). */
@@ -83,7 +85,7 @@ export interface NodApiManagedInstanceStatusDto {
  */
 export interface WhatsappProviderAdapter {
   readonly id: WhatsappProviderId;
-  getHealth(): Promise<WhatsappProviderHealthDto>;
+  getHealth(config?: WhatsappProviderConfig): Promise<WhatsappProviderHealthDto>;
   listLabels?(
     instanceRef: string,
     instanceToken?: string | null,

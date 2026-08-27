@@ -3,6 +3,7 @@ import { UazapiAdapter } from "../uazapi/uazapi.adapter";
 import type {
   WhatsappLabelListResult,
   WhatsappProviderAdapter,
+  WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
 
@@ -19,7 +20,24 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
 
   constructor(private readonly uazapi: UazapiAdapter) {}
 
-  async getHealth(): Promise<WhatsappProviderHealthDto> {
+  async getHealth(
+    config?: WhatsappProviderConfig,
+  ): Promise<WhatsappProviderHealthDto> {
+    if (config?.provider === this.id) {
+      const hasCredentials = Boolean(
+        config.config.baseUrl.trim() && config.config.token.trim(),
+      );
+
+      return {
+        provider: this.id,
+        status: hasCredentials ? "connected" : "disconnected",
+        checkedAt: new Date().toISOString(),
+        message: hasCredentials
+          ? undefined
+          : "Missing Uazapi connection credentials",
+      };
+    }
+
     const health = await this.uazapi.getHealth();
 
     return {
