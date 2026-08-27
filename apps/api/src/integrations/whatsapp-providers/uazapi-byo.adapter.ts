@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { UazapiAdapter } from "../uazapi/uazapi.adapter";
+import type { IntegrationStatus } from "../integration.types";
 import type {
   WhatsappLabelListResult,
   WhatsappProviderAdapter,
@@ -24,17 +25,29 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
     config?: WhatsappProviderConfig,
   ): Promise<WhatsappProviderHealthDto> {
     if (config?.provider === this.id) {
-      const hasCredentials = Boolean(
-        config.config.baseUrl.trim() && config.config.token.trim(),
+      const baseUrl = config.config.baseUrl.trim();
+      const token = config.config.token.trim();
+      const checkedAt = new Date().toISOString();
+
+      if (!baseUrl || !token) {
+        return {
+          provider: this.id,
+          status: "disconnected",
+          checkedAt,
+          message: "Missing Uazapi connection credentials",
+        };
+      }
+
+      const connection = await this.uazapi.getInstanceStatusForConnection(
+        baseUrl,
+        token,
       );
 
       return {
         provider: this.id,
-        status: hasCredentials ? "connected" : "disconnected",
-        checkedAt: new Date().toISOString(),
-        message: hasCredentials
-          ? undefined
-          : "Missing Uazapi connection credentials",
+        status: this.mapConnectionStatus(connection.connectionStatus),
+        checkedAt,
+        message: this.connectionStatusMessage(connection.connectionStatus),
       };
     }
 
@@ -46,6 +59,44 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
       checkedAt: health.checkedAt,
       message: health.message,
     };
+  }
+
+  private mapConnectionStatus(
+    status:
+      | "not_configured"
+      | "pending"
+      | "qr_required"
+      | "connected"
+      | "disconnected"
+      | "error",
+  ): IntegrationStatus {
+    switch (status) {
+      case "connected":
+        return "connected";
+      case "disconnected":
+      case "not_configured":
+        return "disconnected";
+      case "qr_required":
+        return "needs_reconnect";
+      case "pending":
+        return "syncing";
+      case "error":
+        return "error";
+    }
+  }
+
+  private connectionStatusMessage(
+    status:
+      | "not_configured"
+      | "pending"
+      | "qr_required"
+      | "connected"
+      | "disconnected"
+      | "error",
+  ): string | undefined {
+    return status === "connected"
+      ? undefined
+      : `Uazapi instance status: ${status}`;
   }
 
   async listLabels(
