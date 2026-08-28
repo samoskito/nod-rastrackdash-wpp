@@ -21,6 +21,7 @@ type RecordShape = {
   configIv: string | null;
   configTag: string | null;
   webhookUrl: string | null;
+  webhookTokenHash: string | null;
   status: "pending_payment" | "active" | "disconnected" | "suspended" | "error";
   lastHealthStatus: string | null;
   lastHealthCheckedAt: Date | null;
@@ -41,6 +42,7 @@ function record(overrides: Partial<RecordShape> = {}): RecordShape {
     configIv: null,
     configTag: null,
     webhookUrl: null,
+    webhookTokenHash: null,
     status: "active",
     lastHealthStatus: null,
     lastHealthCheckedAt: null,
@@ -59,9 +61,14 @@ function fakePrisma(initial: RecordShape[] = []) {
     whatsappInstance: {
       findMany: async ({ where }: { where: { workspaceId: string } }) =>
         records.filter((item) => item.workspaceId === where.workspaceId),
-      findFirst: async ({ where }: { where: { id: string; workspaceId: string } }) =>
+      findFirst: async ({
+        where,
+      }: {
+        where: { id: string; workspaceId: string };
+      }) =>
         records.find(
-          (item) => item.id === where.id && item.workspaceId === where.workspaceId,
+          (item) =>
+            item.id === where.id && item.workspaceId === where.workspaceId,
         ) ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         const created = record({
@@ -70,37 +77,44 @@ function fakePrisma(initial: RecordShape[] = []) {
           name: data.name as string,
           displayName: (data.displayName as string | null) ?? null,
           provider: data.provider as string,
-          providerInstanceId: (data.providerInstanceId as string | null) ?? null,
+          providerInstanceId:
+            (data.providerInstanceId as string | null) ?? null,
           configEncrypted: data.configEncrypted as string,
           configIv: data.configIv as string,
           configTag: data.configTag as string,
+          webhookUrl: (data.webhookUrl as string | null) ?? null,
+          webhookTokenHash: (data.webhookTokenHash as string | null) ?? null,
           status: data.status as RecordShape["status"],
         });
         records.push(created);
         return created;
       },
-      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
         const found = records.find((item) => item.id === where.id);
         if (!found) throw new Error("missing record");
         Object.assign(found, data, { updatedAt: new Date() });
         return found;
       },
     },
-    auditLog: { create: async ({ data }: { data: unknown }) => audits.push(data) },
+    auditLog: {
+      create: async ({ data }: { data: unknown }) => audits.push(data),
+    },
   };
-}
-
-function adapter(
-  provider: WhatsappProviderAdapter["id"],
-  getHealth: WhatsappProviderAdapter["getHealth"],
-): WhatsappProviderAdapter {
-  return { id: provider, getHealth };
 }
 
 function service(
   prisma = fakePrisma(),
   registry = new WhatsappProviderRegistry(),
-  env: Record<string, string | undefined> = {},
+  env: Record<string, string | undefined> = {
+    API_PUBLIC_URL: "https://api.example.test",
+    NODE_ENV: "test",
+  },
 ) {
   return {
     prisma,
@@ -113,6 +127,13 @@ function service(
       env,
     ),
   };
+}
+
+function adapter(
+  provider: WhatsappProviderAdapter["id"],
+  getHealth: WhatsappProviderAdapter["getHealth"],
+): WhatsappProviderAdapter {
+  return { id: provider, getHealth };
 }
 
 const owner = {
@@ -142,7 +163,9 @@ describe("WhatsappConnectionsService", () => {
     expect(prisma.records[0]?.configTag).toBeTruthy();
     expect(JSON.stringify(created)).not.toContain(token);
     expect(JSON.stringify(prisma.audits)).not.toContain(token);
-    await expect(connections.listConnections(owner.workspaceId)).resolves.toEqual([
+    await expect(
+      connections.listConnections(owner.workspaceId),
+    ).resolves.toEqual([
       expect.objectContaining({ id: created.id, provider: "waha" }),
     ]);
   });
@@ -152,7 +175,9 @@ describe("WhatsappConnectionsService", () => {
       fakePrisma([record({ workspaceId: "workspace-b" })]),
     );
     await expect(
-      connections.updateConnection(owner, "connection-1", { name: "Novo nome" }),
+      connections.updateConnection(owner, "connection-1", {
+        name: "Novo nome",
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -178,20 +203,94 @@ describe("WhatsappConnectionsService", () => {
 
   it("records a failed health check while list remains available", async () => {
     const { service: connections, registry } = service(fakePrisma([record()]));
-    registry.register(adapter("waha", async () => { throw new Error("provider unavailable"); }));
-
-    await expect(connections.testConnection(owner, "connection-1")).resolves.toEqual(
-      expect.objectContaining({ status: "error" }),
+    registry.register(
+      adapter("waha", async () => {
+        throw new Error("provider unavailable");
+      }),
     );
-    await expect(connections.listConnections(owner.workspaceId)).resolves.toHaveLength(1);
-  });
-
-  it("fails closed when a nod_api connection is requested without a configured broker", async () => {
-    const { service: connections } = service();
 
     await expect(
-      connections.createConnection(owner, { provider: "nod_api", name: "NOD" }),
-    ).rejects.toThrow("NOD_API_BROKER_URL");
+      connections.testConnection(owner, "connection-1"),
+    ).resolves.toEqual(expect.objectContaining({ status: "error" }));
+    await expect(
+      connections.listConnections(owner.workspaceId),
+    ).resolves.toHaveLength(1);
+  });
+
+  it("does not provision NOD API while preserving the Testar contract", async () => {
+    const registry = new WhatsappProviderRegistry();
+    let managedInstanceCalls = 0;
+    const createManagedInstance = async () => {
+      managedInstanceCalls += 1;
+      throw new Error("createManagedInstance must not be called by onboarding");
+    };
+    registry.register({
+      id: "nod_api",
+      createManagedInstance,
+      getHealth: async (config) => {
+        expect(config).toEqual({
+          provider: "nod_api",
+          config: {
+            enabled: true,
+            instanceId: "configured-instance",
+            instanceToken: "configured-token",
+          },
+        });
+        return {
+          provider: "nod_api",
+          status: "connected",
+          checkedAt: "2026-08-27T12:01:00.000Z",
+        };
+      },
+    });
+    const { service: connections, prisma } = service(undefined, registry);
+    const created = await connections.createConnection(owner, {
+      provider: "nod_api",
+      name: "NOD",
+      credentials: {
+        instanceId: "configured-instance",
+        instanceToken: "configured-token",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("configured-instance");
+    expect(managedInstanceCalls).toBe(0);
+    await expect(
+      connections.testConnection(owner, created.id),
+    ).resolves.toEqual(
+      expect.objectContaining({ provider: "nod_api", status: "connected" }),
+    );
+  });
+
+  it("rotates a hash-only webhook token without exposing it in persistence or audit", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+      },
+    });
+
+    const first = await connections.rotateWebhookToken(owner, created.id);
+    const second = await connections.rotateWebhookToken(owner, created.id);
+
+    expect(first.webhookEndpoint).toBe(
+      `https://api.example.test/webhooks/whatsapp/${created.id}`,
+    );
+    expect(first.webhookEndpoint).not.toContain("token=");
+    expect(second.webhookToken).not.toBe(first.webhookToken);
+    expect(JSON.stringify(prisma.records)).not.toContain(first.webhookToken);
+    expect(JSON.stringify(prisma.records)).not.toContain(second.webhookToken);
+    expect(JSON.stringify(prisma.audits)).not.toContain(first.webhookToken);
+    expect(JSON.stringify(prisma.audits)).not.toContain(second.webhookToken);
+    await expect(
+      connections.rotateWebhookToken(
+        { ...owner, workspaceId: "workspace-b" },
+        created.id,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -203,11 +302,8 @@ describe("WhatsApp provider module graph", () => {
   });
 
   afterAll(() => {
-    if (previousWebOrigin === undefined) {
-      delete process.env.WEB_ORIGIN;
-    } else {
-      process.env.WEB_ORIGIN = previousWebOrigin;
-    }
+    if (previousWebOrigin === undefined) delete process.env.WEB_ORIGIN;
+    else process.env.WEB_ORIGIN = previousWebOrigin;
   });
 
   it("compiles WhatsappProvidersModule without a database", async () => {
@@ -218,7 +314,9 @@ describe("WhatsApp provider module graph", () => {
   });
 
   it("compiles AppModule without a database", async () => {
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const module = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     await module.close();
   });
 });

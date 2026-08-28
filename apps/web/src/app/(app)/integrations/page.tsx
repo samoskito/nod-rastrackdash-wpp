@@ -11,7 +11,9 @@ import type {
   MetaManualConfigurationDto,
   ProviderConversionRuleDto,
   CurrentWorkspaceDto,
+  WhatsappConnectionDto,
 } from "@wpptrack/shared";
+import { metaAssetsSchema, whatsappConnectionsSchema } from "@wpptrack/shared";
 import {
   Activity,
   Database,
@@ -41,6 +43,12 @@ import {
   InboundWebhookPanel,
   type InboundWebhookConnectionView,
 } from "./inbound-webhook-panel";
+import {
+  createWhatsappConnectionAction,
+  rotateWhatsappWebhookTokenAction,
+  testWhatsappConnectionAction,
+} from "./whatsapp-provider-actions";
+import { WhatsappProviderPanel } from "./whatsapp-provider-panel";
 import {
   createMetaManualConnectionAction,
   createMetaManualCredentialAction,
@@ -90,6 +98,16 @@ type PageNotice = {
   tone: "success" | "warn";
   title: string;
   message: string;
+};
+
+type LegacyWhatsappInstance = {
+  id: string;
+  name: string;
+  provider: string;
+  billingStatus: string;
+  providerInstanceId: string | null;
+  checkoutUrl: string | null;
+  createdAt: string;
 };
 
 async function getHealth(): Promise<
@@ -168,8 +186,15 @@ async function getMetaConnection(): Promise<
 
 async function getMetaAssets(): Promise<ResourceResult<MetaAssetsDto | null>> {
   try {
+    const response = await serverApiFetch<unknown>("/integrations/meta/assets");
+    const parsed = metaAssetsSchema.safeParse(response);
+
+    if (!parsed.success) {
+      return { data: null, state: "error" };
+    }
+
     return {
-      data: await serverApiFetch<MetaAssetsDto>("/integrations/meta/assets"),
+      data: parsed.data,
       state: "real",
     };
   } catch {
@@ -177,6 +202,22 @@ async function getMetaAssets(): Promise<ResourceResult<MetaAssetsDto | null>> {
       data: null,
       state: "error",
     };
+  }
+}
+
+async function getLegacyWhatsappInstances(): Promise<
+  ResourceResult<LegacyWhatsappInstance[]>
+> {
+  try {
+    const instances = await serverApiFetch<LegacyWhatsappInstance[]>(
+      "/integrations/whatsapp/instances",
+    );
+    return {
+      data: instances,
+      state: instances.length > 0 ? "real" : "empty",
+    };
+  } catch {
+    return { data: [], state: "error" };
   }
 }
 
@@ -315,6 +356,26 @@ async function getInboundWebhookData(): Promise<
       data: null,
       state: "error",
     };
+  }
+}
+
+async function getWhatsappConnections(): Promise<
+  ResourceResult<WhatsappConnectionDto[]>
+> {
+  try {
+    const connections = await serverApiFetch<unknown>(
+      "/integrations/whatsapp-connections",
+    );
+    const parsed = whatsappConnectionsSchema.safeParse(connections);
+    if (!parsed.success) {
+      return { data: [], state: "error" };
+    }
+    return {
+      data: parsed.data,
+      state: "real",
+    };
+  } catch {
+    return { data: [], state: "error" };
   }
 }
 
@@ -810,13 +871,15 @@ export default async function IntegrationsPage({
         ? await getMetaManualConfiguration()
         : ({ data: null, state: "empty" } as const);
   const inboundWebhookResult = await getInboundWebhookData();
+  const whatsappConnectionsResult = await getWhatsappConnections();
+  const legacyWhatsappInstancesResult = await getLegacyWhatsappInstances();
   const inboundWebhookData = inboundWebhookResult.data;
   const pipeline = pipelineResult.data;
   const workspace = workspaceResult.data;
   const isPlatformOperator = Boolean(workspace?.platformRole);
   const workspacePermissionsUnavailable = workspaceResult.state === "error";
   const canManageIntegrations = Boolean(
-    workspace?.permissions.canManageIntegrations,
+    workspace?.permissions?.canManageIntegrations,
   );
   const maxPipelineValue = Math.max(
     ...(pipeline?.stages ?? []).map((stage) => stage.value),
@@ -855,12 +918,12 @@ export default async function IntegrationsPage({
     oauthConnected && metaManualResult.data?.advancedRoutingEnabled,
   );
   const metaRefreshBusinessId =
-    metaAssets?.selection.businessId &&
+    metaAssets?.selection?.businessId &&
     metaAssets.businesses.some(
-      (business) => business.id === metaAssets.selection.businessId,
+      (business) => business.id === metaAssets.selection?.businessId,
     )
       ? metaAssets.selection.businessId
-      : (metaAssets?.businesses[0]?.id ?? "");
+      : (metaAssets?.businesses?.[0]?.id ?? "");
   const integrations =
     health?.providers.map((item) => ({
       title: providerTitle(item.provider),
@@ -899,6 +962,7 @@ export default async function IntegrationsPage({
     inboundWebhookData?.connections.filter(
       ({ overview }) => overview.connection.status !== "paused",
     ).length ?? 0;
+  const legacyWhatsappInstances = legacyWhatsappInstancesResult.data;
   const whatsappSourceLabel = usesExternalWhatsapp
     ? "MySQL externo"
     : inboundConnectionCount > 0
@@ -941,6 +1005,19 @@ export default async function IntegrationsPage({
         <div className={`feedback-banner ${pageNotice.tone}`} role="status">
           <strong>{pageNotice.title}</strong>
           <span>{pageNotice.message}</span>
+        </div>
+      ) : null}
+
+      {workspacePermissionsUnavailable ? (
+        <div className="feedback-banner warn" role="alert">
+          <strong>Permissoes temporariamente indisponiveis</strong>
+          <span>
+            Nao foi possivel confirmar as permissoes agora. A API validara a
+            acao ao continuar.
+          </span>
+          <a className="button" href="/integrations">
+            Tentar novamente
+          </a>
         </div>
       ) : null}
 
@@ -1181,6 +1258,18 @@ export default async function IntegrationsPage({
               </div>
             </div>
           )}
+          {legacyMetaConnected && workspacePermissionsUnavailable ? (
+            <div className="connection-callout">
+              <div>
+                <span className="micro-label">Conta Meta</span>
+                <strong>Trocar conta Meta</strong>
+                <p className="muted">
+                  Aguarde a confirmacao das permissoes para trocar a conta. A
+                  API validara a acao antes de qualquer alteracao.
+                </p>
+              </div>
+            </div>
+          ) : null}
           <MetaManualConnectionPanel
             workspaceId={metaConnection?.workspaceId ?? workspace?.id ?? ""}
             capabilities={metaCapabilities}
@@ -1389,6 +1478,14 @@ export default async function IntegrationsPage({
         </header>
 
         <div className="integration-domain-content integration-whatsapp-content">
+          <WhatsappProviderPanel
+            connections={whatsappConnectionsResult.data}
+            canManage={canManageIntegrations}
+            createAction={createWhatsappConnectionAction}
+            testAction={testWhatsappConnectionAction}
+            rotateAction={rotateWhatsappWebhookTokenAction}
+          />
+
           {inboundWebhookData &&
           (inboundWebhookData.capabilities.enabled ||
             inboundWebhookData.connections.length > 0) ? (
@@ -1410,7 +1507,34 @@ export default async function IntegrationsPage({
             />
           ) : null}
 
-          {!usesExternalWhatsapp && (
+          {usesExternalWhatsapp ? (
+            <div className="surface-panel whatsapp-instance-panel">
+              <span className="eyebrow">Integracao externa MySQL</span>
+              <h2>Dados recebidos por integracao externa do MySQL</h2>
+              <p className="muted">
+                Esta fonte e monitorada pelo conector externo; nao ha instancia
+                ou cobranca para configurar neste painel.
+              </p>
+              <div className="metric-grid compact">
+                <div className="metric-card">
+                  <span className="micro-label">Ultima sincronizacao</span>
+                  <strong>
+                    {sourceSyncLabel(
+                      pipeline?.whatsappSource?.lastSyncCompletedAt,
+                    )}
+                  </strong>
+                </div>
+                <div className="metric-card">
+                  <span className="micro-label">Status</span>
+                  <strong>
+                    {statusLabel(
+                      pipeline?.whatsappSource?.lastSyncStatus ?? "pending",
+                    )}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          ) : (
             <div className="surface-panel whatsapp-instance-panel">
               <span className="eyebrow">WhatsApp Business</span>
               <h2>Instancia Uazapi (BYO)</h2>
@@ -1439,6 +1563,19 @@ export default async function IntegrationsPage({
                   </strong>
                 </div>
               </div>
+              {legacyWhatsappInstancesResult.state === "error" ? (
+                <p className="muted">Nao foi possivel carregar instancias.</p>
+              ) : legacyWhatsappInstances.length > 0 ? (
+                <div className="inbound-connection-list">
+                  {legacyWhatsappInstances.map((instance) => (
+                    <div className="inbound-connection-body" key={instance.id}>
+                      <strong>{instance.name}</strong>
+                      <span>{instance.providerInstanceId ?? instance.id}</span>
+                      <span>{statusLabel(instance.billingStatus)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
         </div>

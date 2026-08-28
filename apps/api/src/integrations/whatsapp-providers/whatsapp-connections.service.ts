@@ -5,12 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { createHash, randomBytes } from "node:crypto";
 import type { Prisma, WorkspaceRole } from "@prisma/client";
 import type {
   WhatsappConnectionCreateInputDto,
   WhatsappConnectionCredentialsUpdateDto,
   WhatsappConnectionDto,
   WhatsappConnectionTestResultDto,
+  WhatsappConnectionWebhookTokenRotateResultDto,
   WhatsappConnectionUpdateInputDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../../common/prisma/prisma.service";
@@ -49,6 +51,14 @@ type WhatsappConnectionRecord = {
   updatedAt: Date;
 };
 
+type AdapterWhatsappConnectionCreateInput = Exclude<
+  WhatsappConnectionCreateInputDto,
+  { provider: "gupshup" | "umbler" }
+>;
+type WhatsappConnectionCredentials =
+  | AdapterWhatsappConnectionCreateInput["credentials"]
+  | WhatsappConnectionCredentialsUpdateDto["credentials"];
+
 const PROVIDERS: readonly WhatsappProviderId[] = [
   "uazapi_byo",
   "waha",
@@ -71,7 +81,6 @@ export class WhatsappConnectionsService {
       where: { workspaceId },
       orderBy: { createdAt: "asc" },
     })) as WhatsappConnectionRecord[];
-
     return connections
       .filter((connection) => this.isProvider(connection.provider))
       .map((connection) => this.toDto(connection));
@@ -82,34 +91,15 @@ export class WhatsappConnectionsService {
     input: WhatsappConnectionCreateInputDto,
   ): Promise<WhatsappConnectionDto> {
     this.assertCanManage(actor);
-    let config = this.toProviderConfig(input.provider, input.credentials);
-    let providerInstanceId: string | null = null;
-
-    if (input.provider === "nod_api") {
-      if (!this.env.NOD_API_BROKER_URL?.trim()) {
-        throw new BadRequestException(
-          "NOD API requer NOD_API_BROKER_URL configurado no servidor",
-        );
-      }
-      const adapter = this.registry.require("nod_api");
-      if (!adapter.createManagedInstance) {
-        throw new BadRequestException("NOD API broker nao esta disponivel");
-      }
-      const managed = await adapter.createManagedInstance(input.name);
-      if (!managed.instanceId || !managed.instanceToken) {
-        throw new BadRequestException("NOD API broker retornou credenciais invalidas");
-      }
-      config = {
-        provider: "nod_api",
-        config: {
-          enabled: true,
-          instanceId: managed.instanceId,
-          instanceToken: managed.instanceToken,
-        },
-      };
-      providerInstanceId = managed.instanceId;
-    }
-
+    const adapterInput = input as AdapterWhatsappConnectionCreateInput;
+    const config = this.toProviderConfig(
+      adapterInput.provider,
+      adapterInput.credentials,
+    );
+    const providerInstanceId =
+      adapterInput.provider === "nod_api"
+        ? (adapterInput.credentials?.instanceId ?? null)
+        : null;
     const encrypted = this.encryptConfig(config);
     const created = (await this.prisma.whatsappInstance.create({
       data: {
@@ -130,7 +120,6 @@ export class WhatsappConnectionsService {
       targetId: created.id,
       afterSummary: { provider: created.provider, status: created.status },
     });
-
     return this.toDto(created);
   }
 
@@ -145,7 +134,6 @@ export class WhatsappConnectionsService {
       where: { id: existing.id },
       data: input,
     })) as WhatsappConnectionRecord;
-
     await this.recordAudit({
       workspaceId: actor.workspaceId,
       actorUserId: actor.userId,
@@ -154,7 +142,6 @@ export class WhatsappConnectionsService {
       beforeSummary: this.metadataSummary(existing),
       afterSummary: this.metadataSummary(updated),
     });
-
     return this.toDto(updated);
   }
 
@@ -166,10 +153,17 @@ export class WhatsappConnectionsService {
     this.assertCanManage(actor);
     const existing = await this.findForWorkspace(actor.workspaceId, id);
     if (existing.provider !== input.provider) {
-      throw new ConflictException("O provider da conexao nao pode ser alterado");
+      throw new ConflictException(
+        "O provider da conexao nao pode ser alterado",
+      );
     }
-    if (input.provider === "nod_api" && (!input.credentials.instanceId || !input.credentials.instanceToken)) {
-      throw new BadRequestException("NOD API requer instanceId e instanceToken");
+    if (
+      input.provider === "nod_api" &&
+      (!input.credentials.instanceId || !input.credentials.instanceToken)
+    ) {
+      throw new BadRequestException(
+        "NOD API requer instanceId e instanceToken",
+      );
     }
     const config = this.toProviderConfig(input.provider, input.credentials);
     const encrypted = this.encryptConfig(config);
@@ -179,13 +173,12 @@ export class WhatsappConnectionsService {
         ...encrypted,
         providerInstanceId:
           input.provider === "uazapi_byo"
-            ? input.credentials.instanceId ?? null
+            ? (input.credentials.instanceId ?? null)
             : input.provider === "zapi" || input.provider === "nod_api"
               ? input.credentials.instanceId
               : existing.providerInstanceId,
       },
     })) as WhatsappConnectionRecord;
-
     await this.recordAudit({
       workspaceId: actor.workspaceId,
       actorUserId: actor.userId,
@@ -193,14 +186,10 @@ export class WhatsappConnectionsService {
       targetId: updated.id,
       afterSummary: { provider: updated.provider, credentialsUpdated: true },
     });
-
     return this.toDto(updated);
   }
 
-  async deactivateConnection(
-    actor: WorkspaceActor,
-    id: string,
-  ): Promise<void> {
+  async deactivateConnection(actor: WorkspaceActor, id: string): Promise<void> {
     this.assertCanManage(actor);
     const existing = await this.findForWorkspace(actor.workspaceId, id);
     await this.prisma.whatsappInstance.update({
@@ -229,12 +218,17 @@ export class WhatsappConnectionsService {
 
     try {
       const config = this.decryptConfig(connection);
-      const adapter = this.registry.require(this.requireProvider(connection.provider));
+      const adapter = this.registry.require(
+        this.requireProvider(connection.provider),
+      );
       const health = await adapter.getHealth(config ?? undefined);
       status = health.status;
       message = health.message;
     } catch (error) {
-      message = error instanceof Error ? error.message : "Erro ao testar conexao WhatsApp";
+      message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao testar conexao WhatsApp";
     }
 
     const updated = await this.prisma.whatsappInstance.update({
@@ -258,6 +252,43 @@ export class WhatsappConnectionsService {
     };
   }
 
+  async rotateWebhookToken(
+    actor: WorkspaceActor,
+    id: string,
+  ): Promise<WhatsappConnectionWebhookTokenRotateResultDto> {
+    this.assertCanManage(actor);
+    const existing = await this.findForWorkspace(actor.workspaceId, id);
+    const webhookToken = randomBytes(32).toString("base64url");
+    const webhookEndpoint = this.buildWebhookEndpoint(existing.id);
+    const updated = (await this.prisma.whatsappInstance.update({
+      where: { id: existing.id },
+      data: {
+        webhookTokenHash: createHash("sha256")
+          .update(webhookToken, "utf8")
+          .digest("hex"),
+        webhookUrl: webhookEndpoint,
+      },
+    })) as WhatsappConnectionRecord;
+
+    await this.recordAudit({
+      workspaceId: actor.workspaceId,
+      actorUserId: actor.userId,
+      action: "whatsapp_connection.webhook_token_rotated",
+      targetId: updated.id,
+      beforeSummary: this.metadataSummary(existing),
+      afterSummary: {
+        ...this.metadataSummary(updated),
+        webhookTokenRotated: true,
+      },
+    });
+
+    return {
+      connection: this.toDto(updated),
+      webhookEndpoint,
+      webhookToken,
+    };
+  }
+
   private async findForWorkspace(
     workspaceId: string,
     id: string,
@@ -265,23 +296,43 @@ export class WhatsappConnectionsService {
     const connection = (await this.prisma.whatsappInstance.findFirst({
       where: { id, workspaceId },
     })) as WhatsappConnectionRecord | null;
-    if (!connection || !this.isProvider(connection.provider)) {
+    if (!connection || !this.isProvider(connection.provider))
       throw new NotFoundException("Conexao WhatsApp nao encontrada");
-    }
     return connection;
   }
 
   private toProviderConfig(
     provider: WhatsappProviderId,
-    credentials: WhatsappConnectionCreateInputDto["credentials"] | WhatsappConnectionCredentialsUpdateDto["credentials"],
+    credentials: WhatsappConnectionCredentials,
   ): WhatsappProviderConfig {
     switch (provider) {
       case "uazapi_byo":
-        return { provider, config: credentials as WhatsappProviderConfig["config"] as { baseUrl: string; token: string; instanceId?: string } };
+        return {
+          provider,
+          config: credentials as {
+            baseUrl: string;
+            token: string;
+            instanceId?: string;
+          },
+        };
       case "waha":
-        return { provider, config: credentials as WhatsappProviderConfig["config"] as { baseUrl: string; apiKey: string; session?: string } };
+        return {
+          provider,
+          config: credentials as {
+            baseUrl: string;
+            apiKey: string;
+            session?: string;
+          },
+        };
       case "zapi":
-        return { provider, config: credentials as WhatsappProviderConfig["config"] as { baseUrl: string; instanceId: string; token: string } };
+        return {
+          provider,
+          config: credentials as {
+            baseUrl: string;
+            instanceId: string;
+            token: string;
+          },
+        };
       case "nod_api":
         return {
           provider,
@@ -293,7 +344,9 @@ export class WhatsappConnectionsService {
     }
   }
 
-  private encryptConfig(config: WhatsappProviderConfig): Pick<
+  private encryptConfig(
+    config: WhatsappProviderConfig,
+  ): Pick<
     WhatsappConnectionRecord,
     "configEncrypted" | "configIv" | "configTag"
   > {
@@ -305,20 +358,39 @@ export class WhatsappConnectionsService {
     };
   }
 
-  private decryptConfig(connection: WhatsappConnectionRecord): WhatsappProviderConfig | null {
-    if (!connection.configEncrypted && !connection.configIv && !connection.configTag) {
+  private decryptConfig(
+    connection: WhatsappConnectionRecord,
+  ): WhatsappProviderConfig | null {
+    if (
+      !connection.configEncrypted &&
+      !connection.configIv &&
+      !connection.configTag
+    ) {
       return null;
     }
-    if (!connection.configEncrypted || !connection.configIv || !connection.configTag) {
-      throw new BadRequestException("Configuracao cifrada da conexao esta incompleta");
+    if (
+      !connection.configEncrypted ||
+      !connection.configIv ||
+      !connection.configTag
+    ) {
+      throw new BadRequestException(
+        "Configuracao cifrada da conexao esta incompleta",
+      );
     }
-    const value = JSON.parse(this.encryption.decrypt({
-      encryptedAccessToken: connection.configEncrypted,
-      tokenIv: connection.configIv,
-      tokenTag: connection.configTag,
-    })) as WhatsappProviderConfig;
-    if (!this.isProvider(value.provider) || value.provider !== connection.provider) {
-      throw new BadRequestException("Configuracao cifrada da conexao e invalida");
+    const value = JSON.parse(
+      this.encryption.decrypt({
+        encryptedAccessToken: connection.configEncrypted,
+        tokenIv: connection.configIv,
+        tokenTag: connection.configTag,
+      }),
+    ) as WhatsappProviderConfig;
+    if (
+      !this.isProvider(value.provider) ||
+      value.provider !== connection.provider
+    ) {
+      throw new BadRequestException(
+        "Configuracao cifrada da conexao e invalida",
+      );
     }
     return value;
   }
@@ -331,14 +403,43 @@ export class WhatsappConnectionsService {
       provider: this.requireProvider(connection.provider),
       status: connection.status,
       lastHealthStatus: connection.lastHealthStatus,
-      lastHealthCheckedAt: connection.lastHealthCheckedAt?.toISOString() ?? null,
+      lastHealthCheckedAt:
+        connection.lastHealthCheckedAt?.toISOString() ?? null,
       connectedPhone: null,
       createdAt: connection.createdAt.toISOString(),
     };
   }
 
+  private buildWebhookEndpoint(connectionId: string): string {
+    const apiPublicUrl = this.env.API_PUBLIC_URL?.trim();
+    if (!apiPublicUrl) {
+      throw new BadRequestException(
+        "API_PUBLIC_URL precisa estar configurada para gerar o webhook",
+      );
+    }
+
+    let base: URL;
+    try {
+      base = new URL(apiPublicUrl);
+    } catch {
+      throw new BadRequestException("API_PUBLIC_URL invalida");
+    }
+
+    if (base.protocol !== "http:" && base.protocol !== "https:") {
+      throw new BadRequestException("API_PUBLIC_URL deve usar http ou https");
+    }
+
+    return new URL(
+      `/webhooks/whatsapp/${encodeURIComponent(connectionId)}`,
+      base,
+    ).toString();
+  }
+
   private assertCanManage(actor: WorkspaceActor): void {
-    if (!this.accessPolicy.getPermissions(actor.role, actor.canManageMembers).canManageIntegrations) {
+    if (
+      !this.accessPolicy.getPermissions(actor.role, actor.canManageMembers)
+        .canManageIntegrations
+    ) {
       throw new NotFoundException("Conexao WhatsApp nao encontrada");
     }
   }
@@ -353,8 +454,9 @@ export class WhatsappConnectionsService {
   private isProvider(provider: string): provider is WhatsappProviderId {
     return (PROVIDERS as readonly string[]).includes(provider);
   }
-
-  private metadataSummary(connection: WhatsappConnectionRecord): Record<string, unknown> {
+  private metadataSummary(
+    connection: WhatsappConnectionRecord,
+  ): Record<string, unknown> {
     return {
       name: connection.name,
       displayName: connection.displayName,
@@ -363,13 +465,14 @@ export class WhatsappConnectionsService {
       webhookConfigured: Boolean(connection.webhookUrl),
     };
   }
-
   private redactMessage(message: string): string {
     return message
-      .replace(/(token|api[-_ ]?key|authorization)\s*[:=]\s*[^\s,]+/gi, "$1=[redacted]")
+      .replace(
+        /(token|api[-_ ]?key|authorization)\s*[:=]\s*[^\s,]+/gi,
+        "$1=[redacted]",
+      )
       .slice(0, 500);
   }
-
   private async recordAudit(input: {
     workspaceId: string;
     actorUserId: string;
@@ -397,7 +500,7 @@ export class WhatsappConnectionsService {
         },
       });
     } catch {
-      // Audit failures never expose configuration or break a connection action.
+      /* audit must not reveal credentials or break onboarding */
     }
   }
 }

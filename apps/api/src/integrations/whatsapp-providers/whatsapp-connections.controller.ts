@@ -32,7 +32,8 @@ export class WhatsappConnectionsController {
 
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
-    @Inject(WorkspacesService) private readonly workspacesService: WorkspacesService,
+    @Inject(WorkspacesService)
+    private readonly workspacesService: WorkspacesService,
     private readonly connections: WhatsappConnectionsService,
   ) {}
 
@@ -46,7 +47,9 @@ export class WhatsappConnectionsController {
   async create(@AuthToken() refreshToken: string, @Body() body: unknown) {
     const context = await this.getContext(refreshToken);
     this.enforceMutationRateLimit(context.userId);
-    const input = this.parse(whatsappConnectionCreateInputSchema.safeParse(body));
+    const input = this.parse(
+      whatsappConnectionCreateInputSchema.safeParse(body),
+    );
     return this.connections.createConnection(context, input);
   }
 
@@ -59,7 +62,9 @@ export class WhatsappConnectionsController {
     const context = await this.getContext(refreshToken);
     this.enforceMutationRateLimit(context.userId);
     const connectionId = this.parse(connectionIdSchema.safeParse(id));
-    const input = this.parse(whatsappConnectionUpdateInputSchema.safeParse(body));
+    const input = this.parse(
+      whatsappConnectionUpdateInputSchema.safeParse(body),
+    );
     return this.connections.updateConnection(context, connectionId, input);
   }
 
@@ -78,21 +83,35 @@ export class WhatsappConnectionsController {
     return this.connections.updateCredentials(context, connectionId, input);
   }
 
-  @Delete(":id")
-  @HttpCode(204)
-  async deactivate(@AuthToken() refreshToken: string, @Param("id") id: string): Promise<void> {
-    const context = await this.getContext(refreshToken);
-    this.enforceMutationRateLimit(context.userId);
-    const connectionId = this.parse(connectionIdSchema.safeParse(id));
-    await this.connections.deactivateConnection(context, connectionId);
-  }
-
   @Post(":id/test")
   async test(@AuthToken() refreshToken: string, @Param("id") id: string) {
     const context = await this.getContext(refreshToken);
     this.enforceMutationRateLimit(context.userId);
     const connectionId = this.parse(connectionIdSchema.safeParse(id));
     return this.connections.testConnection(context, connectionId);
+  }
+
+  @Post(":id/rotate-webhook-token")
+  async rotateWebhookToken(
+    @AuthToken() refreshToken: string,
+    @Param("id") id: string,
+  ) {
+    const context = await this.getContext(refreshToken);
+    this.enforceMutationRateLimit(context.userId);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    return this.connections.rotateWebhookToken(context, connectionId);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  async deactivate(
+    @AuthToken() refreshToken: string,
+    @Param("id") id: string,
+  ): Promise<void> {
+    const context = await this.getContext(refreshToken);
+    this.enforceMutationRateLimit(context.userId);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    await this.connections.deactivateConnection(context, connectionId);
   }
 
   private async getContext(refreshToken: string) {
@@ -102,11 +121,16 @@ export class WhatsappConnectionsController {
       workspaceId: workspace.id,
       userId: session.user.id,
       role: workspace.role,
-      canManageMembers: workspace.role === "admin" && workspace.permissions.canManageMembers,
+      canManageMembers:
+        workspace.role === "admin" && workspace.permissions.canManageMembers,
     };
   }
 
-  private parse<T>(parsed: { success: true; data: T } | { success: false; error: { flatten(): unknown } }): T {
+  private parse<T>(
+    parsed:
+      | { success: true; data: T }
+      | { success: false; error: { flatten(): unknown } },
+  ): T {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten());
     }

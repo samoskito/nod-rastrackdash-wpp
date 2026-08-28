@@ -106,6 +106,11 @@ import {
   whatsappInstanceConnectionSchema,
   whatsappInstanceSummarySchema,
   whatsappInstanceQuoteSchema,
+  whatsappConnectionCreateInputSchema,
+  whatsappConnectionCredentialsUpdateSchema,
+  whatsappConnectionTestResultSchema,
+  whatsappConnectionUpdateInputSchema,
+  whatsappConnectionWebhookTokenRotateResultSchema,
 } from "../src";
 
 describe("shared contracts", () => {
@@ -1162,7 +1167,8 @@ describe("shared contracts", () => {
       role: "admin",
       status: "pending",
       expiresAt: "2026-07-09T03:00:00.000Z",
-      acceptUrl: "https://wpp.rastrack.app/invite/accept?token=invite-token-1234567890",
+      acceptUrl:
+        "https://wpp.rastrack.app/invite/accept?token=invite-token-1234567890",
     });
     expect(inviteWithLink.acceptUrl).toContain("/invite/accept?token=");
     expect(acceptInput.token).toBe("invite-token-1234567890");
@@ -2005,5 +2011,95 @@ describe("shared contracts", () => {
 
     expect(result.readyForCutover).toBe(true);
     expect(result.events).toHaveLength(3);
+  });
+
+  it("validates WhatsApp provider credentials strictly", () => {
+    expect(
+      whatsappConnectionCreateInputSchema.parse({
+        provider: "uazapi_byo",
+        name: "Comercial",
+        credentials: {
+          baseUrl: "https://uazapi.example.test",
+          token: "secret",
+        },
+      }),
+    ).toMatchObject({ provider: "uazapi_byo" });
+    expect(() =>
+      whatsappConnectionCreateInputSchema.parse({
+        provider: "uazapi_byo",
+        name: "Comercial",
+        credentials: {
+          baseUrl: "ftp://uazapi.example.test",
+          token: "secret",
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      whatsappConnectionCreateInputSchema.parse({
+        provider: "waha",
+        name: "Comercial",
+        credentials: {
+          baseUrl: "https://waha.example.test",
+          apiKey: "secret",
+        },
+        unexpected: true,
+      }),
+    ).toThrow();
+    expect(() =>
+      whatsappConnectionCredentialsUpdateSchema.parse({
+        provider: "zapi",
+        credentials: {
+          baseUrl: "https://zapi.example.test",
+          instanceId: "instance",
+          token: "secret",
+          unexpected: true,
+        },
+      }),
+    ).toThrow();
+    expect(
+      whatsappConnectionTestResultSchema.parse({
+        connectionId: "connection_1",
+        provider: "waha",
+        status: "connected",
+        checkedAt: "2026-08-27T12:00:00.000Z",
+      }),
+    ).toMatchObject({ status: "connected" });
+    expect(() =>
+      whatsappConnectionUpdateInputSchema.parse({
+        webhookUrl: "https://attacker.example.test/webhook",
+      }),
+    ).toThrow();
+    expect(() =>
+      whatsappConnectionCreateInputSchema.parse({
+        provider: "nod_api",
+        name: "NOD",
+      }),
+    ).toThrow();
+  });
+
+  it("keeps receiver contracts strict, HTTP(S), and free from tokens in the endpoint", () => {
+    const rotated = whatsappConnectionWebhookTokenRotateResultSchema.parse({
+      connection: {
+        id: "connection_1",
+        name: "Comercial",
+        displayName: null,
+        provider: "waha",
+        status: "active",
+        lastHealthStatus: null,
+        lastHealthCheckedAt: null,
+        createdAt: "2026-08-28T12:00:00.000Z",
+      },
+      webhookEndpoint:
+        "https://api.example.test/webhooks/whatsapp/connection_1",
+      webhookToken: "a".repeat(43),
+    });
+    expect(rotated.webhookEndpoint).not.toContain("token=");
+    expect(() =>
+      whatsappConnectionWebhookTokenRotateResultSchema.parse({
+        ...rotated,
+        webhookEndpoint:
+          "ftp://api.example.test/webhooks/whatsapp/connection_1",
+      }),
+    ).toThrow();
   });
 });
