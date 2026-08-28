@@ -20,6 +20,165 @@ export const integrationProviderSchema = z.enum([
   "zapi",
 ]);
 
+export const whatsappConnectionProviderSchema = z.enum([
+  "uazapi_byo",
+  "waha",
+  "zapi",
+  "nod_api",
+]);
+
+export const whatsappConnectionStatusSchema = z.enum([
+  "pending_payment",
+  "active",
+  "disconnected",
+  "suspended",
+  "error",
+]);
+
+export const whatsappConnectionsSchema = z.array(
+  z
+    .object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      displayName: z.string().min(1).nullable(),
+      provider: whatsappConnectionProviderSchema,
+      status: whatsappConnectionStatusSchema,
+      lastHealthStatus: z.string().min(1).nullable(),
+      lastHealthCheckedAt: z.string().datetime().nullable(),
+      connectedPhone: z.string().min(1).nullable().optional(),
+      createdAt: z.string().datetime(),
+    })
+    .strict(),
+);
+
+const httpUrlSchema = z
+  .string()
+  .trim()
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  }, "A URL deve usar http ou https");
+
+const whatsappConnectionMetadataSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    displayName: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict();
+
+const uazapiCredentialsSchema = z
+  .object({
+    baseUrl: httpUrlSchema,
+    token: z.string().trim().min(1).max(4096),
+    instanceId: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+const wahaCredentialsSchema = z
+  .object({
+    baseUrl: httpUrlSchema,
+    apiKey: z.string().trim().min(1).max(4096),
+    session: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+const zapiCredentialsSchema = z
+  .object({
+    baseUrl: httpUrlSchema,
+    instanceId: z.string().trim().min(1).max(200),
+    token: z.string().trim().min(1).max(4096),
+  })
+  .strict();
+
+const nodApiCredentialsSchema = z
+  .object({
+    instanceId: z.string().trim().min(1).max(200),
+    instanceToken: z.string().trim().min(1).max(4096),
+  })
+  .strict();
+
+export const whatsappConnectionCreateInputSchema = z.discriminatedUnion(
+  "provider",
+  [
+    whatsappConnectionMetadataSchema.extend({
+      provider: z.literal("uazapi_byo"),
+      credentials: uazapiCredentialsSchema,
+    }),
+    whatsappConnectionMetadataSchema.extend({
+      provider: z.literal("waha"),
+      credentials: wahaCredentialsSchema,
+    }),
+    whatsappConnectionMetadataSchema.extend({
+      provider: z.literal("zapi"),
+      credentials: zapiCredentialsSchema,
+    }),
+    whatsappConnectionMetadataSchema.extend({
+      provider: z.literal("nod_api"),
+      credentials: nodApiCredentialsSchema,
+    }),
+  ],
+);
+
+export const whatsappConnectionUpdateInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    displayName: z.string().trim().min(1).max(120).nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Informe ao menos um campo para atualizar",
+  );
+
+export const whatsappConnectionCredentialsUpdateSchema = z.discriminatedUnion(
+  "provider",
+  [
+    z
+      .object({
+        provider: z.literal("uazapi_byo"),
+        credentials: uazapiCredentialsSchema,
+      })
+      .strict(),
+    z
+      .object({
+        provider: z.literal("waha"),
+        credentials: wahaCredentialsSchema,
+      })
+      .strict(),
+    z
+      .object({
+        provider: z.literal("zapi"),
+        credentials: zapiCredentialsSchema,
+      })
+      .strict(),
+    z
+      .object({
+        provider: z.literal("nod_api"),
+        credentials: nodApiCredentialsSchema,
+      })
+      .strict(),
+  ],
+);
+
+export const whatsappConnectionTestResultSchema = z
+  .object({
+    connectionId: z.string().min(1),
+    provider: whatsappConnectionProviderSchema,
+    status: z.string().min(1),
+    checkedAt: z.string().datetime(),
+    message: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const whatsappConnectionWebhookTokenRotateResultSchema = z
+  .object({
+    connection: whatsappConnectionsSchema.element,
+    webhookEndpoint: httpUrlSchema,
+    webhookToken: z.string().min(43).max(512),
+  })
+  .strict();
+
 export const integrationHealthSchema = z.object({
   provider: integrationProviderSchema,
   status: z.enum(integrationStatuses),
@@ -471,6 +630,25 @@ export const metaManualConfigurationSchema = z.object({
 });
 
 export type IntegrationProvider = z.infer<typeof integrationProviderSchema>;
+export type WhatsappConnectionDto = z.infer<
+  typeof whatsappConnectionsSchema
+>[number];
+export type WhatsappConnectionsDto = z.infer<typeof whatsappConnectionsSchema>;
+export type WhatsappConnectionCreateInputDto = z.infer<
+  typeof whatsappConnectionCreateInputSchema
+>;
+export type WhatsappConnectionUpdateInputDto = z.infer<
+  typeof whatsappConnectionUpdateInputSchema
+>;
+export type WhatsappConnectionCredentialsUpdateDto = z.infer<
+  typeof whatsappConnectionCredentialsUpdateSchema
+>;
+export type WhatsappConnectionTestResultDto = z.infer<
+  typeof whatsappConnectionTestResultSchema
+>;
+export type WhatsappConnectionWebhookTokenRotateResultDto = z.infer<
+  typeof whatsappConnectionWebhookTokenRotateResultSchema
+>;
 export type IntegrationHealthDto = z.infer<typeof integrationHealthSchema>;
 export type IntegrationHealthSummaryDto = z.infer<
   typeof integrationHealthSummarySchema

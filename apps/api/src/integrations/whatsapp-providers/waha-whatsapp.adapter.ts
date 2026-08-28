@@ -8,6 +8,7 @@ import type { IntegrationEnv } from "../integration.types";
 import type { IntegrationStatus } from "@wpptrack/shared";
 import type {
   WhatsappProviderAdapter,
+  WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
 
@@ -42,10 +43,13 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
     private readonly fetchImpl: RuntimeFetch = fetch,
   ) {}
 
-  async getHealth(): Promise<WhatsappProviderHealthDto> {
+  async getHealth(
+    config?: WhatsappProviderConfig,
+  ): Promise<WhatsappProviderHealthDto> {
     const checkedAt = new Date().toISOString();
-    const baseUrl = this.env.WAHA_BASE_URL?.trim();
-    const apiKey = this.env.WAHA_API_KEY?.trim();
+    const saved = config?.provider === this.id ? config.config : null;
+    const baseUrl = saved?.baseUrl.trim() ?? this.env.WAHA_BASE_URL?.trim();
+    const apiKey = saved?.apiKey.trim() ?? this.env.WAHA_API_KEY?.trim();
 
     if (!baseUrl || !apiKey) {
       return {
@@ -56,7 +60,7 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
       };
     }
 
-    const session = this.env.WAHA_SESSION?.trim() || DEFAULT_SESSION;
+    const session = saved?.session?.trim() || this.env.WAHA_SESSION?.trim() || DEFAULT_SESSION;
 
     try {
       const response = await this.fetchImpl(

@@ -1,12 +1,18 @@
 import { Module } from "@nestjs/common";
+import { AuthModule } from "../../auth/auth.module";
+import { PrismaModule } from "../../common/prisma/prisma.module";
 import { LicenseClientModule } from "../../licensing-client/license-client.module";
+import { WorkspacesModule } from "../../workspaces/workspaces.module";
 import { INTEGRATION_ENV } from "../integration.types";
+import { MetaTokenEncryptionService } from "../meta/meta-token-encryption.service";
 import { UazapiAdapter } from "../uazapi/uazapi.adapter";
 import { NodApiWhatsappAdapter } from "./nod-api-whatsapp.adapter";
 import { UazapiByoAdapter } from "./uazapi-byo.adapter";
 import { WahaWhatsappAdapter } from "./waha-whatsapp.adapter";
 import { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 import { WhatsappProvidersBootstrapService } from "./whatsapp-providers-bootstrap.service";
+import { WhatsappConnectionsController } from "./whatsapp-connections.controller";
+import { WhatsappConnectionsService } from "./whatsapp-connections.service";
 import { ZapiWhatsappAdapter } from "./zapi-whatsapp.adapter";
 
 export { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
@@ -31,7 +37,7 @@ export type {
  * LicenseClientService.getFingerprint()).
  */
 @Module({
-  imports: [LicenseClientModule],
+  imports: [AuthModule, LicenseClientModule, PrismaModule, WorkspacesModule],
   providers: [
     // UazapiAdapter/WahaWhatsappAdapter/ZapiWhatsappAdapter need
     // INTEGRATION_ENV and this module declares no imports of its own
@@ -46,7 +52,10 @@ export type {
     ZapiWhatsappAdapter,
     WhatsappProviderRegistry,
     WhatsappProvidersBootstrapService,
+    MetaTokenEncryptionService,
+    WhatsappConnectionsService,
   ],
+  controllers: [WhatsappConnectionsController],
   exports: [
     WhatsappProviderRegistry,
     UazapiByoAdapter,
@@ -54,6 +63,7 @@ export type {
     NodApiWhatsappAdapter,
     WahaWhatsappAdapter,
     ZapiWhatsappAdapter,
+    WhatsappConnectionsService,
   ],
 })
 export class WhatsappProvidersModule {}

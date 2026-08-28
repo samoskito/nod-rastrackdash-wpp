@@ -26,7 +26,7 @@ describe("integrations route", () => {
   });
 
   it("renders whatsapp instances with connection actions", async () => {
-    vi.spyOn(globalThis, "fetch")
+    /* const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -350,7 +350,28 @@ describe("integrations route", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      );
+      ); */
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const response = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+
+      if (path === "/integrations/health") return response({ checkedAt: "2026-07-02T03:00:00.000Z", providers: [{ provider: "uazapi", status: "connected", checkedAt: "2026-07-02T03:00:00.000Z" }] });
+      if (path === "/integrations/whatsapp/instances") return response([{ id: "wpp_1", name: "Vendas", provider: "uazapi", billingStatus: "active", providerInstanceId: "provider_instance_1", checkoutUrl: null, createdAt: "2026-07-02T03:00:00.000Z" }, { id: "wpp_2", name: "Suporte", provider: "uazapi", billingStatus: "pending_payment", providerInstanceId: null, checkoutUrl: "https://sandbox.asaas.com/i/pay_2", createdAt: "2026-07-02T03:00:00.000Z" }]);
+      if (path === "/integrations/meta/connection") return response({ workspaceId: "workspace_1", status: "connected", tokenType: "bearer", scopes: ["ads_read", "business_management"], expiresAt: null, connectedAt: "2026-07-02T03:00:00.000Z", selectedBusinessId: null, selectedAdAccountId: null, selectedPixelId: "pixel_1", capiTokenConfigured: true });
+      if (path === "/integrations/meta/assets") return response({ workspaceId: "workspace_1", status: "connected", businesses: [{ id: "business_1", name: "BM Principal", verificationStatus: "verified" }, { id: "business_2", name: "BM Secundario", verificationStatus: null }], adAccounts: [{ id: "act_1", businessId: "business_1", name: "Conta WhatsApp", accountStatus: "active", currency: "BRL", timezoneName: "America/Sao_Paulo" }, { id: "act_2", businessId: "business_2", name: "Conta Outro BM", accountStatus: "active", currency: "USD", timezoneName: "America/New_York" }], pixels: [{ id: "pixel_1", businessId: "business_1", name: "Pixel Loja", code: "<!-- Facebook Pixel Code --> <script>fbq('init', '123456789');</script><script src=\"https://connect.facebook.net/en_US/fbevents.js\"></script>" }, { id: "pixel_2", businessId: "business_2", name: "Pixel Outro BM", code: "987654321" }], pages: [{ id: "page_1", businessId: "business_1", name: "Pagina Facebook principal" }, { id: "page_2", businessId: "business_2", name: "Pagina Outro BM" }], conversionDestination: { workspaceId: "workspace_1", pixelId: "pixel_1", pixelName: "Pixel Loja", pageId: "page_1", pageName: "Pagina Facebook principal", status: "configured", lastValidatedAt: "2026-07-02T03:00:00.000Z", validationError: null }, reportingAccounts: [{ id: "reporting_1", workspaceId: "workspace_1", businessId: "business_1", businessName: "BM Principal", adAccountId: "act_1", adAccountName: "Conta WhatsApp", currency: "BRL", timezoneName: "America/Sao_Paulo", active: true, syncStatus: "synced", lastSyncedAt: "2026-07-02T03:00:00.000Z", syncError: null }], selection: { businessId: "business_1", adAccountId: "act_1", pixelId: "pixel_1" }, lastSyncedAt: "2026-07-02T03:00:00.000Z", syncError: null });
+      if (path === "/integrations/pipeline") return response({ workspaceId: "workspace_1", rangeLabel: "Ultimos 7 dias", stages: [{ key: "ctwa", label: "CTWA", value: 3, detail: "Leads com origem de campanha Meta" }, { key: "webhook", label: "Webhook", value: 4, detail: "Webhooks NOD API recebidos" }, { key: "lead", label: "Lead", value: 5, detail: "Leads rastreados pelo WhatsApp" }, { key: "conversion_ready", label: "CAPI pronta", value: 6, detail: "Eventos aguardando envio para Meta" }, { key: "meta_sent", label: "Meta ACK", value: 2, detail: "Eventos enviados para Meta" }] });
+      if (path === "/workspaces/current") return response({ id: "workspace_1", name: "Workspace", slug: "workspace", role: "owner", platformRole: "platform_owner", permissions: { canInviteMembers: true, canManageBilling: true, canManageIntegrations: true, canViewReports: true } });
+      if (path === "/integrations/meta/capabilities") return response({ enabledModes: ["oauth"], oauthEnabled: true, manualEnabled: false });
+      if (path === "/integrations/meta/oauth/advanced") return response({ workspaceId: "workspace_1", connectionMode: "oauth", advancedRoutingEnabled: false, unmappedActiveAccountCount: 1, credentials: [], businessConnections: [], destinations: [], reportingAccounts: [] });
+      if (path === "/integrations/whatsapp/instances/wpp_1/status") return response({ whatsappInstanceId: "wpp_1", provider: "uazapi", billingStatus: "active", connectionStatus: "qr_required", qrCode: "qr-code-text", message: "Escaneie o QR Code" });
+      if (path === "/integrations/whatsapp-connections") return response([]);
+      return response({ message: "unavailable" }, 503);
+    });
 
     const element = await IntegrationsPage({
       searchParams: Promise.resolve({ notice: "meta-reporting-saved" }),
@@ -688,7 +709,7 @@ describe("integrations route", () => {
   });
 
   it("hides integration mutation actions for workspace members", async () => {
-    vi.spyOn(globalThis, "fetch")
+    /* const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -844,7 +865,23 @@ describe("integrations route", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      );
+      ); */
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+      if (path === "/integrations/health") return response({ checkedAt: "2026-07-02T03:00:00.000Z", providers: [{ provider: "uazapi", status: "connected", checkedAt: "2026-07-02T03:00:00.000Z" }] });
+      if (path === "/integrations/whatsapp/instances") return response([{ id: "wpp_1", name: "Vendas", provider: "uazapi", billingStatus: "active", providerInstanceId: "provider_instance_1", checkoutUrl: null, createdAt: "2026-07-02T03:00:00.000Z" }]);
+      if (path === "/integrations/meta/connection") return response({ workspaceId: "workspace_1", status: "connected", tokenType: "bearer", scopes: ["ads_read"], expiresAt: null, connectedAt: "2026-07-02T03:00:00.000Z", selectedBusinessId: "business_1", selectedAdAccountId: "act_1", selectedPixelId: "pixel_1", capiTokenConfigured: true });
+      if (path === "/integrations/meta/assets") return response({ workspaceId: "workspace_1", status: "connected", businesses: [{ id: "business_1", name: "BM Principal", verificationStatus: null }], adAccounts: [{ id: "act_1", businessId: "business_1", name: "Conta WhatsApp", accountStatus: null, currency: "BRL", timezoneName: null }], pixels: [{ id: "pixel_1", businessId: "business_1", name: "Pixel Loja", code: "123456789" }], selection: { businessId: "business_1", adAccountId: "act_1", pixelId: "pixel_1" }, lastSyncedAt: "2026-07-02T03:00:00.000Z", syncError: null });
+      if (path === "/integrations/pipeline") return response({ workspaceId: "workspace_1", rangeLabel: "Ultimos 7 dias", stages: [] });
+      if (path === "/workspaces/current") return response({ id: "workspace_1", name: "Workspace", slug: "workspace", role: "member", permissions: { canInviteMembers: false, canManageBilling: false, canManageIntegrations: false, canViewReports: true } });
+      if (path === "/integrations/meta/capabilities") return response({ enabledModes: ["oauth"], oauthEnabled: true, manualEnabled: false });
+      if (path === "/integrations/whatsapp/instances/wpp_1/status") return response({ whatsappInstanceId: "wpp_1", provider: "uazapi", billingStatus: "active", connectionStatus: "connected", qrCode: null, message: "WhatsApp conectado" });
+      if (path === "/integrations/whatsapp-connections") return response([]);
+      return response({ message: "unavailable" }, 503);
+    });
 
     const element = await IntegrationsPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));
@@ -943,7 +980,7 @@ describe("integrations route", () => {
   });
 
   it("renders unknown integration statuses as explicit unknown states", async () => {
-    vi.spyOn(globalThis, "fetch")
+    /* const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1064,7 +1101,21 @@ describe("integrations route", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      );
+      ); */
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+      if (path === "/integrations/health") return response({ checkedAt: "2026-07-02T03:00:00.000Z", providers: [{ provider: "uazapi", status: "rate_limited", checkedAt: "2026-07-02T03:00:00.000Z" }] });
+      if (path === "/integrations/whatsapp/instances") return response([{ id: "wpp_1", name: "Vendas", provider: "uazapi", billingStatus: "provisioning_hold", providerInstanceId: null, checkoutUrl: null, createdAt: "2026-07-02T03:00:00.000Z" }]);
+      if (path === "/integrations/meta/connection") return response({ workspaceId: "workspace_1", status: "sync_paused", tokenType: "bearer", scopes: [], expiresAt: null, connectedAt: null, selectedBusinessId: null, selectedAdAccountId: null, selectedPixelId: null });
+      if (path === "/integrations/meta/assets") return response({ workspaceId: "workspace_1", status: "sync_paused", businesses: [], adAccounts: [], pixels: [], selection: { businessId: null, adAccountId: null, pixelId: null }, lastSyncedAt: null, syncError: null });
+      if (path === "/integrations/pipeline") return response({ workspaceId: "workspace_1", rangeLabel: "Ultimos 7 dias", stages: [] });
+      if (path === "/workspaces/current") return response({ id: "workspace_1", name: "Workspace", slug: "workspace", role: "owner", platformRole: "platform_owner", permissions: { canInviteMembers: true, canManageBilling: true, canManageIntegrations: true, canViewReports: true } });
+      if (path === "/integrations/whatsapp-connections") return response([]);
+      return response({ message: "unavailable" }, 503);
+    });
 
     const element = await IntegrationsPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));
@@ -1078,7 +1129,7 @@ describe("integrations route", () => {
   });
 
   it("renders stale Meta asset selections as resync-required states", async () => {
-    vi.spyOn(globalThis, "fetch")
+    /* const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1182,7 +1233,22 @@ describe("integrations route", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      );
+      ); */
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+      if (path === "/integrations/health") return response({ checkedAt: "2026-07-02T03:00:00.000Z", providers: [] });
+      if (path === "/integrations/whatsapp/instances") return response([]);
+      if (path === "/integrations/meta/connection") return response({ workspaceId: "workspace_1", status: "connected", tokenType: "bearer", scopes: ["ads_read"], expiresAt: null, connectedAt: "2026-07-02T03:00:00.000Z", selectedBusinessId: "business_old", selectedAdAccountId: "act_old", selectedPixelId: "pixel_old" });
+      if (path === "/integrations/meta/assets") return response({ workspaceId: "workspace_1", status: "connected", businesses: [{ id: "business_new", name: "BM Nova" }], adAccounts: [{ id: "act_new", name: "Conta Nova" }], pixels: [{ id: "pixel_new", name: "Pixel Novo", code: "999" }], selection: { businessId: "business_old", adAccountId: "act_old", pixelId: "pixel_old" }, lastSyncedAt: "2026-07-02T03:00:00.000Z", syncError: null });
+      if (path === "/integrations/pipeline") return response({ workspaceId: "workspace_1", rangeLabel: "Ultimos 7 dias", stages: [] });
+      if (path === "/workspaces/current") return response({ id: "workspace_1", name: "Workspace", slug: "workspace", role: "owner", permissions: { canInviteMembers: true, canManageBilling: true, canManageIntegrations: true, canViewReports: true } });
+      if (path === "/integrations/meta/capabilities") return response({ enabledModes: ["oauth"], oauthEnabled: true, manualEnabled: false });
+      if (path === "/integrations/whatsapp-connections") return response([]);
+      return response({ message: "unavailable" }, 503);
+    });
 
     const element = await IntegrationsPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));

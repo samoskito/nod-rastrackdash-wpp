@@ -7,6 +7,7 @@ import {
   HttpCode,
   Inject,
   Logger,
+  NotImplementedException,
   Param,
   Post,
   Query,
@@ -134,6 +135,68 @@ export class WebhooksController {
     });
   }
 
+  /**
+   * Per-connection receiver used by provider onboarding. The endpoint never
+   * trusts a workspace supplied in the payload: the active instance owns the
+   * workspace context and its stored SHA-256 token hash authenticates the
+   * request. Providers without a wired ingestion path must fail rather than
+   * acknowledging and discarding a delivery.
+   */
+  @Post("whatsapp/:id")
+  @HttpCode(202)
+  async recordWhatsappConnection(
+    @Param("id") id: string,
+    @Body() body: WebhookBody,
+    @Headers("x-wpptrack-webhook-token") webhookToken?: string,
+    @Headers("authorization") authorization?: string,
+  ) {
+    const instance = await this.prisma.whatsappInstance.findFirst({
+      where: { id },
+      select: {
+        id: true,
+        workspaceId: true,
+        provider: true,
+        providerInstanceId: true,
+        webhookTokenHash: true,
+        status: true,
+      },
+    });
+    // This receiver intentionally has no token in its URL. Providers must
+    // send the one-time token out-of-band, either in the dedicated header or
+    // as a bearer token.
+    const receivedToken = webhookToken ?? this.getBearerToken(authorization);
+
+    if (
+      !instance ||
+      instance.status !== "active" ||
+      !instance.webhookTokenHash ||
+      !receivedToken ||
+      !this.matchesTokenHash(receivedToken, instance.webhookTokenHash)
+    ) {
+      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+    }
+
+    const payloadWorkspaceId = this.firstString(body.workspaceId);
+    const payloadConnectionId = this.firstString(body.whatsappInstanceId);
+    if (
+      (payloadWorkspaceId && payloadWorkspaceId !== instance.workspaceId) ||
+      (payloadConnectionId && payloadConnectionId !== instance.id)
+    ) {
+      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+    }
+
+    if (instance.provider === "uazapi_byo") {
+      return this.recordUazapiWebhook(body, {
+        workspaceId: instance.workspaceId,
+        whatsappInstanceId: instance.id,
+        providerInstanceId: instance.providerInstanceId,
+      });
+    }
+
+    throw new NotImplementedException(
+      `Receiver inbound para ${instance.provider} ainda nao esta disponivel`,
+    );
+  }
 
   @Post("meta")
   @HttpCode(202)
@@ -152,7 +215,6 @@ export class WebhooksController {
 
     return this.recordMetaWebhook(body, context);
   }
-
 
   private recordMetaWebhook(body: WebhookBody, context: VerifiedMetaContext) {
     const meta = this.getMetaWebhookMetadata(body);
@@ -316,7 +378,6 @@ export class WebhooksController {
     };
   }
 
-
   private assertUazapiWebhookToken(receivedToken?: string) {
     const expectedToken = process.env.UAZAPI_WEBHOOK_AUTH_TOKEN;
 
@@ -339,6 +400,16 @@ export class WebhooksController {
 
   private hashToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private matchesTokenHash(receivedToken: string, expectedHash: string): boolean {
+    const receivedHash = Buffer.from(this.hashToken(receivedToken), "utf8");
+    const storedHash = Buffer.from(expectedHash, "utf8");
+
+    return (
+      receivedHash.length === storedHash.length &&
+      timingSafeEqual(receivedHash, storedHash)
+    );
   }
 
   private async recordUazapiWebhook(

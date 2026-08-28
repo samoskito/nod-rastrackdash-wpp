@@ -111,6 +111,22 @@ export class UazapiAdapter implements IntegrationAdapter {
     );
   }
 
+  /**
+   * Checks a saved BYO connection without falling back to process env.
+   * Health responses intentionally contain only stable, non-sensitive
+   * failure messages: a provider may echo its request URL or token in an
+   * error payload.
+   */
+  async getInstanceStatusForConnection(
+    baseUrl: string,
+    token: string,
+  ): Promise<UazapiConnectionResult> {
+    return this.requestInstance("GET", "/instance/status", "", token, {
+      baseUrl,
+      redactFailureMessage: true,
+    });
+  }
+
   async connectInstance(
     instanceRef: string,
     instanceToken?: string | null,
@@ -322,10 +338,15 @@ export class UazapiAdapter implements IntegrationAdapter {
     path: string,
     instanceRef: string,
     instanceToken?: string | null,
+    options?: {
+      baseUrl?: string;
+      redactFailureMessage?: boolean;
+    },
   ): Promise<UazapiConnectionResult> {
     const token = this.getInstanceToken(instanceToken);
+    const baseUrl = options?.baseUrl ?? this.env.UAZAPI_BASE_URL;
 
-    if (!this.env.UAZAPI_BASE_URL || !token) {
+    if (!baseUrl || !token) {
       return {
         providerInstanceId: instanceRef,
         connectionStatus: "not_configured",
@@ -337,7 +358,7 @@ export class UazapiAdapter implements IntegrationAdapter {
 
     try {
       const response = await this.fetchImpl(
-        `${this.env.UAZAPI_BASE_URL.replace(/\/$/, "")}${path}`,
+        `${baseUrl.replace(/\/$/, "")}${path}`,
         {
           method,
           headers: {
@@ -357,8 +378,10 @@ export class UazapiAdapter implements IntegrationAdapter {
           connectionStatus: "error",
           qrCode: null,
           connectedPhone: null,
-          message:
-            this.asString(payload.message) ?? `Uazapi HTTP ${response.status}`,
+          message: options?.redactFailureMessage
+            ? `Uazapi status API HTTP ${response.status}`
+            : (this.asString(payload.message) ??
+              `Uazapi HTTP ${response.status}`),
         };
       }
 
@@ -369,8 +392,11 @@ export class UazapiAdapter implements IntegrationAdapter {
         connectionStatus: "error",
         qrCode: null,
         connectedPhone: null,
-        message:
-          error instanceof Error ? error.message : "Erro ao chamar Uazapi",
+        message: options?.redactFailureMessage
+          ? "Uazapi status API request failed"
+          : error instanceof Error
+            ? error.message
+            : "Erro ao chamar Uazapi",
       };
     }
   }
