@@ -149,6 +149,7 @@ export class WebhooksController {
     @Body() body: WebhookBody,
     @Headers("x-wpptrack-webhook-token") webhookToken?: string,
     @Headers("authorization") authorization?: string,
+    @Query("token") queryToken?: string,
   ) {
     const instance = await this.prisma.whatsappInstance.findFirst({
       where: { id },
@@ -161,10 +162,11 @@ export class WebhooksController {
         status: true,
       },
     });
-    // This receiver intentionally has no token in its URL. Providers must
-    // send the one-time token out-of-band, either in the dedicated header or
-    // as a bearer token.
-    const receivedToken = webhookToken ?? this.getBearerToken(authorization);
+    // Uazapi BYO only supports a webhook URL field, so accept its one-time
+    // token from the query string as a final fallback. Dedicated headers keep
+    // precedence for providers that support them.
+    const receivedToken =
+      webhookToken ?? this.getBearerToken(authorization) ?? queryToken;
 
     if (
       !instance ||

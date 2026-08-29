@@ -1,7 +1,7 @@
 "use client";
 
 import type { WhatsappConnectionDto } from "@wpptrack/shared";
-import { Check, Copy, RefreshCw, Stethoscope, Webhook } from "lucide-react";
+import { Copy, RefreshCw, Stethoscope, Webhook } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type {
@@ -68,7 +68,7 @@ export function WhatsappProviderPanel({
     null,
   );
   const [receiver, setReceiver] = useState<WhatsappReceiverSecret | null>(null);
-  const [copied, setCopied] = useState<"endpoint" | "token" | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,7 +112,7 @@ export function WhatsappProviderPanel({
       setNotice(result);
       if (result.receiverSecret) {
         setReceiver(result.receiverSecret);
-        setCopied(null);
+        setCopied(false);
       }
       if (result.ok) router.refresh();
     } catch {
@@ -125,10 +125,11 @@ export function WhatsappProviderPanel({
     }
   }
 
-  async function copy(value: string, kind: "endpoint" | "token") {
+  async function copyWebhookUrl() {
     try {
-      await navigator.clipboard.writeText(value);
-      setCopied(kind);
+      if (!receiver) return;
+      await navigator.clipboard.writeText(receiver.webhookUrl);
+      setCopied(true);
     } catch {
       setNotice({
         ok: false,
@@ -147,8 +148,8 @@ export function WhatsappProviderPanel({
           <span className="eyebrow">Conexoes WhatsApp</span>
           <h2 id="whatsapp-providers-title">Provedores e receivers</h2>
           <p className="muted">
-            As credenciais ficam somente na API. O receiver usa endpoint sem
-            token na URL e token hash-only no servidor.
+            As credenciais ficam somente na API. O token do receiver e salvo
+            apenas como hash no servidor.
           </p>
         </div>
       </div>
@@ -257,35 +258,23 @@ export function WhatsappProviderPanel({
         >
           <div>
             <span className="micro-label">Exibido uma unica vez</span>
-            <strong>Configure o endpoint e envie o token em header</strong>
+            <strong>
+              Cole esta URL completa no campo URL do webhook da Uazapi
+            </strong>
           </div>
           <input
             readOnly
-            value={receiver.endpoint}
-            aria-label="Endpoint do receiver WhatsApp"
+            value={receiver.webhookUrl}
+            aria-label="URL completa do receiver WhatsApp"
             data-presentation-sensitive-field="true"
           />
           <button
             className="button"
             type="button"
-            onClick={() => void copy(receiver.endpoint, "endpoint")}
+            onClick={() => void copyWebhookUrl()}
           >
             <Copy size={16} aria-hidden="true" />
-            {copied === "endpoint" ? "Copiado" : "Copiar endpoint"}
-          </button>
-          <input
-            readOnly
-            value={receiver.token}
-            aria-label="Token do receiver WhatsApp"
-            data-presentation-sensitive-field="true"
-          />
-          <button
-            className="button"
-            type="button"
-            onClick={() => void copy(receiver.token, "token")}
-          >
-            <Check size={16} aria-hidden="true" />
-            {copied === "token" ? "Copiado" : "Copiar token"}
+            {copied ? "Copiada" : "Copiar URL completa"}
           </button>
         </div>
       ) : null}

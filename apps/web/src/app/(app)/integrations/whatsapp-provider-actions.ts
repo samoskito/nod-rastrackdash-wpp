@@ -9,8 +9,7 @@ import { revalidatePath } from "next/cache";
 import { serverApiFetch } from "../../../lib/server-api";
 
 export type WhatsappReceiverSecret = {
-  endpoint: string;
-  token: string;
+  webhookUrl: string;
 };
 
 export type WhatsappProviderActionResult = {
@@ -101,11 +100,10 @@ export async function rotateWhatsappWebhookTokenAction(
     return {
       ok: true,
       message:
-        "Receiver rotacionado. Copie o endpoint e o token agora; o token nao sera exibido novamente.",
+        "Receiver rotacionado. Copie a URL completa agora; ela nao sera exibida novamente.",
       connectionId,
       receiverSecret: {
-        endpoint: result.data.webhookEndpoint,
-        token: result.data.webhookToken,
+        webhookUrl: `${result.data.webhookEndpoint}?token=${encodeURIComponent(result.data.webhookToken)}`,
       },
     };
   } catch {

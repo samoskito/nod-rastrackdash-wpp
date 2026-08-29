@@ -24,7 +24,7 @@ function form(values: Record<string, string>): FormData {
 }
 
 describe("WhatsApp provider actions", () => {
-  it("uses the API rotation contract and returns a one-time header token", async () => {
+  it("uses the API rotation contract and returns a one-time webhook URL", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -53,11 +53,12 @@ describe("WhatsApp provider actions", () => {
     expect(result).toMatchObject({
       ok: true,
       receiverSecret: {
-        endpoint: "https://api.example.test/webhooks/whatsapp/connection_1",
-        token: "a".repeat(43),
+        webhookUrl:
+          "https://api.example.test/webhooks/whatsapp/connection_1?token=" +
+          "a".repeat(43),
       },
     });
-    expect(result.receiverSecret?.endpoint).not.toContain("token=");
+    expect(result.receiverSecret?.webhookUrl).toContain("token=");
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "http://localhost:3333/integrations/whatsapp-connections/connection_1/rotate-webhook-token",
       expect.objectContaining({ method: "POST", body: "{}" }),
