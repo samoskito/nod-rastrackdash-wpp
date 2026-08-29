@@ -36,7 +36,7 @@ function controllerFor(instance: Instance) {
 }
 
 describe("POST /webhooks/whatsapp/:id", () => {
-  it("rejects a missing, invalid, or inactive token before any ingestion", async () => {
+  it("rejects missing and invalid tokens before any ingestion", async () => {
     const { controller } = controllerFor({
       id: "connection-a",
       workspaceId: "workspace-a",
@@ -56,10 +56,24 @@ describe("POST /webhooks/whatsapp/:id", () => {
         {},
         undefined,
         undefined,
+        undefined,
       ),
     ).rejects.toMatchObject({ status: 401 });
     expect(receiver).not.toHaveBeenCalled();
 
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-a",
+        {},
+        undefined,
+        undefined,
+        "invalid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(receiver).not.toHaveBeenCalled();
+  });
+
+  it("rejects an inactive connection before any ingestion", async () => {
     const inactive = controllerFor({
       id: "connection-b",
       workspaceId: "workspace-a",
@@ -73,6 +87,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
         "connection-b",
         {},
         "valid-token",
+        undefined,
         undefined,
       ),
     ).rejects.toMatchObject({ status: 401 });
@@ -97,7 +112,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
-  it("accepts header tokens and binds ingestion to the stored workspace and connection", async () => {
+  it("accepts header, Bearer, and query tokens and binds ingestion to the stored workspace and connection", async () => {
     const { controller } = controllerFor({
       id: "connection-a",
       workspaceId: "workspace-a",
@@ -116,10 +131,26 @@ describe("POST /webhooks/whatsapp/:id", () => {
         {},
         undefined,
         "Bearer valid-token",
+        undefined,
       ),
     ).resolves.toEqual({ accepted: true });
     await expect(
-      controller.recordWhatsappConnection("connection-a", {}, "valid-token"),
+      controller.recordWhatsappConnection(
+        "connection-a",
+        {},
+        "valid-token",
+        undefined,
+        undefined,
+      ),
+    ).resolves.toEqual({ accepted: true });
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-a",
+        {},
+        undefined,
+        undefined,
+        "valid-token",
+      ),
     ).resolves.toEqual({ accepted: true });
     expect(receiver).toHaveBeenLastCalledWith(
       {},
@@ -129,6 +160,36 @@ describe("POST /webhooks/whatsapp/:id", () => {
         providerInstanceId: "provider-a",
       }),
     );
+  });
+
+  it("uses dedicated header and Bearer tokens before the query token", async () => {
+    const { controller } = controllerFor({
+      id: "connection-a",
+      workspaceId: "workspace-a",
+      provider: "uazapi_byo",
+      providerInstanceId: "provider-a",
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-a",
+        {},
+        "invalid-token",
+        "Bearer valid-token",
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-a",
+        {},
+        undefined,
+        "Bearer invalid-token",
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
   });
 
   it("rejects a payload that claims another workspace or connection", async () => {
