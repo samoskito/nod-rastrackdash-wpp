@@ -64,6 +64,15 @@ export class IntegrationsController {
     return this.integrationsService.getWhatsappDataSource(workspaceId);
   }
 
+  @Get("whatsapp/webhook-status")
+  async getWhatsappWebhookStatus(@AuthToken() refreshToken: string) {
+    const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
+
+    return this.integrationsService.getWhatsappWebhookReceiptStatus(
+      workspaceId,
+    );
+  }
+
 
   @Get("meta/connection")
   async getMetaConnection(@AuthToken() refreshToken: string) {
