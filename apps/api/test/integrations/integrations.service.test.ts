@@ -371,9 +371,9 @@ describe("IntegrationsService.getHealthSummary", () => {
 });
 
 describe("getWhatsappWebhookReceiptStatus", () => {
-  function fakeDiagnosticsService(
+  function fakePrisma(
     logs: Array<{
-      receivedAt: string;
+      receivedAt: Date;
       source: "uazapi";
       eventType: string;
       status: string;
@@ -381,8 +381,10 @@ describe("getWhatsappWebhookReceiptStatus", () => {
     }>,
   ) {
     return {
-      listWebhookLogs: async () => logs,
-    } as unknown as import("../../src/diagnostics/diagnostics.service").DiagnosticsService;
+      webhookLog: {
+        findMany: async () => logs,
+      },
+    } as never;
   }
 
   it("returns an honest empty state when the workspace has no webhook logs", async () => {
@@ -392,11 +394,10 @@ describe("getWhatsappWebhookReceiptStatus", () => {
       registry,
       {},
       undefined,
+      fakePrisma([]),
       undefined,
       undefined,
       undefined,
-      undefined,
-      fakeDiagnosticsService([]),
     );
 
     const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
@@ -419,19 +420,18 @@ describe("getWhatsappWebhookReceiptStatus", () => {
       registry,
       {},
       undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      fakeDiagnosticsService([
+      fakePrisma([
         {
-          receivedAt: "2026-08-30T12:00:00.000Z",
+          receivedAt: new Date("2026-08-30T12:00:00.000Z"),
           source: "uazapi",
           eventType: "message.received",
           status: "received",
           leadId: null,
         },
       ]),
+      undefined,
+      undefined,
+      undefined,
     );
 
     const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
@@ -454,19 +454,18 @@ describe("getWhatsappWebhookReceiptStatus", () => {
       registry,
       {},
       undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      fakeDiagnosticsService([
+      fakePrisma([
         {
-          receivedAt: "2026-08-30T12:05:00.000Z",
+          receivedAt: new Date("2026-08-30T12:05:00.000Z"),
           source: "uazapi",
           eventType: "message.received",
           status: "received",
           leadId: "lead-123",
         },
       ]),
+      undefined,
+      undefined,
+      undefined,
     );
 
     const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
@@ -474,7 +473,7 @@ describe("getWhatsappWebhookReceiptStatus", () => {
     expect(status.lastLeadCreated).toBe(true);
   });
 
-  it("fails closed to the empty state when diagnostics service is unavailable", async () => {
+  it("fails closed to the empty state when Prisma is unavailable", async () => {
     const registry = new WhatsappProviderRegistry();
     const service = new IntegrationsService(fakeMetaAdapter(), registry, {});
 
