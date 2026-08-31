@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { switchActiveWorkspace } from "../src/app/actions/workspaces";
 
 const nextCache = vi.hoisted(() => ({
-  revalidatePath: vi.fn()
+  revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/cache", () => nextCache);
@@ -26,23 +26,23 @@ describe("workspace switch action", () => {
             canInviteMembers: true,
             canManageBilling: false,
             canManageIntegrations: true,
-            canViewReports: true
-          }
+            canViewReports: true,
+          },
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
     );
 
     await expect(switchActiveWorkspace("workspace_b")).resolves.toEqual({
-      ok: true
+      ok: true,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/workspaces\/active$/),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ workspaceId: "workspace_b" })
-      })
+        body: JSON.stringify({ workspaceId: "workspace_b" }),
+      }),
     );
     expect(nextCache.revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
@@ -56,20 +56,46 @@ describe("workspace switch action", () => {
       return new Response(
         JSON.stringify({
           statusCode: 404,
-          message: `Workspace ${body.workspaceId} nao encontrado`
+          message: `Workspace ${body.workspaceId} nao encontrado`,
         }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        { status: 404, headers: { "Content-Type": "application/json" } },
       );
     });
 
     const results = await Promise.all([
       switchActiveWorkspace("workspace_secret"),
-      switchActiveWorkspace("workspace_missing")
+      switchActiveWorkspace("workspace_missing"),
     ]);
 
     expect(results).toEqual([{ ok: false }, { ok: false }]);
     expect(JSON.stringify(results)).not.toContain("secret");
     expect(JSON.stringify(results)).not.toContain("missing");
     expect(nextCache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("keeps the existing action while marking a backoffice workspace switch", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "workspace_client" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    await expect(
+      switchActiveWorkspace("workspace_client", "backoffice"),
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/workspaces\/active$/),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "workspace_client",
+          backoffice: true,
+        }),
+      }),
+    );
   });
 });

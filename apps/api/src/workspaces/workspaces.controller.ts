@@ -26,12 +26,14 @@ import {
 import { AuthToken } from "../auth/auth-user.decorator";
 import { firstHeader } from "../auth/auth-token";
 import { AuthService } from "../auth/auth.service";
+import { PlatformAdminService } from "../auth/platform-admin.service";
 import {
   setSessionCookie,
   type SessionCookieResponse,
 } from "../auth/session-cookie";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { WorkspacesService } from "./workspaces.service";
+import { PlatformWorkspaceAccessService } from "./platform-workspace-access.service";
 
 type InviteRequest = {
   headers: Record<string, string | string[] | undefined>;
@@ -42,8 +44,12 @@ type InviteRequest = {
 export class WorkspacesController {
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(PlatformAdminService)
+    private readonly platformAdmin: PlatformAdminService,
     @Inject(WorkspacesService)
     private readonly workspacesService: WorkspacesService,
+    @Inject(PlatformWorkspaceAccessService)
+    private readonly platformWorkspaceAccess: PlatformWorkspaceAccessService,
     @Optional()
     @Inject(RUNTIME_ENV)
     private readonly env: RuntimeEnv = process.env,
@@ -70,10 +76,21 @@ export class WorkspacesController {
       throw new BadRequestException("Payload invalido");
     }
 
-    await this.authService.setActiveWorkspace(
-      refreshToken,
-      parsed.data.workspaceId,
-    );
+    if (parsed.data.backoffice) {
+      await this.platformAdmin.assertPlatformAdmin(refreshToken);
+      await this.platformWorkspaceAccess.assertWorkspaceAvailableForBackoffice(
+        parsed.data.workspaceId,
+      );
+      await this.authService.setSupportWorkspace(
+        refreshToken,
+        parsed.data.workspaceId,
+      );
+    } else {
+      await this.authService.setActiveWorkspace(
+        refreshToken,
+        parsed.data.workspaceId,
+      );
+    }
     const authenticated = await this.authService.getSession(refreshToken);
 
     return this.workspacesService.getCurrentWorkspace(authenticated);

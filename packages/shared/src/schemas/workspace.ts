@@ -50,6 +50,10 @@ export const workspaceUpdateInputSchema = z.object({
 
 export const workspaceActiveInputSchema = z.object({
   workspaceId: z.string().trim().min(1),
+  // Backoffice routes use the same active-workspace endpoint, but platform
+  // admins can select from their separately authorized workspace catalogue.
+  // The API still checks that privilege and the selected workspace server-side.
+  backoffice: z.literal(true).optional(),
 });
 
 export const workspaceBillingSchema = z.object({

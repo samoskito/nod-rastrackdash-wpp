@@ -115,6 +115,25 @@ export class PlatformWorkspaceAccessService {
     );
   }
 
+  /**
+   * The platform-admin catalogue is the authorization boundary for support
+   * context selection. Callers must have already passed platform-admin RBAC;
+   * this confirms that the requested ID is a real catalogue entry without
+   * trusting a client-provided workspace ID.
+   */
+  async assertWorkspaceAvailableForBackoffice(
+    workspaceId: string,
+  ): Promise<void> {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException("Workspace nao encontrado");
+    }
+  }
+
   async createWorkspace(
     rawInput: BackofficeWorkspaceCreateInputDto,
     actor: PlatformAdminUser,
