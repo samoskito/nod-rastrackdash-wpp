@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { conversionEventTestInputSchema } from "./conversion-events";
+import {
+  whatsappConnectionProviderSchema,
+  whatsappConnectionStatusSchema,
+} from "./integrations";
 
 export const diagnosticSources = [
   "meta",
@@ -168,6 +172,63 @@ export const whatsappWebhookReceiptStatusSchema = z.object({
   lastLeadCreated: z.boolean().nullable(),
   recentCount: z.number().int().nonnegative()
 });
+
+export const backofficeWhatsappWebhookConnectionSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    provider: whatsappConnectionProviderSchema,
+    status: whatsappConnectionStatusSchema,
+    webhookConfigured: z.boolean(),
+  })
+  .strict();
+
+export const backofficeWhatsappWebhookConnectionListSchema = z.array(
+  backofficeWhatsappWebhookConnectionSchema,
+);
+
+export const backofficeWhatsappWebhookHistoryQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).max(10_000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  })
+  .strict();
+
+export const backofficeWhatsappWebhookHistoryItemSchema = z
+  .object({
+    id: z.string().min(1),
+    receivedAt: z.string().datetime(),
+    status: z.string().min(1),
+    source: diagnosticSourceSchema,
+    provider: whatsappConnectionProviderSchema,
+    eventType: z.string().min(1),
+    externalEventId: z.string().nullable(),
+    leadId: z.string().nullable(),
+    errorCode: z.string().nullable(),
+  })
+  .strict();
+
+export const backofficeWhatsappWebhookHistorySchema = z
+  .object({
+    items: z.array(backofficeWhatsappWebhookHistoryItemSchema),
+    pagination: z
+      .object({
+        page: z.number().int().positive(),
+        pageSize: z.number().int().positive(),
+        total: z.number().int().nonnegative(),
+        totalPages: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const backofficeWhatsappWebhookDetailSchema = z
+  .object({
+    webhook: backofficeWhatsappWebhookHistoryItemSchema,
+    payloadAvailable: z.boolean(),
+    payload: z.record(z.unknown()).nullable(),
+  })
+  .strict();
 
 export const diagnosticWebhookPayloadSchema = diagnosticWebhookLogSchema
   .pick({
@@ -409,6 +470,21 @@ export type DiagnosticWebhookPayloadDto = z.infer<
 >;
 export type WhatsappWebhookReceiptStatusDto = z.infer<
   typeof whatsappWebhookReceiptStatusSchema
+>;
+export type BackofficeWhatsappWebhookConnectionDto = z.infer<
+  typeof backofficeWhatsappWebhookConnectionSchema
+>;
+export type BackofficeWhatsappWebhookHistoryQueryDto = z.infer<
+  typeof backofficeWhatsappWebhookHistoryQuerySchema
+>;
+export type BackofficeWhatsappWebhookHistoryItemDto = z.infer<
+  typeof backofficeWhatsappWebhookHistoryItemSchema
+>;
+export type BackofficeWhatsappWebhookHistoryDto = z.infer<
+  typeof backofficeWhatsappWebhookHistorySchema
+>;
+export type BackofficeWhatsappWebhookDetailDto = z.infer<
+  typeof backofficeWhatsappWebhookDetailSchema
 >;
 export type DiagnosticJobAttemptDto = z.infer<
   typeof diagnosticJobAttemptSchema
