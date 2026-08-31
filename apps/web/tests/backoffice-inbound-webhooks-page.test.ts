@@ -3,6 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BackofficeInboundWebhooksPage from "../src/app/(backoffice)/backoffice/inbound-webhooks/page";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    refresh: () => undefined,
+  }),
+}));
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -60,6 +66,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const currentWorkspace = {
+  id: "workspace_a",
+  name: "Empresa A",
+  slug: "empresa-a",
+  role: "owner",
+  operationalStatus: "active",
+  permissions: {
+    canInviteMembers: true,
+    canManageBilling: true,
+    canManageIntegrations: true,
+    canViewReports: true,
+  },
+  accessMode: "member",
+  platformRole: "admin",
+};
+
+const workspaceList = [
+  {
+    id: "workspace_a",
+    name: "Empresa A",
+    slug: "empresa-a",
+    role: "owner",
+    operationalStatus: "active",
+    permissions: {
+      canInviteMembers: true,
+      canManageBilling: true,
+      canManageIntegrations: true,
+      canViewReports: true,
+    },
+  },
+];
+
 describe("/backoffice/inbound-webhooks", () => {
   it("lists the WhatsApp BYO connections of the workspace instead of the empty placeholder", async () => {
     mockApi({
@@ -70,6 +108,8 @@ describe("/backoffice/inbound-webhooks", () => {
           items: [historyItem],
           pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
         }),
+      "/workspaces/current": async () => jsonResponse(currentWorkspace),
+      "/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -88,6 +128,8 @@ describe("/backoffice/inbound-webhooks", () => {
           items: [historyItem],
           pagination: { page: 1, pageSize: 25, total: 30, totalPages: 2 },
         }),
+      "/workspaces/current": async () => jsonResponse(currentWorkspace),
+      "/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage({
@@ -113,6 +155,8 @@ describe("/backoffice/inbound-webhooks", () => {
           items: [],
           pagination: { page: 1, pageSize: 25, total: 0, totalPages: 0 },
         }),
+      "/workspaces/current": async () => jsonResponse(currentWorkspace),
+      "/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -124,6 +168,8 @@ describe("/backoffice/inbound-webhooks", () => {
     mockApi({
       "/backoffice/whatsapp-webhooks/connections": async () =>
         jsonResponse({ message: "boom" }, 503),
+      "/workspaces/current": async () => jsonResponse(currentWorkspace),
+      "/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -138,11 +184,119 @@ describe("/backoffice/inbound-webhooks", () => {
         jsonResponse([connection]),
       "/backoffice/whatsapp-webhooks/connections/conn_1/history": async () =>
         jsonResponse({ message: "boom" }, 503),
+      "/workspaces/current": async () => jsonResponse(currentWorkspace),
+      "/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
 
     expect(html).toContain("uazapi-principal");
     expect(html).toContain("Não foi possível carregar os dados de webhook");
+  });
+
+  it("shows an actionable workspace-selection state instead of a generic API error when no workspace context is selected, without calling getConnections/getHistory", async () => {
+    // No "/backoffice/whatsapp-webhooks/*" routes are registered here on
+    // purpose: with no active workspace, the page must never call
+    // getConnections/getHistory. If it did, mockApi would throw "unexpected
+    // fetch" and fail this test.
+    mockApi({
+      "/workspaces/current": async () => jsonResponse({ message: "not found" }, 404),
+      "/workspaces": async () => jsonResponse(workspaceList),
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain(
+      "Selecione um workspace para consultar os webhooks WhatsApp",
+    );
+    expect(html).not.toContain("API indisponível");
+    expect(html).toContain("Empresa A");
+    expect(html).toContain("Selecione um workspace");
+  });
+
+  it("renders the workspace selector with a single workspace and loads the connections for it", async () => {
+    mockApi({
+      "/backoffice/whatsapp-webhooks/connections": async () =>
+        jsonResponse([connection]),
+      "/backoffice/whatsapp-webhooks/connections/conn_1/history": async () =>
+        jsonResponse({
+          items: [historyItem],
+          pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
+        }),
+      "/workspaces/current": async () => jsonResponse(currentWorkspace),
+      "/workspaces": async () => jsonResponse(workspaceList),
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("Empresa A");
+    expect(html).toContain("Workspace disponível");
+    expect(html).toContain("uazapi-principal");
+    expect(html).not.toContain("Selecione um workspace para consultar");
+  });
+
+  it("renders every workspace as a clickable option and preserves the active selection", async () => {
+    mockApi({
+      "/backoffice/whatsapp-webhooks/connections": async () =>
+        jsonResponse([connection]),
+      "/backoffice/whatsapp-webhooks/connections/conn_1/history": async () =>
+        jsonResponse({
+          items: [historyItem],
+          pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
+        }),
+      "/workspaces/current": async () =>
+        jsonResponse({
+          id: "workspace_b",
+          name: "Empresa B",
+          slug: "empresa-b",
+          role: "admin",
+          operationalStatus: "active",
+          permissions: {
+            canInviteMembers: true,
+            canManageBilling: false,
+            canManageIntegrations: true,
+            canViewReports: true,
+          },
+          accessMode: "member",
+          platformRole: "admin",
+        }),
+      "/workspaces": async () =>
+        jsonResponse([
+          {
+            id: "workspace_a",
+            name: "Empresa A",
+            slug: "empresa-a",
+            role: "owner",
+            operationalStatus: "active",
+            permissions: {
+              canInviteMembers: true,
+              canManageBilling: true,
+              canManageIntegrations: true,
+              canViewReports: true,
+            },
+          },
+          {
+            id: "workspace_b",
+            name: "Empresa B",
+            slug: "empresa-b",
+            role: "admin",
+            operationalStatus: "active",
+            permissions: {
+              canInviteMembers: true,
+              canManageBilling: false,
+              canManageIntegrations: true,
+              canViewReports: true,
+            },
+          },
+        ]),
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("2 workspaces disponíveis");
+    expect(html).toContain('<option value="workspace_a">Empresa A</option>');
+    expect(html).toContain(
+      '<option value="workspace_b" selected="">Empresa B</option>',
+    );
   });
 });
