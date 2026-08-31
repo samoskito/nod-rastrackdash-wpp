@@ -37,7 +37,6 @@ import type {
   WhatsappWebhookReceiptStatusDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
-import { DiagnosticsService } from "../diagnostics/diagnostics.service";
 import { WorkspaceAccessPolicyService } from "../workspaces/workspace-access-policy.service";
 import type { IntegrationEnv } from "./integration.types";
 import { INTEGRATION_ENV } from "./integration.types";
@@ -67,9 +66,6 @@ export class IntegrationsService {
     @Optional()
     @Inject(MetaManualConnectionsService)
     private readonly metaManualConnectionsService?: MetaManualConnectionsService,
-    @Optional()
-    @Inject(DiagnosticsService)
-    private readonly diagnosticsService?: DiagnosticsService,
   ) {}
 
   async getHealthSummary(): Promise<IntegrationHealthSummaryDto> {
@@ -460,14 +456,21 @@ export class IntegrationsService {
   async getWhatsappWebhookReceiptStatus(
     workspaceId: string,
   ): Promise<WhatsappWebhookReceiptStatusDto> {
-    if (!this.diagnosticsService) {
+    if (!this.prisma) {
       return this.emptyWhatsappWebhookReceiptStatus();
     }
 
-    const recentLogs = await this.diagnosticsService.listWebhookLogs({
-      workspaceId,
-      limit: 5,
-      offset: 0,
+    const recentLogs = await this.prisma.webhookLog.findMany({
+      where: { workspaceId },
+      orderBy: { receivedAt: "desc" },
+      take: 5,
+      select: {
+        receivedAt: true,
+        source: true,
+        eventType: true,
+        status: true,
+        leadId: true,
+      },
     });
 
     const [latest] = recentLogs;
@@ -478,7 +481,7 @@ export class IntegrationsService {
 
     return {
       hasReceipts: true,
-      lastReceivedAt: latest.receivedAt,
+      lastReceivedAt: latest.receivedAt.toISOString(),
       lastSource: latest.source,
       lastEventType: latest.eventType,
       lastStatus: latest.status,
