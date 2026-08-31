@@ -1,11 +1,18 @@
 import type {
   BackofficeWhatsappWebhookConnectionDto,
   BackofficeWhatsappWebhookHistoryDto,
+  CurrentWorkspaceDto,
+  WorkspaceListDto,
 } from "@wpptrack/shared";
 import { AlertTriangle, CheckCircle2, HelpCircle, Webhook } from "lucide-react";
 import Link from "next/link";
 import { BackofficeNavigation } from "../../../../components/backoffice-navigation";
+import { BackofficeWorkspaceSelector } from "../../../../components/backoffice-workspace-selector";
 import { WebhookHistoryDetail } from "../../../../components/webhook-history-detail";
+import {
+  getAvailableWorkspaces,
+  getCurrentWorkspace,
+} from "../../../../lib/current-workspace";
 import { formatDateTime } from "../../../../lib/date-time";
 import { isApiRequestError, serverApiFetch } from "../../../../lib/server-api";
 
@@ -18,6 +25,9 @@ import { isApiRequestError, serverApiFetch } from "../../../../lib/server-api";
  */
 
 const PAGE_SIZE = 25;
+
+const SELECT_WORKSPACE_MESSAGE =
+  "Selecione um workspace para consultar os webhooks WhatsApp.";
 
 const providerLabels: Record<string, string> = {
   uazapi_byo: "Uazapi (BYO)",
@@ -35,6 +45,7 @@ const connectionStatusLabels: Record<string, string> = {
 };
 
 type ConnectionsResult =
+  | { state: "no_workspace"; message: string }
   | { state: "empty" }
   | { state: "error"; message: string }
   | { state: "real"; connections: BackofficeWhatsappWebhookConnectionDto[] };
@@ -44,6 +55,13 @@ type HistoryResult =
   | { state: "error"; message: string }
   | { state: "real"; history: BackofficeWhatsappWebhookHistoryDto };
 
+/**
+ * Callers MUST gate this on an active workspace context first — see
+ * `BackofficeInboundWebhooksPage`, which only calls this once
+ * `getSelectedWorkspace()` resolves to a real workspace. Calling it without
+ * one just burns a request that the controller rejects with 400 (handled
+ * below as a fallback, in case the client-side workspace read is stale).
+ */
 async function getConnections(): Promise<ConnectionsResult> {
   try {
     const connections = await serverApiFetch<
@@ -54,6 +72,18 @@ async function getConnections(): Promise<ConnectionsResult> {
       ? { state: "real", connections }
       : { state: "empty" };
   } catch (error) {
+    // The controller replies 400 exclusively when the platform admin's
+    // session has no workspace context yet (no other validation on this
+    // endpoint) — treat that as an actionable "pick a workspace" state,
+    // distinct from a genuinely unavailable API (which keeps its own error
+    // panel further down).
+    if (isApiRequestError(error) && error.status === 400) {
+      return {
+        state: "no_workspace",
+        message: error.message.trim() || SELECT_WORKSPACE_MESSAGE,
+      };
+    }
+
     return {
       state: "error",
       message:
@@ -61,6 +91,22 @@ async function getConnections(): Promise<ConnectionsResult> {
           ? error.message
           : "Não foi possível carregar as conexões WhatsApp.",
     };
+  }
+}
+
+async function getWorkspaces(): Promise<WorkspaceListDto> {
+  try {
+    return await getAvailableWorkspaces();
+  } catch {
+    return [];
+  }
+}
+
+async function getSelectedWorkspace(): Promise<CurrentWorkspaceDto | null> {
+  try {
+    return await getCurrentWorkspace();
+  } catch {
+    return null;
   }
 }
 
@@ -95,7 +141,18 @@ export default async function BackofficeInboundWebhooksPage({
   searchParams?: Promise<{ connectionId?: string; page?: string }>;
 }) {
   const params = searchParams ? await searchParams : {};
-  const connectionsResult = await getConnections();
+  const [workspaces, selectedWorkspace] = await Promise.all([
+    getWorkspaces(),
+    getSelectedWorkspace(),
+  ]);
+
+  // Never call the connections/history endpoints without an active workspace
+  // context — the controller requires it and would just reply 400 for a
+  // request we already know is missing that context.
+  const connectionsResult: ConnectionsResult = selectedWorkspace
+    ? await getConnections()
+    : { state: "no_workspace", message: SELECT_WORKSPACE_MESSAGE };
+
   const connections =
     connectionsResult.state === "real" ? connectionsResult.connections : [];
 
@@ -107,9 +164,10 @@ export default async function BackofficeInboundWebhooksPage({
   const page =
     Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 
-  const historyResult = selectedConnectionId
-    ? await getHistory(selectedConnectionId, page)
-    : null;
+  const historyResult =
+    selectedWorkspace && selectedConnectionId
+      ? await getHistory(selectedConnectionId, page)
+      : null;
 
   return (
     <section className="page-stack standalone-page inbound-deliveries-page">
@@ -126,13 +184,25 @@ export default async function BackofficeInboundWebhooksPage({
         </div>
         {connectionsResult.state === "error" ? (
           <span className="status-chip bad">API indisponível</span>
+        ) : connectionsResult.state === "no_workspace" ? (
+          <span className="status-chip warn">Selecione um workspace</span>
         ) : (
           <span className="status-chip neutral">Somente leitura</span>
         )}
       </header>
 
+      <BackofficeWorkspaceSelector
+        selectedWorkspaceId={selectedWorkspace?.id ?? null}
+        workspaces={workspaces}
+      />
+
       {connectionsResult.state === "error" ? (
         <ErrorPanel message={connectionsResult.message} />
+      ) : connectionsResult.state === "no_workspace" ? (
+        <NoWorkspacePanel
+          hasWorkspaces={workspaces.length > 0}
+          message={connectionsResult.message}
+        />
       ) : connectionsResult.state === "empty" ? (
         <EmptyConnectionsPanel />
       ) : (
@@ -350,6 +420,30 @@ function PaginationNav({
         )}
       </div>
     </nav>
+  );
+}
+
+function NoWorkspacePanel({
+  hasWorkspaces,
+  message,
+}: {
+  hasWorkspaces: boolean;
+  message: string;
+}) {
+  return (
+    <section className="surface-panel">
+      <div className="inbound-empty-state">
+        <Webhook aria-hidden="true" size={20} />
+        <div>
+          <strong>{message}</strong>
+          <p className="muted">
+            {hasWorkspaces
+              ? "Escolha um workspace no seletor acima para carregar as conexões e o histórico de webhooks."
+              : "Nenhum workspace está disponível para o seu usuário. Peça acesso a um workspace para continuar."}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
