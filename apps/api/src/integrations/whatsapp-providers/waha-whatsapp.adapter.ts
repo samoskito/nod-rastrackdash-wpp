@@ -11,6 +11,11 @@ import type {
   WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
+import {
+  fetchProviderUrl,
+  normalizeProviderBaseUrl,
+  providerRequestFailureMessage,
+} from "./whatsapp-provider-http";
 
 const DEFAULT_SESSION = "default";
 
@@ -48,10 +53,11 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
   ): Promise<WhatsappProviderHealthDto> {
     const checkedAt = new Date().toISOString();
     const saved = config?.provider === this.id ? config.config : null;
-    const baseUrl = saved?.baseUrl.trim() ?? this.env.WAHA_BASE_URL?.trim();
+    const configuredBaseUrl =
+      saved?.baseUrl.trim() ?? this.env.WAHA_BASE_URL?.trim();
     const apiKey = saved?.apiKey.trim() ?? this.env.WAHA_API_KEY?.trim();
 
-    if (!baseUrl || !apiKey) {
+    if (!configuredBaseUrl || !apiKey) {
       return {
         provider: this.id,
         status: "disconnected",
@@ -60,10 +66,24 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
       };
     }
 
-    const session = saved?.session?.trim() || this.env.WAHA_SESSION?.trim() || DEFAULT_SESSION;
+    const baseUrl = normalizeProviderBaseUrl(configuredBaseUrl);
+    if (!baseUrl) {
+      return {
+        provider: this.id,
+        status: "error",
+        checkedAt,
+        message: "Invalid WAHA base URL",
+      };
+    }
+
+    const session =
+      saved?.session?.trim() ||
+      this.env.WAHA_SESSION?.trim() ||
+      DEFAULT_SESSION;
 
     try {
-      const response = await this.fetchImpl(
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
         `${baseUrl.replace(/\/$/, "")}/api/sessions/${encodeURIComponent(session)}`,
         {
           method: "GET",
@@ -84,8 +104,7 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
         string,
         unknown
       >;
-      const status =
-        typeof payload.status === "string" ? payload.status : null;
+      const status = typeof payload.status === "string" ? payload.status : null;
 
       return {
         provider: this.id,
@@ -98,10 +117,7 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
         provider: this.id,
         status: "error",
         checkedAt,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Erro ao chamar WAHA session API",
+        message: providerRequestFailureMessage(error),
       };
     }
   }
@@ -122,12 +138,18 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
   }
 
   private statusMessage(status: string | null): string | undefined {
-    if (status === "WORKING" || status === "authenticated") {
-      return undefined;
+    switch (status) {
+      case "WORKING":
+      case "authenticated":
+        return undefined;
+      case "SCAN_QR_CODE":
+        return "WAHA session requires QR reconnection";
+      case "STOPPED":
+        return "WAHA session stopped";
+      case "FAILED":
+        return "WAHA session error";
+      default:
+        return "WAHA session API returned an unknown status";
     }
-
-    return status
-      ? `WAHA session status: ${status}`
-      : "WAHA session API returned no status";
   }
 }

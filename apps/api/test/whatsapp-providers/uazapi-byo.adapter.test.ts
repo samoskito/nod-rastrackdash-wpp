@@ -56,9 +56,11 @@ describe("UazapiByoAdapter", () => {
     it("checks the saved connection status with its own URL and token", async () => {
       let capturedUrl: string | undefined;
       let capturedHeaders: Record<string, string> | undefined;
+      let capturedInit: RequestInit | undefined;
       const fetchImpl = (async (url: string, init?: RequestInit) => {
         capturedUrl = url;
         capturedHeaders = init?.headers as Record<string, string>;
+        capturedInit = init;
         return jsonResponse(200, { instance: { status: "connected" } });
       }) as typeof fetch;
       const adapter = new UazapiByoAdapter(
@@ -75,6 +77,8 @@ describe("UazapiByoAdapter", () => {
 
       expect(capturedUrl).toBe("https://uazapi.example.com/instance/status");
       expect(capturedHeaders?.token).toBe("connection-token");
+      expect(capturedInit?.signal).toBeInstanceOf(AbortSignal);
+      expect(capturedInit?.redirect).toBe("error");
       expect(health.status).toBe("connected");
       expect(health.message).toBeUndefined();
     });
@@ -152,6 +156,29 @@ describe("UazapiByoAdapter", () => {
         message: "Missing Uazapi connection credentials",
       });
     });
+
+    it.each([
+      "http://127.0.0.1:3000",
+      "http://169.254.169.254",
+      "https://user:pass@uazapi.example.com",
+    ])(
+      "rejects unsafe saved base URL %s without a request",
+      async (baseUrl) => {
+        const fetchImpl = (async () => {
+          throw new Error("must not request unsafe URL");
+        }) as typeof fetch;
+        const adapter = new UazapiByoAdapter(new UazapiAdapter({}, fetchImpl));
+
+        const health = await adapter.getHealth({
+          provider: "uazapi_byo",
+          config: { baseUrl, token: "connection-token" },
+        });
+
+        expect(health.status).toBe("error");
+        expect(health.message).toBe("Uazapi instance status: error");
+        expect(JSON.stringify(health)).not.toContain(baseUrl);
+      },
+    );
   });
 
   it("listLabels() delegates to the wrapped UazapiAdapter and returns its labels", async () => {

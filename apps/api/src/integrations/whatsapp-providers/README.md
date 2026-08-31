@@ -6,17 +6,33 @@ rewriting call sites each time.
 
 ## Providers
 
-| id          | status                      | slice   |
-|-------------|------------------------------|---------|
-| `uazapi_byo`| **implemented, registered** | F5.1    |
-| `nod_api`   | **implemented, registered** | F5.3b (private repo broker) |
-| `waha`      | **implemented, registered, BYO** | F5.4 |
-| `zapi`      | **implemented, registered, BYO** | F5.5 |
+| id           | status                           | slice                       |
+| ------------ | -------------------------------- | --------------------------- |
+| `uazapi_byo` | **implemented, registered**      | F5.1                        |
+| `nod_api`    | **implemented, registered**      | F5.3b (private repo broker) |
+| `waha`       | **implemented, registered, BYO** | F5.4                        |
+| `zapi`       | **implemented, registered, BYO** | F5.5                        |
 
 All four providers are registered in `WhatsappProvidersModule` today
 (`WhatsappProvidersBootstrapService`), unconditionally — an unconfigured
 provider still shows up in the registry and reports `disconnected` health
 instead of being silently absent. No stub adapters remain as of F5.5.
+
+## Boundary for BYO URLs
+
+Base URLs supplied by a workspace are validated by the API before encrypted
+persistence and again immediately before a request. They must be absolute
+`http`/`https` URLs with no credentials, query or fragment. Loopback,
+link-local, carrier-grade NAT and unspecified destinations are rejected;
+redirects are disabled and every outbound request has a five-second abort
+timeout.
+
+RFC1918 private addresses and ordinary internal DNS names remain deliberately
+supported: self-hosted Uazapi/WAHA deployments commonly run in a Docker or
+VPS private network. That BYO exception means the deployment operator must
+only grant integration-management access to trusted workspace members; it
+cannot safely be replaced by a public-host allowlist without breaking the
+documented self-hosted contract.
 
 ### `waha` (F5.4) — BYO self-hosted WAHA
 
@@ -25,6 +41,7 @@ instance and this adapter talks to it directly — no PalmUP broker, no
 admin tokens.
 
 Contract:
+
 ```
 GET {WAHA_BASE_URL}/api/sessions/{WAHA_SESSION}
 Header: X-Api-Key: {WAHA_API_KEY}
@@ -35,12 +52,12 @@ Env vars: `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` (default
 reports `disconnected` with a clear message (never throws). Session
 status is mapped to `IntegrationStatus`:
 
-| WAHA status      | `IntegrationStatus`  |
-|------------------|-----------------------|
-| `WORKING` / `authenticated` | `connected`   |
-| `SCAN_QR_CODE`   | `needs_reconnect`      |
-| `STOPPED`        | `disconnected`         |
-| `FAILED` / other / HTTP error / network error | `error` |
+| WAHA status                                   | `IntegrationStatus` |
+| --------------------------------------------- | ------------------- |
+| `WORKING` / `authenticated`                   | `connected`         |
+| `SCAN_QR_CODE`                                | `needs_reconnect`   |
+| `STOPPED`                                     | `disconnected`      |
+| `FAILED` / other / HTTP error / network error | `error`             |
 
 `listLabels` is intentionally left `undefined` — WAHA has no Uazapi-style
 label catalog. **Inbound webhook parsing for WAHA events is out of scope
@@ -54,6 +71,7 @@ Pure BYO: the student runs (or subscribes to) their own
 directly — no PalmUP broker, no admin tokens.
 
 Contract:
+
 ```
 GET {ZAPI_BASE_URL}/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/status
 ```
@@ -65,12 +83,12 @@ across their docs/versions, so the response is read defensively — the
 boolean `connected` field is the primary signal, with `state`/`status`
 strings used only to detect a pending-QR hint when disconnected:
 
-| Response shape                                   | `IntegrationStatus`  |
-|---------------------------------------------------|-----------------------|
-| `connected: true`                                  | `connected`            |
-| `connected: false` + `state`/`status` matching `/qr/i` (e.g. `"qrCode"`, `"pendingQR"`) | `needs_reconnect` |
-| `connected: false`, no qr hint                     | `disconnected`         |
-| HTTP non-2xx / network error                       | `error`                |
+| Response shape                                                                          | `IntegrationStatus` |
+| --------------------------------------------------------------------------------------- | ------------------- |
+| `connected: true`                                                                       | `connected`         |
+| `connected: false` + `state`/`status` matching `/qr/i` (e.g. `"qrCode"`, `"pendingQR"`) | `needs_reconnect`   |
+| `connected: false`, no qr hint                                                          | `disconnected`      |
+| HTTP non-2xx / network error                                                            | `error`             |
 
 `listLabels` is intentionally left `undefined` — Z-API has no
 Uazapi-style label catalog. **Inbound webhook parsing for Z-API events is
@@ -80,7 +98,7 @@ inbound providers (uazapi) are untouched by this change.
 ## Interface
 
 `WhatsappProviderAdapter` (see `whatsapp-provider.types.ts`) is
-deliberately thin — it was extracted from the *actual* call sites of
+deliberately thin — it was extracted from the _actual_ call sites of
 `UazapiAdapter` (`integrations.service.ts`, `uazapi-provider-conversion.service.ts`),
 not invented up front:
 
@@ -137,12 +155,12 @@ Inbound webhooks flow through `InboundWebhookParserRegistry`
 (`apps/api/src/inbound-webhooks/providers/inbound-webhook-parser.registry.ts`).
 Registered parsers:
 
-| provider | parser | notes |
-|---|---|---|
-| `umbler` | `umbler-v1` | legacy inbound |
-| `gupshup` | `gupshup-v1` | legacy inbound |
-| `waha`   | `waha-v1`   | F5.6 — see `providers/waha/waha-v1.parser.ts` |
-| `zapi`   | `zapi-v1`   | F5.6 — see `providers/zapi/zapi-v1.parser.ts` |
+| provider  | parser       | notes                                         |
+| --------- | ------------ | --------------------------------------------- |
+| `umbler`  | `umbler-v1`  | legacy inbound                                |
+| `gupshup` | `gupshup-v1` | legacy inbound                                |
+| `waha`    | `waha-v1`    | F5.6 — see `providers/waha/waha-v1.parser.ts` |
+| `zapi`    | `zapi-v1`    | F5.6 — see `providers/zapi/zapi-v1.parser.ts` |
 
 ### Classification choices (v1)
 
@@ -165,17 +183,31 @@ Registered parsers:
 Example WAHA payload (message, inbound):
 
 ```json
-{ "event": "message", "session": "default",
-  "payload": { "from": "5511999999999@c.us", "to": "5521888888888@c.us",
-               "timestamp": 1724400000, "fromMe": false, "type": "chat",
-               "body": "olá, vi o anúncio" } }
+{
+  "event": "message",
+  "session": "default",
+  "payload": {
+    "from": "5511999999999@c.us",
+    "to": "5521888888888@c.us",
+    "timestamp": 1724400000,
+    "fromMe": false,
+    "type": "chat",
+    "body": "olá, vi o anúncio"
+  }
+}
 ```
 
 Example Z-API payload:
 
 ```json
-{ "phone": "5511999999999", "message": "olá, vi o anúncio",
-  "connectedPhone": "5521888888888", "instanceId": "3CXY25DZSUKAPXJYHUGA",
-  "messageId": "3EB0D7...", "timestamp": 1724400000, "fromMe": false,
-  "isGroup": false }
+{
+  "phone": "5511999999999",
+  "message": "olá, vi o anúncio",
+  "connectedPhone": "5521888888888",
+  "instanceId": "3CXY25DZSUKAPXJYHUGA",
+  "messageId": "3EB0D7...",
+  "timestamp": 1724400000,
+  "fromMe": false,
+  "isGroup": false
+}
 ```
