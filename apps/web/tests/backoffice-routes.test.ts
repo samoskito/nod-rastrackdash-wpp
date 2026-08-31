@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BackofficeClientsPage from "../src/app/(backoffice)/backoffice/clients/page";
 import BackofficeHomePage from "../src/app/(backoffice)/backoffice/page";
-import BackofficeInboundWebhooksPage from "../src/app/(backoffice)/backoffice/inbound-webhooks/page";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -30,34 +29,6 @@ function mockApi(routes: Record<string, () => Promise<Response>>): void {
     return routes[match]!();
   });
 }
-
-const connection = {
-  id: "conn_1",
-  workspaceId: "ws_1",
-  provider: "umbler",
-  displayName: "Umbler Vendas",
-  parserVersion: "v1",
-  parserReleaseStatus: "certified",
-  status: "observation",
-  productionActivatedAt: null,
-  lastDeliveryAt: "2026-08-01T12:00:00.000Z",
-  lastSuccessfulParseAt: "2026-08-01T12:00:00.000Z",
-  createdAt: "2026-07-01T12:00:00.000Z",
-  updatedAt: "2026-08-01T12:00:00.000Z",
-};
-
-const capabilities = {
-  enabled: true,
-  productionEnabled: false,
-  providers: [
-    {
-      provider: "umbler",
-      parserVersion: "v1",
-      parserReleaseStatus: "certified",
-      creationEnabled: true,
-    },
-  ],
-};
 
 async function renderPage(element: unknown): Promise<string> {
   return renderToStaticMarkup(createElement("div", null, element as never));
@@ -128,86 +99,5 @@ describe("/backoffice/clients", () => {
     expect(html).toContain('aria-label="Areas do backoffice"');
     expect(html).toContain('aria-current="page"');
     expect(html).not.toContain("Sem backend multi-cliente neste template");
-  });
-});
-
-describe("/backoffice/inbound-webhooks", () => {
-  it("renders workspace connections and the real observation counters", async () => {
-    mockApi({
-      "/integrations/inbound-webhooks/capabilities": async () =>
-        jsonResponse(capabilities),
-      "/integrations/inbound-webhooks/conn_1/overview": async () =>
-        jsonResponse({
-          connection,
-          counters: {
-            eligibleRouted: 7,
-            eligibleUnresolved: 2,
-            ignoredNoCtwa: 5,
-            duplicate: 1,
-            invalid: 0,
-          },
-        }),
-      "/integrations/inbound-webhooks": async () => jsonResponse([connection]),
-    });
-
-    const html = await renderPage(await BackofficeInboundWebhooksPage());
-
-    expect(html).toContain("Umbler Vendas");
-    expect(html).toContain("Umbler Talk");
-    expect(html).toContain("Observando");
-    expect(html).toContain("CTWA roteado");
-    expect(html).toContain("<strong>7</strong>");
-    expect(html).toContain("Parser certificado");
-  });
-
-  it("states that the platform-wide delivery console is not part of this edition", async () => {
-    mockApi({
-      "/integrations/inbound-webhooks/capabilities": async () =>
-        jsonResponse(capabilities),
-      "/integrations/inbound-webhooks": async () => jsonResponse([]),
-    });
-
-    const html = await renderPage(await BackofficeInboundWebhooksPage());
-
-    expect(html).toContain("Somente leitura");
-    expect(html).toContain("console multi-cliente");
-    expect(html).toContain("Nenhuma conexão de webhook neste workspace");
-    // The private build's delivery search / replay surfaces stay absent.
-    expect(html).not.toContain("/backoffice/inbound-webhooks/replay");
-    expect(html).not.toContain("/backoffice/inbound-webhooks/recovery");
-    expect(html).not.toContain("/backoffice/diagnostics/webhooks");
-  });
-
-  it("marks counters as unavailable instead of showing zeros when the overview fails", async () => {
-    mockApi({
-      "/integrations/inbound-webhooks/capabilities": async () =>
-        jsonResponse(capabilities),
-      "/integrations/inbound-webhooks/conn_1/overview": async () =>
-        jsonResponse({ message: "boom" }, 500),
-      "/integrations/inbound-webhooks": async () => jsonResponse([connection]),
-    });
-
-    const html = await renderPage(await BackofficeInboundWebhooksPage());
-
-    expect(html).toContain("Umbler Vendas");
-    expect(html).toContain("Contadores de observação indisponíveis");
-    expect(html).toContain("temporariamente indisponível");
-    expect(html).not.toContain("CTWA roteado");
-  });
-
-  it("renders an honest error state when the connection list fails", async () => {
-    mockApi({
-      "/integrations/inbound-webhooks/capabilities": async () =>
-        jsonResponse({ message: "boom" }, 503),
-      "/integrations/inbound-webhooks": async () =>
-        jsonResponse({ message: "boom" }, 503),
-    });
-
-    const html = await renderPage(await BackofficeInboundWebhooksPage());
-
-    expect(html).toContain("API indisponível");
-    expect(html).toContain("Não foi possível carregar as conexões de webhook");
-    expect(html).not.toContain("CTWA roteado");
-    expect(html).not.toContain("Recursos de webhook habilitados");
   });
 });

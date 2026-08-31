@@ -1,7 +1,4 @@
-import type {
-  WhatsappConnectionDto,
-  WhatsappWebhookReceiptStatusDto,
-} from "@wpptrack/shared";
+import type { WhatsappConnectionDto } from "@wpptrack/shared";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -24,20 +21,8 @@ const connection: WhatsappConnectionDto = {
   createdAt: "2026-08-01T00:00:00.000Z",
 };
 
-const organicReceipt: WhatsappWebhookReceiptStatusDto = {
-  hasReceipts: true,
-  lastReceivedAt: "2026-08-30T12:00:00.000Z",
-  lastSource: "uazapi",
-  lastEventType: "message.received",
-  lastStatus: "received",
-  lastLeadCreated: false,
-  recentCount: 2,
-};
-
 function renderPanel({
   connections = [connection],
-  webhookStatus = null as WhatsappWebhookReceiptStatusDto | null,
-  webhookStatusState = "empty" as "real" | "empty" | "error",
 } = {}) {
   const action = vi.fn(
     async (): Promise<WhatsappProviderActionResult> => ({
@@ -53,38 +38,24 @@ function renderPanel({
       createAction: action,
       testAction: action,
       rotateAction: action,
-      webhookStatus,
-      webhookStatusState,
     }),
   );
 }
 
-describe("WhatsappProviderPanel webhook receipt visibility", () => {
-  it("shows students an honest empty state before any webhook arrives", () => {
-    const html = renderPanel();
-
-    expect(html).toContain("Nenhum webhook recebido ainda");
-  });
-
-  it("shows the organic receipt status inline with the connection panel", () => {
-    const html = renderPanel({
-      webhookStatus: organicReceipt,
-      webhookStatusState: "real",
-    });
-
-    expect(html).toContain("Recebido — organico, sem lead CTWA");
-    expect(html).toContain("Uazapi Principal");
-  });
-
+describe("WhatsappProviderPanel", () => {
   it("does not render the receiver secret block or raw webhook payload fields", () => {
-    const html = renderPanel({
-      webhookStatus: organicReceipt,
-      webhookStatusState: "real",
-    });
+    const html = renderPanel();
 
     expect(html).not.toContain("Exibido uma unica vez");
     expect(html).not.toContain("data-presentation-sensitive-field");
     expect(html).not.toContain("payloadAvailable");
     expect(html).not.toContain("externalEventId");
+  });
+
+  it("no longer renders the removed student-facing webhook receipt block", () => {
+    const html = renderPanel();
+
+    expect(html).not.toContain("Recebimento de webhook");
+    expect(html).not.toContain("whatsapp-webhook-receipt-status");
   });
 });
