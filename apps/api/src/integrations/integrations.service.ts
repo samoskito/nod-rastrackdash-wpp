@@ -34,8 +34,10 @@ import type {
   MetaManualCredentialInputDto,
   MetaManualCredentialRotationInputDto,
   MetaOAuthAdvancedRoutingInputDto,
+  WhatsappWebhookReceiptStatusDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { DiagnosticsService } from "../diagnostics/diagnostics.service";
 import { WorkspaceAccessPolicyService } from "../workspaces/workspace-access-policy.service";
 import type { IntegrationEnv } from "./integration.types";
 import { INTEGRATION_ENV } from "./integration.types";
@@ -65,6 +67,9 @@ export class IntegrationsService {
     @Optional()
     @Inject(MetaManualConnectionsService)
     private readonly metaManualConnectionsService?: MetaManualConnectionsService,
+    @Optional()
+    @Inject(DiagnosticsService)
+    private readonly diagnosticsService?: DiagnosticsService,
   ) {}
 
   async getHealthSummary(): Promise<IntegrationHealthSummaryDto> {
@@ -444,6 +449,53 @@ export class IntegrationsService {
       provider: connector.provider,
       lastSyncCompletedAt: connector.lastSyncCompletedAt?.toISOString() ?? null,
       lastSyncStatus: connector.lastSyncStatus,
+    };
+  }
+
+  /**
+   * Workspace-scoped, student-safe receipt status for WhatsApp webhooks.
+   * Only surfaces timestamp/status/source/lead-created — never raw payloads,
+   * hashes or ids, so this can be rendered directly in the workspace UI.
+   */
+  async getWhatsappWebhookReceiptStatus(
+    workspaceId: string,
+  ): Promise<WhatsappWebhookReceiptStatusDto> {
+    if (!this.diagnosticsService) {
+      return this.emptyWhatsappWebhookReceiptStatus();
+    }
+
+    const recentLogs = await this.diagnosticsService.listWebhookLogs({
+      workspaceId,
+      limit: 5,
+      offset: 0,
+    });
+
+    const [latest] = recentLogs;
+
+    if (!latest) {
+      return this.emptyWhatsappWebhookReceiptStatus();
+    }
+
+    return {
+      hasReceipts: true,
+      lastReceivedAt: latest.receivedAt,
+      lastSource: latest.source,
+      lastEventType: latest.eventType,
+      lastStatus: latest.status,
+      lastLeadCreated: Boolean(latest.leadId),
+      recentCount: recentLogs.length,
+    };
+  }
+
+  private emptyWhatsappWebhookReceiptStatus(): WhatsappWebhookReceiptStatusDto {
+    return {
+      hasReceipts: false,
+      lastReceivedAt: null,
+      lastSource: null,
+      lastEventType: null,
+      lastStatus: null,
+      lastLeadCreated: null,
+      recentCount: 0,
     };
   }
 

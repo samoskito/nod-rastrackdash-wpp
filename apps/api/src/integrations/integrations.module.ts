@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { PrismaModule } from "../common/prisma/prisma.module";
+import { DiagnosticsModule } from "../diagnostics/diagnostics.module";
 import { InboundWebhooksModule } from "../inbound-webhooks/inbound-webhooks.module";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
 import { INTEGRATION_ENV } from "./integration.types";
@@ -21,6 +22,7 @@ export { INTEGRATION_ENV } from "./integration.types";
   imports: [
     AuthModule,
     PrismaModule,
+    DiagnosticsModule,
     InboundWebhooksModule,
     WorkspacesModule,
     WhatsappProvidersModule,

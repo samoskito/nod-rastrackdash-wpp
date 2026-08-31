@@ -1,6 +1,9 @@
 "use client";
 
-import type { WhatsappConnectionDto } from "@wpptrack/shared";
+import type {
+  WhatsappConnectionDto,
+  WhatsappWebhookReceiptStatusDto,
+} from "@wpptrack/shared";
 import { Copy, RefreshCw, Stethoscope, Webhook } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -8,6 +11,7 @@ import type {
   WhatsappProviderActionResult,
   WhatsappReceiverSecret,
 } from "./whatsapp-provider-actions";
+import { WhatsappWebhookReceiptStatus } from "./whatsapp-webhook-receipt-status";
 
 type WhatsappProviderAction = (
   formData: FormData,
@@ -54,12 +58,16 @@ export function WhatsappProviderPanel({
   createAction,
   testAction,
   rotateAction,
+  webhookStatus = null,
+  webhookStatusState = "empty",
 }: {
   connections: WhatsappConnectionDto[];
   canManage: boolean;
   createAction: WhatsappProviderAction;
   testAction: WhatsappProviderAction;
   rotateAction: WhatsappProviderAction;
+  webhookStatus?: WhatsappWebhookReceiptStatusDto | null;
+  webhookStatusState?: "real" | "empty" | "error";
 }) {
   const router = useRouter();
   const [provider, setProvider] = useState<ProviderId>("uazapi_byo");
@@ -153,6 +161,11 @@ export function WhatsappProviderPanel({
           </p>
         </div>
       </div>
+
+      <WhatsappWebhookReceiptStatus
+        status={webhookStatus}
+        state={webhookStatusState}
+      />
 
       <div
         className="inbound-counter-grid"

@@ -154,6 +154,21 @@ export const diagnosticWebhookLogListSchema = z.array(
   diagnosticWebhookLogSchema
 );
 
+/**
+ * Workspace-scoped, student-safe summary of WhatsApp webhook receipt.
+ * Deliberately excludes ids/hashes/payloads — see recordWebhookLog callers
+ * for the full (backoffice-only) log shape.
+ */
+export const whatsappWebhookReceiptStatusSchema = z.object({
+  hasReceipts: z.boolean(),
+  lastReceivedAt: z.string().datetime().nullable(),
+  lastSource: diagnosticSourceSchema.nullable(),
+  lastEventType: z.string().min(1).nullable(),
+  lastStatus: z.string().min(1).nullable(),
+  lastLeadCreated: z.boolean().nullable(),
+  recentCount: z.number().int().nonnegative()
+});
+
 export const diagnosticWebhookPayloadSchema = diagnosticWebhookLogSchema
   .pick({
     id: true,
@@ -391,6 +406,9 @@ export type DiagnosticWebhookLogListQueryDto = z.infer<
 >;
 export type DiagnosticWebhookPayloadDto = z.infer<
   typeof diagnosticWebhookPayloadSchema
+>;
+export type WhatsappWebhookReceiptStatusDto = z.infer<
+  typeof whatsappWebhookReceiptStatusSchema
 >;
 export type DiagnosticJobAttemptDto = z.infer<
   typeof diagnosticJobAttemptSchema

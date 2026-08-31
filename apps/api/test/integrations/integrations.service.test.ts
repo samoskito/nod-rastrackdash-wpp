@@ -369,3 +369,117 @@ describe("IntegrationsService.getHealthSummary", () => {
     ]);
   });
 });
+
+describe("getWhatsappWebhookReceiptStatus", () => {
+  function fakeDiagnosticsService(
+    logs: Array<{
+      receivedAt: string;
+      source: "uazapi";
+      eventType: string;
+      status: string;
+      leadId: string | null;
+    }>,
+  ) {
+    return {
+      listWebhookLogs: async () => logs,
+    } as unknown as import("../../src/diagnostics/diagnostics.service").DiagnosticsService;
+  }
+
+  it("returns an honest empty state when the workspace has no webhook logs", async () => {
+    const registry = new WhatsappProviderRegistry();
+    const service = new IntegrationsService(
+      fakeMetaAdapter(),
+      registry,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      fakeDiagnosticsService([]),
+    );
+
+    const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
+
+    expect(status).toEqual({
+      hasReceipts: false,
+      lastReceivedAt: null,
+      lastSource: null,
+      lastEventType: null,
+      lastStatus: null,
+      lastLeadCreated: null,
+      recentCount: 0,
+    });
+  });
+
+  it("reports organic receipt (no CTWA lead) from the most recent webhook log", async () => {
+    const registry = new WhatsappProviderRegistry();
+    const service = new IntegrationsService(
+      fakeMetaAdapter(),
+      registry,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      fakeDiagnosticsService([
+        {
+          receivedAt: "2026-08-30T12:00:00.000Z",
+          source: "uazapi",
+          eventType: "message.received",
+          status: "received",
+          leadId: null,
+        },
+      ]),
+    );
+
+    const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
+
+    expect(status).toEqual({
+      hasReceipts: true,
+      lastReceivedAt: "2026-08-30T12:00:00.000Z",
+      lastSource: "uazapi",
+      lastEventType: "message.received",
+      lastStatus: "received",
+      lastLeadCreated: false,
+      recentCount: 1,
+    });
+  });
+
+  it("reports a created CTWA lead when the webhook log carries a leadId", async () => {
+    const registry = new WhatsappProviderRegistry();
+    const service = new IntegrationsService(
+      fakeMetaAdapter(),
+      registry,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      fakeDiagnosticsService([
+        {
+          receivedAt: "2026-08-30T12:05:00.000Z",
+          source: "uazapi",
+          eventType: "message.received",
+          status: "received",
+          leadId: "lead-123",
+        },
+      ]),
+    );
+
+    const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
+
+    expect(status.lastLeadCreated).toBe(true);
+  });
+
+  it("fails closed to the empty state when diagnostics service is unavailable", async () => {
+    const registry = new WhatsappProviderRegistry();
+    const service = new IntegrationsService(fakeMetaAdapter(), registry, {});
+
+    const status = await service.getWhatsappWebhookReceiptStatus("ws-1");
+
+    expect(status.hasReceipts).toBe(false);
+  });
+});
