@@ -32,12 +32,12 @@ describe("ZapiV1Parser", () => {
     expect(parser.parserVersion).toBe(ZAPI_V1_PARSER_VERSION);
   });
 
-  it("parses an inbound text message as eligible_route_unresolved when no CTWA is present", () => {
+  it("classifies an organic inbound text message as ignored_no_ctwa", () => {
     const result = parseZapiV1Webhook(inboundMessagePayload());
 
     expect(result.error).toBeNull();
-    expect(result.classification).toBe("eligible_route_unresolved");
-    expect(result.classificationReason).toBe("no_ctwa_in_zapi_payload");
+    expect(result.classification).toBe("ignored_no_ctwa");
+    expect(result.classificationReason).toBe("ctwa_missing");
     expect(result.events).toHaveLength(1);
 
     const [event] = result.events;
@@ -55,6 +55,7 @@ describe("ZapiV1Parser", () => {
       name: null,
     });
     expect(event.hasCtwa).toBe(false);
+    expect(event.classification).toBe("ignored_no_ctwa");
     expect(event.message.direction).toBe("inbound");
     expect(event.message.authorType).toBe("contact");
     expect(event.message.text).toBe("Olá, quero saber mais");
@@ -135,6 +136,42 @@ describe("ZapiV1Parser", () => {
 
     expect(result.classification).toBe("invalid_payload");
     expect(result.events).toHaveLength(0);
+  });
+
+  it("rejects a non-boolean fromMe value fail-closed", () => {
+    const result = parseZapiV1Webhook(
+      inboundMessagePayload({ fromMe: "false" }),
+    );
+
+    expect(result.classification).toBe("invalid_payload");
+    expect(result.events).toHaveLength(0);
+  });
+
+  it("keeps sensitive message and phone data out of normalized summaries", () => {
+    const result = parseZapiV1Webhook(
+      inboundMessagePayload({
+        message: "conteudo-sensivel",
+        ctwa: { ad_id: "ad-123", clid: "clid-sensivel" },
+      }),
+    );
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].normalizedSummary).toEqual(
+      expect.objectContaining({
+        connectedPhoneSuffix: "6666",
+        adId: "ad-123",
+        hasCtwa: true,
+      }),
+    );
+    expect(JSON.stringify(result.events[0].normalizedSummary)).not.toContain(
+      "conteudo-sensivel",
+    );
+    expect(JSON.stringify(result.events[0].normalizedSummary)).not.toContain(
+      "5511988887777",
+    );
+    expect(JSON.stringify(result.events[0].normalizedSummary)).not.toContain(
+      "clid-sensivel",
+    );
   });
 
   it("produces a distinct dedupeKey per externalMessageId", () => {

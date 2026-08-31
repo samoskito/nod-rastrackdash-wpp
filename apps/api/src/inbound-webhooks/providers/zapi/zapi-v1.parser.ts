@@ -344,12 +344,14 @@ function parsePayload(payload: unknown): InboundWebhookParserResult {
   const hasCtwa = ctwa.adId !== null || ctwa.ctwaClid !== null;
   const classification: InboundWebhookEventClassification = fromMe
     ? "ignored_outbound"
-    : "eligible_route_unresolved";
+    : hasCtwa
+      ? "eligible_route_unresolved"
+      : "ignored_no_ctwa";
   const classificationReason = fromMe
     ? "message_from_me"
     : hasCtwa
       ? "route_resolution_pending"
-      : "no_ctwa_in_zapi_payload";
+      : "ctwa_missing";
   const direction: ParsedInboundWebhookMessageDirection = fromMe
     ? "outbound"
     : "inbound";

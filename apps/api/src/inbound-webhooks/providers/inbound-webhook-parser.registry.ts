@@ -43,7 +43,12 @@ function parserKey(provider: string, parserVersion: string): string {
 }
 
 function defaultParsers(): InboundWebhookParser[] {
-  return [new UmblerV1Parser(), new GupshupV1Parser()];
+  return [
+    new UmblerV1Parser(),
+    new GupshupV1Parser(),
+    new WahaV1Parser(),
+    new ZapiV1Parser(),
+  ];
 }
 
 export class InboundWebhookParserRegistry {
