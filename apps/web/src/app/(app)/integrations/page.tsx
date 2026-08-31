@@ -12,12 +12,10 @@ import type {
   ProviderConversionRuleDto,
   CurrentWorkspaceDto,
   WhatsappConnectionDto,
-  WhatsappWebhookReceiptStatusDto,
 } from "@wpptrack/shared";
 import {
   metaAssetsSchema,
   whatsappConnectionsSchema,
-  whatsappWebhookReceiptStatusSchema,
 } from "@wpptrack/shared";
 import {
   Activity,
@@ -381,26 +379,6 @@ async function getWhatsappConnections(): Promise<
     };
   } catch {
     return { data: [], state: "error" };
-  }
-}
-
-async function getWhatsappWebhookReceiptStatus(): Promise<
-  ResourceResult<WhatsappWebhookReceiptStatusDto | null>
-> {
-  try {
-    const status = await serverApiFetch<unknown>(
-      "/integrations/whatsapp/webhook-status",
-    );
-    const parsed = whatsappWebhookReceiptStatusSchema.safeParse(status);
-    if (!parsed.success) {
-      return { data: null, state: "error" };
-    }
-    return {
-      data: parsed.data,
-      state: parsed.data.hasReceipts ? "real" : "empty",
-    };
-  } catch {
-    return { data: null, state: "error" };
   }
 }
 
@@ -897,8 +875,6 @@ export default async function IntegrationsPage({
         : ({ data: null, state: "empty" } as const);
   const inboundWebhookResult = await getInboundWebhookData();
   const whatsappConnectionsResult = await getWhatsappConnections();
-  const whatsappWebhookReceiptStatusResult =
-    await getWhatsappWebhookReceiptStatus();
   const legacyWhatsappInstancesResult = await getLegacyWhatsappInstances();
   const inboundWebhookData = inboundWebhookResult.data;
   const pipeline = pipelineResult.data;
@@ -925,7 +901,6 @@ export default async function IntegrationsPage({
     ...(inboundWebhookData?.capabilities.enabled
       ? [inboundWebhookResult.state]
       : []),
-    whatsappWebhookReceiptStatusResult.state,
   ].includes("error");
   const metaStatus = resolveMetaStatus(
     metaConnection?.status,
@@ -1512,8 +1487,6 @@ export default async function IntegrationsPage({
             createAction={createWhatsappConnectionAction}
             testAction={testWhatsappConnectionAction}
             rotateAction={rotateWhatsappWebhookTokenAction}
-            webhookStatus={whatsappWebhookReceiptStatusResult.data}
-            webhookStatusState={whatsappWebhookReceiptStatusResult.state}
           />
 
           {inboundWebhookData &&

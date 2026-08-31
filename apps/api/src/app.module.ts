@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { AuthModule } from "./auth/auth.module";
+import { BackofficeWhatsappWebhooksModule } from "./backoffice-whatsapp-webhooks/backoffice-whatsapp-webhooks.module";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { RequestDurationInterceptor } from "./common/http/request-duration.interceptor";
 import { QueueModule } from "./common/queue/queue.module";
@@ -30,6 +31,7 @@ import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
     EmailModule,
     PrismaModule,
     AuthModule,
+    BackofficeWhatsappWebhooksModule,
     WorkspacesModule,
     DiagnosticsModule,
     ExternalDataModule,

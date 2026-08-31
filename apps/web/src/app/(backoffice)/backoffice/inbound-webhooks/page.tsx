@@ -1,102 +1,115 @@
 import type {
-  InboundWebhookCapabilitiesDto,
-  InboundWebhookConnectionDto,
-  InboundWebhookConnectionOverviewDto,
-  InboundWebhookObservationCountersDto,
+  BackofficeWhatsappWebhookConnectionDto,
+  BackofficeWhatsappWebhookHistoryDto,
 } from "@wpptrack/shared";
-import { AlertTriangle, Info, Webhook } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, Webhook } from "lucide-react";
+import Link from "next/link";
 import { BackofficeNavigation } from "../../../../components/backoffice-navigation";
+import { WebhookHistoryDetail } from "../../../../components/webhook-history-detail";
 import { formatDateTime } from "../../../../lib/date-time";
-import { serverApiFetch } from "../../../../lib/server-api";
+import { isApiRequestError, serverApiFetch } from "../../../../lib/server-api";
 
 /**
- * Student-edition inbound webhook observation.
- *
- * The PalmUP platform build serves this page from `backoffice/inbound-webhooks`
- * (delivery search, payload viewer, replay/recovery, provider-conversion
- * rollout). This public template ships none of those controllers — the only
- * inbound-webhook endpoints available here are the workspace-scoped
- * `integrations/inbound-webhooks` reads. So this route is deliberately a
- * read-only view of the *current workspace* and says so out loud instead of
- * pretending to be a platform-wide console. Every number below comes from
- * `/:connectionId/overview`; when that call fails the counters render as
- * unavailable rather than as zeros.
+ * Backoffice "Webhooks WhatsApp": platform-admin view of BYO WhatsApp
+ * connections (Fase A: `/backoffice/whatsapp-webhooks/*`), with a paginated,
+ * analyzable receipt history per connection and a redacted payload viewer.
+ * Every number and row below comes straight from the API — no fabricated
+ * counters, no invented rows when a call fails.
  */
 
-type ConnectionView = {
-  connection: InboundWebhookConnectionDto;
-  counters: InboundWebhookObservationCountersDto | null;
-};
-
-type InboundWebhookResult = {
-  capabilities: InboundWebhookCapabilitiesDto | null;
-  connections: ConnectionView[];
-  state: "real" | "empty" | "error";
-};
+const PAGE_SIZE = 25;
 
 const providerLabels: Record<string, string> = {
-  gupshup: "Gupshup",
-  uazapi: "UAZAPI",
-  umbler: "Umbler Talk",
+  uazapi_byo: "Uazapi (BYO)",
+  waha: "WAHA",
+  zapi: "Z-API",
+  nod_api: "NOD API",
 };
 
 const connectionStatusLabels: Record<string, string> = {
-  observation: "Observando",
-  paused: "Pausada",
-  production: "Envio automático",
+  pending_payment: "Pagamento pendente",
+  active: "Ativa",
+  disconnected: "Desconectada",
+  suspended: "Suspensa",
+  error: "Erro",
 };
 
-const parserReleaseLabels: Record<string, string> = {
-  certified: "Parser certificado",
-  observation_only: "Parser em observação",
-  retired: "Parser aposentado",
-};
+type ConnectionsResult =
+  | { state: "empty" }
+  | { state: "error"; message: string }
+  | { state: "real"; connections: BackofficeWhatsappWebhookConnectionDto[] };
 
-async function getInboundWebhooks(): Promise<InboundWebhookResult> {
-  let capabilities: InboundWebhookCapabilitiesDto | null = null;
-  let connections: InboundWebhookConnectionDto[];
+type HistoryResult =
+  | { state: "empty" }
+  | { state: "error"; message: string }
+  | { state: "real"; history: BackofficeWhatsappWebhookHistoryDto };
 
-  const capabilitiesResult = await serverApiFetch<InboundWebhookCapabilitiesDto>(
-    "/integrations/inbound-webhooks/capabilities",
-  ).then(
-    (value) => value,
-    () => null,
-  );
-  capabilities = capabilitiesResult;
-
+async function getConnections(): Promise<ConnectionsResult> {
   try {
-    connections = await serverApiFetch<InboundWebhookConnectionDto[]>(
-      "/integrations/inbound-webhooks",
-    );
-  } catch {
-    return { capabilities, connections: [], state: "error" };
+    const connections = await serverApiFetch<
+      BackofficeWhatsappWebhookConnectionDto[]
+    >("/backoffice/whatsapp-webhooks/connections");
+
+    return connections.length > 0
+      ? { state: "real", connections }
+      : { state: "empty" };
+  } catch (error) {
+    return {
+      state: "error",
+      message:
+        isApiRequestError(error) && error.message.trim()
+          ? error.message
+          : "Não foi possível carregar as conexões WhatsApp.",
+    };
   }
-
-  const views = await Promise.all(
-    connections.map(async (connection) => {
-      const overview = await serverApiFetch<InboundWebhookConnectionOverviewDto>(
-        `/integrations/inbound-webhooks/${encodeURIComponent(connection.id)}/overview`,
-      ).then(
-        (value) => value,
-        () => null,
-      );
-
-      return {
-        connection,
-        counters: overview ? overview.counters : null,
-      };
-    }),
-  );
-
-  return {
-    capabilities,
-    connections: views,
-    state: views.length > 0 ? "real" : "empty",
-  };
 }
 
-export default async function BackofficeInboundWebhooksPage() {
-  const result = await getInboundWebhooks();
+async function getHistory(
+  connectionId: string,
+  page: number,
+): Promise<HistoryResult> {
+  try {
+    const history = await serverApiFetch<BackofficeWhatsappWebhookHistoryDto>(
+      `/backoffice/whatsapp-webhooks/connections/${encodeURIComponent(
+        connectionId,
+      )}/history?page=${page}&pageSize=${PAGE_SIZE}`,
+    );
+
+    return history.items.length > 0
+      ? { state: "real", history }
+      : { state: "empty" };
+  } catch (error) {
+    return {
+      state: "error",
+      message:
+        isApiRequestError(error) && error.message.trim()
+          ? error.message
+          : "Não foi possível carregar o histórico de webhooks.",
+    };
+  }
+}
+
+export default async function BackofficeInboundWebhooksPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ connectionId?: string; page?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
+  const connectionsResult = await getConnections();
+  const connections =
+    connectionsResult.state === "real" ? connectionsResult.connections : [];
+
+  const selectedConnectionId =
+    connections.find((connection) => connection.id === params.connectionId)
+      ?.id ?? connections[0]?.id;
+
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
+  const page =
+    Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+
+  const historyResult = selectedConnectionId
+    ? await getHistory(selectedConnectionId, page)
+    : null;
 
   return (
     <section className="page-stack standalone-page inbound-deliveries-page">
@@ -107,237 +120,249 @@ export default async function BackofficeInboundWebhooksPage() {
           <span className="eyebrow">Operação da plataforma</span>
           <h1>Webhooks WhatsApp</h1>
           <p>
-            Consulta somente leitura das conexões de webhook do workspace atual.
+            Histórico de recepção de webhooks das conexões WhatsApp BYO, por
+            workspace.
           </p>
         </div>
-        {result.state === "error" ? (
+        {connectionsResult.state === "error" ? (
           <span className="status-chip bad">API indisponível</span>
         ) : (
           <span className="status-chip neutral">Somente leitura</span>
         )}
       </header>
 
-      <ScopeNotice />
-
-      {result.capabilities ? (
-        <CapabilitiesPanel capabilities={result.capabilities} />
-      ) : null}
-
-      {result.state === "error" ? (
-        <ErrorPanel />
-      ) : result.state === "empty" ? (
-        <EmptyPanel />
+      {connectionsResult.state === "error" ? (
+        <ErrorPanel message={connectionsResult.message} />
+      ) : connectionsResult.state === "empty" ? (
+        <EmptyConnectionsPanel />
       ) : (
-        <ConnectionsPanel connections={result.connections} />
+        <>
+          <ConnectionSelector
+            connections={connections}
+            selectedConnectionId={selectedConnectionId ?? null}
+          />
+
+          {selectedConnectionId && historyResult ? (
+            <HistoryPanel
+              connectionId={selectedConnectionId}
+              page={page}
+              result={historyResult}
+            />
+          ) : null}
+        </>
       )}
     </section>
   );
 }
 
-function ScopeNotice() {
-  return (
-    <section className="surface-panel inbound-operator-scope" role="note">
-      <div className="section-heading-row">
-        <div>
-          <span className="eyebrow">Escopo desta edição</span>
-          <h2>O que esta página mostra (e o que não mostra)</h2>
-          <p>
-            Esta instância student não inclui o console multi-cliente da PalmUP.
-            A API deste template só expõe leituras de webhook do workspace
-            atual, então não há busca de entregas, visualização de payload,
-            replay/recuperação nem rollout de conversão por provedor aqui.
-          </p>
-        </div>
-        <span className="status-chip neutral">
-          <Info aria-hidden="true" size={14} strokeWidth={2} />
-          Workspace atual
-        </span>
-      </div>
-
-      <p className="muted">
-        Para criar, pausar, girar segredo ou rotear canais de uma conexão, use{" "}
-        <a href="/integrations">Integrações</a> dentro do workspace. Os números
-        abaixo vêm da própria API — quando uma leitura falha, o campo aparece
-        como indisponível em vez de zero.
-      </p>
-    </section>
-  );
-}
-
-function CapabilitiesPanel({
-  capabilities,
-}: {
-  capabilities: InboundWebhookCapabilitiesDto;
-}) {
-  return (
-    <section className="surface-panel">
-      <div className="section-heading-row">
-        <div>
-          <span className="eyebrow">Configuração da instância</span>
-          <h2>Recursos de webhook habilitados</h2>
-        </div>
-      </div>
-
-      <dl className="account-facts">
-        <div>
-          <dt>Recepção de webhooks</dt>
-          <dd>{capabilities.enabled ? "Habilitada" : "Desabilitada"}</dd>
-        </div>
-        <div>
-          <dt>Envio automático (produção)</dt>
-          <dd>
-            {capabilities.productionEnabled ? "Habilitado" : "Desabilitado"}
-          </dd>
-        </div>
-        <div>
-          <dt>Provedores disponíveis</dt>
-          <dd>
-            {capabilities.providers.length > 0
-              ? capabilities.providers
-                  .map(
-                    (provider) =>
-                      providerLabels[provider.provider] ?? provider.provider,
-                  )
-                  .join(", ")
-              : "Nenhum"}
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
-function ConnectionsPanel({
+function ConnectionSelector({
   connections,
+  selectedConnectionId,
 }: {
-  connections: ConnectionView[];
+  connections: BackofficeWhatsappWebhookConnectionDto[];
+  selectedConnectionId: string | null;
 }) {
-  const degraded = connections.some((view) => view.counters === null);
-
   return (
     <section className="surface-panel">
       <div className="section-heading-row">
         <div>
           <span className="eyebrow">Fontes de mensagens</span>
-          <h2>Conexões do workspace</h2>
+          <h2>Conexões WhatsApp BYO</h2>
         </div>
         <span className="status-chip neutral">
           {connections.length} conexão(ões)
         </span>
       </div>
 
-      {degraded ? (
-        <p className="action-note warn">
-          Parte dos contadores de observação está temporariamente indisponível.
-        </p>
-      ) : null}
+      <nav className="backoffice-connection-tabs" aria-label="Conexões WhatsApp">
+        {connections.map((connection) => {
+          const isActive = connection.id === selectedConnectionId;
 
-      <div className="inbound-connection-list">
-        {connections.map(({ connection, counters }) => (
-          <details className="inbound-connection" key={connection.id}>
-            <summary>
-              <div className="inbound-connection-identity">
-                <span
-                  className={`status-dot ${connection.status !== "paused" ? "active" : ""}`}
-                  aria-hidden="true"
-                />
-                <div>
-                  <strong>{connection.displayName}</strong>
-                  <span>
-                    {providerLabels[connection.provider] ?? connection.provider}{" "}
-                    -{" "}
-                    {connectionStatusLabels[connection.status] ??
-                      connection.status}
-                  </span>
-                </div>
-              </div>
-              <div className="inbound-connection-health">
-                <span>
-                  Última entrega: {optionalDateTime(connection.lastDeliveryAt)}
-                </span>
-                <span>
-                  Último parse: {optionalDateTime(connection.lastSuccessfulParseAt)}
-                </span>
-              </div>
-            </summary>
-
-            <div className="inbound-connection-body">
-              <dl className="account-facts">
-                <div>
-                  <dt>Parser</dt>
-                  <dd>
-                    {connection.parserVersion}
-                    {connection.parserReleaseStatus
-                      ? ` — ${
-                          parserReleaseLabels[connection.parserReleaseStatus] ??
-                          connection.parserReleaseStatus
-                        }`
-                      : ""}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Envio automático desde</dt>
-                  <dd>{optionalDateTime(connection.productionActivatedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Criada em</dt>
-                  <dd>{optionalDateTime(connection.createdAt)}</dd>
-                </div>
-                <div>
-                  <dt>Atualizada em</dt>
-                  <dd>{optionalDateTime(connection.updatedAt)}</dd>
-                </div>
-              </dl>
-
-              {counters ? (
-                <div className="inbound-counter-grid">
-                  <ObservationCounter
-                    label="CTWA roteado"
-                    tone="success"
-                    value={counters.eligibleRouted}
-                  />
-                  <ObservationCounter
-                    label="CTWA pendente"
-                    tone="warn"
-                    value={counters.eligibleUnresolved}
-                  />
-                  <ObservationCounter
-                    label="Sem CTWA"
-                    value={counters.ignoredNoCtwa}
-                  />
-                  <ObservationCounter
-                    label="Duplicados"
-                    value={counters.duplicate}
-                  />
-                  <ObservationCounter
-                    label="Inválidos"
-                    tone="error"
-                    value={counters.invalid}
-                  />
-                </div>
-              ) : (
-                <p className="action-note warn">
-                  Contadores de observação indisponíveis para esta conexão.
-                </p>
-              )}
-            </div>
-          </details>
-        ))}
-      </div>
+          return (
+            <Link
+              aria-current={isActive ? "page" : undefined}
+              className={`button ghost${isActive ? " active" : ""}`}
+              href={`/backoffice/inbound-webhooks?connectionId=${encodeURIComponent(
+                connection.id,
+              )}`}
+              key={connection.id}
+            >
+              <span
+                className={`status-dot ${connection.status === "active" ? "active" : ""}`}
+                aria-hidden="true"
+              />
+              {connection.name}
+              <span className="muted">
+                {providerLabels[connection.provider] ?? connection.provider}
+              </span>
+              {!connection.webhookConfigured ? (
+                <span className="status-chip warn">Webhook não configurado</span>
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
     </section>
   );
 }
 
-function EmptyPanel() {
+function HistoryPanel({
+  connectionId,
+  page,
+  result,
+}: {
+  connectionId: string;
+  page: number;
+  result: HistoryResult;
+}) {
+  if (result.state === "error") {
+    return <ErrorPanel message={result.message} />;
+  }
+
+  if (result.state === "empty") {
+    return (
+      <section className="surface-panel">
+        <div className="inbound-empty-state">
+          <Webhook aria-hidden="true" size={20} />
+          <div>
+            <strong>Nenhum webhook recebido nesta conexão</strong>
+            <p className="muted">
+              Assim que a Uazapi (ou outro provedor BYO) enviar um webhook para
+              esta conexão, ele aparece aqui.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const { history } = result;
+
+  return (
+    <section className="surface-panel">
+      <div className="section-heading-row">
+        <div>
+          <span className="eyebrow">Histórico analisável</span>
+          <h2>Recepção de webhooks</h2>
+        </div>
+        <span className="status-chip neutral">
+          {history.pagination.total} registro(s)
+        </span>
+      </div>
+
+      <div className="table-wrap audit-table-scroll">
+        <table className="audit-table">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Status</th>
+              <th>Provider</th>
+              <th>Evento</th>
+              <th>Lead CTWA</th>
+              <th>Erro</th>
+              <th>Detalhe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.items.map((item) => (
+              <tr key={item.id}>
+                <td>{formatDateTime(item.receivedAt)}</td>
+                <td>
+                  <span className={statusChipClass(item.status)}>
+                    {item.status}
+                  </span>
+                </td>
+                <td>{providerLabels[item.provider] ?? item.provider}</td>
+                <td>{item.eventType}</td>
+                <td>
+                  {item.leadId ? (
+                    <span className="status-chip">
+                      <CheckCircle2 aria-hidden="true" size={14} strokeWidth={2} />
+                      Sim
+                    </span>
+                  ) : (
+                    <span className="status-chip neutral">
+                      <HelpCircle aria-hidden="true" size={14} strokeWidth={2} />
+                      Não
+                    </span>
+                  )}
+                </td>
+                <td>{item.errorCode ?? "—"}</td>
+                <td>
+                  <WebhookHistoryDetail
+                    connectionId={connectionId}
+                    webhookLogId={item.id}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <PaginationNav
+        connectionId={connectionId}
+        page={history.pagination.page}
+        totalPages={history.pagination.totalPages}
+      />
+    </section>
+  );
+}
+
+function PaginationNav({
+  connectionId,
+  page,
+  totalPages,
+}: {
+  connectionId: string;
+  page: number;
+  totalPages: number;
+}) {
+  function href(target: number) {
+    return `/backoffice/inbound-webhooks?connectionId=${encodeURIComponent(
+      connectionId,
+    )}&page=${target}`;
+  }
+
+  return (
+    <nav className="report-pagination" aria-label="Paginação do histórico de webhooks">
+      <span>
+        Página {page} de {Math.max(totalPages, 1)}
+      </span>
+      <div>
+        {page > 1 ? (
+          <Link className="button ghost" href={href(page - 1)}>
+            Anterior
+          </Link>
+        ) : (
+          <span className="button ghost disabled" aria-disabled="true">
+            Anterior
+          </span>
+        )}
+        {page < totalPages ? (
+          <Link className="button ghost" href={href(page + 1)}>
+            Próxima
+          </Link>
+        ) : (
+          <span className="button ghost disabled" aria-disabled="true">
+            Próxima
+          </span>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+function EmptyConnectionsPanel() {
   return (
     <section className="surface-panel">
       <div className="inbound-empty-state">
         <Webhook aria-hidden="true" size={20} />
         <div>
-          <strong>Nenhuma conexão de webhook neste workspace</strong>
+          <strong>Nenhuma conexão WhatsApp BYO neste workspace</strong>
           <p className="muted">
             Crie a primeira conexão em <a href="/integrations">Integrações</a>{" "}
-            para começar a receber payloads do provedor WhatsApp.
+            para começar a receber webhooks de um provedor BYO.
           </p>
         </div>
       </div>
@@ -345,41 +370,28 @@ function EmptyPanel() {
   );
 }
 
-function ErrorPanel() {
+function ErrorPanel({ message }: { message: string }) {
   return (
     <section className="surface-panel" role="alert">
       <div className="inbound-empty-state">
         <AlertTriangle aria-hidden="true" size={20} />
         <div>
-          <strong>Não foi possível carregar as conexões de webhook</strong>
-          <p className="muted">
-            Verifique se a API está no ar e se a sessão continua válida, depois
-            recarregue esta página. Nenhum dado é exibido enquanto a leitura
-            falha.
-          </p>
+          <strong>Não foi possível carregar os dados de webhook</strong>
+          <p className="muted">{message}</p>
         </div>
       </div>
     </section>
   );
 }
 
-function ObservationCounter({
-  label,
-  tone = "",
-  value,
-}: {
-  label: string;
-  tone?: "" | "error" | "success" | "warn";
-  value: number;
-}) {
-  return (
-    <div className={`inbound-counter${tone ? ` ${tone}` : ""}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
+function statusChipClass(status: string): string {
+  if (status === "failed" || status === "error" || status === "invalid") {
+    return "status-chip bad";
+  }
 
-function optionalDateTime(value: string | null): string {
-  return value ? formatDateTime(value) : "—";
+  if (status === "requires_review" || status === "duplicate") {
+    return "status-chip warn";
+  }
+
+  return "status-chip";
 }

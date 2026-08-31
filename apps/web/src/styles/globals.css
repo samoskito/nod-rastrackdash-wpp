@@ -8046,6 +8046,22 @@ html[data-presentation-mode="active"] .inbound-webhook-secret {
   gap: 10px;
 }
 
+.backoffice-connection-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.backoffice-connection-tabs .button {
+  align-items: center;
+  gap: 8px;
+}
+
+.backoffice-connection-tabs .button.active {
+  border-color: var(--mint);
+  color: var(--ink);
+}
+
 .inbound-empty-state {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
