@@ -87,14 +87,9 @@ const workspaceList = [
     id: "workspace_a",
     name: "Empresa A",
     slug: "empresa-a",
-    role: "owner",
     operationalStatus: "active",
-    permissions: {
-      canInviteMembers: true,
-      canManageBilling: true,
-      canManageIntegrations: true,
-      canViewReports: true,
-    },
+    createdAt: "2026-08-31T10:00:00.000Z",
+    responsible: null,
   },
 ];
 
@@ -109,7 +104,7 @@ describe("/backoffice/inbound-webhooks", () => {
           pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
         }),
       "/workspaces/current": async () => jsonResponse(currentWorkspace),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -129,7 +124,7 @@ describe("/backoffice/inbound-webhooks", () => {
           pagination: { page: 1, pageSize: 25, total: 30, totalPages: 2 },
         }),
       "/workspaces/current": async () => jsonResponse(currentWorkspace),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage({
@@ -156,7 +151,7 @@ describe("/backoffice/inbound-webhooks", () => {
           pagination: { page: 1, pageSize: 25, total: 0, totalPages: 0 },
         }),
       "/workspaces/current": async () => jsonResponse(currentWorkspace),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -169,7 +164,7 @@ describe("/backoffice/inbound-webhooks", () => {
       "/backoffice/whatsapp-webhooks/connections": async () =>
         jsonResponse({ message: "boom" }, 503),
       "/workspaces/current": async () => jsonResponse(currentWorkspace),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -185,7 +180,7 @@ describe("/backoffice/inbound-webhooks", () => {
       "/backoffice/whatsapp-webhooks/connections/conn_1/history": async () =>
         jsonResponse({ message: "boom" }, 503),
       "/workspaces/current": async () => jsonResponse(currentWorkspace),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -200,8 +195,9 @@ describe("/backoffice/inbound-webhooks", () => {
     // getConnections/getHistory. If it did, mockApi would throw "unexpected
     // fetch" and fail this test.
     mockApi({
-      "/workspaces/current": async () => jsonResponse({ message: "not found" }, 404),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/workspaces/current": async () =>
+        jsonResponse({ message: "not found" }, 404),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -214,6 +210,33 @@ describe("/backoffice/inbound-webhooks", () => {
     expect(html).toContain("Selecione um workspace");
   });
 
+  it("keeps the no-workspace state when the backoffice catalogue is empty", async () => {
+    mockApi({
+      "/workspaces/current": async () =>
+        jsonResponse({ message: "not found" }, 404),
+      "/backoffice/workspaces": async () => jsonResponse([]),
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("Nenhum workspace está disponível");
+    expect(html).not.toContain("Workspace disponível");
+  });
+
+  it("fails closed to the no-workspace state when the backoffice catalogue cannot load", async () => {
+    mockApi({
+      "/workspaces/current": async () =>
+        jsonResponse({ message: "not found" }, 404),
+      "/backoffice/workspaces": async () =>
+        jsonResponse({ message: "unavailable" }, 503),
+    });
+
+    const html = await renderPage();
+
+    expect(html).toContain("Nenhum workspace está disponível");
+    expect(html).not.toContain("API indisponível");
+  });
+
   it("renders the workspace selector with a single workspace and loads the connections for it", async () => {
     mockApi({
       "/backoffice/whatsapp-webhooks/connections": async () =>
@@ -224,7 +247,7 @@ describe("/backoffice/inbound-webhooks", () => {
           pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
         }),
       "/workspaces/current": async () => jsonResponse(currentWorkspace),
-      "/workspaces": async () => jsonResponse(workspaceList),
+      "/backoffice/workspaces": async () => jsonResponse(workspaceList),
     });
 
     const html = await renderPage();
@@ -260,33 +283,23 @@ describe("/backoffice/inbound-webhooks", () => {
           accessMode: "member",
           platformRole: "admin",
         }),
-      "/workspaces": async () =>
+      "/backoffice/workspaces": async () =>
         jsonResponse([
           {
             id: "workspace_a",
             name: "Empresa A",
             slug: "empresa-a",
-            role: "owner",
             operationalStatus: "active",
-            permissions: {
-              canInviteMembers: true,
-              canManageBilling: true,
-              canManageIntegrations: true,
-              canViewReports: true,
-            },
+            createdAt: "2026-08-31T10:00:00.000Z",
+            responsible: null,
           },
           {
             id: "workspace_b",
             name: "Empresa B",
             slug: "empresa-b",
-            role: "admin",
             operationalStatus: "active",
-            permissions: {
-              canInviteMembers: true,
-              canManageBilling: false,
-              canManageIntegrations: true,
-              canViewReports: true,
-            },
+            createdAt: "2026-08-31T11:00:00.000Z",
+            responsible: null,
           },
         ]),
     });

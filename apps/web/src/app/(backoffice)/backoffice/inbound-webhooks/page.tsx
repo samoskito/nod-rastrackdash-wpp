@@ -1,18 +1,15 @@
 import type {
   BackofficeWhatsappWebhookConnectionDto,
   BackofficeWhatsappWebhookHistoryDto,
+  BackofficeWorkspaceListDto,
   CurrentWorkspaceDto,
-  WorkspaceListDto,
 } from "@wpptrack/shared";
 import { AlertTriangle, CheckCircle2, HelpCircle, Webhook } from "lucide-react";
 import Link from "next/link";
 import { BackofficeNavigation } from "../../../../components/backoffice-navigation";
 import { BackofficeWorkspaceSelector } from "../../../../components/backoffice-workspace-selector";
 import { WebhookHistoryDetail } from "../../../../components/webhook-history-detail";
-import {
-  getAvailableWorkspaces,
-  getCurrentWorkspace,
-} from "../../../../lib/current-workspace";
+import { getCurrentWorkspace } from "../../../../lib/current-workspace";
 import { formatDateTime } from "../../../../lib/date-time";
 import { isApiRequestError, serverApiFetch } from "../../../../lib/server-api";
 
@@ -94,9 +91,11 @@ async function getConnections(): Promise<ConnectionsResult> {
   }
 }
 
-async function getWorkspaces(): Promise<WorkspaceListDto> {
+async function getWorkspaces(): Promise<BackofficeWorkspaceListDto> {
   try {
-    return await getAvailableWorkspaces();
+    return await serverApiFetch<BackofficeWorkspaceListDto>(
+      "/backoffice/workspaces",
+    );
   } catch {
     return [];
   }
@@ -244,7 +243,10 @@ function ConnectionSelector({
         </span>
       </div>
 
-      <nav className="backoffice-connection-tabs" aria-label="Conexões WhatsApp">
+      <nav
+        className="backoffice-connection-tabs"
+        aria-label="Conexões WhatsApp"
+      >
         {connections.map((connection) => {
           const isActive = connection.id === selectedConnectionId;
 
@@ -266,7 +268,9 @@ function ConnectionSelector({
                 {providerLabels[connection.provider] ?? connection.provider}
               </span>
               {!connection.webhookConfigured ? (
-                <span className="status-chip warn">Webhook não configurado</span>
+                <span className="status-chip warn">
+                  Webhook não configurado
+                </span>
               ) : null}
             </Link>
           );
@@ -347,12 +351,20 @@ function HistoryPanel({
                 <td>
                   {item.leadId ? (
                     <span className="status-chip">
-                      <CheckCircle2 aria-hidden="true" size={14} strokeWidth={2} />
+                      <CheckCircle2
+                        aria-hidden="true"
+                        size={14}
+                        strokeWidth={2}
+                      />
                       Sim
                     </span>
                   ) : (
                     <span className="status-chip neutral">
-                      <HelpCircle aria-hidden="true" size={14} strokeWidth={2} />
+                      <HelpCircle
+                        aria-hidden="true"
+                        size={14}
+                        strokeWidth={2}
+                      />
                       Não
                     </span>
                   )}
@@ -395,7 +407,10 @@ function PaginationNav({
   }
 
   return (
-    <nav className="report-pagination" aria-label="Paginação do histórico de webhooks">
+    <nav
+      className="report-pagination"
+      aria-label="Paginação do histórico de webhooks"
+    >
       <span>
         Página {page} de {Math.max(totalPages, 1)}
       </span>

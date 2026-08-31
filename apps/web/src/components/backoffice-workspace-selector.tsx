@@ -1,6 +1,6 @@
 "use client";
 
-import type { WorkspaceListEntryDto } from "@wpptrack/shared";
+import type { BackofficeWorkspaceListDto } from "@wpptrack/shared";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition, type ChangeEvent } from "react";
 import { switchActiveWorkspace } from "../app/actions/workspaces";
@@ -8,16 +8,15 @@ import { switchActiveWorkspace } from "../app/actions/workspaces";
 /**
  * Back office workspace picker. Reuses the same switch/revalidate mechanism
  * as the app shell's workspace selector (`switchActiveWorkspace` +
- * `router.refresh()`) instead of a parallel workspace-selection path — the
- * API still revalidates the requested workspace against the caller's real
- * memberships, so this component only ever offers IDs the server already
- * trusts.
+ * `router.refresh()`) instead of a parallel workspace-selection path. The
+ * API revalidates platform-admin authorization and the requested workspace
+ * before activating the support context.
  */
 export function BackofficeWorkspaceSelector({
   workspaces,
   selectedWorkspaceId,
 }: {
-  workspaces: WorkspaceListEntryDto[];
+  workspaces: BackofficeWorkspaceListDto;
   selectedWorkspaceId: string | null;
 }) {
   const router = useRouter();
@@ -38,7 +37,7 @@ export function BackofficeWorkspaceSelector({
 
     setSwitchError(false);
     startTransition(async () => {
-      const result = await switchActiveWorkspace(workspaceId);
+      const result = await switchActiveWorkspace(workspaceId, "backoffice");
 
       if (!result.ok) {
         setSwitchError(true);
