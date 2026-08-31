@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import BackofficeClientsPage from "../src/app/(backoffice)/backoffice/clients/page";
 import BackofficeHomePage from "../src/app/(backoffice)/backoffice/page";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: () => undefined,
+  }),
+}));
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

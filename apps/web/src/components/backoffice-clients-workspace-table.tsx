@@ -1,5 +1,6 @@
 import type { BackofficeWorkspaceListDto } from "@wpptrack/shared";
 import { formatDateTime } from "../lib/date-time";
+import { BackofficeClientsEnterWorkspaceButton } from "./backoffice-clients-enter-workspace-button";
 import { BackofficeClientsResponsibleCell } from "./backoffice-clients-responsible-cell";
 
 const operationalStatusLabels: Record<string, string> = {
@@ -22,6 +23,7 @@ export function BackofficeClientsWorkspaceTable({
             <th>Status</th>
             <th>Responsável</th>
             <th>Criado em</th>
+            <th>Acesso</th>
           </tr>
         </thead>
         <tbody>
@@ -46,6 +48,12 @@ export function BackofficeClientsWorkspaceTable({
                 />
               </td>
               <td>{formatDateTime(workspace.createdAt)}</td>
+              <td>
+                <BackofficeClientsEnterWorkspaceButton
+                  workspaceId={workspace.id}
+                  workspaceName={workspace.name}
+                />
+              </td>
             </tr>
           ))}
         </tbody>

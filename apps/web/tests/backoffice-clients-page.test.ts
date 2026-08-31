@@ -3,6 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BackofficeClientsPage from "../src/app/(backoffice)/backoffice/clients/page";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: () => undefined,
+  }),
+}));
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -63,6 +69,19 @@ describe("backoffice clients page", () => {
     expect(html).toContain("pendente@cliente.com");
     expect(html).toContain("Ativação pendente");
     expect(html).toContain("2 workspaces");
+  });
+
+  it("offers an entry action into each listed workspace", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse([activeWorkspace, pendingWorkspace]),
+    );
+
+    const html = await renderPage(await BackofficeClientsPage());
+
+    expect(html).toContain('aria-label="Entrar no workspace Loja Ativa"');
+    expect(html).toContain(
+      'aria-label="Entrar no workspace Loja Pendente"',
+    );
   });
 
   it("uses natural pt-BR singular for a single workspace", async () => {
