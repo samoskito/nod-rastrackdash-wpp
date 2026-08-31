@@ -14,6 +14,11 @@ import type {
   WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
+import {
+  fetchProviderUrl,
+  normalizeProviderBaseUrl,
+  providerRequestFailureMessage,
+} from "./whatsapp-provider-http";
 
 /** Prod PalmUP broker — see .claude-task-f5-3b-nod-api-client.md. */
 const DEFAULT_BROKER_URL = "https://wpptrack-api.rastrack.app";
@@ -69,7 +74,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
           provider: this.id,
           status: "error",
           checkedAt,
-          message: error instanceof Error ? error.message : "Erro ao consultar NOD API",
+          message: "NOD API managed instance request failed",
         };
       }
     }
@@ -86,7 +91,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
     }
 
     try {
-      const response = await this.fetchImpl(
+      const response = await this.fetchBroker(
         `${this.brokerUrl()}/nod-api/health`,
         {
           method: "GET",
@@ -110,10 +115,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
           provider: this.id,
           status: this.errorStatus(code),
           checkedAt,
-          message:
-            this.asString(payload.message) ??
-            code ??
-            `NOD API broker HTTP ${response.status}`,
+          message: this.healthErrorMessage(code, response.status),
         };
       }
 
@@ -141,10 +143,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
         provider: this.id,
         status: "error",
         checkedAt,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Erro ao chamar NOD API broker",
+        message: providerRequestFailureMessage(error),
       };
     }
   }
@@ -153,7 +152,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
     name?: string,
   ): Promise<NodApiManagedInstanceDto> {
     const licenseKey = this.requireLicenseKey();
-    const response = await this.fetchImpl(
+    const response = await this.fetchBroker(
       `${this.brokerUrl()}/nod-api/instances`,
       {
         method: "POST",
@@ -182,7 +181,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
     instanceToken: string,
   ): Promise<NodApiManagedInstanceStatusDto> {
     const licenseKey = this.requireLicenseKey();
-    const response = await this.fetchImpl(
+    const response = await this.fetchBroker(
       `${this.brokerUrl()}/nod-api/instances/status`,
       {
         method: "POST",
@@ -202,10 +201,7 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
     return {
       status: this.asString(payload.status) ?? "unknown",
       // Broker contract (private F5.3): qrCode + connectedPhone
-      qr:
-        this.asString(payload.qrCode) ??
-        this.asString(payload.qr) ??
-        null,
+      qr: this.asString(payload.qrCode) ?? this.asString(payload.qr) ?? null,
       phone:
         this.asString(payload.connectedPhone) ??
         this.asString(payload.phone) ??
@@ -214,10 +210,26 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
   }
 
   private brokerUrl(): string {
-    return (this.env.NOD_API_BROKER_URL?.trim() || DEFAULT_BROKER_URL).replace(
-      /\/$/,
-      "",
+    const brokerUrl = normalizeProviderBaseUrl(
+      this.env.NOD_API_BROKER_URL?.trim() || DEFAULT_BROKER_URL,
     );
+
+    if (!brokerUrl) {
+      throw new Error("nod_api_invalid_broker_url");
+    }
+
+    return brokerUrl;
+  }
+
+  private async fetchBroker(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetchProviderUrl(this.fetchImpl, url, init);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
+      throw new Error("nod_api_broker_request_failed");
+    }
   }
 
   private requireLicenseKey(): string {
@@ -256,34 +268,52 @@ export class NodApiWhatsappAdapter implements WhatsappProviderAdapter {
   }
 
   private managedInstanceStatus(status: string): IntegrationStatus {
-    if (/connected|working|active/i.test(status)) {
-      return "connected";
+    switch (status.trim().toLowerCase()) {
+      case "connected":
+      case "working":
+      case "active":
+        return "connected";
+      case "qr":
+      case "qr_required":
+      case "needs_reconnect":
+      case "reconnect":
+      case "pending":
+        return "needs_reconnect";
+      case "disconnected":
+      case "stopped":
+        return "disconnected";
+      default:
+        return "error";
     }
-    if (/qr|reconnect|pending/i.test(status)) {
-      return "needs_reconnect";
-    }
-    if (/disconnected|stopped/i.test(status)) {
-      return "disconnected";
-    }
-    return "error";
   }
 
   private brokerErrorMessage(
     payload: Record<string, unknown>,
     status: number,
   ): string {
-    return (
-      this.asString(payload.message) ??
-      this.asString(payload.code) ??
-      `NOD API broker HTTP ${status}`
-    );
+    void payload;
+    return `nod_api_broker_http_${status}`;
+  }
+
+  private healthErrorMessage(code: string | null, status: number): string {
+    switch (code) {
+      case "nod_api_invalid_license":
+      case "nod_api_license_blocked":
+      case "nod_api_expired":
+        return "NOD API license needs attention";
+      default:
+        return `NOD API broker HTTP ${status}`;
+    }
   }
 
   /** Never trust admin* fields from the broker response — scrub before use. */
-  private async parseJson(response: Response): Promise<Record<string, unknown>> {
-    const payload = (await response
-      .json()
-      .catch(() => ({}))) as Record<string, unknown>;
+  private async parseJson(
+    response: Response,
+  ): Promise<Record<string, unknown>> {
+    const payload = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
 
     return this.scrubAdminFields(payload);
   }

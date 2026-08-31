@@ -10,6 +10,11 @@ import type {
 } from "../integration.types";
 import type { WhatsappLabelDto } from "@wpptrack/shared";
 import { INTEGRATION_ENV } from "../integration.types";
+import {
+  fetchProviderUrl,
+  normalizeProviderBaseUrl,
+  providerRequestFailureMessage,
+} from "../whatsapp-providers/whatsapp-provider-http";
 
 export type UazapiConnectionResult = {
   providerInstanceId: string | null;
@@ -71,12 +76,23 @@ export class UazapiAdapter implements IntegrationAdapter {
       this.env.UAZAPI_BASE_URL && this.env.UAZAPI_TOKEN,
     );
 
+    const hasValidBaseUrl =
+      !this.env.UAZAPI_BASE_URL ||
+      Boolean(normalizeProviderBaseUrl(this.env.UAZAPI_BASE_URL));
+
     return {
       provider: this.provider,
-      status: hasCredentials ? "connected" : "disconnected",
+      status:
+        hasCredentials && hasValidBaseUrl
+          ? "connected"
+          : hasCredentials
+            ? "error"
+            : "disconnected",
       checkedAt: new Date().toISOString(),
       message: hasCredentials
-        ? undefined
+        ? hasValidBaseUrl
+          ? undefined
+          : "Invalid UAZAPI_BASE_URL"
         : "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
     };
   }
@@ -151,17 +167,26 @@ export class UazapiAdapter implements IntegrationAdapter {
   ): Promise<UazapiDeleteInstanceResult> {
     const token = this.getInstanceToken(instanceToken);
 
-    if (!this.env.UAZAPI_BASE_URL || !token) {
+    const configuredBaseUrl = this.env.UAZAPI_BASE_URL?.trim();
+    const baseUrl = configuredBaseUrl
+      ? normalizeProviderBaseUrl(configuredBaseUrl)
+      : null;
+
+    if (!baseUrl || !token) {
       return {
-        status: "not_configured",
+        status: configuredBaseUrl && !baseUrl ? "error" : "not_configured",
         alreadyMissing: false,
-        message: "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
+        message:
+          configuredBaseUrl && !baseUrl
+            ? "Invalid UAZAPI_BASE_URL"
+            : "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
       };
     }
 
     try {
-      const response = await this.fetchImpl(
-        `${this.env.UAZAPI_BASE_URL.replace(/\/$/, "")}/instance`,
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        `${baseUrl}/instance`,
         {
           method: "DELETE",
           headers: {
@@ -174,16 +199,13 @@ export class UazapiAdapter implements IntegrationAdapter {
         string,
         unknown
       >;
-      const message =
-        this.asString(payload.message) ??
-        this.asString(payload.response) ??
-        this.asString(payload.error);
+      void payload;
 
       if (response.status === 404) {
         return {
           status: "deleted",
           alreadyMissing: true,
-          message: message ?? "Instancia ja removida na Uazapi",
+          message: "Instancia ja removida na Uazapi",
         };
       }
 
@@ -191,21 +213,20 @@ export class UazapiAdapter implements IntegrationAdapter {
         return {
           status: "error",
           alreadyMissing: false,
-          message: message ?? `Uazapi HTTP ${response.status}`,
+          message: `Uazapi HTTP ${response.status}`,
         };
       }
 
       return {
         status: "deleted",
         alreadyMissing: false,
-        message,
+        message: null,
       };
     } catch (error) {
       return {
         status: "error",
         alreadyMissing: false,
-        message:
-          error instanceof Error ? error.message : "Erro ao chamar Uazapi",
+        message: providerRequestFailureMessage(error),
       };
     }
   }
@@ -214,20 +235,25 @@ export class UazapiAdapter implements IntegrationAdapter {
     instanceToken: string | null;
     webhookUrl: string | null;
   }): Promise<UazapiWebhookConfigurationResult> {
-    if (
-      !this.env.UAZAPI_BASE_URL ||
-      !input.instanceToken ||
-      !input.webhookUrl
-    ) {
+    const configuredBaseUrl = this.env.UAZAPI_BASE_URL?.trim();
+    const baseUrl = configuredBaseUrl
+      ? normalizeProviderBaseUrl(configuredBaseUrl)
+      : null;
+
+    if (!baseUrl || !input.instanceToken || !input.webhookUrl) {
       return {
-        status: "not_configured",
-        message: "Missing UAZAPI_BASE_URL, instance token or webhook URL",
+        status: configuredBaseUrl && !baseUrl ? "error" : "not_configured",
+        message:
+          configuredBaseUrl && !baseUrl
+            ? "Invalid UAZAPI_BASE_URL"
+            : "Missing UAZAPI_BASE_URL, instance token or webhook URL",
       };
     }
 
     try {
-      const response = await this.fetchImpl(
-        `${this.env.UAZAPI_BASE_URL.replace(/\/$/, "")}/webhook`,
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        `${baseUrl}/webhook`,
         {
           method: "POST",
           headers: {
@@ -250,30 +276,21 @@ export class UazapiAdapter implements IntegrationAdapter {
           }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as Record<
-        string,
-        unknown
-      >;
-
       if (!response.ok) {
         return {
           status: "error",
-          message:
-            this.asString(payload.message) ??
-            this.asString(payload.error) ??
-            `Uazapi HTTP ${response.status}`,
+          message: `Uazapi HTTP ${response.status}`,
         };
       }
 
       return {
         status: "configured",
-        message: this.asString(payload.message),
+        message: null,
       };
     } catch (error) {
       return {
         status: "error",
-        message:
-          error instanceof Error ? error.message : "Erro ao chamar Uazapi",
+        message: providerRequestFailureMessage(error),
       };
     }
   }
@@ -284,17 +301,26 @@ export class UazapiAdapter implements IntegrationAdapter {
   ): Promise<UazapiLabelListResult> {
     const token = this.getInstanceToken(instanceToken);
 
-    if (!this.env.UAZAPI_BASE_URL || !token) {
+    const configuredBaseUrl = this.env.UAZAPI_BASE_URL?.trim();
+    const baseUrl = configuredBaseUrl
+      ? normalizeProviderBaseUrl(configuredBaseUrl)
+      : null;
+
+    if (!baseUrl || !token) {
       return {
-        status: "not_configured",
-        message: "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
+        status: configuredBaseUrl && !baseUrl ? "error" : "not_configured",
+        message:
+          configuredBaseUrl && !baseUrl
+            ? "Invalid UAZAPI_BASE_URL"
+            : "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
         labels: [],
       };
     }
 
     try {
-      const response = await this.fetchImpl(
-        `${this.env.UAZAPI_BASE_URL.replace(/\/$/, "")}/labels`,
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        `${baseUrl}/labels`,
         {
           method: "GET",
           headers: {
@@ -306,14 +332,9 @@ export class UazapiAdapter implements IntegrationAdapter {
       const payload = (await response.json().catch(() => [])) as unknown;
 
       if (!response.ok) {
-        const errorPayload = this.asRecord(payload);
-
         return {
           status: "error",
-          message:
-            this.asString(errorPayload?.message) ??
-            this.asString(errorPayload?.error) ??
-            `Uazapi HTTP ${response.status}`,
+          message: `Uazapi HTTP ${response.status}`,
           labels: [],
         };
       }
@@ -326,8 +347,7 @@ export class UazapiAdapter implements IntegrationAdapter {
     } catch (error) {
       return {
         status: "error",
-        message:
-          error instanceof Error ? error.message : "Erro ao chamar Uazapi",
+        message: providerRequestFailureMessage(error),
         labels: [],
       };
     }
@@ -344,21 +364,31 @@ export class UazapiAdapter implements IntegrationAdapter {
     },
   ): Promise<UazapiConnectionResult> {
     const token = this.getInstanceToken(instanceToken);
-    const baseUrl = options?.baseUrl ?? this.env.UAZAPI_BASE_URL;
+    const configuredBaseUrl = (
+      options?.baseUrl ?? this.env.UAZAPI_BASE_URL
+    )?.trim();
+    const baseUrl = configuredBaseUrl
+      ? normalizeProviderBaseUrl(configuredBaseUrl)
+      : null;
 
     if (!baseUrl || !token) {
       return {
         providerInstanceId: instanceRef,
-        connectionStatus: "not_configured",
+        connectionStatus:
+          configuredBaseUrl && !baseUrl ? "error" : "not_configured",
         qrCode: null,
         connectedPhone: null,
-        message: "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
+        message:
+          configuredBaseUrl && !baseUrl
+            ? "Invalid UAZAPI_BASE_URL"
+            : "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
       };
     }
 
     try {
-      const response = await this.fetchImpl(
-        `${baseUrl.replace(/\/$/, "")}${path}`,
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        `${baseUrl}${path}`,
         {
           method,
           headers: {
@@ -380,8 +410,7 @@ export class UazapiAdapter implements IntegrationAdapter {
           connectedPhone: null,
           message: options?.redactFailureMessage
             ? `Uazapi status API HTTP ${response.status}`
-            : (this.asString(payload.message) ??
-              `Uazapi HTTP ${response.status}`),
+            : `Uazapi HTTP ${response.status}`,
         };
       }
 
@@ -394,9 +423,7 @@ export class UazapiAdapter implements IntegrationAdapter {
         connectedPhone: null,
         message: options?.redactFailureMessage
           ? "Uazapi status API request failed"
-          : error instanceof Error
-            ? error.message
-            : "Erro ao chamar Uazapi",
+          : providerRequestFailureMessage(error),
       };
     }
   }
@@ -441,7 +468,9 @@ export class UazapiAdapter implements IntegrationAdapter {
         payload.phone,
         payload.phoneNumber,
       ),
-      message: this.asString(payload.message),
+      // Successful status payloads can still contain provider diagnostics;
+      // callers receive the structured status/QR/phone fields instead.
+      message: null,
     };
   }
 

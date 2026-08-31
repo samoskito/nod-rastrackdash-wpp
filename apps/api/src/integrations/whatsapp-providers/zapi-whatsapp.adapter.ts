@@ -11,6 +11,11 @@ import type {
   WhatsappProviderConfig,
   WhatsappProviderHealthDto,
 } from "./whatsapp-provider.types";
+import {
+  fetchProviderUrl,
+  normalizeProviderBaseUrl,
+  providerRequestFailureMessage,
+} from "./whatsapp-provider-http";
 
 /**
  * Real "zapi" WhatsApp provider adapter (F5.5): talks directly to a
@@ -50,11 +55,13 @@ export class ZapiWhatsappAdapter implements WhatsappProviderAdapter {
   ): Promise<WhatsappProviderHealthDto> {
     const checkedAt = new Date().toISOString();
     const saved = config?.provider === this.id ? config.config : null;
-    const baseUrl = saved?.baseUrl.trim() ?? this.env.ZAPI_BASE_URL?.trim();
-    const instanceId = saved?.instanceId.trim() ?? this.env.ZAPI_INSTANCE_ID?.trim();
+    const configuredBaseUrl =
+      saved?.baseUrl.trim() ?? this.env.ZAPI_BASE_URL?.trim();
+    const instanceId =
+      saved?.instanceId.trim() ?? this.env.ZAPI_INSTANCE_ID?.trim();
     const token = saved?.token.trim() ?? this.env.ZAPI_TOKEN?.trim();
 
-    if (!baseUrl || !instanceId || !token) {
+    if (!configuredBaseUrl || !instanceId || !token) {
       return {
         provider: this.id,
         status: "disconnected",
@@ -63,8 +70,19 @@ export class ZapiWhatsappAdapter implements WhatsappProviderAdapter {
       };
     }
 
+    const baseUrl = normalizeProviderBaseUrl(configuredBaseUrl);
+    if (!baseUrl) {
+      return {
+        provider: this.id,
+        status: "error",
+        checkedAt,
+        message: "Invalid Z-API base URL",
+      };
+    }
+
     try {
-      const response = await this.fetchImpl(
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
         `${baseUrl.replace(/\/$/, "")}/instances/${encodeURIComponent(
           instanceId,
         )}/token/${encodeURIComponent(token)}/status`,
@@ -101,10 +119,7 @@ export class ZapiWhatsappAdapter implements WhatsappProviderAdapter {
         provider: this.id,
         status: "error",
         checkedAt,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Erro ao chamar Z-API instance status API",
+        message: providerRequestFailureMessage(error),
       };
     }
   }
@@ -132,6 +147,8 @@ export class ZapiWhatsappAdapter implements WhatsappProviderAdapter {
       return undefined;
     }
 
-    return statusHint ? `Z-API instance status: ${statusHint}` : undefined;
+    return statusHint && /qr/i.test(statusHint)
+      ? "Z-API instance requires QR reconnection"
+      : "Z-API instance disconnected";
   }
 }

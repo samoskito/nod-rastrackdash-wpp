@@ -39,10 +39,15 @@ describe("NodApiWhatsappAdapter", () => {
     it("sends license headers to the configured broker and reports connected when nodApiEnabled + upstreamConfigured", async () => {
       let capturedUrl: string | undefined;
       let capturedHeaders: Record<string, string> | undefined;
+      let capturedInit: RequestInit | undefined;
       const fetchImpl = (async (url: string, init?: RequestInit) => {
         capturedUrl = url;
         capturedHeaders = init?.headers as Record<string, string>;
-        return jsonResponse(200, { nodApiEnabled: true, upstreamConfigured: true });
+        capturedInit = init;
+        return jsonResponse(200, {
+          nodApiEnabled: true,
+          upstreamConfigured: true,
+        });
       }) as typeof fetch;
 
       const adapter = new NodApiWhatsappAdapter(
@@ -63,6 +68,8 @@ describe("NodApiWhatsappAdapter", () => {
       expect(capturedHeaders?.["x-license-account-identity"]).toBe(
         "owner@example.com",
       );
+      expect(capturedInit?.signal).toBeInstanceOf(AbortSignal);
+      expect(capturedInit?.redirect).toBe("error");
       expect(health.status).toBe("connected");
       expect(health.message).toBeUndefined();
     });
@@ -71,7 +78,10 @@ describe("NodApiWhatsappAdapter", () => {
       let capturedUrl: string | undefined;
       const fetchImpl = (async (url: string) => {
         capturedUrl = url;
-        return jsonResponse(200, { nodApiEnabled: true, upstreamConfigured: true });
+        return jsonResponse(200, {
+          nodApiEnabled: true,
+          upstreamConfigured: true,
+        });
       }) as typeof fetch;
       const adapter = new NodApiWhatsappAdapter(
         fakeLicenseClient(),
@@ -81,12 +91,17 @@ describe("NodApiWhatsappAdapter", () => {
 
       await adapter.getHealth();
 
-      expect(capturedUrl).toBe("https://wpptrack-api.rastrack.app/nod-api/health");
+      expect(capturedUrl).toBe(
+        "https://wpptrack-api.rastrack.app/nod-api/health",
+      );
     });
 
     it("reports needs_reconnect when nodApiEnabled but upstream is not configured", async () => {
       const fetchImpl = (async () =>
-        jsonResponse(200, { nodApiEnabled: true, upstreamConfigured: false })) as typeof fetch;
+        jsonResponse(200, {
+          nodApiEnabled: true,
+          upstreamConfigured: false,
+        })) as typeof fetch;
       const adapter = new NodApiWhatsappAdapter(
         fakeLicenseClient(),
         { LICENSE_KEY: "lic-key" },
@@ -133,7 +148,7 @@ describe("NodApiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(health.status).toBe("needs_reconnect");
-      expect(health.message).toBe("License is invalid");
+      expect(health.message).toBe("NOD API license needs attention");
     });
 
     it("never throws uncaught — reports status 'error' when fetch rejects", async () => {
@@ -149,7 +164,7 @@ describe("NodApiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(health.status).toBe("error");
-      expect(health.message).toBe("network down");
+      expect(health.message).toBe("Provider request failed");
     });
 
     it("scrubs admin* fields from the broker payload before returning", async () => {
@@ -168,6 +183,46 @@ describe("NodApiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(JSON.stringify(health)).not.toContain("should-not-leak");
+    });
+
+    it("does not reflect a broker error payload that contains credentials", async () => {
+      const fetchImpl = (async () =>
+        jsonResponse(500, {
+          message: "failed https://broker.example.com/?key=lic-key",
+          token: "lic-key",
+        })) as typeof fetch;
+      const adapter = new NodApiWhatsappAdapter(
+        fakeLicenseClient(),
+        { LICENSE_KEY: "lic-key" },
+        fetchImpl,
+      );
+
+      const health = await adapter.getHealth();
+
+      expect(health).toMatchObject({
+        status: "error",
+        message: "NOD API broker HTTP 500",
+      });
+      expect(JSON.stringify(health)).not.toContain("lic-key");
+      expect(JSON.stringify(health)).not.toContain("broker.example.com");
+    });
+
+    it("fails closed when a managed status is malformed or ambiguous", async () => {
+      const fetchImpl = (async () =>
+        jsonResponse(200, { status: "not_connected" })) as typeof fetch;
+      const adapter = new NodApiWhatsappAdapter(
+        fakeLicenseClient(),
+        { LICENSE_KEY: "lic-key" },
+        fetchImpl,
+      );
+
+      const health = await adapter.getHealth({
+        provider: "nod_api",
+        config: { enabled: true, instanceId: "inst-1", instanceToken: "tok-1" },
+      });
+
+      expect(health.status).toBe("error");
+      expect(health.message).toBeUndefined();
     });
   });
 
@@ -210,7 +265,7 @@ describe("NodApiWhatsappAdapter", () => {
       );
 
       await expect(adapter.createManagedInstance?.()).rejects.toThrow(
-        /nod_api_disabled|NOD API not enabled/,
+        "nod_api_broker_http_403",
       );
     });
 
@@ -233,7 +288,10 @@ describe("NodApiWhatsappAdapter", () => {
           instanceId: "inst-1",
           instanceToken: "tok-1",
         });
-        return jsonResponse(200, { status: "connected", phone: "+551199999999" });
+        return jsonResponse(200, {
+          status: "connected",
+          phone: "+551199999999",
+        });
       }) as typeof fetch;
       const adapter = new NodApiWhatsappAdapter(
         fakeLicenseClient(),

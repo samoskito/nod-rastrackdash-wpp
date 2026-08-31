@@ -73,8 +73,10 @@ describe("ZapiWhatsappAdapter", () => {
 
     it("GETs the instance status endpoint built from base URL, instance id and token", async () => {
       let capturedUrl: string | undefined;
-      const fetchImpl = (async (url: string) => {
+      let capturedInit: RequestInit | undefined;
+      const fetchImpl = (async (url: string, init?: RequestInit) => {
         capturedUrl = url;
+        capturedInit = init;
         return jsonResponse(200, { connected: true });
       }) as typeof fetch;
       const adapter = new ZapiWhatsappAdapter(
@@ -91,6 +93,38 @@ describe("ZapiWhatsappAdapter", () => {
       expect(capturedUrl).toBe(
         "https://api.z-api.io/instances/inst-1/token/token-1/status",
       );
+      expect(capturedInit?.signal).toBeInstanceOf(AbortSignal);
+      expect(capturedInit?.redirect).toBe("error");
+    });
+
+    it("prefers saved credentials over environment credentials", async () => {
+      let capturedUrl: string | undefined;
+      const fetchImpl = (async (url: string) => {
+        capturedUrl = url;
+        return jsonResponse(200, { connected: true });
+      }) as typeof fetch;
+      const adapter = new ZapiWhatsappAdapter(
+        {
+          ZAPI_BASE_URL: "https://environment.example.com",
+          ZAPI_INSTANCE_ID: "environment-instance",
+          ZAPI_TOKEN: "environment-token",
+        },
+        fetchImpl,
+      );
+
+      const health = await adapter.getHealth({
+        provider: "zapi",
+        config: {
+          baseUrl: "https://saved.example.com",
+          instanceId: "saved-instance",
+          token: "saved-token",
+        },
+      });
+
+      expect(capturedUrl).toBe(
+        "https://saved.example.com/instances/saved-instance/token/saved-token/status",
+      );
+      expect(health.status).toBe("connected");
     });
 
     it("maps connected:true to connected", async () => {
@@ -129,7 +163,7 @@ describe("ZapiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(health.status).toBe("needs_reconnect");
-      expect(health.message).toBe("Z-API instance status: qrCode");
+      expect(health.message).toBe("Z-API instance requires QR reconnection");
     });
 
     it("maps connected:false with a pendingQR state hint to needs_reconnect", async () => {
@@ -150,7 +184,7 @@ describe("ZapiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(health.status).toBe("needs_reconnect");
-      expect(health.message).toBe("Z-API instance status: pendingQR");
+      expect(health.message).toBe("Z-API instance requires QR reconnection");
     });
 
     it("maps plain connected:false (no qr hint) to disconnected", async () => {
@@ -171,7 +205,7 @@ describe("ZapiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(health.status).toBe("disconnected");
-      expect(health.message).toBe("Z-API instance status: disconnected");
+      expect(health.message).toBe("Z-API instance disconnected");
     });
 
     it("maps connected:false with no status/state fields to disconnected", async () => {
@@ -225,7 +259,7 @@ describe("ZapiWhatsappAdapter", () => {
       const health = await adapter.getHealth();
 
       expect(health.status).toBe("error");
-      expect(health.message).toBe("network down");
+      expect(health.message).toBe("Provider request failed");
     });
 
     it("does not leak the token into the health response", async () => {
@@ -244,5 +278,51 @@ describe("ZapiWhatsappAdapter", () => {
 
       expect(JSON.stringify(health)).not.toContain("super-secret-token");
     });
+
+    it("never treats malformed connected values as connected or reflects payload", async () => {
+      const fetchImpl = (async () =>
+        jsonResponse(200, {
+          connected: "true",
+          status: "token=super-secret-token",
+        })) as typeof fetch;
+      const adapter = new ZapiWhatsappAdapter(
+        {
+          ZAPI_BASE_URL: "https://api.z-api.io",
+          ZAPI_INSTANCE_ID: "inst-1",
+          ZAPI_TOKEN: "token-1",
+        },
+        fetchImpl,
+      );
+
+      const health = await adapter.getHealth();
+
+      expect(health.status).toBe("disconnected");
+      expect(health.message).toBe("Z-API instance disconnected");
+      expect(JSON.stringify(health)).not.toContain("super-secret-token");
+    });
+
+    it.each(["http://127.0.0.1:3000", "http://169.254.169.254"])(
+      "rejects unsafe base URL %s without a request",
+      async (baseUrl) => {
+        const fetchImpl = (async () => {
+          throw new Error("must not request unsafe URL");
+        }) as typeof fetch;
+        const adapter = new ZapiWhatsappAdapter(
+          {
+            ZAPI_BASE_URL: baseUrl,
+            ZAPI_INSTANCE_ID: "inst-1",
+            ZAPI_TOKEN: "token-1",
+          },
+          fetchImpl,
+        );
+
+        const health = await adapter.getHealth();
+
+        expect(health).toMatchObject({
+          status: "error",
+          message: "Invalid Z-API base URL",
+        });
+      },
+    );
   });
 });

@@ -25,6 +25,7 @@ import type {
   WhatsappProviderConfig,
   WhatsappProviderId,
 } from "./whatsapp-provider.types";
+import { normalizeProviderBaseUrl } from "./whatsapp-provider-http";
 
 type WorkspaceActor = {
   workspaceId: string;
@@ -305,43 +306,59 @@ export class WhatsappConnectionsService {
     provider: WhatsappProviderId,
     credentials: WhatsappConnectionCredentials,
   ): WhatsappProviderConfig {
-    switch (provider) {
-      case "uazapi_byo":
-        return {
-          provider,
-          config: credentials as {
-            baseUrl: string;
-            token: string;
-            instanceId?: string;
-          },
-        };
-      case "waha":
-        return {
-          provider,
-          config: credentials as {
-            baseUrl: string;
-            apiKey: string;
-            session?: string;
-          },
-        };
-      case "zapi":
-        return {
-          provider,
-          config: credentials as {
-            baseUrl: string;
-            instanceId: string;
-            token: string;
-          },
-        };
-      case "nod_api":
-        return {
-          provider,
-          config: {
-            enabled: true,
-            ...(credentials as { instanceId?: string; instanceToken?: string }),
-          },
-        };
+    const config = (() => {
+      switch (provider) {
+        case "uazapi_byo":
+          return {
+            provider,
+            config: credentials as {
+              baseUrl: string;
+              token: string;
+              instanceId?: string;
+            },
+          };
+        case "waha":
+          return {
+            provider,
+            config: credentials as {
+              baseUrl: string;
+              apiKey: string;
+              session?: string;
+            },
+          };
+        case "zapi":
+          return {
+            provider,
+            config: credentials as {
+              baseUrl: string;
+              instanceId: string;
+              token: string;
+            },
+          };
+        case "nod_api":
+          return {
+            provider,
+            config: {
+              enabled: true,
+              ...(credentials as {
+                instanceId?: string;
+                instanceToken?: string;
+              }),
+            },
+          };
+      }
+    })();
+
+    if (
+      (config.provider === "uazapi_byo" ||
+        config.provider === "waha" ||
+        config.provider === "zapi") &&
+      !normalizeProviderBaseUrl(config.config.baseUrl)
+    ) {
+      throw new BadRequestException("URL base do provider WhatsApp invalida");
     }
+
+    return config;
   }
 
   private encryptConfig(
