@@ -48,8 +48,10 @@ import {
 } from "./inbound-webhook-panel";
 import {
   createWhatsappConnectionAction,
+  loadWhatsappConnectionForEditAction,
   rotateWhatsappWebhookTokenAction,
   testWhatsappConnectionAction,
+  updateWhatsappConnectionAction,
 } from "./whatsapp-provider-actions";
 import { WhatsappProviderPanel } from "./whatsapp-provider-panel";
 import {
@@ -1487,6 +1489,8 @@ export default async function IntegrationsPage({
             createAction={createWhatsappConnectionAction}
             testAction={testWhatsappConnectionAction}
             rotateAction={rotateWhatsappWebhookTokenAction}
+            editAction={updateWhatsappConnectionAction}
+            loadEditAction={loadWhatsappConnectionForEditAction}
           />
 
           {inboundWebhookData &&

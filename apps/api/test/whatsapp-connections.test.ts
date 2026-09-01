@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { NotFoundException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module";
@@ -291,6 +291,182 @@ describe("WhatsappConnectionsService", () => {
         created.id,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("loads editable metadata without the provider secret", async () => {
+    const { service: connections } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      displayName: "WhatsApp Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret-never-returned",
+        session: "support",
+      },
+    });
+
+    const edit = await connections.getEditableConnection(owner, created.id);
+
+    expect(edit).toEqual({
+      id: created.id,
+      provider: "waha",
+      name: "Suporte",
+      displayName: "WhatsApp Suporte",
+      baseUrl: "https://waha.example.test",
+      instanceId: null,
+      session: "support",
+    });
+    expect(JSON.stringify(edit)).not.toContain("waha-secret-never-returned");
+  });
+
+  it("returns 404 for edit metadata of a connection from another workspace", async () => {
+    const { service: connections } = service(
+      fakePrisma([record({ workspaceId: "workspace-b" })]),
+    );
+    await expect(
+      connections.getEditableConnection(owner, "connection-1"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("keeps the current secret when the edit payload omits it", async () => {
+    const { service: connections, registry } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "original-secret",
+      },
+    });
+
+    await connections.editConnection(owner, created.id, {
+      provider: "waha",
+      name: "Suporte renomeado",
+      displayName: null,
+      credentials: {
+        baseUrl: "https://waha-novo.example.test",
+      },
+    });
+
+    let receivedConfig: unknown;
+    registry.register(
+      adapter("waha", async (config) => {
+        receivedConfig = config;
+        return {
+          provider: "waha",
+          status: "connected",
+          checkedAt: "2026-08-27T12:01:00.000Z",
+        };
+      }),
+    );
+    await connections.testConnection(owner, created.id);
+
+    expect(receivedConfig).toEqual({
+      provider: "waha",
+      config: {
+        baseUrl: "https://waha-novo.example.test",
+        apiKey: "original-secret",
+        session: undefined,
+      },
+    });
+  });
+
+  it("replaces the secret when the edit payload provides a new one", async () => {
+    const { service: connections, registry } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "original-secret",
+      },
+    });
+
+    await connections.editConnection(owner, created.id, {
+      provider: "waha",
+      name: "Suporte",
+      displayName: null,
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "rotated-secret",
+      },
+    });
+
+    let receivedConfig: unknown;
+    registry.register(
+      adapter("waha", async (config) => {
+        receivedConfig = config;
+        return {
+          provider: "waha",
+          status: "connected",
+          checkedAt: "2026-08-27T12:01:00.000Z",
+        };
+      }),
+    );
+    await connections.testConnection(owner, created.id);
+
+    expect(receivedConfig).toMatchObject({
+      config: { apiKey: "rotated-secret" },
+    });
+  });
+
+  it("rejects an edit that changes the provider", async () => {
+    const { service: connections } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: { baseUrl: "https://waha.example.test", apiKey: "secret" },
+    });
+
+    await expect(
+      connections.editConnection(owner, created.id, {
+        provider: "zapi",
+        name: "Suporte",
+        displayName: null,
+        credentials: {
+          baseUrl: "https://zapi.example.test",
+          instanceId: "instance-1",
+          token: "token",
+        },
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("returns 404 rather than editing a connection from another workspace", async () => {
+    const { service: connections } = service(
+      fakePrisma([record({ workspaceId: "workspace-b" })]),
+    );
+    await expect(
+      connections.editConnection(owner, "connection-1", {
+        provider: "waha",
+        name: "Novo nome",
+        displayName: null,
+        credentials: { baseUrl: "https://waha.example.test" },
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("does not leak the secret in the edit audit trail", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: { baseUrl: "https://waha.example.test", apiKey: "secret" },
+    });
+
+    await connections.editConnection(owner, created.id, {
+      provider: "waha",
+      name: "Suporte",
+      displayName: null,
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "rotated-secret",
+      },
+    });
+
+    expect(JSON.stringify(prisma.audits)).not.toContain("secret");
+    expect(JSON.stringify(prisma.audits)).not.toContain("rotated-secret");
   });
 });
 

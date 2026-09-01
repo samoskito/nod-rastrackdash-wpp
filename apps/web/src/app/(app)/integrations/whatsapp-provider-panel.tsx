@@ -1,10 +1,12 @@
 "use client";
 
 import type { WhatsappConnectionDto } from "@wpptrack/shared";
-import { Copy, RefreshCw, Stethoscope, Webhook } from "lucide-react";
+import { Copy, Pencil, RefreshCw, Stethoscope, Webhook } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type {
+  WhatsappConnectionEditData,
+  WhatsappConnectionEditResult,
   WhatsappProviderActionResult,
   WhatsappReceiverSecret,
 } from "./whatsapp-provider-actions";
@@ -13,7 +15,18 @@ type WhatsappProviderAction = (
   formData: FormData,
 ) => Promise<WhatsappProviderActionResult>;
 
+type WhatsappProviderLoadEditAction = (
+  connectionId: string,
+) => Promise<WhatsappConnectionEditResult>;
+
 type ProviderId = "uazapi_byo" | "nod_api" | "waha" | "zapi";
+
+const secretFieldLabel: Record<ProviderId, string> = {
+  uazapi_byo: "Token",
+  waha: "API key",
+  zapi: "Token",
+  nod_api: "Instance token",
+};
 
 const providerCards: Array<{
   id: ProviderId;
@@ -54,12 +67,16 @@ export function WhatsappProviderPanel({
   createAction,
   testAction,
   rotateAction,
+  editAction,
+  loadEditAction,
 }: {
   connections: WhatsappConnectionDto[];
   canManage: boolean;
   createAction: WhatsappProviderAction;
   testAction: WhatsappProviderAction;
   rotateAction: WhatsappProviderAction;
+  editAction: WhatsappProviderAction;
+  loadEditAction: WhatsappProviderLoadEditAction;
 }) {
   const router = useRouter();
   const [provider, setProvider] = useState<ProviderId>("uazapi_byo");
@@ -69,6 +86,10 @@ export function WhatsappProviderPanel({
   );
   const [receiver, setReceiver] = useState<WhatsappReceiverSecret | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editData, setEditData] = useState<WhatsappConnectionEditData | null>(
+    null,
+  );
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -119,6 +140,64 @@ export function WhatsappProviderPanel({
       setNotice({
         ok: false,
         message: "Nao foi possivel concluir a acao da conexao WhatsApp.",
+      });
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function openEdit(connectionId: string) {
+    if (pending) return;
+    if (editing === connectionId) {
+      closeEdit();
+      return;
+    }
+    setPending(`edit-load-${connectionId}`);
+    setNotice(null);
+    try {
+      const result = await loadEditAction(connectionId);
+      if (result.ok) {
+        setEditData(result.data);
+        setEditing(connectionId);
+      } else {
+        setNotice(result);
+      }
+    } catch {
+      setNotice({
+        ok: false,
+        message: "Nao foi possivel carregar os dados da conexao.",
+      });
+    } finally {
+      setPending(null);
+    }
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setEditData(null);
+  }
+
+  async function submitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending || !editing) return;
+    const form = event.currentTarget;
+    const connectionId = editing;
+    setPending(`edit-${connectionId}`);
+    setNotice(null);
+
+    try {
+      const result = await editAction(new FormData(form));
+      setNotice(result);
+      clearCredentials(form);
+      if (result.ok) {
+        closeEdit();
+        router.refresh();
+      }
+    } catch {
+      clearCredentials(form);
+      setNotice({
+        ok: false,
+        message: "Nao foi possivel atualizar a conexao WhatsApp.",
       });
     } finally {
       setPending(null);
@@ -332,7 +411,122 @@ export function WhatsappProviderPanel({
                     <RefreshCw size={15} aria-hidden="true" />
                     Gerar receiver
                   </button>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={Boolean(pending) && editing !== connection.id}
+                    onClick={() => void openEdit(connection.id)}
+                  >
+                    <Pencil size={15} aria-hidden="true" />
+                    {pending === `edit-load-${connection.id}`
+                      ? "Carregando..."
+                      : "Editar"}
+                  </button>
                 </div>
+              ) : null}
+
+              {canManage && editing === connection.id && editData ? (
+                <form
+                  className="inbound-webhook-create"
+                  data-testid={`whatsapp-connection-edit-${connection.id}`}
+                  onSubmit={submitEdit}
+                  onInvalid={(event) => clearCredentials(event.currentTarget)}
+                >
+                  <input type="hidden" name="connectionId" value={connection.id} />
+                  <input type="hidden" name="provider" value={connection.provider} />
+                  <label>
+                    <span className="field-label">Provedor</span>
+                    <input
+                      value={
+                        providerCards.find(
+                          (card) => card.id === connection.provider,
+                        )?.title ?? connection.provider
+                      }
+                      disabled
+                      readOnly
+                    />
+                  </label>
+                  <label>
+                    <span className="field-label">Nome</span>
+                    <input
+                      name="name"
+                      defaultValue={editData.name}
+                      required
+                      minLength={1}
+                      maxLength={120}
+                    />
+                  </label>
+                  <label>
+                    <span className="field-label">Nome exibido</span>
+                    <input
+                      name="displayName"
+                      defaultValue={editData.displayName ?? ""}
+                      maxLength={120}
+                    />
+                  </label>
+                  {connection.provider !== "nod_api" ? (
+                    <label>
+                      <span className="field-label">URL da API</span>
+                      <input
+                        name="baseUrl"
+                        type="url"
+                        defaultValue={editData.baseUrl ?? ""}
+                        required
+                      />
+                    </label>
+                  ) : null}
+                  {connection.provider === "uazapi_byo" ||
+                  connection.provider === "zapi" ||
+                  connection.provider === "nod_api" ? (
+                    <label>
+                      <span className="field-label">Instance ID</span>
+                      <input
+                        name="instanceId"
+                        defaultValue={editData.instanceId ?? ""}
+                        required={connection.provider !== "uazapi_byo"}
+                      />
+                    </label>
+                  ) : null}
+                  {connection.provider === "waha" ? (
+                    <label>
+                      <span className="field-label">Sessao</span>
+                      <input
+                        name="session"
+                        defaultValue={editData.session ?? ""}
+                      />
+                    </label>
+                  ) : null}
+                  <label>
+                    <span className="field-label">
+                      {secretFieldLabel[connection.provider]}
+                    </span>
+                    <input
+                      name="secret"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Deixe em branco para manter atual"
+                    />
+                  </label>
+                  <div className="inbound-connection-actions">
+                    <button
+                      className="button primary"
+                      type="submit"
+                      disabled={pending === `edit-${connection.id}`}
+                    >
+                      {pending === `edit-${connection.id}`
+                        ? "Salvando..."
+                        : "Salvar alteracoes"}
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={Boolean(pending)}
+                      onClick={closeEdit}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
               ) : null}
             </div>
           ))

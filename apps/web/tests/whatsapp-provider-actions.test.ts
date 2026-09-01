@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createWhatsappConnectionAction,
+  loadWhatsappConnectionForEditAction,
   rotateWhatsappWebhookTokenAction,
   testWhatsappConnectionAction,
+  updateWhatsappConnectionAction,
 } from "../src/app/(app)/integrations/whatsapp-provider-actions";
 
 vi.mock("next/headers", () => ({
@@ -116,6 +118,170 @@ describe("WhatsApp provider actions", () => {
 
     expect(result.ok).toBe(false);
     expect(JSON.stringify(result)).not.toContain("do-not-return");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("loads non-sensitive editable metadata for a connection", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "connection_1",
+          provider: "waha",
+          name: "WAHA comercial",
+          displayName: null,
+          baseUrl: "https://waha.example.test",
+          instanceId: null,
+          session: "support",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await loadWhatsappConnectionForEditAction("connection_1");
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: "connection_1",
+        provider: "waha",
+        name: "WAHA comercial",
+        displayName: null,
+        baseUrl: "https://waha.example.test",
+        instanceId: null,
+        session: "support",
+      },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/integrations/whatsapp-connections/connection_1/edit",
+      expect.anything(),
+    );
+  });
+
+  it("fails closed when the edit metadata response does not match the requested connection", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "connection_other",
+          provider: "waha",
+          name: "Outra conexao",
+          displayName: null,
+          baseUrl: null,
+          instanceId: null,
+          session: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await loadWhatsappConnectionForEditAction("connection_1");
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("keeps the current secret when the edit form leaves it blank", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "connection_1",
+          name: "WAHA comercial",
+          displayName: null,
+          provider: "waha",
+          status: "active",
+          lastHealthStatus: null,
+          lastHealthCheckedAt: null,
+          createdAt: "2026-08-28T12:00:00.000Z",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await updateWhatsappConnectionAction(
+      form({
+        connectionId: "connection_1",
+        provider: "waha",
+        name: "WAHA comercial",
+        baseUrl: "https://waha.example.test",
+        session: "support",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/integrations/whatsapp-connections/connection_1/edit",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          provider: "waha",
+          name: "WAHA comercial",
+          displayName: null,
+          credentials: {
+            baseUrl: "https://waha.example.test",
+            session: "support",
+          },
+        }),
+      }),
+    );
+  });
+
+  it("replaces the secret when the edit form provides one and never echoes it back", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "connection_1",
+          name: "WAHA comercial",
+          displayName: null,
+          provider: "waha",
+          status: "active",
+          lastHealthStatus: null,
+          lastHealthCheckedAt: null,
+          createdAt: "2026-08-28T12:00:00.000Z",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await updateWhatsappConnectionAction(
+      form({
+        connectionId: "connection_1",
+        provider: "waha",
+        name: "WAHA comercial",
+        baseUrl: "https://waha.example.test",
+        secret: "rotated-secret-do-not-return",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("rotated-secret-do-not-return");
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/integrations/whatsapp-connections/connection_1/edit",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          provider: "waha",
+          name: "WAHA comercial",
+          displayName: null,
+          credentials: {
+            baseUrl: "https://waha.example.test",
+            apiKey: "rotated-secret-do-not-return",
+          },
+        }),
+      }),
+    );
+  });
+
+  it("validates edit input locally without calling the API", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+
+    const result = await updateWhatsappConnectionAction(
+      form({
+        connectionId: "connection_1",
+        provider: "waha",
+        name: "WAHA comercial",
+        baseUrl: "ftp://waha.example.test",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
   });
 });
