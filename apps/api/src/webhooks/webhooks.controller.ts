@@ -29,6 +29,7 @@ import {
   parseUazapiWebhook,
   type ParsedUazapiWebhook,
 } from "./uazapi-webhook-parser";
+import { computeCanonicalPayloadHash } from "./webhook-payload-hash";
 
 type WebhookBody = Record<string, unknown>;
 
@@ -638,6 +639,10 @@ export class WebhooksController {
       ? hashPhoneIdentity(event.contact.phoneNumber)
       : undefined;
     const emptyConversion = { created: [], duplicates: [], queued: [] };
+    // Idempotency hardening: fingerprint the payload so a same-externalId
+    // replay with a genuinely different body (rather than a plain retry) is
+    // quarantined instead of silently treated as a duplicate.
+    const payloadHash = computeCanonicalPayloadHash(body);
 
     const diagnostic = await this.diagnosticsService.recordWebhookLog({
       workspaceId: context.workspaceId,
@@ -653,12 +658,13 @@ export class WebhooksController {
             parsed.externalDeliveryId,
           ].join(":")
         : undefined,
+      payloadHash,
       phoneHash,
       adId: event?.adId ?? undefined,
       summaryPayload: body,
     });
 
-    if (diagnostic.status === "duplicate") {
+    if (diagnostic.status === "duplicate" || diagnostic.status === "conflict") {
       return { ...diagnostic, conversion: emptyConversion };
     }
 

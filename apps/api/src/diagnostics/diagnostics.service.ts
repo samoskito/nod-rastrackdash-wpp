@@ -6,7 +6,7 @@ import {
   NotFoundException,
   Optional
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type {
   DiagnosticAuditLogDto,
   DiagnosticAuditLogListQueryDto,
@@ -81,6 +81,7 @@ type WebhookLogRecord = {
   jobId: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  payloadHash: string | null;
   summaryPayload?: unknown;
 };
 
@@ -185,6 +186,13 @@ export type WebhookLogInput = {
   eventType: string;
   externalEventId?: string;
   idempotencyKey?: string;
+  /**
+   * Canonical SHA-256 fingerprint of the received payload. Only the
+   * WAHA/Z-API receiver computes and sends this today; when absent (Meta,
+   * Uazapi), idempotencyKey collisions are always treated as a plain
+   * replay, exactly as before this field existed.
+   */
+  payloadHash?: string;
   leadId?: string;
   phoneHash?: string;
   campaignId?: string;
@@ -196,7 +204,12 @@ export type WebhookLogInput = {
 export type WebhookLogResult = {
   webhookLogId: string;
   diagnosticEventId: string;
-  status: "received" | "duplicate";
+  /**
+   * "conflict" means the same idempotencyKey/externalEventId arrived with a
+   * divergent payloadHash: the delivery was quarantined as its own
+   * WebhookLog row and the original record was left untouched.
+   */
+  status: "received" | "duplicate" | "conflict";
 };
 
 type DiagnosticActorContext = {
@@ -250,84 +263,186 @@ export class DiagnosticsService {
   }
 
   async recordWebhookLog(input: WebhookLogInput): Promise<WebhookLogResult> {
-    if (input.idempotencyKey) {
-      const existing = (await this.prisma.webhookLog.findUnique({
-        where: { idempotencyKey: input.idempotencyKey }
-      })) as WebhookLogRecord | null;
-
-      if (existing) {
-        if (
-          existing.workspaceId !== (input.workspaceId ?? null) ||
-          existing.source !== input.source
-        ) {
-          throw new ConflictException(
-            "Webhook idempotency key belongs to another context"
-          );
-        }
-
-        const existingEvents = (await this.prisma.diagnosticEvent.findMany({
-          where: { webhookLogId: existing.id },
-          orderBy: { occurredAt: "asc" },
-          take: 1
-        })) as DiagnosticEventRecord[];
-
-        return {
-          webhookLogId: existing.id,
-          diagnosticEventId: existingEvents[0]?.id ?? existing.id,
-          status: "duplicate"
-        };
-      }
+    if (!input.idempotencyKey) {
+      return this.persistWebhookLog(input, "received");
     }
 
-    const webhook = await this.prisma.webhookLog.create({
-      data: {
-        workspaceId: input.workspaceId ?? null,
-        whatsappInstanceId: input.whatsappInstanceId ?? null,
-        source: input.source,
-        eventType: input.eventType,
-        externalEventId: input.externalEventId ?? null,
-        leadId: input.leadId ?? null,
-        phoneHash: input.phoneHash ?? null,
-        campaignId: input.campaignId ?? null,
-        adSetId: input.adSetId ?? null,
-        adId: input.adId ?? null,
-        status: "received",
-        idempotencyKey: input.idempotencyKey ?? null,
-        summaryPayload: input.summaryPayload
-          ? (this.redactSensitive(
-              input.summaryPayload
-            ) as Prisma.InputJsonValue)
-          : undefined
+    // Create-first, catch-and-refetch on P2002: this makes concurrent
+    // deliveries of the same idempotencyKey deterministic. Whichever
+    // request's INSERT the database commits first wins the unique
+    // constraint and returns "received"; the other necessarily observes a
+    // P2002 and resolves against the row that actually persisted, instead
+    // of racing a find-then-create check that both requests could pass at
+    // once.
+    try {
+      return await this.persistWebhookLog(input, "received");
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
       }
-    });
-    const event = await this.prisma.diagnosticEvent.create({
-      data: {
-        workspaceId: input.workspaceId ?? null,
-        source: input.source,
-        eventType: input.eventType,
-        severity: "info",
-        status: "received",
-        title: `Webhook ${input.source} recebido`,
-        message: `Evento ${input.eventType} recebido para processamento`,
-        leadId: input.leadId ?? null,
-        phoneHash: input.phoneHash ?? null,
-        campaignId: input.campaignId ?? null,
-        adSetId: input.adSetId ?? null,
-        adId: input.adId ?? null,
-        webhookLogId: webhook.id,
-        summaryPayload: input.summaryPayload
-          ? (this.redactSensitive(
-              input.summaryPayload
-            ) as Prisma.InputJsonValue)
-          : undefined
-      }
+
+      return this.resolveIdempotencyConflict(input);
+    }
+  }
+
+  private async resolveIdempotencyConflict(
+    input: WebhookLogInput
+  ): Promise<WebhookLogResult> {
+    const existing = (await this.prisma.webhookLog.findUnique({
+      where: { idempotencyKey: input.idempotencyKey! }
+    })) as WebhookLogRecord | null;
+
+    if (!existing) {
+      // The row that caused the unique violation an instant ago is gone.
+      // This should not happen with a durable unique constraint; fail
+      // closed instead of silently dropping the delivery.
+      throw new ConflictException(
+        "Nao foi possivel resolver a colisao do idempotencyKey"
+      );
+    }
+
+    if (
+      existing.workspaceId !== (input.workspaceId ?? null) ||
+      existing.source !== input.source
+    ) {
+      throw new ConflictException(
+        "Webhook idempotency key belongs to another context"
+      );
+    }
+
+    if (this.payloadHashesDiverge(existing.payloadHash, input.payloadHash)) {
+      // Same externalEventId/idempotencyKey, different payload: quarantine
+      // the divergent delivery as its own WebhookLog row instead of
+      // trusting or overwriting the original. It gets no idempotencyKey of
+      // its own, so it can never collide with (or be mistaken for) the
+      // original record.
+      return this.persistWebhookLog(input, "conflict", {
+        idempotencyKey: null,
+        errorCode: "idempotency_payload_mismatch",
+        errorMessage: `Payload diverge do registro original (webhookLogId=${existing.id})`
+      });
+    }
+
+    const existingEvents = (await this.prisma.diagnosticEvent.findMany({
+      where: { webhookLogId: existing.id },
+      orderBy: { occurredAt: "asc" },
+      take: 1
+    })) as DiagnosticEventRecord[];
+
+    return {
+      webhookLogId: existing.id,
+      diagnosticEventId: existingEvents[0]?.id ?? existing.id,
+      status: "duplicate"
+    };
+  }
+
+  /**
+   * Whether an idempotencyKey replay's payload actually diverges from the
+   * original. When either side didn't supply a hash (every provider except
+   * WAHA/Z-API today), there is nothing to compare against, so it is
+   * treated as a plain replay - preserving prior behavior for Uazapi/Meta.
+   */
+  private payloadHashesDiverge(
+    existingHash: string | null,
+    incomingHash: string | undefined
+  ): boolean {
+    if (!existingHash || !incomingHash) {
+      return false;
+    }
+
+    return existingHash !== incomingHash;
+  }
+
+  private async persistWebhookLog(
+    input: WebhookLogInput,
+    status: "received" | "conflict",
+    overrides: {
+      idempotencyKey?: string | null;
+      errorCode?: string;
+      errorMessage?: string;
+    } = {}
+  ): Promise<WebhookLogResult> {
+    const idempotencyKey =
+      "idempotencyKey" in overrides
+        ? overrides.idempotencyKey ?? null
+        : input.idempotencyKey ?? null;
+
+    // WebhookLog and its DiagnosticEvent must land together: a WebhookLog
+    // without a linked event (or vice versa) would leave the diagnostics
+    // timeline inconsistent. Writing both inside one transaction also keeps
+    // the create-first/P2002 recovery in recordWebhookLog() correct - if the
+    // WebhookLog insert violates the idempotencyKey unique constraint, the
+    // whole transaction rolls back before any DiagnosticEvent is written,
+    // and the P2002 still propagates for the caller to catch.
+    const { webhook, event } = await this.prisma.$transaction(async (tx) => {
+      const webhook = await tx.webhookLog.create({
+        data: {
+          workspaceId: input.workspaceId ?? null,
+          whatsappInstanceId: input.whatsappInstanceId ?? null,
+          source: input.source,
+          eventType: input.eventType,
+          externalEventId: input.externalEventId ?? null,
+          leadId: input.leadId ?? null,
+          phoneHash: input.phoneHash ?? null,
+          campaignId: input.campaignId ?? null,
+          adSetId: input.adSetId ?? null,
+          adId: input.adId ?? null,
+          status,
+          idempotencyKey,
+          payloadHash: input.payloadHash ?? null,
+          errorCode: overrides.errorCode ?? null,
+          errorMessage: overrides.errorMessage ?? null,
+          summaryPayload: input.summaryPayload
+            ? (this.redactSensitive(
+                input.summaryPayload
+              ) as Prisma.InputJsonValue)
+            : undefined
+        }
+      });
+      const event = await tx.diagnosticEvent.create({
+        data: {
+          workspaceId: input.workspaceId ?? null,
+          source: input.source,
+          eventType: input.eventType,
+          severity: status === "conflict" ? "warning" : "info",
+          status,
+          title:
+            status === "conflict"
+              ? `Webhook ${input.source} em conflito de idempotencia`
+              : `Webhook ${input.source} recebido`,
+          message:
+            status === "conflict"
+              ? `Evento ${input.eventType} recebido com payload divergente do original para o mesmo identificador externo`
+              : `Evento ${input.eventType} recebido para processamento`,
+          leadId: input.leadId ?? null,
+          phoneHash: input.phoneHash ?? null,
+          campaignId: input.campaignId ?? null,
+          adSetId: input.adSetId ?? null,
+          adId: input.adId ?? null,
+          webhookLogId: webhook.id,
+          summaryPayload: input.summaryPayload
+            ? (this.redactSensitive(
+                input.summaryPayload
+              ) as Prisma.InputJsonValue)
+            : undefined
+        }
+      });
+
+      return { webhook, event };
     });
 
     return {
       webhookLogId: webhook.id,
       diagnosticEventId: event.id,
-      status: "received"
+      status
     };
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    );
   }
 
   async getSummary(
