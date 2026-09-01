@@ -28,6 +28,13 @@ const secretFieldLabel: Record<ProviderId, string> = {
   nod_api: "Instance token",
 };
 
+const receiverInstructionText: Record<ProviderId, string> = {
+  uazapi_byo: "Cole esta URL completa no campo URL do webhook da Uazapi",
+  waha: "Cole esta URL completa no campo de Webhook da WAHA",
+  zapi: "Cole esta URL completa no campo de webhook da Z-API",
+  nod_api: "Cole esta URL completa no campo de webhook do NOD API",
+};
+
 const providerCards: Array<{
   id: ProviderId;
   title: string;
@@ -85,6 +92,9 @@ export function WhatsappProviderPanel({
     null,
   );
   const [receiver, setReceiver] = useState<WhatsappReceiverSecret | null>(null);
+  const [receiverProvider, setReceiverProvider] = useState<ProviderId | null>(
+    null,
+  );
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editData, setEditData] = useState<WhatsappConnectionEditData | null>(
@@ -133,6 +143,10 @@ export function WhatsappProviderPanel({
       setNotice(result);
       if (result.receiverSecret) {
         setReceiver(result.receiverSecret);
+        setReceiverProvider(
+          connections.find((connection) => connection.id === connectionId)
+            ?.provider ?? null,
+        );
         setCopied(false);
       }
       if (result.ok) router.refresh();
@@ -338,7 +352,9 @@ export function WhatsappProviderPanel({
           <div>
             <span className="micro-label">Exibido uma unica vez</span>
             <strong>
-              Cole esta URL completa no campo URL do webhook da Uazapi
+              {receiverProvider
+                ? receiverInstructionText[receiverProvider]
+                : "Cole esta URL completa no campo de webhook do provider"}
             </strong>
           </div>
           <input
