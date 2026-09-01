@@ -15,6 +15,7 @@ import {
 import {
   whatsappConnectionCreateInputSchema,
   whatsappConnectionCredentialsUpdateSchema,
+  whatsappConnectionEditInputSchema,
   whatsappConnectionUpdateInputSchema,
 } from "@wpptrack/shared";
 import { z } from "zod";
@@ -41,6 +42,16 @@ export class WhatsappConnectionsController {
   async list(@AuthToken() refreshToken: string) {
     const context = await this.getContext(refreshToken);
     return this.connections.listConnections(context.workspaceId);
+  }
+
+  @Get(":id/edit")
+  async editMetadata(
+    @AuthToken() refreshToken: string,
+    @Param("id") id: string,
+  ) {
+    const context = await this.getContext(refreshToken);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    return this.connections.getEditableConnection(context, connectionId);
   }
 
   @Post()
@@ -81,6 +92,21 @@ export class WhatsappConnectionsController {
       whatsappConnectionCredentialsUpdateSchema.safeParse(body),
     );
     return this.connections.updateCredentials(context, connectionId, input);
+  }
+
+  @Patch(":id/edit")
+  async edit(
+    @AuthToken() refreshToken: string,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const context = await this.getContext(refreshToken);
+    this.enforceMutationRateLimit(context.userId);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    const input = this.parse(
+      whatsappConnectionEditInputSchema.safeParse(body),
+    );
+    return this.connections.editConnection(context, connectionId, input);
   }
 
   @Post(":id/test")

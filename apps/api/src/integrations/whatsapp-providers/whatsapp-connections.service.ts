@@ -11,6 +11,8 @@ import type {
   WhatsappConnectionCreateInputDto,
   WhatsappConnectionCredentialsUpdateDto,
   WhatsappConnectionDto,
+  WhatsappConnectionEditInputDto,
+  WhatsappConnectionEditMetadataDto,
   WhatsappConnectionTestResultDto,
   WhatsappConnectionWebhookTokenRotateResultDto,
   WhatsappConnectionUpdateInputDto,
@@ -186,6 +188,65 @@ export class WhatsappConnectionsService {
       action: "whatsapp_connection.credentials_update",
       targetId: updated.id,
       afterSummary: { provider: updated.provider, credentialsUpdated: true },
+    });
+    return this.toDto(updated);
+  }
+
+  async getEditableConnection(
+    actor: WorkspaceActor,
+    id: string,
+  ): Promise<WhatsappConnectionEditMetadataDto> {
+    this.assertCanManage(actor);
+    const existing = await this.findForWorkspace(actor.workspaceId, id);
+    const config = this.decryptConfig(existing);
+    return {
+      id: existing.id,
+      provider: this.requireProvider(existing.provider),
+      name: existing.name,
+      displayName: existing.displayName,
+      baseUrl: this.extractConfigBaseUrl(config),
+      instanceId: existing.providerInstanceId ?? this.extractConfigInstanceId(config),
+      session: this.extractConfigSession(config),
+    };
+  }
+
+  async editConnection(
+    actor: WorkspaceActor,
+    id: string,
+    input: WhatsappConnectionEditInputDto,
+  ): Promise<WhatsappConnectionDto> {
+    this.assertCanManage(actor);
+    const existing = await this.findForWorkspace(actor.workspaceId, id);
+    if (existing.provider !== input.provider) {
+      throw new ConflictException(
+        "O provider da conexao nao pode ser alterado",
+      );
+    }
+    const previousConfig = this.decryptConfig(existing);
+    const credentials = this.mergeEditCredentials(input, previousConfig);
+    const config = this.toProviderConfig(input.provider, credentials);
+    const encrypted = this.encryptConfig(config);
+    const updated = (await this.prisma.whatsappInstance.update({
+      where: { id: existing.id },
+      data: {
+        name: input.name,
+        displayName: input.displayName ?? null,
+        ...encrypted,
+        providerInstanceId:
+          input.provider === "uazapi_byo"
+            ? (input.credentials.instanceId ?? null)
+            : input.provider === "zapi" || input.provider === "nod_api"
+              ? input.credentials.instanceId
+              : existing.providerInstanceId,
+      },
+    })) as WhatsappConnectionRecord;
+    await this.recordAudit({
+      workspaceId: actor.workspaceId,
+      actorUserId: actor.userId,
+      action: "whatsapp_connection.edit",
+      targetId: updated.id,
+      beforeSummary: this.metadataSummary(existing),
+      afterSummary: this.metadataSummary(updated),
     });
     return this.toDto(updated);
   }
@@ -410,6 +471,113 @@ export class WhatsappConnectionsService {
       );
     }
     return value;
+  }
+
+  // Merges the edit payload's non-secret fields with the previously stored
+  // secret when the payload omits it — "campo secreto vazio = manter
+  // atual; preenchido = substituir". Throws if there is no secret to fall
+  // back to (a connection must always have one after create).
+  private mergeEditCredentials(
+    input: WhatsappConnectionEditInputDto,
+    previous: WhatsappProviderConfig | null,
+  ): AdapterWhatsappConnectionCreateInput["credentials"] {
+    switch (input.provider) {
+      case "uazapi_byo": {
+        const prevConfig =
+          previous?.provider === "uazapi_byo" ? previous.config : undefined;
+        const token = input.credentials.token ?? prevConfig?.token;
+        if (!token) {
+          throw new BadRequestException(
+            "Token da conexao WhatsApp e obrigatorio",
+          );
+        }
+        return {
+          baseUrl: input.credentials.baseUrl,
+          token,
+          instanceId: input.credentials.instanceId,
+        };
+      }
+      case "waha": {
+        const prevConfig =
+          previous?.provider === "waha" ? previous.config : undefined;
+        const apiKey = input.credentials.apiKey ?? prevConfig?.apiKey;
+        if (!apiKey) {
+          throw new BadRequestException(
+            "API key da conexao WhatsApp e obrigatoria",
+          );
+        }
+        return {
+          baseUrl: input.credentials.baseUrl,
+          apiKey,
+          session: input.credentials.session,
+        };
+      }
+      case "zapi": {
+        const prevConfig =
+          previous?.provider === "zapi" ? previous.config : undefined;
+        const token = input.credentials.token ?? prevConfig?.token;
+        if (!token) {
+          throw new BadRequestException(
+            "Token da conexao WhatsApp e obrigatorio",
+          );
+        }
+        return {
+          baseUrl: input.credentials.baseUrl,
+          instanceId: input.credentials.instanceId,
+          token,
+        };
+      }
+      case "nod_api": {
+        const prevConfig =
+          previous?.provider === "nod_api" ? previous.config : undefined;
+        const instanceToken =
+          input.credentials.instanceToken ?? prevConfig?.instanceToken;
+        if (!instanceToken) {
+          throw new BadRequestException(
+            "Instance token da conexao WhatsApp e obrigatorio",
+          );
+        }
+        return {
+          instanceId: input.credentials.instanceId,
+          instanceToken,
+        };
+      }
+    }
+  }
+
+  private extractConfigBaseUrl(
+    config: WhatsappProviderConfig | null,
+  ): string | null {
+    if (!config) return null;
+    if (
+      config.provider === "uazapi_byo" ||
+      config.provider === "waha" ||
+      config.provider === "zapi"
+    ) {
+      return config.config.baseUrl ?? null;
+    }
+    return null;
+  }
+
+  private extractConfigInstanceId(
+    config: WhatsappProviderConfig | null,
+  ): string | null {
+    if (!config) return null;
+    if (
+      config.provider === "uazapi_byo" ||
+      config.provider === "zapi" ||
+      config.provider === "nod_api"
+    ) {
+      return config.config.instanceId ?? null;
+    }
+    return null;
+  }
+
+  private extractConfigSession(
+    config: WhatsappProviderConfig | null,
+  ): string | null {
+    if (!config || config.provider !== "waha") return null;
+    return config.config.session ?? null;
   }
 
   private toDto(connection: WhatsappConnectionRecord): WhatsappConnectionDto {

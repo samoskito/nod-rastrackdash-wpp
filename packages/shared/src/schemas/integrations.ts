@@ -179,6 +179,64 @@ export const whatsappConnectionWebhookTokenRotateResultSchema = z
   })
   .strict();
 
+// Non-sensitive metadata used to pre-fill the Editar form: never includes
+// the provider secret (apiKey/token/instanceToken), only the fields the
+// student is allowed to correct (name, endpoint, session/instance id).
+export const whatsappConnectionEditMetadataSchema = z
+  .object({
+    id: z.string().min(1),
+    provider: whatsappConnectionProviderSchema,
+    name: z.string().min(1),
+    displayName: z.string().min(1).nullable(),
+    baseUrl: z.string().min(1).nullable(),
+    instanceId: z.string().min(1).nullable(),
+    session: z.string().min(1).nullable(),
+  })
+  .strict();
+
+// Update payload for the Editar action: the secret credential field is
+// optional per provider — omitted/blank means "keep the current secret",
+// filled means "rotate it". Provider is required only to make the
+// discriminated union select the right credentials shape; the API still
+// rejects the request if it doesn't match the connection's stored provider.
+export const whatsappConnectionEditInputSchema = z.discriminatedUnion(
+  "provider",
+  [
+    z
+      .object({
+        provider: z.literal("uazapi_byo"),
+        name: z.string().trim().min(1).max(120),
+        displayName: z.string().trim().min(1).max(120).nullable(),
+        credentials: uazapiCredentialsSchema.partial({ token: true }),
+      })
+      .strict(),
+    z
+      .object({
+        provider: z.literal("waha"),
+        name: z.string().trim().min(1).max(120),
+        displayName: z.string().trim().min(1).max(120).nullable(),
+        credentials: wahaCredentialsSchema.partial({ apiKey: true }),
+      })
+      .strict(),
+    z
+      .object({
+        provider: z.literal("zapi"),
+        name: z.string().trim().min(1).max(120),
+        displayName: z.string().trim().min(1).max(120).nullable(),
+        credentials: zapiCredentialsSchema.partial({ token: true }),
+      })
+      .strict(),
+    z
+      .object({
+        provider: z.literal("nod_api"),
+        name: z.string().trim().min(1).max(120),
+        displayName: z.string().trim().min(1).max(120).nullable(),
+        credentials: nodApiCredentialsSchema.partial({ instanceToken: true }),
+      })
+      .strict(),
+  ],
+);
+
 export const integrationHealthSchema = z.object({
   provider: integrationProviderSchema,
   status: z.enum(integrationStatuses),
@@ -648,6 +706,12 @@ export type WhatsappConnectionTestResultDto = z.infer<
 >;
 export type WhatsappConnectionWebhookTokenRotateResultDto = z.infer<
   typeof whatsappConnectionWebhookTokenRotateResultSchema
+>;
+export type WhatsappConnectionEditMetadataDto = z.infer<
+  typeof whatsappConnectionEditMetadataSchema
+>;
+export type WhatsappConnectionEditInputDto = z.infer<
+  typeof whatsappConnectionEditInputSchema
 >;
 export type IntegrationHealthDto = z.infer<typeof integrationHealthSchema>;
 export type IntegrationHealthSummaryDto = z.infer<
