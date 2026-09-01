@@ -12,7 +12,9 @@ export const diagnosticSources = [
   "gupshup",
   "asaas",
   "external_mysql",
-  "internal"
+  "internal",
+  "waha",
+  "zapi"
 ] as const;
 export const diagnosticSeverities = [
   "info",

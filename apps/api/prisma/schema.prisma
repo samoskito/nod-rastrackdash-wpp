@@ -53,6 +53,8 @@ enum DiagnosticSource {
   asaas
   external_mysql
   internal
+  waha
+  zapi
 }
 
 enum DiagnosticSeverity {

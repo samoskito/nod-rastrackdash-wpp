@@ -15,25 +15,102 @@ type Instance = {
 const hash = (value: string) =>
   createHash("sha256").update(value, "utf8").digest("hex");
 
-function controllerFor(instance: Instance) {
+type Services = {
+  diagnosticsService: { recordWebhookLog: ReturnType<typeof vi.fn> };
+  conversionRulesService: { evaluateTriggers: ReturnType<typeof vi.fn> };
+  conversionEventsService: {
+    recordAutomaticLeadSubmitted: ReturnType<typeof vi.fn>;
+    recordRuleMatches: ReturnType<typeof vi.fn>;
+    listReadyLogIds: ReturnType<typeof vi.fn>;
+  };
+  conversionEventsQueueService: { enqueueSend: ReturnType<typeof vi.fn> };
+  leadsService: { upsertFromWhatsappWebhook: ReturnType<typeof vi.fn> };
+};
+
+function defaultServices(): Services {
+  return {
+    diagnosticsService: {
+      recordWebhookLog: vi.fn(async () => ({
+        webhookLogId: "webhook-log-1",
+        diagnosticEventId: "diagnostic-event-1",
+        status: "received",
+      })),
+    },
+    conversionRulesService: {
+      evaluateTriggers: vi.fn(async () => []),
+    },
+    conversionEventsService: {
+      recordAutomaticLeadSubmitted: vi.fn(async () => ({
+        created: [],
+        duplicates: [],
+      })),
+      recordRuleMatches: vi.fn(async () => ({ created: [], duplicates: [] })),
+      listReadyLogIds: vi.fn(async () => []),
+    },
+    conversionEventsQueueService: {
+      enqueueSend: vi.fn(async () => ({ queued: true })),
+    },
+    leadsService: {
+      upsertFromWhatsappWebhook: vi.fn(async () => ({ id: "lead-1" })),
+    },
+  };
+}
+
+function controllerFor(instance: Instance, services: Services = defaultServices()) {
   const prisma = {
     whatsappInstance: {
       findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
         where.id === instance.id ? instance : null,
       ),
     },
+    metaAd: {
+      findFirst: vi.fn(async () => null),
+    },
   };
   const controller = new WebhooksController(
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
+    services.diagnosticsService as never,
+    services.conversionRulesService as never,
+    services.conversionEventsService as never,
+    services.conversionEventsQueueService as never,
+    services.leadsService as never,
     {} as never,
     prisma as never,
   );
-  return { controller, prisma };
+  return { controller, prisma, services };
 }
+
+function wahaMessagePayload(overrides: Record<string, unknown> = {}) {
+  return {
+    event: "message",
+    session: "session-1",
+    payload: {
+      from: "5511999999999@c.us",
+      to: "5511888888888@c.us",
+      id: "waha-msg-1",
+      timestamp: 1_700_000_000,
+      fromMe: false,
+      type: "chat",
+      body: "Ola",
+      ...overrides,
+    },
+  };
+}
+
+function zapiMessagePayload(overrides: Record<string, unknown> = {}) {
+  return {
+    instanceId: "instance-1",
+    connectedPhone: "5511888888888",
+    phone: "5511999999999",
+    timestamp: 1_700_000_000,
+    fromMe: false,
+    isGroup: false,
+    message: "Ola",
+    messageId: "zapi-msg-1",
+    ...overrides,
+  };
+}
+
+const ctwaFixture = { ad_id: "ad-123", clid: "clid-123" };
 
 describe("POST /webhooks/whatsapp/:id", () => {
   it("rejects missing and invalid tokens before any ingestion", async () => {
@@ -220,9 +297,12 @@ describe("POST /webhooks/whatsapp/:id", () => {
 
   it("does not acknowledge a provider without a wired receiver", async () => {
     const { controller } = controllerFor({
-      id: "connection-waha",
+      id: "connection-unknown",
       workspaceId: "workspace-a",
-      provider: "waha",
+      // Fail-closed contract: any provider besides uazapi_byo/waha/zapi
+      // must keep returning 501, including provider values that don't
+      // exist in the WhatsApp connection catalog at all.
+      provider: "does_not_exist",
       providerInstanceId: null,
       webhookTokenHash: hash("valid-token"),
       status: "active",
@@ -230,7 +310,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
 
     await expect(
       controller.recordWhatsappConnection(
-        "connection-waha",
+        "connection-unknown",
         { event: "message" },
         "valid-token",
       ),
@@ -255,5 +335,195 @@ describe("POST /webhooks/whatsapp/:id", () => {
       controller.recordWhatsappConnection("connection-nod", {}, "valid-token"),
     ).rejects.toMatchObject({ status: 501 });
     expect(receiver).not.toHaveBeenCalled();
+  });
+
+  it("accepts a WAHA paid CTWA message, logs WebhookLog, and creates a lead", async () => {
+    const { controller, services } = controllerFor({
+      id: "connection-waha",
+      workspaceId: "workspace-a",
+      provider: "waha",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-waha",
+        wahaMessagePayload({ ctwa: ctwaFixture }),
+        "valid-token",
+      ),
+    ).resolves.toMatchObject({ webhookLogId: "webhook-log-1" });
+
+    expect(services.diagnosticsService.recordWebhookLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-a",
+        whatsappInstanceId: "connection-waha",
+        source: "waha",
+        eventType: "message",
+      }),
+    );
+    expect(
+      services.leadsService.upsertFromWhatsappWebhook,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-a",
+        whatsappInstanceId: "connection-waha",
+        phone: "5511999999999",
+        source: "waha",
+        ctwaClid: "clid-123",
+      }),
+    );
+  });
+
+  it("accepts a Z-API paid CTWA message, logs WebhookLog, and creates a lead", async () => {
+    const { controller, services } = controllerFor({
+      id: "connection-zapi",
+      workspaceId: "workspace-a",
+      provider: "zapi",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-zapi",
+        zapiMessagePayload({ ctwa: ctwaFixture }),
+        "valid-token",
+      ),
+    ).resolves.toMatchObject({ webhookLogId: "webhook-log-1" });
+
+    expect(services.diagnosticsService.recordWebhookLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-a",
+        whatsappInstanceId: "connection-zapi",
+        source: "zapi",
+      }),
+    );
+    expect(
+      services.leadsService.upsertFromWhatsappWebhook,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-a",
+        whatsappInstanceId: "connection-zapi",
+        phone: "5511999999999",
+        source: "zapi",
+        ctwaClid: "clid-123",
+      }),
+    );
+  });
+
+  it("does not create a lead for an organic message without CTWA (WAHA/Z-API)", async () => {
+    const waha = controllerFor({
+      id: "connection-waha",
+      workspaceId: "workspace-a",
+      provider: "waha",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await waha.controller.recordWhatsappConnection(
+      "connection-waha",
+      wahaMessagePayload(),
+      "valid-token",
+    );
+    expect(
+      waha.services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+
+    const zapi = controllerFor({
+      id: "connection-zapi",
+      workspaceId: "workspace-a",
+      provider: "zapi",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await zapi.controller.recordWhatsappConnection(
+      "connection-zapi",
+      zapiMessagePayload(),
+      "valid-token",
+    );
+    expect(
+      zapi.services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not create a lead for a fromMe message even with CTWA (WAHA/Z-API)", async () => {
+    const waha = controllerFor({
+      id: "connection-waha",
+      workspaceId: "workspace-a",
+      provider: "waha",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await waha.controller.recordWhatsappConnection(
+      "connection-waha",
+      wahaMessagePayload({ fromMe: true, ctwa: ctwaFixture }),
+      "valid-token",
+    );
+    expect(
+      waha.services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+
+    const zapi = controllerFor({
+      id: "connection-zapi",
+      workspaceId: "workspace-a",
+      provider: "zapi",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await zapi.controller.recordWhatsappConnection(
+      "connection-zapi",
+      zapiMessagePayload({ fromMe: true, ctwa: ctwaFixture }),
+      "valid-token",
+    );
+    expect(
+      zapi.services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("skips WebhookLog and lead work on a duplicate delivery (dedupe/replay)", async () => {
+    const services = defaultServices();
+    services.diagnosticsService.recordWebhookLog = vi.fn(async () => ({
+      webhookLogId: "webhook-log-existing",
+      diagnosticEventId: "diagnostic-event-existing",
+      status: "duplicate",
+    }));
+    const { controller } = controllerFor(
+      {
+        id: "connection-waha",
+        workspaceId: "workspace-a",
+        provider: "waha",
+        providerInstanceId: null,
+        webhookTokenHash: hash("valid-token"),
+        status: "active",
+      },
+      services,
+    );
+
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-waha",
+        wahaMessagePayload({ ctwa: ctwaFixture }),
+        "valid-token",
+      ),
+    ).resolves.toMatchObject({
+      status: "duplicate",
+      conversion: { created: [], duplicates: [], queued: [] },
+    });
+    expect(
+      services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+    expect(
+      services.conversionRulesService.evaluateTriggers,
+    ).not.toHaveBeenCalled();
   });
 });

@@ -16,9 +16,13 @@ import {
 } from "@nestjs/common";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { hashPhoneIdentity } from "../common/phone/phone-identity";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { ConversionRulesService } from "../conversion-rules/conversion-rules.service";
 import { DiagnosticsService } from "../diagnostics/diagnostics.service";
+import type { InboundWebhookParserResult } from "../inbound-webhooks/providers/inbound-webhook-parser";
+import { parseWahaV1Webhook } from "../inbound-webhooks/providers/waha/waha-v1.parser";
+import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.parser";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
 import { LeadsService } from "../leads/leads.service";
 import {
@@ -32,6 +36,25 @@ type VerifiedUazapiContext = {
   workspaceId: string;
   whatsappInstanceId: string;
   providerInstanceId: string | null;
+};
+
+// WAHA and Z-API are wired through their standalone v1 parsers rather than
+// the full inbound-webhooks automation pipeline: this per-connection
+// receiver only needs a single normalized message event to log to
+// WebhookLog and, when eligible, create a lead.
+type WiredMessageProvider = "waha" | "zapi";
+
+const MESSAGE_PROVIDER_PARSERS: Record<
+  WiredMessageProvider,
+  (payload: unknown) => InboundWebhookParserResult
+> = {
+  waha: parseWahaV1Webhook,
+  zapi: parseZapiV1Webhook,
+};
+
+type VerifiedConnectionContext = {
+  workspaceId: string;
+  whatsappInstanceId: string;
 };
 
 type VerifiedMetaContext = {
@@ -195,9 +218,22 @@ export class WebhooksController {
       });
     }
 
+    if (this.isWiredMessageProvider(instance.provider)) {
+      return this.recordProviderMessageWebhook(instance.provider, body, {
+        workspaceId: instance.workspaceId,
+        whatsappInstanceId: instance.id,
+      });
+    }
+
     throw new NotImplementedException(
       `Receiver inbound para ${instance.provider} ainda nao esta disponivel`,
     );
+  }
+
+  private isWiredMessageProvider(
+    provider: string,
+  ): provider is WiredMessageProvider {
+    return provider === "waha" || provider === "zapi";
   }
 
   @Post("meta")
@@ -569,6 +605,128 @@ export class WebhooksController {
         this.conversionEventsQueueService.enqueueSend(
           logId,
           resolvedContext.workspaceId,
+        ),
+      ),
+    );
+
+    return {
+      ...diagnostic,
+      conversion: {
+        ...conversion,
+        automatic,
+        queued,
+      },
+    };
+  }
+
+  /**
+   * WAHA/Z-API receiver: the connection is already authenticated by
+   * recordWhatsappConnection, so this only needs to parse, log to
+   * WebhookLog, and (for a paid CTWA inbound message) create a lead. Unlike
+   * Uazapi's shared endpoint there is no provider-instance lookup to do:
+   * the workspace/connection context comes straight from the verified
+   * instance.
+   */
+  private async recordProviderMessageWebhook(
+    provider: WiredMessageProvider,
+    body: WebhookBody,
+    context: VerifiedConnectionContext,
+  ) {
+    const parsed = MESSAGE_PROVIDER_PARSERS[provider](body);
+    const event = parsed.events[0] ?? null;
+    const phoneHash = event
+      ? hashPhoneIdentity(event.contact.phoneNumber)
+      : undefined;
+    const emptyConversion = { created: [], duplicates: [], queued: [] };
+
+    const diagnostic = await this.diagnosticsService.recordWebhookLog({
+      workspaceId: context.workspaceId,
+      whatsappInstanceId: context.whatsappInstanceId,
+      source: provider,
+      eventType: parsed.providerEventType ?? `${provider}.webhook`,
+      externalEventId: parsed.externalDeliveryId ?? undefined,
+      idempotencyKey: parsed.externalDeliveryId
+        ? [
+            provider,
+            context.workspaceId,
+            context.whatsappInstanceId,
+            parsed.externalDeliveryId,
+          ].join(":")
+        : undefined,
+      phoneHash,
+      adId: event?.adId ?? undefined,
+      summaryPayload: body,
+    });
+
+    if (diagnostic.status === "duplicate") {
+      return { ...diagnostic, conversion: emptyConversion };
+    }
+
+    // Product rule (mirrors Uazapi): only a paid CTWA inbound message
+    // creates a platform lead. Organic messages (no ctwaClid) and messages
+    // sent from the connected number itself (fromMe) never do; group chats
+    // never reach here because the parsers decline to emit an event for
+    // them.
+    if (!event || event.message.direction !== "inbound" || !event.ctwaClid) {
+      return { ...diagnostic, conversion: emptyConversion };
+    }
+
+    const attribution = await this.resolveUazapiMetaAttribution(
+      context.workspaceId,
+      { adId: event.adId ?? undefined },
+    );
+    const triggerInput = {
+      messageText: event.message.text ?? undefined,
+      labels: [] as string[],
+    };
+    const rules = await this.conversionRulesService.evaluateTriggers(
+      context.workspaceId,
+      triggerInput,
+    );
+    const lead = await this.leadsService.upsertFromWhatsappWebhook({
+      workspaceId: context.workspaceId,
+      whatsappInstanceId: context.whatsappInstanceId,
+      name: event.contact.name ?? undefined,
+      phone: event.contact.phoneNumber,
+      phoneHash,
+      source: provider,
+      labels: triggerInput.labels,
+      campaignId: attribution.campaignId,
+      adSetId: attribution.adSetId,
+      adId: attribution.adId,
+      ctwaClid: event.ctwaClid,
+      ctwaSourceUrl: event.ad?.sourceUrl ?? undefined,
+      occurredAt: event.occurredAt,
+    });
+    const automatic =
+      await this.conversionEventsService.recordAutomaticLeadSubmitted({
+        workspaceId: context.workspaceId,
+        leadId: lead?.id,
+        phoneHash,
+        campaignId: attribution.campaignId,
+        adSetId: attribution.adSetId,
+        adId: attribution.adId,
+        ctwaClid: event.ctwaClid,
+      });
+    const conversion = await this.conversionEventsService.recordRuleMatches({
+      workspaceId: context.workspaceId,
+      rules,
+      leadId: lead?.id,
+      phoneHash,
+      campaignId: attribution.campaignId,
+      adSetId: attribution.adSetId,
+      adId: attribution.adId,
+      ctwaClid: event.ctwaClid,
+    });
+    const readyLogIds = await this.conversionEventsService.listReadyLogIds([
+      ...automatic.created,
+      ...conversion.created,
+    ]);
+    const queued = await Promise.all(
+      readyLogIds.map((logId) =>
+        this.conversionEventsQueueService.enqueueSend(
+          logId,
+          context.workspaceId,
         ),
       ),
     );
