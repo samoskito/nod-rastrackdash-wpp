@@ -34,6 +34,7 @@ const connection: WhatsappConnectionDto = {
 
 function renderPanel(
   overrides: Partial<{
+    connections: WhatsappConnectionDto[];
     createAction: ReturnType<typeof vi.fn>;
     testAction: ReturnType<typeof vi.fn>;
     rotateAction: ReturnType<typeof vi.fn>;
@@ -58,7 +59,7 @@ function renderPanel(
     }));
 
   const props = {
-    connections: [connection],
+    connections: overrides.connections ?? [connection],
     canManage: true,
     createAction: overrides.createAction ?? noopAction,
     testAction: overrides.testAction ?? noopAction,
@@ -69,6 +70,18 @@ function renderPanel(
 
   render(createElement(WhatsappProviderPanel, props));
   return props;
+}
+
+function connectionFor(
+  provider: WhatsappConnectionDto["provider"],
+  id: string,
+): WhatsappConnectionDto {
+  return {
+    ...connection,
+    id,
+    provider,
+    name: `${provider} connection`,
+  };
 }
 
 describe("WhatsappProviderPanel edit flow", () => {
@@ -164,5 +177,53 @@ describe("WhatsappProviderPanel edit flow", () => {
     await editForm.findByLabelText("URL da API");
 
     expect(editForm.queryByRole("combobox")).toBeNull();
+  });
+});
+
+describe("WhatsappProviderPanel receiver instruction", () => {
+  it("mentions the Uazapi webhook field and the one-time URL after generating a receiver for a Uazapi connection", async () => {
+    const uazapiConnection = connectionFor("uazapi_byo", "connection_uazapi");
+    const rotateAction = vi.fn(async () => ({
+      ok: true as const,
+      message: "Receiver gerado.",
+      receiverSecret: { webhookUrl: "https://api.test/webhook/uazapi-token" },
+    }));
+    renderPanel({ connections: [uazapiConnection], rotateAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /gerar receiver/i }));
+
+    await waitFor(() => {
+      expect(rotateAction).toHaveBeenCalledTimes(1);
+    });
+
+    await screen.findByText(/campo url do webhook da uazapi/i);
+    const webhookInput = screen.getByLabelText(
+      "URL completa do receiver WhatsApp",
+    ) as HTMLInputElement;
+    expect(webhookInput.value).toBe("https://api.test/webhook/uazapi-token");
+    expect(screen.getByText(/exibido uma unica vez/i)).not.toBeNull();
+  });
+
+  it("mentions the WAHA webhook field, not Uazapi, after generating a receiver for a WAHA connection", async () => {
+    const wahaConnection = connectionFor("waha", "connection_waha");
+    const rotateAction = vi.fn(async () => ({
+      ok: true as const,
+      message: "Receiver gerado.",
+      receiverSecret: { webhookUrl: "https://api.test/webhook/waha-token" },
+    }));
+    renderPanel({ connections: [wahaConnection], rotateAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /gerar receiver/i }));
+
+    await waitFor(() => {
+      expect(rotateAction).toHaveBeenCalledTimes(1);
+    });
+
+    const secretPanel = within(
+      (await screen.findByText(/campo de webhook da waha/i)).closest(
+        '[data-presentation-sensitive-action="true"]',
+      ) as HTMLElement,
+    );
+    expect(secretPanel.queryByText(/uazapi/i)).toBeNull();
   });
 });
