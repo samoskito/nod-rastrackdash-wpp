@@ -6,13 +6,14 @@ import { WhatsappProviderRegistry } from "../src/integrations/whatsapp-providers
 import { WorkspaceAccessPolicyService } from "../src/workspaces/workspace-access-policy.service";
 import { WebhooksController } from "../src/webhooks/webhooks.controller";
 
-// Coherence check between the write path (WhatsappConnectionsService, which
-// persists WAHA's credentials.session into providerInstanceId) and the read
-// path (WebhooksController, which binds an inbound delivery's top-level
-// `session` against that same persisted providerInstanceId). Both sides are
+// Same coherence check as whatsapp-connections-waha-receiver-binding.test.ts,
+// mirrored for Z-API: WhatsappConnectionsService persists
+// credentials.instanceId into providerInstanceId (write path), and
+// WebhooksController binds an inbound delivery's top-level `instanceId`
+// against that same persisted providerInstanceId (read path). Both sides are
 // exercised for real against one shared fake `whatsappInstance` table so a
 // regression in either side's field name/semantics fails this test instead
-// of only surfacing in production as every WAHA webhook being rejected.
+// of only surfacing in production as every Z-API webhook being rejected.
 
 type RecordShape = {
   id: string;
@@ -40,7 +41,7 @@ function record(overrides: Partial<RecordShape> = {}): RecordShape {
     workspaceId: "workspace-a",
     name: "Vendas",
     displayName: null,
-    provider: "waha",
+    provider: "zapi",
     providerInstanceId: null,
     configEncrypted: null,
     configIv: null,
@@ -118,19 +119,16 @@ function sharedFakeDb(initial: RecordShape[] = []) {
   };
 }
 
-function organicWahaPayload(session: string) {
+function organicZapiPayload(instanceId: string) {
   return {
-    event: "message",
-    session,
-    payload: {
-      from: "5511999999999@c.us",
-      to: "5511888888888@c.us",
-      id: "waha-msg-1",
-      timestamp: 1_700_000_000,
-      fromMe: false,
-      type: "chat",
-      body: "Ola",
-    },
+    instanceId,
+    connectedPhone: "5511888888888",
+    phone: "5511999999999",
+    timestamp: 1_700_000_000,
+    fromMe: false,
+    isGroup: false,
+    message: "Ola",
+    messageId: "zapi-msg-1",
   };
 }
 
@@ -165,8 +163,8 @@ const owner = {
   role: "owner" as const,
 };
 
-describe("WAHA connection persistence <-> receiver binding coherence", () => {
-  it("accepts a webhook whose session matches the session persisted at creation, and rejects a mismatched one", async () => {
+describe("Z-API connection persistence <-> receiver binding coherence", () => {
+  it("accepts a webhook whose instanceId matches the instanceId persisted at creation, and rejects a mismatched one", async () => {
     const db = sharedFakeDb();
     const connections = new WhatsappConnectionsService(
       db.connectionsPrisma as never,
@@ -177,12 +175,12 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
 
     const created = await connections.createConnection(owner, {
-      provider: "waha",
+      provider: "zapi",
       name: "Suporte",
       credentials: {
-        baseUrl: "https://waha.example.test",
-        apiKey: "waha-secret",
-        session: "session-live",
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-live",
+        token: "zapi-secret",
       },
     });
     const { webhookToken } = await connections.rotateWebhookToken(
@@ -204,7 +202,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     await expect(
       controller.recordWhatsappConnection(
         created.id,
-        organicWahaPayload("session-live"),
+        organicZapiPayload("instance-live"),
         webhookToken,
       ),
     ).resolves.toBeDefined();
@@ -215,7 +213,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     await expect(
       controller.recordWhatsappConnection(
         created.id,
-        organicWahaPayload("some-other-session"),
+        organicZapiPayload("some-other-instance"),
         webhookToken,
       ),
     ).rejects.toMatchObject({ status: 401 });
@@ -224,7 +222,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
   });
 
-  it("rebinds the receiver to the new session after editConnection rotates it, and stops accepting the old one", async () => {
+  it("rebinds the receiver to the new instanceId after editConnection rotates it, and stops accepting the old one", async () => {
     const db = sharedFakeDb();
     const connections = new WhatsappConnectionsService(
       db.connectionsPrisma as never,
@@ -235,12 +233,12 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
 
     const created = await connections.createConnection(owner, {
-      provider: "waha",
+      provider: "zapi",
       name: "Suporte",
       credentials: {
-        baseUrl: "https://waha.example.test",
-        apiKey: "waha-secret",
-        session: "session-old",
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-old",
+        token: "zapi-secret",
       },
     });
     const { webhookToken } = await connections.rotateWebhookToken(
@@ -249,13 +247,13 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
 
     await connections.editConnection(owner, created.id, {
-      provider: "waha",
+      provider: "zapi",
       name: "Suporte",
       displayName: null,
       credentials: {
-        baseUrl: "https://waha.example.test",
-        apiKey: "waha-secret",
-        session: "session-new",
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-new",
+        token: "zapi-secret",
       },
     });
 
@@ -273,7 +271,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     await expect(
       controller.recordWhatsappConnection(
         created.id,
-        organicWahaPayload("session-old"),
+        organicZapiPayload("instance-old"),
         webhookToken,
       ),
     ).rejects.toMatchObject({ status: 401 });
@@ -281,7 +279,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     await expect(
       controller.recordWhatsappConnection(
         created.id,
-        organicWahaPayload("session-new"),
+        organicZapiPayload("instance-new"),
         webhookToken,
       ),
     ).resolves.toBeDefined();
@@ -290,7 +288,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
   });
 
-  it("rebinds the receiver to the new session after updateCredentials rotates it, and stops accepting the old one", async () => {
+  it("rebinds the receiver to the new instanceId after updateCredentials rotates it, and stops accepting the old one", async () => {
     const db = sharedFakeDb();
     const connections = new WhatsappConnectionsService(
       db.connectionsPrisma as never,
@@ -301,12 +299,12 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
 
     const created = await connections.createConnection(owner, {
-      provider: "waha",
+      provider: "zapi",
       name: "Suporte",
       credentials: {
-        baseUrl: "https://waha.example.test",
-        apiKey: "waha-secret",
-        session: "session-old",
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-old",
+        token: "zapi-secret",
       },
     });
     const { webhookToken } = await connections.rotateWebhookToken(
@@ -315,11 +313,11 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     );
 
     await connections.updateCredentials(owner, created.id, {
-      provider: "waha",
+      provider: "zapi",
       credentials: {
-        baseUrl: "https://waha.example.test",
-        apiKey: "waha-secret",
-        session: "session-new",
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-new",
+        token: "zapi-secret",
       },
     });
 
@@ -337,7 +335,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     await expect(
       controller.recordWhatsappConnection(
         created.id,
-        organicWahaPayload("session-old"),
+        organicZapiPayload("instance-old"),
         webhookToken,
       ),
     ).rejects.toMatchObject({ status: 401 });
@@ -345,7 +343,7 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
     await expect(
       controller.recordWhatsappConnection(
         created.id,
-        organicWahaPayload("session-new"),
+        organicZapiPayload("instance-new"),
         webhookToken,
       ),
     ).resolves.toBeDefined();

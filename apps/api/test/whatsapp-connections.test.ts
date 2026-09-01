@@ -299,6 +299,57 @@ describe("WhatsappConnectionsService", () => {
     expect(prisma.records).toHaveLength(0);
   });
 
+  it("persists Z-API credentials.instanceId as providerInstanceId on create", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "zapi",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-abc",
+        token: "zapi-secret",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-abc");
+    expect(created.id).toBe(prisma.records[0]?.id);
+  });
+
+  it("rejects creating a Z-API connection without an instanceId, and persists nothing", async () => {
+    const { service: connections, prisma } = service();
+
+    await expect(
+      connections.createConnection(owner, {
+        provider: "zapi",
+        name: "Suporte",
+        credentials: {
+          baseUrl: "https://zapi.example.test",
+          instanceId: "",
+          token: "zapi-secret",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records).toHaveLength(0);
+  });
+
+  it("rejects creating a NOD API connection without an instanceId, and persists nothing", async () => {
+    const { service: connections, prisma } = service();
+
+    await expect(
+      connections.createConnection(owner, {
+        provider: "nod_api",
+        name: "NOD",
+        credentials: {
+          instanceId: "",
+          instanceToken: "configured-token",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records).toHaveLength(0);
+  });
+
   it("rotates a hash-only webhook token without exposing it in persistence or audit", async () => {
     const { service: connections, prisma } = service();
     const created = await connections.createConnection(owner, {
@@ -385,6 +436,133 @@ describe("WhatsappConnectionsService", () => {
     expect(prisma.records[0]?.providerInstanceId).toBe("session-new");
   });
 
+  it("updates providerInstanceId when updateCredentials rotates the WAHA session", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "session-old",
+      },
+    });
+
+    await connections.updateCredentials(owner, created.id, {
+      provider: "waha",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "session-new",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("session-new");
+  });
+
+  it("rejects updateCredentials that blanks the WAHA session, without mutating the stored connection", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "session-old",
+      },
+    });
+    const before = { ...prisma.records[0] };
+
+    await expect(
+      connections.updateCredentials(owner, created.id, {
+        provider: "waha",
+        credentials: {
+          baseUrl: "https://waha.example.test",
+          apiKey: "waha-secret",
+          session: "",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records[0]).toEqual(before);
+  });
+
+  it("updates providerInstanceId when updateCredentials rotates the Z-API instanceId", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "zapi",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-old",
+        token: "zapi-secret",
+      },
+    });
+
+    await connections.updateCredentials(owner, created.id, {
+      provider: "zapi",
+      credentials: {
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-new",
+        token: "zapi-secret",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-new");
+  });
+
+  it("rejects updateCredentials that blanks the Z-API instanceId, without mutating the stored connection", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "zapi",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-old",
+        token: "zapi-secret",
+      },
+    });
+    const before = { ...prisma.records[0] };
+
+    await expect(
+      connections.updateCredentials(owner, created.id, {
+        provider: "zapi",
+        credentials: {
+          baseUrl: "https://zapi.example.test",
+          instanceId: "",
+          token: "zapi-secret",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records[0]).toEqual(before);
+  });
+
+  it("rejects updateCredentials that blanks the NOD API instanceId, without mutating the stored connection", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "nod_api",
+      name: "NOD",
+      credentials: {
+        instanceId: "instance-old",
+        instanceToken: "configured-token",
+      },
+    });
+    const before = { ...prisma.records[0] };
+
+    await expect(
+      connections.updateCredentials(owner, created.id, {
+        provider: "nod_api",
+        credentials: {
+          instanceId: "",
+          instanceToken: "configured-token",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records[0]).toEqual(before);
+  });
+
   it("returns 404 for edit metadata of a connection from another workspace", async () => {
     const { service: connections } = service(
       fakePrisma([record({ workspaceId: "workspace-b" })]),
@@ -459,6 +637,60 @@ describe("WhatsappConnectionsService", () => {
         displayName: null,
         credentials: {
           baseUrl: "https://waha-novo.example.test",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records[0]).toEqual(before);
+  });
+
+  it("rejects an edit payload that blanks the Z-API instanceId, without mutating the stored connection", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "zapi",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://zapi.example.test",
+        instanceId: "instance-old",
+        token: "zapi-secret",
+      },
+    });
+    const before = { ...prisma.records[0] };
+
+    await expect(
+      connections.editConnection(owner, created.id, {
+        provider: "zapi",
+        name: "Suporte",
+        displayName: null,
+        credentials: {
+          baseUrl: "https://zapi.example.test",
+          instanceId: "",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records[0]).toEqual(before);
+  });
+
+  it("rejects an edit payload that blanks the NOD API instanceId, without mutating the stored connection", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "nod_api",
+      name: "NOD",
+      credentials: {
+        instanceId: "instance-old",
+        instanceToken: "configured-token",
+      },
+    });
+    const before = { ...prisma.records[0] };
+
+    await expect(
+      connections.editConnection(owner, created.id, {
+        provider: "nod_api",
+        name: "NOD",
+        displayName: null,
+        credentials: {
+          instanceId: "",
         },
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
