@@ -563,6 +563,54 @@ describe("WhatsappConnectionsService", () => {
     expect(prisma.records[0]).toEqual(before);
   });
 
+  it("preserves the existing providerInstanceId when updateCredentials omits the Uazapi instanceId", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "uazapi_byo",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        token: "uazapi-secret",
+        instanceId: "instance-old",
+      },
+    });
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-old");
+
+    await connections.updateCredentials(owner, created.id, {
+      provider: "uazapi_byo",
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        token: "uazapi-secret-rotated",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-old");
+  });
+
+  it("updates providerInstanceId when updateCredentials sets a new Uazapi instanceId", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "uazapi_byo",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        token: "uazapi-secret",
+        instanceId: "instance-old",
+      },
+    });
+
+    await connections.updateCredentials(owner, created.id, {
+      provider: "uazapi_byo",
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        token: "uazapi-secret",
+        instanceId: "instance-new",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-new");
+  });
+
   it("returns 404 for edit metadata of a connection from another workspace", async () => {
     const { service: connections } = service(
       fakePrisma([record({ workspaceId: "workspace-b" })]),
@@ -737,6 +785,56 @@ describe("WhatsappConnectionsService", () => {
     expect(receivedConfig).toMatchObject({
       config: { apiKey: "rotated-secret" },
     });
+  });
+
+  it("preserves the existing providerInstanceId when editConnection omits the Uazapi instanceId", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "uazapi_byo",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        token: "uazapi-secret",
+        instanceId: "instance-old",
+      },
+    });
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-old");
+
+    await connections.editConnection(owner, created.id, {
+      provider: "uazapi_byo",
+      name: "Suporte renomeado",
+      displayName: null,
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-old");
+  });
+
+  it("updates providerInstanceId when editConnection sets a new Uazapi instanceId", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "uazapi_byo",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        token: "uazapi-secret",
+        instanceId: "instance-old",
+      },
+    });
+
+    await connections.editConnection(owner, created.id, {
+      provider: "uazapi_byo",
+      name: "Suporte",
+      displayName: null,
+      credentials: {
+        baseUrl: "https://uazapi.example.test",
+        instanceId: "instance-new",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("instance-new");
   });
 
   it("rejects an edit that changes the provider", async () => {

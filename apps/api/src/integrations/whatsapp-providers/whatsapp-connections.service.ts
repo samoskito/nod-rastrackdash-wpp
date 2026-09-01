@@ -175,7 +175,7 @@ export class WhatsappConnectionsService {
     const encrypted = this.encryptConfig(config);
     const providerInstanceId =
       input.provider === "uazapi_byo"
-        ? (input.credentials.instanceId ?? null)
+        ? (input.credentials.instanceId ?? existing.providerInstanceId)
         : this.deriveProviderInstanceId(input.provider, input.credentials);
     const updated = (await this.prisma.whatsappInstance.update({
       where: { id: existing.id },
@@ -238,7 +238,7 @@ export class WhatsappConnectionsService {
     const encrypted = this.encryptConfig(config);
     const providerInstanceId =
       input.provider === "uazapi_byo"
-        ? (input.credentials.instanceId ?? null)
+        ? (input.credentials.instanceId ?? existing.providerInstanceId)
         : this.deriveProviderInstanceId(input.provider, credentials);
     const updated = (await this.prisma.whatsappInstance.update({
       where: { id: existing.id },
