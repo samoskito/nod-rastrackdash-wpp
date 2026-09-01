@@ -102,7 +102,9 @@ export class WhatsappConnectionsService {
     const providerInstanceId =
       adapterInput.provider === "nod_api"
         ? (adapterInput.credentials?.instanceId ?? null)
-        : null;
+        : adapterInput.provider === "waha"
+          ? this.requireWahaSession(adapterInput.credentials?.session)
+          : null;
     const encrypted = this.encryptConfig(config);
     const created = (await this.prisma.whatsappInstance.create({
       data: {
@@ -205,7 +207,15 @@ export class WhatsappConnectionsService {
       name: existing.name,
       displayName: existing.displayName,
       baseUrl: this.extractConfigBaseUrl(config),
-      instanceId: existing.providerInstanceId ?? this.extractConfigInstanceId(config),
+      // providerInstanceId now also carries the WAHA session (see
+      // createConnection/editConnection), which belongs in the `session`
+      // field below, not `instanceId` - the edit form never renders an
+      // Instance ID input for waha, but the DTO contract still shouldn't
+      // duplicate it there.
+      instanceId:
+        existing.provider === "waha"
+          ? this.extractConfigInstanceId(config)
+          : (existing.providerInstanceId ?? this.extractConfigInstanceId(config)),
       session: this.extractConfigSession(config),
     };
   }
@@ -235,9 +245,11 @@ export class WhatsappConnectionsService {
         providerInstanceId:
           input.provider === "uazapi_byo"
             ? (input.credentials.instanceId ?? null)
-            : input.provider === "zapi" || input.provider === "nod_api"
-              ? input.credentials.instanceId
-              : existing.providerInstanceId,
+            : input.provider === "waha"
+              ? this.requireWahaSession(input.credentials.session)
+              : input.provider === "zapi" || input.provider === "nod_api"
+                ? input.credentials.instanceId
+                : existing.providerInstanceId,
       },
     })) as WhatsappConnectionRecord;
     await this.recordAudit({
@@ -509,7 +521,7 @@ export class WhatsappConnectionsService {
         return {
           baseUrl: input.credentials.baseUrl,
           apiKey,
-          session: input.credentials.session,
+          session: this.requireWahaSession(input.credentials.session),
         };
       }
       case "zapi": {
@@ -543,6 +555,23 @@ export class WhatsappConnectionsService {
         };
       }
     }
+  }
+
+  // WAHA webhook deliveries are bound to the connection's persisted
+  // providerInstanceId (see webhooks.controller.ts's
+  // assertProviderInstanceBinding): the receiver rejects any payload whose
+  // top-level `session` doesn't match it, and fails closed outright when
+  // providerInstanceId hasn't been configured. A WAHA connection must
+  // therefore always be created/edited with a session, or its webhook
+  // endpoint would be unreachable (401) forever.
+  private requireWahaSession(session: string | undefined): string {
+    const trimmed = session?.trim();
+    if (!trimmed) {
+      throw new BadRequestException(
+        "Sessao da conexao WhatsApp (WAHA) e obrigatoria",
+      );
+    }
+    return trimmed;
   }
 
   private extractConfigBaseUrl(

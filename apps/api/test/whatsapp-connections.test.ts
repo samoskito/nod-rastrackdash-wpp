@@ -1,5 +1,9 @@
 import "reflect-metadata";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module";
@@ -262,6 +266,39 @@ describe("WhatsappConnectionsService", () => {
     );
   });
 
+  it("persists WAHA credentials.session as providerInstanceId on create", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "session-abc",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("session-abc");
+    expect(created.id).toBe(prisma.records[0]?.id);
+  });
+
+  it("rejects creating a WAHA connection without a session, and persists nothing", async () => {
+    const { service: connections, prisma } = service();
+
+    await expect(
+      connections.createConnection(owner, {
+        provider: "waha",
+        name: "Suporte",
+        credentials: {
+          baseUrl: "https://waha.example.test",
+          apiKey: "waha-secret",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records).toHaveLength(0);
+  });
+
   it("rotates a hash-only webhook token without exposing it in persistence or audit", async () => {
     const { service: connections, prisma } = service();
     const created = await connections.createConnection(owner, {
@@ -270,6 +307,7 @@ describe("WhatsappConnectionsService", () => {
       credentials: {
         baseUrl: "https://waha.example.test",
         apiKey: "waha-secret",
+        session: "support",
       },
     });
 
@@ -320,6 +358,33 @@ describe("WhatsappConnectionsService", () => {
     expect(JSON.stringify(edit)).not.toContain("waha-secret-never-returned");
   });
 
+  it("updates providerInstanceId when editConnection changes the WAHA session", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "session-old",
+      },
+    });
+    expect(prisma.records[0]?.providerInstanceId).toBe("session-old");
+
+    await connections.editConnection(owner, created.id, {
+      provider: "waha",
+      name: "Suporte",
+      displayName: null,
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "session-new",
+      },
+    });
+
+    expect(prisma.records[0]?.providerInstanceId).toBe("session-new");
+  });
+
   it("returns 404 for edit metadata of a connection from another workspace", async () => {
     const { service: connections } = service(
       fakePrisma([record({ workspaceId: "workspace-b" })]),
@@ -337,6 +402,7 @@ describe("WhatsappConnectionsService", () => {
       credentials: {
         baseUrl: "https://waha.example.test",
         apiKey: "original-secret",
+        session: "support",
       },
     });
 
@@ -346,6 +412,7 @@ describe("WhatsappConnectionsService", () => {
       displayName: null,
       credentials: {
         baseUrl: "https://waha-novo.example.test",
+        session: "support",
       },
     });
 
@@ -367,9 +434,36 @@ describe("WhatsappConnectionsService", () => {
       config: {
         baseUrl: "https://waha-novo.example.test",
         apiKey: "original-secret",
-        session: undefined,
+        session: "support",
       },
     });
+  });
+
+  it("rejects an edit payload that omits the WAHA session, without mutating the stored connection", async () => {
+    const { service: connections, prisma } = service();
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "original-secret",
+        session: "support",
+      },
+    });
+    const before = { ...prisma.records[0] };
+
+    await expect(
+      connections.editConnection(owner, created.id, {
+        provider: "waha",
+        name: "Suporte renomeado",
+        displayName: null,
+        credentials: {
+          baseUrl: "https://waha-novo.example.test",
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.records[0]).toEqual(before);
   });
 
   it("replaces the secret when the edit payload provides a new one", async () => {
@@ -380,6 +474,7 @@ describe("WhatsappConnectionsService", () => {
       credentials: {
         baseUrl: "https://waha.example.test",
         apiKey: "original-secret",
+        session: "support",
       },
     });
 
@@ -390,6 +485,7 @@ describe("WhatsappConnectionsService", () => {
       credentials: {
         baseUrl: "https://waha.example.test",
         apiKey: "rotated-secret",
+        session: "support",
       },
     });
 
@@ -416,7 +512,11 @@ describe("WhatsappConnectionsService", () => {
     const created = await connections.createConnection(owner, {
       provider: "waha",
       name: "Suporte",
-      credentials: { baseUrl: "https://waha.example.test", apiKey: "secret" },
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "secret",
+        session: "support",
+      },
     });
 
     await expect(
@@ -452,7 +552,11 @@ describe("WhatsappConnectionsService", () => {
     const created = await connections.createConnection(owner, {
       provider: "waha",
       name: "Suporte",
-      credentials: { baseUrl: "https://waha.example.test", apiKey: "secret" },
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "secret",
+        session: "support",
+      },
     });
 
     await connections.editConnection(owner, created.id, {
@@ -462,6 +566,7 @@ describe("WhatsappConnectionsService", () => {
       credentials: {
         baseUrl: "https://waha.example.test",
         apiKey: "rotated-secret",
+        session: "support",
       },
     });
 
