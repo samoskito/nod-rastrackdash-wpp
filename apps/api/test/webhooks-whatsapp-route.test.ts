@@ -16,7 +16,11 @@ const hash = (value: string) =>
   createHash("sha256").update(value, "utf8").digest("hex");
 
 type Services = {
-  diagnosticsService: { recordWebhookLog: ReturnType<typeof vi.fn> };
+  diagnosticsService: {
+    recordWebhookLog: ReturnType<typeof vi.fn>;
+    markWebhookLogProcessed: ReturnType<typeof vi.fn>;
+    markWebhookLogFailed: ReturnType<typeof vi.fn>;
+  };
   conversionRulesService: { evaluateTriggers: ReturnType<typeof vi.fn> };
   conversionEventsService: {
     recordAutomaticLeadSubmitted: ReturnType<typeof vi.fn>;
@@ -35,6 +39,8 @@ function defaultServices(): Services {
         diagnosticEventId: "diagnostic-event-1",
         status: "received",
       })),
+      markWebhookLogProcessed: vi.fn(async () => true),
+      markWebhookLogFailed: vi.fn(async () => true),
     },
     conversionRulesService: {
       evaluateTriggers: vi.fn(async () => []),

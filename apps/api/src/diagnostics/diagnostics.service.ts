@@ -205,6 +205,13 @@ export type WebhookLogResult = {
   webhookLogId: string;
   diagnosticEventId: string;
   /**
+   * "received" means the caller now owns the delivery and must settle it
+   * with markWebhookLogProcessed/markWebhookLogFailed. It covers both a
+   * brand-new row and a retry that reclaimed a previously failed one.
+   *
+   * "duplicate" means the delivery must not be processed: it either
+   * already completed, or another request is holding the claim right now.
+   *
    * "conflict" means the same idempotencyKey/externalEventId arrived with a
    * divergent payloadHash: the delivery was quarantined as its own
    * WebhookLog row and the original record was left untouched.
@@ -218,6 +225,23 @@ type DiagnosticActorContext = {
 };
 
 const failedStatuses = ["error", "failed"];
+
+/**
+ * WebhookLog lifecycle used by the per-connection receiver.
+ *
+ * "received" doubles as the in-flight claim: exactly one request holds a row
+ * in this state, either by winning the idempotencyKey INSERT or by taking
+ * over a previously failed row. It settles on "processed" (downstream work
+ * completed) or "failed" (downstream work threw), and only a settled-failed
+ * row can be claimed again.
+ *
+ * Callers that never settle their row (Meta, Uazapi) keep the pre-existing
+ * behavior: the row stays "received" and replays are duplicates.
+ */
+const webhookLogInFlightStatus = "received";
+const webhookLogProcessedStatus = "processed";
+const webhookLogFailedStatus = "failed";
+const webhookReceiverFailureCode = "receiver_processing_failed";
 
 @Injectable()
 export class DiagnosticsService {
@@ -328,12 +352,110 @@ export class DiagnosticsService {
       orderBy: { occurredAt: "asc" },
       take: 1
     })) as DiagnosticEventRecord[];
+    const diagnosticEventId = existingEvents[0]?.id ?? existing.id;
+
+    if (failedStatuses.includes(existing.status)) {
+      return this.claimFailedWebhookLog(existing.id, diagnosticEventId);
+    }
 
     return {
       webhookLogId: existing.id,
-      diagnosticEventId: existingEvents[0]?.id ?? existing.id,
+      diagnosticEventId,
       status: "duplicate"
     };
+  }
+
+  /**
+   * A delivery whose downstream processing failed must stay reprocessable:
+   * the provider's retry carries the same idempotencyKey and would otherwise
+   * be answered as a duplicate forever, silently dropping the delivery.
+   *
+   * The takeover is one conditional UPDATE (still failed -> back in flight),
+   * so it is also the concurrency guard: two retries racing the same failed
+   * row both issue it, the database serializes them, and only the one whose
+   * WHERE still matched reports count 1. The loser is answered as a
+   * duplicate rather than processing the delivery a second time in parallel.
+   */
+  private async claimFailedWebhookLog(
+    webhookLogId: string,
+    diagnosticEventId: string
+  ): Promise<WebhookLogResult> {
+    const claimed = await this.prisma.webhookLog.updateMany({
+      where: { id: webhookLogId, status: { in: failedStatuses } },
+      data: {
+        status: webhookLogInFlightStatus,
+        processedAt: null,
+        errorCode: null,
+        errorMessage: null
+      }
+    });
+
+    return {
+      webhookLogId,
+      diagnosticEventId,
+      status: claimed.count === 1 ? "received" : "duplicate"
+    };
+  }
+
+  /**
+   * Settles an in-flight delivery as processed. Scoped to a row still held
+   * by this request, so a late completion can never overwrite a row another
+   * retry has already claimed. Returns whether the claim was still held.
+   */
+  async markWebhookLogProcessed(webhookLogId: string): Promise<boolean> {
+    const updated = await this.prisma.webhookLog.updateMany({
+      where: { id: webhookLogId, status: webhookLogInFlightStatus },
+      data: {
+        status: webhookLogProcessedStatus,
+        processedAt: new Date(),
+        errorCode: null,
+        errorMessage: null
+      }
+    });
+
+    return updated.count === 1;
+  }
+
+  /**
+   * Settles an in-flight delivery as failed, which is what makes a later
+   * retry reclaimable. Same claim scoping as markWebhookLogProcessed, and
+   * processedAt stays null: it means "completed successfully at", never
+   * "last touched at".
+   */
+  async markWebhookLogFailed(
+    webhookLogId: string,
+    error: unknown,
+    errorCode: string = webhookReceiverFailureCode
+  ): Promise<boolean> {
+    const updated = await this.prisma.webhookLog.updateMany({
+      where: { id: webhookLogId, status: webhookLogInFlightStatus },
+      data: {
+        status: webhookLogFailedStatus,
+        processedAt: null,
+        errorCode,
+        errorMessage: this.describeWebhookFailure(error)
+      }
+    });
+
+    return updated.count === 1;
+  }
+
+  /**
+   * Downstream failures are recorded by error class only. Provider and ORM
+   * errors routinely quote whatever they choked on - phone numbers, message
+   * text, tokens - and WebhookLog.errorMessage is surfaced in the
+   * diagnostics UI, so the raw message is never persisted.
+   */
+  private describeWebhookFailure(error: unknown): string {
+    const name = error instanceof Error ? error.name : "";
+    // Only an error class name gets through. Anything else - a dynamically
+    // built name, a thrown string, a name long enough to be carrying data -
+    // is reported as unknown rather than persisted verbatim.
+    const safeName = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)
+      ? name
+      : "UnknownError";
+
+    return `Falha no processamento do webhook (errorName=${safeName})`;
   }
 
   /**

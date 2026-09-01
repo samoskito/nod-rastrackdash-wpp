@@ -17,6 +17,7 @@ function makePrisma() {
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     diagnosticEvent: {
       create: vi.fn(),
@@ -214,6 +215,65 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.diagnosticEvent.create).not.toHaveBeenCalled();
   });
 
+  it("nao reivindica um registro concluido: replay de delivery processado continua duplicate", async () => {
+    prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-1",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "processed",
+      payloadHash: "a".repeat(64),
+    });
+    prisma.diagnosticEvent.findMany.mockResolvedValueOnce([
+      { id: "diagnostic-event-1" },
+    ]);
+
+    await expect(service.recordWebhookLog(baseInput())).resolves.toMatchObject({
+      status: "duplicate",
+    });
+    expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("nao reivindica um registro em voo: entrega concorrente continua duplicate", async () => {
+    prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-1",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "received",
+      payloadHash: "a".repeat(64),
+    });
+    prisma.diagnosticEvent.findMany.mockResolvedValueOnce([
+      { id: "diagnostic-event-1" },
+    ]);
+
+    await expect(service.recordWebhookLog(baseInput())).resolves.toMatchObject({
+      status: "duplicate",
+    });
+    expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("payload divergente sobre um registro failed vira conflito em quarentena, nunca uma reivindicacao", async () => {
+    prisma.webhookLog.create
+      .mockRejectedValueOnce(uniqueConstraintError())
+      .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-1",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "failed",
+      payloadHash: "b".repeat(64),
+    });
+    prisma.diagnosticEvent.create.mockResolvedValueOnce({
+      id: "diagnostic-event-quarantine-1",
+    });
+
+    await expect(service.recordWebhookLog(baseInput())).resolves.toMatchObject({
+      status: "conflict",
+    });
+    expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
+  });
+
   it("propagates a P2002 whose constraint target is a string that does not name idempotencyKey", async () => {
     const otherConstraintError = new Prisma.PrismaClientKnownRequestError(
       "unique constraint",
@@ -229,5 +289,155 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
       otherConstraintError,
     );
     expect(prisma.webhookLog.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("DiagnosticsService WebhookLog claim/settle lifecycle", () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let service: DiagnosticsService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    service = new DiagnosticsService(prisma as never);
+  });
+
+  for (const status of ["failed", "error"]) {
+    it(`reivindica um registro "${status}" para reprocessamento e limpa o erro anterior`, async () => {
+      prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
+      prisma.webhookLog.findUnique.mockResolvedValueOnce({
+        id: "webhook-log-1",
+        workspaceId: "workspace-a",
+        source: "waha",
+        status,
+        payloadHash: "a".repeat(64),
+      });
+      prisma.diagnosticEvent.findMany.mockResolvedValueOnce([
+        { id: "diagnostic-event-1" },
+      ]);
+      prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      await expect(
+        service.recordWebhookLog(baseInput()),
+      ).resolves.toEqual({
+        webhookLogId: "webhook-log-1",
+        diagnosticEventId: "diagnostic-event-1",
+        status: "received",
+      });
+      expect(prisma.webhookLog.updateMany).toHaveBeenCalledWith({
+        where: { id: "webhook-log-1", status: { in: ["error", "failed"] } },
+        data: {
+          status: "received",
+          processedAt: null,
+          errorCode: null,
+          errorMessage: null,
+        },
+      });
+      // A retry reuses the original row; it never creates a second one.
+      expect(prisma.webhookLog.create).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  it("o retry que perde a corrida pela reivindicacao e respondido como duplicate", async () => {
+    prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-1",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "failed",
+      payloadHash: "a".repeat(64),
+    });
+    prisma.diagnosticEvent.findMany.mockResolvedValueOnce([
+      { id: "diagnostic-event-1" },
+    ]);
+    // The conditional UPDATE no longer matched: another retry already took
+    // the row out of "failed".
+    prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(service.recordWebhookLog(baseInput())).resolves.toMatchObject({
+      webhookLogId: "webhook-log-1",
+      status: "duplicate",
+    });
+  });
+
+  it("markWebhookLogProcessed so liquida a linha ainda em voo", async () => {
+    prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await expect(
+      service.markWebhookLogProcessed("webhook-log-1"),
+    ).resolves.toBe(true);
+
+    const call = prisma.webhookLog.updateMany.mock.calls[0][0];
+    expect(call.where).toEqual({ id: "webhook-log-1", status: "received" });
+    expect(call.data).toMatchObject({
+      status: "processed",
+      errorCode: null,
+      errorMessage: null,
+    });
+    expect(call.data.processedAt).toBeInstanceOf(Date);
+  });
+
+  it("markWebhookLogProcessed informa que a reivindicacao ja nao era sua", async () => {
+    prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      service.markWebhookLogProcessed("webhook-log-1"),
+    ).resolves.toBe(false);
+  });
+
+  it("markWebhookLogFailed marca failed com erro redigido e mantem processedAt nulo", async () => {
+    prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 1 });
+    const error = new Error(
+      "falha ao enviar para 5511999999999 com Bearer super-secret-token",
+    );
+    error.name = "ProviderTimeoutError";
+
+    await expect(
+      service.markWebhookLogFailed("webhook-log-1", error),
+    ).resolves.toBe(true);
+
+    const call = prisma.webhookLog.updateMany.mock.calls[0][0];
+    expect(call.where).toEqual({ id: "webhook-log-1", status: "received" });
+    expect(call.data).toMatchObject({
+      status: "failed",
+      processedAt: null,
+      errorCode: "receiver_processing_failed",
+    });
+    // Only the error class is persisted: provider errors quote payloads.
+    expect(call.data.errorMessage).toContain("ProviderTimeoutError");
+    expect(call.data.errorMessage).not.toContain("5511999999999");
+    expect(call.data.errorMessage).not.toMatch(/bearer|super-secret-token/i);
+    expect(call.data.errorMessage).not.toContain(error.message);
+  });
+
+  it("markWebhookLogFailed redige tambem erros nao-Error e nomes exoticos", async () => {
+    prisma.webhookLog.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.markWebhookLogFailed(
+      "webhook-log-1",
+      "5511999999999 recusou o token",
+    );
+    expect(
+      prisma.webhookLog.updateMany.mock.calls[0][0].data.errorMessage,
+    ).toBe("Falha no processamento do webhook (errorName=UnknownError)");
+
+    // A dynamically built name is not a class name: it is dropped whole
+    // instead of being pattern-scrubbed.
+    const weird = new Error("boom");
+    weird.name = "Erro 5511999999999 (token=abc)";
+    await service.markWebhookLogFailed("webhook-log-1", weird);
+    const errorMessage =
+      prisma.webhookLog.updateMany.mock.calls[1][0].data.errorMessage;
+    expect(errorMessage).toBe(
+      "Falha no processamento do webhook (errorName=UnknownError)",
+    );
+  });
+
+  it("markWebhookLogFailed nao sobrescreve uma linha reivindicada por outro retry", async () => {
+    prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      service.markWebhookLogFailed("webhook-log-1", new Error("late")),
+    ).resolves.toBe(false);
+    expect(prisma.webhookLog.update).not.toHaveBeenCalled();
   });
 });

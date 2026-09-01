@@ -20,7 +20,10 @@ import { hashPhoneIdentity } from "../common/phone/phone-identity";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { ConversionRulesService } from "../conversion-rules/conversion-rules.service";
 import { DiagnosticsService } from "../diagnostics/diagnostics.service";
-import type { InboundWebhookParserResult } from "../inbound-webhooks/providers/inbound-webhook-parser";
+import type {
+  InboundWebhookParserResult,
+  ParsedInboundWebhookEvent,
+} from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { parseWahaV1Webhook } from "../inbound-webhooks/providers/waha/waha-v1.parser";
 import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.parser";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
@@ -709,13 +712,58 @@ export class WebhooksController {
       return { ...diagnostic, conversion: emptyConversion };
     }
 
+    // From here on this request holds the WebhookLog claim and must settle
+    // it. A downstream failure has to land as "failed" so the provider's
+    // retry can reclaim and reprocess the very same delivery: left in
+    // flight, every retry would be answered as a duplicate and the delivery
+    // would be lost. The error still propagates, so the provider sees a
+    // non-2xx and retries.
+    try {
+      const conversion = await this.convertProviderMessage(
+        provider,
+        event,
+        phoneHash,
+        context,
+      );
+
+      await this.diagnosticsService.markWebhookLogProcessed(
+        diagnostic.webhookLogId,
+      );
+
+      return { ...diagnostic, conversion };
+    } catch (error) {
+      await this.markProviderDeliveryFailed(
+        provider,
+        diagnostic.webhookLogId,
+        context,
+        error,
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Downstream half of the WAHA/Z-API receiver, run while holding the
+   * WebhookLog claim. Kept separate from recordProviderMessageWebhook so
+   * every step of it - attribution, rules, lead, conversion, enqueue - is
+   * covered by the same failure/retry accounting.
+   */
+  private async convertProviderMessage(
+    provider: WiredMessageProvider,
+    event: ParsedInboundWebhookEvent | null,
+    phoneHash: string | undefined,
+    context: VerifiedConnectionContext,
+  ) {
+    const emptyConversion = { created: [], duplicates: [], queued: [] };
+
     // Product rule (mirrors Uazapi): only a paid CTWA inbound message
     // creates a platform lead. Organic messages (no ctwaClid) and messages
     // sent from the connected number itself (fromMe) never do; group chats
     // never reach here because the parsers decline to emit an event for
-    // them.
+    // them. Nothing left to do is still a processed delivery.
     if (!event || event.message.direction !== "inbound" || !event.ctwaClid) {
-      return { ...diagnostic, conversion: emptyConversion };
+      return emptyConversion;
     }
 
     const attribution = await this.resolveUazapiMetaAttribution(
@@ -779,13 +827,38 @@ export class WebhooksController {
     );
 
     return {
-      ...diagnostic,
-      conversion: {
-        ...conversion,
-        automatic,
-        queued,
-      },
+      ...conversion,
+      automatic,
+      queued,
     };
+  }
+
+  /**
+   * Best-effort settlement of a failed delivery: the downstream error is the
+   * one worth propagating, so a failure to write the status is logged (with
+   * no payload, phone, or token) instead of replacing it. The row then stays
+   * in flight and the delivery is only recoverable once it can be settled.
+   */
+  private async markProviderDeliveryFailed(
+    provider: WiredMessageProvider,
+    webhookLogId: string,
+    context: VerifiedConnectionContext,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      await this.diagnosticsService.markWebhookLogFailed(webhookLogId, error);
+    } catch (markError) {
+      this.logger.error(
+        JSON.stringify({
+          event: "whatsapp_receiver_failure_not_recorded",
+          provider,
+          workspaceId: context.workspaceId,
+          whatsappInstanceId: context.whatsappInstanceId,
+          webhookLogId,
+          errorName: markError instanceof Error ? markError.name : "unknown",
+        }),
+      );
+    }
   }
 
   private async evaluateUazapiTeamMessage(

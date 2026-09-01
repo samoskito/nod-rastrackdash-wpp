@@ -142,6 +142,8 @@ function webhooksServices() {
         diagnosticEventId: "diagnostic-event-1",
         status: "received",
       })),
+      markWebhookLogProcessed: vi.fn(async () => true),
+      markWebhookLogFailed: vi.fn(async () => true),
     },
     conversionRulesService: { evaluateTriggers: vi.fn(async () => []) },
     conversionEventsService: {
