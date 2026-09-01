@@ -1,11 +1,13 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   Headers,
   HttpCode,
   Inject,
+  InternalServerErrorException,
   Logger,
   NotImplementedException,
   Param,
@@ -14,17 +16,26 @@ import {
   RawBody,
   UnauthorizedException,
 } from "@nestjs/common";
+import { safeErrorName } from "../common/errors/safe-error-name";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { hashPhoneIdentity } from "../common/phone/phone-identity";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { ConversionRulesService } from "../conversion-rules/conversion-rules.service";
 import { DiagnosticsService } from "../diagnostics/diagnostics.service";
+import type {
+  InboundWebhookParserResult,
+  ParsedInboundWebhookEvent,
+} from "../inbound-webhooks/providers/inbound-webhook-parser";
+import { parseWahaV1Webhook } from "../inbound-webhooks/providers/waha/waha-v1.parser";
+import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.parser";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
 import { LeadsService } from "../leads/leads.service";
 import {
   parseUazapiWebhook,
   type ParsedUazapiWebhook,
 } from "./uazapi-webhook-parser";
+import { computeCanonicalPayloadHash } from "./webhook-payload-hash";
 
 type WebhookBody = Record<string, unknown>;
 
@@ -32,6 +43,36 @@ type VerifiedUazapiContext = {
   workspaceId: string;
   whatsappInstanceId: string;
   providerInstanceId: string | null;
+};
+
+// WAHA and Z-API are wired through their standalone v1 parsers rather than
+// the full inbound-webhooks automation pipeline: this per-connection
+// receiver only needs a single normalized message event to log to
+// WebhookLog and, when eligible, create a lead.
+type WiredMessageProvider = "waha" | "zapi";
+
+const MESSAGE_PROVIDER_PARSERS: Record<
+  WiredMessageProvider,
+  (payload: unknown) => InboundWebhookParserResult
+> = {
+  waha: parseWahaV1Webhook,
+  zapi: parseZapiV1Webhook,
+};
+
+// The body field each provider uses to claim the session/instance it is
+// delivering for. Both are bound against the connection's persisted
+// providerInstanceId before anything is parsed, logged, or converted.
+const WIRED_MESSAGE_PROVIDER_BINDING_FIELD: Record<
+  WiredMessageProvider,
+  "session" | "instanceId"
+> = {
+  waha: "session",
+  zapi: "instanceId",
+};
+
+type VerifiedConnectionContext = {
+  workspaceId: string;
+  whatsappInstanceId: string;
 };
 
 type VerifiedMetaContext = {
@@ -195,9 +236,52 @@ export class WebhooksController {
       });
     }
 
+    if (this.isWiredMessageProvider(instance.provider)) {
+      this.assertProviderInstanceBinding(
+        instance.provider,
+        body,
+        instance.providerInstanceId,
+      );
+
+      return this.recordProviderMessageWebhook(instance.provider, body, {
+        workspaceId: instance.workspaceId,
+        whatsappInstanceId: instance.id,
+      });
+    }
+
     throw new NotImplementedException(
       `Receiver inbound para ${instance.provider} ainda nao esta disponivel`,
     );
+  }
+
+  private isWiredMessageProvider(
+    provider: string,
+  ): provider is WiredMessageProvider {
+    return provider === "waha" || provider === "zapi";
+  }
+
+  /**
+   * WAHA (`payload.session`) and Z-API (`body.instanceId`) deliveries must
+   * bind to the connection's persisted providerInstanceId before anything
+   * is parsed, logged, or converted. A connection whose providerInstanceId
+   * has not been configured yet, or a payload that omits the field or
+   * disagrees with it, is rejected outright: the webhook token alone would
+   * otherwise let a delivery for one WAHA session/Z-API instance be
+   * ingested under a differently-configured connection sharing the same
+   * token. Fails closed in every case.
+   */
+  private assertProviderInstanceBinding(
+    provider: WiredMessageProvider,
+    body: WebhookBody,
+    providerInstanceId: string | null,
+  ): void {
+    const claimed = this.firstString(
+      body[WIRED_MESSAGE_PROVIDER_BINDING_FIELD[provider]],
+    );
+
+    if (!providerInstanceId || !claimed || claimed !== providerInstanceId) {
+      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+    }
   }
 
   @Post("meta")
@@ -581,6 +665,324 @@ export class WebhooksController {
         queued,
       },
     };
+  }
+
+  /**
+   * WAHA/Z-API receiver: the connection is already authenticated by
+   * recordWhatsappConnection, so this only needs to parse, log to
+   * WebhookLog, and (for a paid CTWA inbound message) create a lead. Unlike
+   * Uazapi's shared endpoint there is no provider-instance lookup to do:
+   * the workspace/connection context comes straight from the verified
+   * instance.
+   */
+  private async recordProviderMessageWebhook(
+    provider: WiredMessageProvider,
+    body: WebhookBody,
+    context: VerifiedConnectionContext,
+  ) {
+    const parsed = MESSAGE_PROVIDER_PARSERS[provider](body);
+    const event = parsed.events[0] ?? null;
+    const phoneHash = event
+      ? hashPhoneIdentity(event.contact.phoneNumber)
+      : undefined;
+    const emptyConversion = { created: [], duplicates: [], queued: [] };
+    // Idempotency hardening: fingerprint the payload so a same-externalId
+    // replay with a genuinely different body (rather than a plain retry) is
+    // quarantined instead of silently treated as a duplicate.
+    const payloadHash = computeCanonicalPayloadHash(body);
+
+    const diagnostic = await this.diagnosticsService.recordWebhookLog({
+      workspaceId: context.workspaceId,
+      whatsappInstanceId: context.whatsappInstanceId,
+      source: provider,
+      eventType: parsed.providerEventType ?? `${provider}.webhook`,
+      externalEventId: parsed.externalDeliveryId ?? undefined,
+      idempotencyKey: parsed.externalDeliveryId
+        ? [
+            provider,
+            context.workspaceId,
+            context.whatsappInstanceId,
+            parsed.externalDeliveryId,
+          ].join(":")
+        : undefined,
+      payloadHash,
+      phoneHash,
+      adId: event?.adId ?? undefined,
+      summaryPayload: body,
+    });
+
+    if (diagnostic.status === "duplicate" || diagnostic.status === "conflict") {
+      return { ...diagnostic, conversion: emptyConversion };
+    }
+
+    // From here on this request holds the WebhookLog claim and must settle
+    // it. A downstream failure has to land as "failed" so the provider's
+    // retry can reclaim and reprocess the very same delivery: left in
+    // flight, every retry would be answered as a duplicate and the delivery
+    // would be lost. The error still propagates, so the provider sees a
+    // non-2xx and retries. Settling is never optional in either direction:
+    // an unsettled delivery is answered with a non-2xx, never a success.
+    let conversion: Awaited<ReturnType<typeof this.convertProviderMessage>>;
+
+    try {
+      conversion = await this.convertProviderMessage(
+        provider,
+        event,
+        phoneHash,
+        context,
+      );
+    } catch (error) {
+      await this.settleProviderDeliveryFailed(
+        provider,
+        diagnostic.webhookLogId,
+        context,
+        error,
+      );
+
+      throw error;
+    }
+
+    // Settling is outside the try on purpose: a settlement problem is its
+    // own incident, not a downstream failure to be re-recorded as one.
+    await this.settleProviderDeliveryProcessed(
+      provider,
+      diagnostic.webhookLogId,
+      context,
+    );
+
+    return { ...diagnostic, conversion };
+  }
+
+  /**
+   * Downstream half of the WAHA/Z-API receiver, run while holding the
+   * WebhookLog claim. Kept separate from recordProviderMessageWebhook so
+   * every step of it - attribution, rules, lead, conversion, enqueue - is
+   * covered by the same failure/retry accounting.
+   */
+  private async convertProviderMessage(
+    provider: WiredMessageProvider,
+    event: ParsedInboundWebhookEvent | null,
+    phoneHash: string | undefined,
+    context: VerifiedConnectionContext,
+  ) {
+    const emptyConversion = { created: [], duplicates: [], queued: [] };
+
+    // Product rule (mirrors Uazapi): only a paid CTWA inbound message
+    // creates a platform lead. Organic messages (no ctwaClid) and messages
+    // sent from the connected number itself (fromMe) never do; group chats
+    // never reach here because the parsers decline to emit an event for
+    // them. Nothing left to do is still a processed delivery.
+    if (!event || event.message.direction !== "inbound" || !event.ctwaClid) {
+      return emptyConversion;
+    }
+
+    const attribution = await this.resolveUazapiMetaAttribution(
+      context.workspaceId,
+      { adId: event.adId ?? undefined },
+    );
+    const triggerInput = {
+      messageText: event.message.text ?? undefined,
+      labels: [] as string[],
+    };
+    const rules = await this.conversionRulesService.evaluateTriggers(
+      context.workspaceId,
+      triggerInput,
+    );
+    const lead = await this.leadsService.upsertFromWhatsappWebhook({
+      workspaceId: context.workspaceId,
+      whatsappInstanceId: context.whatsappInstanceId,
+      name: event.contact.name ?? undefined,
+      phone: event.contact.phoneNumber,
+      phoneHash,
+      source: provider,
+      labels: triggerInput.labels,
+      campaignId: attribution.campaignId,
+      adSetId: attribution.adSetId,
+      adId: attribution.adId,
+      ctwaClid: event.ctwaClid,
+      ctwaSourceUrl: event.ad?.sourceUrl ?? undefined,
+      occurredAt: event.occurredAt,
+    });
+    const automatic =
+      await this.conversionEventsService.recordAutomaticLeadSubmitted({
+        workspaceId: context.workspaceId,
+        leadId: lead?.id,
+        phoneHash,
+        campaignId: attribution.campaignId,
+        adSetId: attribution.adSetId,
+        adId: attribution.adId,
+        ctwaClid: event.ctwaClid,
+      });
+    const conversion = await this.conversionEventsService.recordRuleMatches({
+      workspaceId: context.workspaceId,
+      rules,
+      leadId: lead?.id,
+      phoneHash,
+      campaignId: attribution.campaignId,
+      adSetId: attribution.adSetId,
+      adId: attribution.adId,
+      ctwaClid: event.ctwaClid,
+    });
+    const readyLogIds = await this.conversionEventsService.listReadyLogIds([
+      ...automatic.created,
+      ...conversion.created,
+    ]);
+    const queued = await Promise.all(
+      readyLogIds.map((logId) =>
+        this.conversionEventsQueueService.enqueueSend(
+          logId,
+          context.workspaceId,
+        ),
+      ),
+    );
+
+    return {
+      ...conversion,
+      automatic,
+      queued,
+    };
+  }
+
+  /**
+   * Settles a delivery whose downstream processing threw.
+   *
+   * The write is what makes the provider's retry reprocessable, so it is
+   * never best-effort: if it cannot be written the row is stuck in flight
+   * and every retry of this delivery will be answered as a duplicate, i.e.
+   * the delivery is lost while the provider is told 2xx. That is strictly
+   * worse than the downstream failure, so it is reported as its own incident
+   * and raised instead of being logged away behind the original error, which
+   * is kept as the cause.
+   *
+   * A settlement that simply matched no row (claim already taken over) is a
+   * different case: nothing is stuck, the downstream error still propagates,
+   * and it is only recorded.
+   */
+  private async settleProviderDeliveryFailed(
+    provider: WiredMessageProvider,
+    webhookLogId: string,
+    context: VerifiedConnectionContext,
+    error: unknown,
+  ): Promise<void> {
+    let settled: boolean;
+
+    try {
+      settled = await this.diagnosticsService.markWebhookLogFailed(
+        webhookLogId,
+        error,
+      );
+    } catch (markError) {
+      throw this.reportDeliveryStuckInFlight(
+        provider,
+        webhookLogId,
+        context,
+        markError,
+        error,
+      );
+    }
+
+    if (!settled) {
+      this.logSettlementIncident("whatsapp_receiver_failure_claim_lost", {
+        provider,
+        webhookLogId,
+        context,
+      });
+    }
+  }
+
+  /**
+   * Settles a delivery whose downstream processing completed. The conditional
+   * UPDATE is the proof this request still held the claim, so its result is
+   * checked: a delivery this request did not settle must never be answered as
+   * a success. Both "the claim was gone" and "the write never landed" fail
+   * the request instead.
+   */
+  private async settleProviderDeliveryProcessed(
+    provider: WiredMessageProvider,
+    webhookLogId: string,
+    context: VerifiedConnectionContext,
+  ): Promise<void> {
+    let settled: boolean;
+
+    try {
+      settled =
+        await this.diagnosticsService.markWebhookLogProcessed(webhookLogId);
+    } catch (markError) {
+      throw this.reportDeliveryStuckInFlight(
+        provider,
+        webhookLogId,
+        context,
+        markError,
+      );
+    }
+
+    if (settled) {
+      return;
+    }
+
+    this.logSettlementIncident("whatsapp_receiver_processed_claim_lost", {
+      provider,
+      webhookLogId,
+      context,
+    });
+
+    throw new ConflictException(
+      "Entrega de webhook nao pode ser concluida: a reivindicacao do registro foi perdida",
+    );
+  }
+
+  /**
+   * The row could not be settled at all, so it stays "received" and the
+   * delivery is not recoverable by retry until it is settled. Reported by
+   * error class only - provider and ORM errors quote payloads, phones and
+   * tokens - and raised with a static message for the same reason.
+   */
+  private reportDeliveryStuckInFlight(
+    provider: WiredMessageProvider,
+    webhookLogId: string,
+    context: VerifiedConnectionContext,
+    markError: unknown,
+    downstreamError?: unknown,
+  ): InternalServerErrorException {
+    this.logSettlementIncident("whatsapp_receiver_delivery_stuck_in_flight", {
+      provider,
+      webhookLogId,
+      context,
+      markError,
+      downstreamError,
+    });
+
+    return new InternalServerErrorException(
+      "Falha ao registrar o resultado do webhook",
+      { cause: markError },
+    );
+  }
+
+  private logSettlementIncident(
+    event: string,
+    details: {
+      provider: WiredMessageProvider;
+      webhookLogId: string;
+      context: VerifiedConnectionContext;
+      markError?: unknown;
+      downstreamError?: unknown;
+    },
+  ): void {
+    this.logger.error(
+      JSON.stringify({
+        event,
+        provider: details.provider,
+        workspaceId: details.context.workspaceId,
+        whatsappInstanceId: details.context.whatsappInstanceId,
+        webhookLogId: details.webhookLogId,
+        ...(details.markError !== undefined
+          ? { errorName: safeErrorName(details.markError) }
+          : {}),
+        ...(details.downstreamError !== undefined
+          ? { downstreamErrorName: safeErrorName(details.downstreamError) }
+          : {}),
+      }),
+    );
   }
 
   private async evaluateUazapiTeamMessage(

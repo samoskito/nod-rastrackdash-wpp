@@ -77,7 +77,11 @@ describe("WhatsappConnectionsService provider URL validation", () => {
     await connections.createConnection(owner, {
       provider: "waha",
       name: "WhatsApp",
-      credentials: { baseUrl: "http://10.0.0.8:3000", apiKey: "key" },
+      credentials: {
+        baseUrl: "http://10.0.0.8:3000",
+        apiKey: "key",
+        session: "self-hosted",
+      },
     });
 
     expect(created).toHaveLength(1);

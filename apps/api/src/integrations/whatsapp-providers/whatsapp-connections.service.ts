@@ -100,9 +100,12 @@ export class WhatsappConnectionsService {
       adapterInput.credentials,
     );
     const providerInstanceId =
-      adapterInput.provider === "nod_api"
+      adapterInput.provider === "uazapi_byo"
         ? (adapterInput.credentials?.instanceId ?? null)
-        : null;
+        : this.deriveProviderInstanceId(
+            adapterInput.provider,
+            adapterInput.credentials,
+          );
     const encrypted = this.encryptConfig(config);
     const created = (await this.prisma.whatsappInstance.create({
       data: {
@@ -170,16 +173,15 @@ export class WhatsappConnectionsService {
     }
     const config = this.toProviderConfig(input.provider, input.credentials);
     const encrypted = this.encryptConfig(config);
+    const providerInstanceId =
+      input.provider === "uazapi_byo"
+        ? (input.credentials.instanceId ?? existing.providerInstanceId)
+        : this.deriveProviderInstanceId(input.provider, input.credentials);
     const updated = (await this.prisma.whatsappInstance.update({
       where: { id: existing.id },
       data: {
         ...encrypted,
-        providerInstanceId:
-          input.provider === "uazapi_byo"
-            ? (input.credentials.instanceId ?? null)
-            : input.provider === "zapi" || input.provider === "nod_api"
-              ? input.credentials.instanceId
-              : existing.providerInstanceId,
+        providerInstanceId,
       },
     })) as WhatsappConnectionRecord;
     await this.recordAudit({
@@ -205,7 +207,15 @@ export class WhatsappConnectionsService {
       name: existing.name,
       displayName: existing.displayName,
       baseUrl: this.extractConfigBaseUrl(config),
-      instanceId: existing.providerInstanceId ?? this.extractConfigInstanceId(config),
+      // providerInstanceId now also carries the WAHA session (see
+      // createConnection/editConnection), which belongs in the `session`
+      // field below, not `instanceId` - the edit form never renders an
+      // Instance ID input for waha, but the DTO contract still shouldn't
+      // duplicate it there.
+      instanceId:
+        existing.provider === "waha"
+          ? this.extractConfigInstanceId(config)
+          : (existing.providerInstanceId ?? this.extractConfigInstanceId(config)),
       session: this.extractConfigSession(config),
     };
   }
@@ -226,18 +236,17 @@ export class WhatsappConnectionsService {
     const credentials = this.mergeEditCredentials(input, previousConfig);
     const config = this.toProviderConfig(input.provider, credentials);
     const encrypted = this.encryptConfig(config);
+    const providerInstanceId =
+      input.provider === "uazapi_byo"
+        ? (input.credentials.instanceId ?? existing.providerInstanceId)
+        : this.deriveProviderInstanceId(input.provider, credentials);
     const updated = (await this.prisma.whatsappInstance.update({
       where: { id: existing.id },
       data: {
         name: input.name,
         displayName: input.displayName ?? null,
         ...encrypted,
-        providerInstanceId:
-          input.provider === "uazapi_byo"
-            ? (input.credentials.instanceId ?? null)
-            : input.provider === "zapi" || input.provider === "nod_api"
-              ? input.credentials.instanceId
-              : existing.providerInstanceId,
+        providerInstanceId,
       },
     })) as WhatsappConnectionRecord;
     await this.recordAudit({
@@ -509,7 +518,7 @@ export class WhatsappConnectionsService {
         return {
           baseUrl: input.credentials.baseUrl,
           apiKey,
-          session: input.credentials.session,
+          session: this.requireWahaSession(input.credentials.session),
         };
       }
       case "zapi": {
@@ -543,6 +552,64 @@ export class WhatsappConnectionsService {
         };
       }
     }
+  }
+
+  // Single source of truth for deriving the plaintext providerInstanceId
+  // column from per-provider credentials, applied consistently across
+  // createConnection/updateCredentials/editConnection. Only waha/zapi/nod_api
+  // are handled here — each has a mandatory identifier and a missing one is
+  // rejected rather than silently persisted as null/empty. Uazapi is
+  // intentionally out of scope: its instanceId stays optional and is derived
+  // inline by each caller, unchanged.
+  private deriveProviderInstanceId(
+    provider: "waha" | "zapi" | "nod_api",
+    credentials: { instanceId?: string; session?: string } | undefined,
+  ): string {
+    switch (provider) {
+      case "waha":
+        return this.requireWahaSession(credentials?.session);
+      case "zapi":
+        return this.requireProviderIdentifier(credentials?.instanceId, "Z-API");
+      case "nod_api":
+        return this.requireProviderIdentifier(
+          credentials?.instanceId,
+          "NOD API",
+        );
+    }
+  }
+
+  // WAHA webhook deliveries are bound to the connection's persisted
+  // providerInstanceId (see webhooks.controller.ts's
+  // assertProviderInstanceBinding): the receiver rejects any payload whose
+  // top-level `session` doesn't match it, and fails closed outright when
+  // providerInstanceId hasn't been configured. A WAHA connection must
+  // therefore always be created/edited with a session, or its webhook
+  // endpoint would be unreachable (401) forever.
+  private requireWahaSession(session: string | undefined): string {
+    const trimmed = session?.trim();
+    if (!trimmed) {
+      throw new BadRequestException(
+        "Sessao da conexao WhatsApp (WAHA) e obrigatoria",
+      );
+    }
+    return trimmed;
+  }
+
+  // Same fail-closed contract as requireWahaSession, generalized for
+  // Z-API/NOD API's instanceId: webhook receiver binding (Z-API) and future
+  // provisioning (NOD API) both depend on providerInstanceId being a real,
+  // non-blank value.
+  private requireProviderIdentifier(
+    value: string | undefined,
+    label: string,
+  ): string {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+      throw new BadRequestException(
+        `Instance ID da conexao WhatsApp (${label}) e obrigatorio`,
+      );
+    }
+    return trimmed;
   }
 
   private extractConfigBaseUrl(

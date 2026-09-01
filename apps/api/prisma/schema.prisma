@@ -53,6 +53,8 @@ enum DiagnosticSource {
   asaas
   external_mysql
   internal
+  waha
+  zapi
 }
 
 enum DiagnosticSeverity {
@@ -627,6 +629,7 @@ model WebhookLog {
   summaryPayload     Json?
   rawPayloadRef      String?
   idempotencyKey     String?          @unique
+  payloadHash        String?
 
   workspace        Workspace?        @relation(fields: [workspaceId], references: [id])
   diagnosticEvents DiagnosticEvent[]
