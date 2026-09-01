@@ -277,7 +277,7 @@ export class DiagnosticsService {
     try {
       return await this.persistWebhookLog(input, "received");
     } catch (error) {
-      if (!this.isUniqueConstraintError(error)) {
+      if (!this.isIdempotencyKeyConflict(error)) {
         throw error;
       }
 
@@ -438,11 +438,28 @@ export class DiagnosticsService {
     };
   }
 
-  private isUniqueConstraintError(error: unknown): boolean {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    );
+  /**
+   * Only the idempotencyKey unique constraint is a "same delivery raced
+   * itself" signal we know how to resolve. Any other P2002 (a future unique
+   * constraint added to WebhookLog, or one on an unrelated table reached
+   * through the same transaction) is a genuine, unrelated failure and must
+   * propagate instead of being silently reinterpreted as a replay/conflict.
+   */
+  private isIdempotencyKeyConflict(error: unknown): boolean {
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== "P2002"
+    ) {
+      return false;
+    }
+
+    const target = error.meta?.target;
+
+    if (Array.isArray(target)) {
+      return target.includes("idempotencyKey");
+    }
+
+    return typeof target === "string" && target.includes("idempotencyKey");
   }
 
   async getSummary(

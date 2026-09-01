@@ -53,6 +53,17 @@ const MESSAGE_PROVIDER_PARSERS: Record<
   zapi: parseZapiV1Webhook,
 };
 
+// The body field each provider uses to claim the session/instance it is
+// delivering for. Both are bound against the connection's persisted
+// providerInstanceId before anything is parsed, logged, or converted.
+const WIRED_MESSAGE_PROVIDER_BINDING_FIELD: Record<
+  WiredMessageProvider,
+  "session" | "instanceId"
+> = {
+  waha: "session",
+  zapi: "instanceId",
+};
+
 type VerifiedConnectionContext = {
   workspaceId: string;
   whatsappInstanceId: string;
@@ -220,6 +231,12 @@ export class WebhooksController {
     }
 
     if (this.isWiredMessageProvider(instance.provider)) {
+      this.assertProviderInstanceBinding(
+        instance.provider,
+        body,
+        instance.providerInstanceId,
+      );
+
       return this.recordProviderMessageWebhook(instance.provider, body, {
         workspaceId: instance.workspaceId,
         whatsappInstanceId: instance.id,
@@ -235,6 +252,30 @@ export class WebhooksController {
     provider: string,
   ): provider is WiredMessageProvider {
     return provider === "waha" || provider === "zapi";
+  }
+
+  /**
+   * WAHA (`payload.session`) and Z-API (`body.instanceId`) deliveries must
+   * bind to the connection's persisted providerInstanceId before anything
+   * is parsed, logged, or converted. A connection whose providerInstanceId
+   * has not been configured yet, or a payload that omits the field or
+   * disagrees with it, is rejected outright: the webhook token alone would
+   * otherwise let a delivery for one WAHA session/Z-API instance be
+   * ingested under a differently-configured connection sharing the same
+   * token. Fails closed in every case.
+   */
+  private assertProviderInstanceBinding(
+    provider: WiredMessageProvider,
+    body: WebhookBody,
+    providerInstanceId: string | null,
+  ): void {
+    const claimed = this.firstString(
+      body[WIRED_MESSAGE_PROVIDER_BINDING_FIELD[provider]],
+    );
+
+    if (!providerInstanceId || !claimed || claimed !== providerInstanceId) {
+      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+    }
   }
 
   @Post("meta")

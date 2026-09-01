@@ -337,12 +337,119 @@ describe("POST /webhooks/whatsapp/:id", () => {
     expect(receiver).not.toHaveBeenCalled();
   });
 
+  it("rejects a WAHA delivery whose payload.session is missing or diverges from the persisted session, before parsing/logging", async () => {
+    const { controller, services } = controllerFor({
+      id: "connection-waha",
+      workspaceId: "workspace-a",
+      provider: "waha",
+      providerInstanceId: "session-1",
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    // `session` lives at the top level of the WAHA envelope, alongside
+    // `payload` (unlike `ctwa`, which nests inside `payload`), so it is
+    // overridden by spreading over the whole message rather than through
+    // wahaMessagePayload's `payload`-scoped overrides.
+    const { session: _missingSession, ...missingSession } = wahaMessagePayload({
+      ctwa: ctwaFixture,
+    });
+
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-waha",
+        missingSession,
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-waha",
+        {
+          ...wahaMessagePayload({ ctwa: ctwaFixture }),
+          session: "other-session",
+        },
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(services.diagnosticsService.recordWebhookLog).not.toHaveBeenCalled();
+    expect(
+      services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Z-API delivery whose body.instanceId is missing or diverges from the persisted providerInstanceId, before parsing/logging", async () => {
+    const { controller, services } = controllerFor({
+      id: "connection-zapi",
+      workspaceId: "workspace-a",
+      provider: "zapi",
+      providerInstanceId: "instance-1",
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-zapi",
+        zapiMessagePayload({ ctwa: ctwaFixture, instanceId: undefined }),
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      controller.recordWhatsappConnection(
+        "connection-zapi",
+        zapiMessagePayload({ ctwa: ctwaFixture, instanceId: "other-instance" }),
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(services.diagnosticsService.recordWebhookLog).not.toHaveBeenCalled();
+    expect(
+      services.leadsService.upsertFromWhatsappWebhook,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on a WAHA/Z-API connection whose providerInstanceId has not been persisted yet, even with a plausible payload", async () => {
+    const waha = controllerFor({
+      id: "connection-waha",
+      workspaceId: "workspace-a",
+      provider: "waha",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await expect(
+      waha.controller.recordWhatsappConnection(
+        "connection-waha",
+        wahaMessagePayload({ ctwa: ctwaFixture }),
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+
+    const zapi = controllerFor({
+      id: "connection-zapi",
+      workspaceId: "workspace-a",
+      provider: "zapi",
+      providerInstanceId: null,
+      webhookTokenHash: hash("valid-token"),
+      status: "active",
+    });
+
+    await expect(
+      zapi.controller.recordWhatsappConnection(
+        "connection-zapi",
+        zapiMessagePayload({ ctwa: ctwaFixture }),
+        "valid-token",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
   it("accepts a WAHA paid CTWA message, logs WebhookLog, and creates a lead", async () => {
     const { controller, services } = controllerFor({
       id: "connection-waha",
       workspaceId: "workspace-a",
       provider: "waha",
-      providerInstanceId: null,
+      providerInstanceId: "session-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -381,7 +488,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-zapi",
       workspaceId: "workspace-a",
       provider: "zapi",
-      providerInstanceId: null,
+      providerInstanceId: "instance-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -419,7 +526,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-waha",
       workspaceId: "workspace-a",
       provider: "waha",
-      providerInstanceId: null,
+      providerInstanceId: "session-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -437,7 +544,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-zapi",
       workspaceId: "workspace-a",
       provider: "zapi",
-      providerInstanceId: null,
+      providerInstanceId: "instance-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -457,7 +564,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-waha",
       workspaceId: "workspace-a",
       provider: "waha",
-      providerInstanceId: null,
+      providerInstanceId: "session-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -475,7 +582,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-zapi",
       workspaceId: "workspace-a",
       provider: "zapi",
-      providerInstanceId: null,
+      providerInstanceId: "instance-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -502,7 +609,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
         id: "connection-waha",
         workspaceId: "workspace-a",
         provider: "waha",
-        providerInstanceId: null,
+        providerInstanceId: "session-1",
         webhookTokenHash: hash("valid-token"),
         status: "active",
       },
@@ -539,7 +646,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
         id: "connection-waha",
         workspaceId: "workspace-a",
         provider: "waha",
-        providerInstanceId: null,
+        providerInstanceId: "session-1",
         webhookTokenHash: hash("valid-token"),
         status: "active",
       },
@@ -569,7 +676,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-waha",
       workspaceId: "workspace-a",
       provider: "waha",
-      providerInstanceId: null,
+      providerInstanceId: "session-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });
@@ -590,7 +697,7 @@ describe("POST /webhooks/whatsapp/:id", () => {
       id: "connection-zapi",
       workspaceId: "workspace-a",
       provider: "zapi",
-      providerInstanceId: null,
+      providerInstanceId: "instance-1",
       webhookTokenHash: hash("valid-token"),
       status: "active",
     });

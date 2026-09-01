@@ -200,4 +200,34 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.diagnosticEvent.create).not.toHaveBeenCalled();
     expect(prisma.webhookLog.findUnique).not.toHaveBeenCalled();
   });
+
+  it("propagates a P2002 raised by a different unique constraint instead of treating it as an idempotencyKey replay/conflict", async () => {
+    const otherConstraintError = uniqueConstraintError(["someOtherColumn"]);
+    prisma.webhookLog.create.mockRejectedValueOnce(otherConstraintError);
+
+    await expect(service.recordWebhookLog(baseInput())).rejects.toBe(
+      otherConstraintError,
+    );
+    // Restricted to the idempotencyKey constraint: an unrelated unique
+    // violation must not trigger the find-and-resolve conflict path at all.
+    expect(prisma.webhookLog.findUnique).not.toHaveBeenCalled();
+    expect(prisma.diagnosticEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("propagates a P2002 whose constraint target is a string that does not name idempotencyKey", async () => {
+    const otherConstraintError = new Prisma.PrismaClientKnownRequestError(
+      "unique constraint",
+      {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target: "WebhookLog_someOtherColumn_key" },
+      },
+    );
+    prisma.webhookLog.create.mockRejectedValueOnce(otherConstraintError);
+
+    await expect(service.recordWebhookLog(baseInput())).rejects.toBe(
+      otherConstraintError,
+    );
+    expect(prisma.webhookLog.findUnique).not.toHaveBeenCalled();
+  });
 });
