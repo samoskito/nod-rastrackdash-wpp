@@ -1,5 +1,9 @@
 import "reflect-metadata";
 import { createHash } from "node:crypto";
+import {
+  ConflictException,
+  InternalServerErrorException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { DiagnosticsService } from "../src/diagnostics/diagnostics.service";
@@ -114,6 +118,20 @@ function controllerWith(
     {} as never,
     prisma as never,
   );
+}
+
+/** Collects the controller's structured log lines for redaction assertions. */
+function captureLogger(controller: WebhooksController): string[] {
+  const logged: string[] = [];
+  vi.spyOn(
+    (controller as unknown as { logger: { error: (m: string) => void } })
+      .logger,
+    "error",
+  ).mockImplementation((message: string) => {
+    logged.push(message);
+  });
+
+  return logged;
 }
 
 function deliver(controller: WebhooksController, body: unknown) {
@@ -282,36 +300,107 @@ describe("WAHA/Z-API receiver failure accounting", () => {
     }
   });
 
-  it("propagates the downstream error even when the failure cannot be recorded, without leaking the payload", async () => {
+  it("nao engole a falha de liquidacao: sinaliza a entrega presa em voo e falha alto, sem vazar o payload", async () => {
     const diagnostics = diagnosticsMock();
+    const settleFailure = new Error("banco indisponivel");
+    settleFailure.name = "PrismaClientInitializationError";
     diagnostics.markWebhookLogFailed = vi.fn(async () => {
-      throw new Error("banco indisponivel");
+      throw settleFailure;
     });
     const services = downstreamServices();
     const failure = new Error("falha com telefone 5511999999999 e token secreto");
+    failure.name = "DownstreamError";
     services.leadsService.upsertFromWhatsappWebhook.mockRejectedValueOnce(
       failure,
     );
     const controller = controllerWith(diagnostics, services);
-    const logged: string[] = [];
-    const logger = vi
-      .spyOn(
-        (controller as unknown as { logger: { error: (m: string) => void } })
-          .logger,
-        "error",
-      )
-      .mockImplementation((message: string) => {
-        logged.push(message);
-      });
+    const logged = captureLogger(controller);
+
+    const thrown = await deliver(controller, wahaMessagePayload()).catch(
+      (error: unknown) => error,
+    );
+
+    // The settlement failure is the severe one - the row is still "received"
+    // and every provider retry would be answered as a duplicate - so it must
+    // surface instead of being logged away behind the downstream error.
+    expect(thrown).toBeInstanceOf(InternalServerErrorException);
+    expect(thrown).not.toBe(failure);
+    expect((thrown as Error).cause).toBe(settleFailure);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("whatsapp_receiver_delivery_stuck_in_flight");
+    // Both sides of the incident are named, by error class only.
+    expect(logged[0]).toContain("PrismaClientInitializationError");
+    expect(logged[0]).toContain("DownstreamError");
+    expect(logged[0]).not.toContain("5511999999999");
+    expect(logged[0]).not.toMatch(/token|secreto|valid-token/i);
+    expect((thrown as Error).message).not.toContain("5511999999999");
+  });
+
+  it("registra a reivindicacao perdida ao marcar falha e mantem o erro downstream propagado", async () => {
+    const diagnostics = diagnosticsMock();
+    // The conditional UPDATE matched nothing: the row was no longer in
+    // flight. Nothing is stuck, but it must not pass unnoticed either.
+    diagnostics.markWebhookLogFailed = vi.fn(async () => false);
+    const services = downstreamServices();
+    const failure = new Error("falha com telefone 5511999999999");
+    services.leadsService.upsertFromWhatsappWebhook.mockRejectedValueOnce(
+      failure,
+    );
+    const controller = controllerWith(diagnostics, services);
+    const logged = captureLogger(controller);
 
     await expect(deliver(controller, wahaMessagePayload())).rejects.toBe(
       failure,
     );
 
-    expect(logger).toHaveBeenCalledTimes(1);
-    expect(logged[0]).toContain("whatsapp_receiver_failure_not_recorded");
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("whatsapp_receiver_failure_claim_lost");
     expect(logged[0]).not.toContain("5511999999999");
-    expect(logged[0]).not.toMatch(/token|secreto|valid-token/i);
+    expect(logged[0]).not.toMatch(/token|valid-token/i);
+  });
+
+  it("nunca reporta sucesso quando a liquidacao processed nao encontra mais a reivindicacao", async () => {
+    const diagnostics = diagnosticsMock();
+    // count === 0: the row is not "received" anymore, so this request has no
+    // standing to answer 2xx for a delivery it did not settle.
+    diagnostics.markWebhookLogProcessed = vi.fn(async () => false);
+    const services = downstreamServices();
+    const controller = controllerWith(diagnostics, services);
+    const logged = captureLogger(controller);
+
+    await expect(
+      deliver(controller, wahaMessagePayload()),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("whatsapp_receiver_processed_claim_lost");
+    expect(logged[0]).not.toContain("5511999999999");
+    expect(logged[0]).not.toMatch(/token|valid-token/i);
+    // A lost claim belongs to whoever holds it now: this request must not
+    // overwrite it with a failure either.
+    expect(diagnostics.markWebhookLogFailed).not.toHaveBeenCalled();
+  });
+
+  it("nao engole uma liquidacao processed que nem chegou a ser escrita", async () => {
+    const diagnostics = diagnosticsMock();
+    const settleFailure = new Error("banco indisponivel");
+    settleFailure.name = "PrismaClientInitializationError";
+    diagnostics.markWebhookLogProcessed = vi.fn(async () => {
+      throw settleFailure;
+    });
+    const services = downstreamServices();
+    const controller = controllerWith(diagnostics, services);
+    const logged = captureLogger(controller);
+
+    const thrown = await deliver(controller, wahaMessagePayload()).catch(
+      (error: unknown) => error,
+    );
+
+    expect(thrown).toBeInstanceOf(InternalServerErrorException);
+    expect((thrown as Error).cause).toBe(settleFailure);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("whatsapp_receiver_delivery_stuck_in_flight");
+    expect(diagnostics.markWebhookLogFailed).not.toHaveBeenCalled();
   });
 });
 

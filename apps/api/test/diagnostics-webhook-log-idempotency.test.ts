@@ -274,6 +274,106 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
   });
 
+  it("registro legado com payloadHash NULL e replay identificado vira conflict em quarentena, nunca duplicate", async () => {
+    // Rows written before the payloadHash migration carry NULL. A WAHA/Z-API
+    // delivery that does carry a fingerprint cannot be proven to be the same
+    // payload as such a row, so answering "duplicate" would silently drop a
+    // possibly different delivery. Fail closed into quarantine instead.
+    prisma.webhookLog.create
+      .mockRejectedValueOnce(uniqueConstraintError())
+      .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-legacy",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "received",
+      payloadHash: null,
+    });
+    prisma.diagnosticEvent.create.mockResolvedValueOnce({
+      id: "diagnostic-event-quarantine-1",
+    });
+
+    await expect(service.recordWebhookLog(baseInput())).resolves.toEqual({
+      webhookLogId: "webhook-log-quarantine-1",
+      diagnosticEventId: "diagnostic-event-quarantine-1",
+      status: "conflict",
+    });
+    // The legacy row is left exactly as it was.
+    expect(prisma.webhookLog.update).not.toHaveBeenCalled();
+    expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
+    const quarantineCreateData = prisma.webhookLog.create.mock.calls[1][0].data;
+    expect(quarantineCreateData.idempotencyKey).toBeNull();
+    expect(quarantineCreateData.errorCode).toBe("idempotency_payload_mismatch");
+  });
+
+  it("registro legado com payloadHash NULL em estado failed nao e reivindicado: vira conflict", async () => {
+    prisma.webhookLog.create
+      .mockRejectedValueOnce(uniqueConstraintError())
+      .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-legacy",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "failed",
+      payloadHash: null,
+    });
+    prisma.diagnosticEvent.create.mockResolvedValueOnce({
+      id: "diagnostic-event-quarantine-1",
+    });
+
+    await expect(service.recordWebhookLog(baseInput())).resolves.toMatchObject({
+      status: "conflict",
+    });
+    expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("replay sem fingerprint sobre um registro com payloadHash tambem vira conflict, nunca duplicate", async () => {
+    prisma.webhookLog.create
+      .mockRejectedValueOnce(uniqueConstraintError())
+      .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-1",
+      workspaceId: "workspace-a",
+      source: "waha",
+      status: "received",
+      payloadHash: "a".repeat(64),
+    });
+    prisma.diagnosticEvent.create.mockResolvedValueOnce({
+      id: "diagnostic-event-quarantine-1",
+    });
+
+    await expect(
+      service.recordWebhookLog(baseInput({ payloadHash: undefined })),
+    ).resolves.toMatchObject({ status: "conflict" });
+    expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("preserva Uazapi/Meta: sem fingerprint dos dois lados o replay continua duplicate", async () => {
+    prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
+    prisma.webhookLog.findUnique.mockResolvedValueOnce({
+      id: "webhook-log-1",
+      workspaceId: "workspace-a",
+      source: "uazapi",
+      status: "received",
+      payloadHash: null,
+    });
+    prisma.diagnosticEvent.findMany.mockResolvedValueOnce([
+      { id: "diagnostic-event-1" },
+    ]);
+
+    await expect(
+      service.recordWebhookLog(
+        baseInput({ source: "uazapi", payloadHash: undefined }),
+      ),
+    ).resolves.toMatchObject({
+      webhookLogId: "webhook-log-1",
+      status: "duplicate",
+    });
+    // Only the original create was attempted: no quarantine row for the
+    // providers that never fingerprint their payloads.
+    expect(prisma.webhookLog.create).toHaveBeenCalledTimes(1);
+  });
+
   it("propagates a P2002 whose constraint target is a string that does not name idempotencyKey", async () => {
     const otherConstraintError = new Prisma.PrismaClientKnownRequestError(
       "unique constraint",

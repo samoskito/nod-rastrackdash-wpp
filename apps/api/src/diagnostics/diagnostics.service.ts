@@ -30,6 +30,7 @@ import type {
   DiagnosticSummaryDto,
   DiagnosticSummaryQueryDto
 } from "@wpptrack/shared";
+import { safeErrorName } from "../common/errors/safe-error-name";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { DiagnosticsQueueService } from "../common/queue/diagnostics-queue.service";
@@ -447,32 +448,36 @@ export class DiagnosticsService {
    * diagnostics UI, so the raw message is never persisted.
    */
   private describeWebhookFailure(error: unknown): string {
-    const name = error instanceof Error ? error.name : "";
-    // Only an error class name gets through. Anything else - a dynamically
-    // built name, a thrown string, a name long enough to be carrying data -
-    // is reported as unknown rather than persisted verbatim.
-    const safeName = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)
-      ? name
-      : "UnknownError";
-
-    return `Falha no processamento do webhook (errorName=${safeName})`;
+    return `Falha no processamento do webhook (errorName=${safeErrorName(
+      error
+    )})`;
   }
 
   /**
-   * Whether an idempotencyKey replay's payload actually diverges from the
-   * original. When either side didn't supply a hash (every provider except
-   * WAHA/Z-API today), there is nothing to compare against, so it is
-   * treated as a plain replay - preserving prior behavior for Uazapi/Meta.
+   * Whether an idempotencyKey replay must be treated as divergent rather
+   * than a plain replay.
+   *
+   * A replay is only trustworthy when both sides present the same
+   * fingerprint. If exactly one side has one - most importantly a legacy row
+   * written before payloadHash existed (NULL) being replayed by a
+   * fingerprinted WAHA/Z-API delivery - the payloads cannot be proven equal,
+   * so the delivery is quarantined as a conflict instead of being discarded
+   * as a duplicate. Failing closed can only cost an extra quarantined row;
+   * failing open silently drops a delivery that may not be a replay at all.
+   *
+   * When neither side has a fingerprint (Meta, Uazapi - the providers that
+   * never compute one) there is nothing to compare and nothing new to
+   * suspect, so the pre-existing replay behavior is preserved exactly.
    */
   private payloadHashesDiverge(
     existingHash: string | null,
     incomingHash: string | undefined
   ): boolean {
-    if (!existingHash || !incomingHash) {
+    if (!existingHash && !incomingHash) {
       return false;
     }
 
-    return existingHash !== incomingHash;
+    return existingHash !== (incomingHash ?? null);
   }
 
   private async persistWebhookLog(

@@ -1,11 +1,13 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   Headers,
   HttpCode,
   Inject,
+  InternalServerErrorException,
   Logger,
   NotImplementedException,
   Param,
@@ -14,6 +16,7 @@ import {
   RawBody,
   UnauthorizedException,
 } from "@nestjs/common";
+import { safeErrorName } from "../common/errors/safe-error-name";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { hashPhoneIdentity } from "../common/phone/phone-identity";
@@ -717,22 +720,19 @@ export class WebhooksController {
     // retry can reclaim and reprocess the very same delivery: left in
     // flight, every retry would be answered as a duplicate and the delivery
     // would be lost. The error still propagates, so the provider sees a
-    // non-2xx and retries.
+    // non-2xx and retries. Settling is never optional in either direction:
+    // an unsettled delivery is answered with a non-2xx, never a success.
+    let conversion: Awaited<ReturnType<typeof this.convertProviderMessage>>;
+
     try {
-      const conversion = await this.convertProviderMessage(
+      conversion = await this.convertProviderMessage(
         provider,
         event,
         phoneHash,
         context,
       );
-
-      await this.diagnosticsService.markWebhookLogProcessed(
-        diagnostic.webhookLogId,
-      );
-
-      return { ...diagnostic, conversion };
     } catch (error) {
-      await this.markProviderDeliveryFailed(
+      await this.settleProviderDeliveryFailed(
         provider,
         diagnostic.webhookLogId,
         context,
@@ -741,6 +741,16 @@ export class WebhooksController {
 
       throw error;
     }
+
+    // Settling is outside the try on purpose: a settlement problem is its
+    // own incident, not a downstream failure to be re-recorded as one.
+    await this.settleProviderDeliveryProcessed(
+      provider,
+      diagnostic.webhookLogId,
+      context,
+    );
+
+    return { ...diagnostic, conversion };
   }
 
   /**
@@ -834,31 +844,145 @@ export class WebhooksController {
   }
 
   /**
-   * Best-effort settlement of a failed delivery: the downstream error is the
-   * one worth propagating, so a failure to write the status is logged (with
-   * no payload, phone, or token) instead of replacing it. The row then stays
-   * in flight and the delivery is only recoverable once it can be settled.
+   * Settles a delivery whose downstream processing threw.
+   *
+   * The write is what makes the provider's retry reprocessable, so it is
+   * never best-effort: if it cannot be written the row is stuck in flight
+   * and every retry of this delivery will be answered as a duplicate, i.e.
+   * the delivery is lost while the provider is told 2xx. That is strictly
+   * worse than the downstream failure, so it is reported as its own incident
+   * and raised instead of being logged away behind the original error, which
+   * is kept as the cause.
+   *
+   * A settlement that simply matched no row (claim already taken over) is a
+   * different case: nothing is stuck, the downstream error still propagates,
+   * and it is only recorded.
    */
-  private async markProviderDeliveryFailed(
+  private async settleProviderDeliveryFailed(
     provider: WiredMessageProvider,
     webhookLogId: string,
     context: VerifiedConnectionContext,
     error: unknown,
   ): Promise<void> {
+    let settled: boolean;
+
     try {
-      await this.diagnosticsService.markWebhookLogFailed(webhookLogId, error);
+      settled = await this.diagnosticsService.markWebhookLogFailed(
+        webhookLogId,
+        error,
+      );
     } catch (markError) {
-      this.logger.error(
-        JSON.stringify({
-          event: "whatsapp_receiver_failure_not_recorded",
-          provider,
-          workspaceId: context.workspaceId,
-          whatsappInstanceId: context.whatsappInstanceId,
-          webhookLogId,
-          errorName: markError instanceof Error ? markError.name : "unknown",
-        }),
+      throw this.reportDeliveryStuckInFlight(
+        provider,
+        webhookLogId,
+        context,
+        markError,
+        error,
       );
     }
+
+    if (!settled) {
+      this.logSettlementIncident("whatsapp_receiver_failure_claim_lost", {
+        provider,
+        webhookLogId,
+        context,
+      });
+    }
+  }
+
+  /**
+   * Settles a delivery whose downstream processing completed. The conditional
+   * UPDATE is the proof this request still held the claim, so its result is
+   * checked: a delivery this request did not settle must never be answered as
+   * a success. Both "the claim was gone" and "the write never landed" fail
+   * the request instead.
+   */
+  private async settleProviderDeliveryProcessed(
+    provider: WiredMessageProvider,
+    webhookLogId: string,
+    context: VerifiedConnectionContext,
+  ): Promise<void> {
+    let settled: boolean;
+
+    try {
+      settled =
+        await this.diagnosticsService.markWebhookLogProcessed(webhookLogId);
+    } catch (markError) {
+      throw this.reportDeliveryStuckInFlight(
+        provider,
+        webhookLogId,
+        context,
+        markError,
+      );
+    }
+
+    if (settled) {
+      return;
+    }
+
+    this.logSettlementIncident("whatsapp_receiver_processed_claim_lost", {
+      provider,
+      webhookLogId,
+      context,
+    });
+
+    throw new ConflictException(
+      "Entrega de webhook nao pode ser concluida: a reivindicacao do registro foi perdida",
+    );
+  }
+
+  /**
+   * The row could not be settled at all, so it stays "received" and the
+   * delivery is not recoverable by retry until it is settled. Reported by
+   * error class only - provider and ORM errors quote payloads, phones and
+   * tokens - and raised with a static message for the same reason.
+   */
+  private reportDeliveryStuckInFlight(
+    provider: WiredMessageProvider,
+    webhookLogId: string,
+    context: VerifiedConnectionContext,
+    markError: unknown,
+    downstreamError?: unknown,
+  ): InternalServerErrorException {
+    this.logSettlementIncident("whatsapp_receiver_delivery_stuck_in_flight", {
+      provider,
+      webhookLogId,
+      context,
+      markError,
+      downstreamError,
+    });
+
+    return new InternalServerErrorException(
+      "Falha ao registrar o resultado do webhook",
+      { cause: markError },
+    );
+  }
+
+  private logSettlementIncident(
+    event: string,
+    details: {
+      provider: WiredMessageProvider;
+      webhookLogId: string;
+      context: VerifiedConnectionContext;
+      markError?: unknown;
+      downstreamError?: unknown;
+    },
+  ): void {
+    this.logger.error(
+      JSON.stringify({
+        event,
+        provider: details.provider,
+        workspaceId: details.context.workspaceId,
+        whatsappInstanceId: details.context.whatsappInstanceId,
+        webhookLogId: details.webhookLogId,
+        ...(details.markError !== undefined
+          ? { errorName: safeErrorName(details.markError) }
+          : {}),
+        ...(details.downstreamError !== undefined
+          ? { downstreamErrorName: safeErrorName(details.downstreamError) }
+          : {}),
+      }),
+    );
   }
 
   private async evaluateUazapiTeamMessage(
