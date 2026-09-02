@@ -331,9 +331,22 @@ export class WhatsappConnectionsService {
     const existing = await this.findForWorkspace(actor.workspaceId, id);
     const webhookToken = randomBytes(32).toString("base64url");
     const webhookEndpoint = this.buildWebhookEndpoint(existing.id);
+    // WAHA connections created before providerInstanceId was bound to the
+    // configured session can still hold the authoritative session in their
+    // encrypted config. Repair that derived column only while an authorized
+    // manager explicitly (re)configures the receiver; the public receiver
+    // remains strictly bound to the persisted value.
+    const providerInstanceId =
+      existing.provider === "waha"
+        ? this.requireWahaSession(
+            this.extractConfigSession(this.decryptConfig(existing)) ??
+              undefined,
+          )
+        : existing.providerInstanceId;
     const updated = (await this.prisma.whatsappInstance.update({
       where: { id: existing.id },
       data: {
+        providerInstanceId,
         webhookTokenHash: createHash("sha256")
           .update(webhookToken, "utf8")
           .digest("hex"),

@@ -355,4 +355,63 @@ describe("WAHA connection persistence <-> receiver binding coherence", () => {
       1,
     );
   });
+
+  it("backfills a legacy WAHA providerInstanceId from encrypted config while rotating its receiver token", async () => {
+    const db = sharedFakeDb();
+    const connections = new WhatsappConnectionsService(
+      db.connectionsPrisma as never,
+      new MetaTokenEncryptionService({ META_TOKEN_ENCRYPTION_KEY: "test-key" }),
+      new WhatsappProviderRegistry(),
+      new WorkspaceAccessPolicyService(),
+      { API_PUBLIC_URL: "https://api.example.test", NODE_ENV: "test" },
+    );
+
+    const created = await connections.createConnection(owner, {
+      provider: "waha",
+      name: "Suporte",
+      credentials: {
+        baseUrl: "https://waha.example.test",
+        apiKey: "waha-secret",
+        session: "legacy-session",
+      },
+    });
+    // Simulate a connection stored before providerInstanceId carried WAHA's
+    // session. The encrypted config remains the existing source of truth.
+    db.records[0]!.providerInstanceId = "stale-session";
+
+    const { webhookToken } = await connections.rotateWebhookToken(
+      owner,
+      created.id,
+    );
+    expect(db.records[0]?.providerInstanceId).toBe("legacy-session");
+
+    const services = webhooksServices();
+    const controller = new WebhooksController(
+      services.diagnosticsService as never,
+      services.conversionRulesService as never,
+      services.conversionEventsService as never,
+      services.conversionEventsQueueService as never,
+      services.leadsService as never,
+      {} as never,
+      db.webhooksPrisma as never,
+    );
+
+    await expect(
+      controller.recordWhatsappConnection(
+        created.id,
+        organicWahaPayload("legacy-session"),
+        webhookToken,
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      controller.recordWhatsappConnection(
+        created.id,
+        organicWahaPayload("untrusted-session"),
+        webhookToken,
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(services.diagnosticsService.recordWebhookLog).toHaveBeenCalledTimes(
+      1,
+    );
+  });
 });
