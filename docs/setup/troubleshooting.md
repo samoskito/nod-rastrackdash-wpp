@@ -126,6 +126,23 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** ajuste a env para o host interno correto; se for RAM, aumente a VPS ou use build remoto do Dokploy; preencha a variável faltante.
 - **Verificação:** deploy conclui, log mostra "migrations aplicadas" seguido do start da API sem reinício.
 
+## Dokploy: falha ao clonar repositório Git público
+
+- **Sintoma:** o deploy para antes do build com mensagens como `could not read Username for 'https://github.com'`, `expected flush after ref listing` ou falha no `git-upload-pack`, mesmo usando um repositório público.
+- **Diagnóstico seguro:** no **host/worker do Dokploy**, e não no container da API, execute:
+  ```bash
+  GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c core.askPass= -c protocol.version=0 -c http.version=HTTP/1.1 ls-remote --heads https://github.com/samoskito/nod-rastrackdash-wpp.git refs/heads/main
+  ```
+  O resultado esperado termina em `refs/heads/main` e mostra o SHA da branch atual. Não forneça usuário, senha, token ou credencial GitHub.
+- **Causa provável:** incompatibilidade/intermitência do Git/libcurl com HTTP/2 e Git protocol v2 no worker do Dokploy. A consulta de referências pode responder `200`, enquanto a etapa seguinte `git-upload-pack` falha com `401`; o Git então exibe uma mensagem enganosa de autenticação.
+- **Correção no Dokploy afetado:** configure o Git do serviço Dokploy através de um arquivo persistente montado em `/etc/dokploy` e da variável `GIT_CONFIG_GLOBAL` do serviço. Em uma instalação Docker Swarm com serviço chamado `dokploy`, o operador pode aplicar:
+  ```bash
+  sudo sh -c 'printf "[http]\n\tversion = HTTP/1.1\n[protocol]\n\tversion = 0\n" > /etc/dokploy/gitconfig && chmod 644 /etc/dokploy/gitconfig && docker service update --env-add GIT_CONFIG_GLOBAL=/etc/dokploy/gitconfig dokploy'
+  ```
+  Se o nome do serviço ou o diretório persistente forem diferentes na versão instalada, confirme-os na tela/documentação do próprio Dokploy antes de executar. Essa correção é do host/worker; não é uma variável da aplicação nem um passo para colocar na URL do Git.
+- **Verificação:** o serviço Dokploy converge, o novo deploy consegue clonar a branch e o build começa. Mantenha `Provider = Git`, a URL pública e a branch `main`.
+- **Limite conhecido:** o deploy anterior marcado como concluído não prova sozinho que houve um clone limpo; o problema pode ser intermitente ou um cache anterior. Se a instalação nova não apresentar o sintoma, não aplique a correção por antecipação.
+
 ## Dokploy: API sobe nos logs mas o domínio não responde (parece crash-loop, mas não é)
 
 - **Diagnóstico:** o log de runtime mostra "Nest application started"/start bem-sucedido, mas `curl` no domínio público retorna erro de conexão/`502`; confira a variável `API_PORT` no serviço e a "porta interna do container" configurada no Dokploy.

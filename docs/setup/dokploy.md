@@ -18,6 +18,26 @@ Confirme cada item antes de abrir o Dokploy:
 | Alvo do web | Decida agora: **Vercel** (recomendado, mais simples) ou **Dokploy** para `apps/web`. Isso muda o passo 10. |
 | Dimensionamento | Rode a entrevista de [`vps.md`](vps.md) (workspaces, leads/dia) antes de contratar/redimensionar a VPS. |
 
+### 0.1 Preflight do clone Git público
+
+O fluxo do aluno usa **Provider = Git** com a URL pública do repositório. O aluno **não** precisa de acesso à conta GitHub da PalmUP, GitHub App ou usuário/senha na URL.
+
+Antes de criar o serviço da API, confirme que o Dokploy consegue ler a branch pública:
+
+```bash
+GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c core.askPass= -c protocol.version=0 -c http.version=HTTP/1.1 ls-remote --heads https://github.com/samoskito/nod-rastrackdash-wpp.git refs/heads/main
+```
+
+Resultado esperado:
+
+```text
+91f5e068750bf616d04d631df76b4836c01c1db4 refs/heads/main
+```
+
+Execute esse teste no **host da VPS/Dokploy**, não no container da API. Se ele funcionar, não forneça credenciais ao GitHub e prossiga. Se o deploy do Dokploy falhar com `could not read Username` junto de `expected flush after ref listing`, siga [`troubleshooting.md`](troubleshooting.md#dokploy-falha-ao-clonar-repositório-git-público) antes de tentar novamente.
+
+> **Compatibilidade Dokploy v0.30.2:** em hosts que apresentarem esse erro, o serviço Dokploy pode precisar de uma configuração persistente de Git para evitar a negociação HTTP/2 problemática. Aplique o procedimento de troubleshooting no host/worker do Dokploy; não execute dentro do container da API e não transforme isso em login GitHub.
+
 ## Arquitetura recomendada
 
 - **Vercel** para `apps/web` (Next.js) — CDN e HTTPS automáticos.
@@ -92,7 +112,7 @@ Crie um **serviço de aplicação** no mesmo projeto, com estes campos:
 
 | Campo | Valor |
 |---|---|
-| Origem/provedor | GitHub |
+| Origem/provedor | **Git** |
 | Repositório | `https://github.com/samoskito/nod-rastrackdash-wpp` |
 | Branch | `main` |
 | Método de build | Dockerfile |
