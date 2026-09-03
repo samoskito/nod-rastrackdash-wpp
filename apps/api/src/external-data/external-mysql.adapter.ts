@@ -2,29 +2,26 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import type {
   ExternalConnectionTestResultDto,
   ExternalConnectorSslModeDto,
-  ExternalMysqlCredentialsInputDto
+  ExternalMysqlCredentialsInputDto,
 } from "@wpptrack/shared";
 import {
   createConnection,
   type Connection,
   type ConnectionOptions,
-  type RowDataPacket
+  type RowDataPacket,
 } from "mysql2/promise";
-import {
-  RUNTIME_ENV,
-  type RuntimeEnv
-} from "../common/runtime/runtime.module";
+import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 
 const leadsView = "vw_wpptrack_leads";
 const eventsView = "vw_wpptrack_events";
 
 export const EXTERNAL_MYSQL_CONNECTION_FACTORY = Symbol(
-  "EXTERNAL_MYSQL_CONNECTION_FACTORY"
+  "EXTERNAL_MYSQL_CONNECTION_FACTORY",
 );
 
 export type ExternalMysqlConnection = Pick<Connection, "query" | "end">;
 export type ExternalMysqlConnectionFactory = (
-  options: ConnectionOptions
+  options: ConnectionOptions,
 ) => Promise<ExternalMysqlConnection>;
 
 export type ExternalSyncCursorValue = {
@@ -84,47 +81,50 @@ export class ExternalMysqlAdapter {
   constructor(
     @Optional()
     @Inject(EXTERNAL_MYSQL_CONNECTION_FACTORY)
-    private readonly connectionFactory: ExternalMysqlConnectionFactory =
-      createConnection,
+    private readonly connectionFactory: ExternalMysqlConnectionFactory = createConnection,
     @Optional()
     @Inject(RUNTIME_ENV)
-    private readonly env: RuntimeEnv = process.env
+    private readonly env: RuntimeEnv = process.env,
   ) {}
 
   async testConnection(
     credentials: ExternalMysqlCredentialsInputDto,
-    sslMode: ExternalConnectorSslModeDto
+    sslMode: ExternalConnectorSslModeDto,
   ): Promise<ExternalConnectionTestResultDto> {
     const startedAt = Date.now();
 
     try {
-      return await this.withConnection(credentials, sslMode, async (connection) => {
-        await this.query(connection, "SELECT 1 AS ok", []);
-        const rows = await this.query<ViewRow>(
-          connection,
-          `SELECT TABLE_NAME
+      return await this.withConnection(
+        credentials,
+        sslMode,
+        async (connection) => {
+          await this.query(connection, "SELECT 1 AS ok", []);
+          const rows = await this.query<ViewRow>(
+            connection,
+            `SELECT TABLE_NAME
              FROM information_schema.VIEWS
             WHERE TABLE_SCHEMA = ?
               AND TABLE_NAME IN (?, ?)`,
-          [credentials.database, leadsView, eventsView]
-        );
-        const views = new Set(rows.map((row) => String(row.TABLE_NAME)));
-        const leadsViewAvailable = views.has(leadsView);
-        const eventsViewAvailable = views.has(eventsView);
-        const ok = leadsViewAvailable && eventsViewAvailable;
+            [credentials.database, leadsView, eventsView],
+          );
+          const views = new Set(rows.map((row) => String(row.TABLE_NAME)));
+          const leadsViewAvailable = views.has(leadsView);
+          const eventsViewAvailable = views.has(eventsView);
+          const ok = leadsViewAvailable && eventsViewAvailable;
 
-        return {
-          ok,
-          status: ok ? "connected" : "failed",
-          latencyMs: Math.max(0, Date.now() - startedAt),
-          leadsViewAvailable,
-          eventsViewAvailable,
-          errorCode: ok ? null : "RequiredViewsMissing",
-          message: ok
-            ? "Conexao e views obrigatorias validadas"
-            : "Conexao estabelecida, mas faltam views obrigatorias"
-        };
-      });
+          return {
+            ok,
+            status: ok ? "connected" : "failed",
+            latencyMs: Math.max(0, Date.now() - startedAt),
+            leadsViewAvailable,
+            eventsViewAvailable,
+            errorCode: ok ? null : "RequiredViewsMissing",
+            message: ok
+              ? "Conexao e views obrigatorias validadas"
+              : "Conexao estabelecida, mas faltam views obrigatorias",
+          };
+        },
+      );
     } catch (error) {
       return {
         ok: false,
@@ -133,7 +133,7 @@ export class ExternalMysqlAdapter {
         leadsViewAvailable: false,
         eventsViewAvailable: false,
         errorCode: this.errorCode(error),
-        message: this.safeErrorMessage(error)
+        message: this.safeErrorMessage(error),
       };
     }
   }
@@ -142,13 +142,13 @@ export class ExternalMysqlAdapter {
     credentials: ExternalMysqlCredentialsInputDto,
     sslMode: ExternalConnectorSslModeDto,
     cursor: ExternalSyncCursorValue,
-    limit: number
+    limit: number,
   ): Promise<ExternalLeadRow[]> {
     return this.withConnection(credentials, sslMode, async (connection) => {
       const hasThumbnailUrl = await this.viewHasColumn(
         connection,
         leadsView,
-        "thumbnail_url"
+        "thumbnail_url",
       );
       const thumbnailSelection = hasThumbnailUrl
         ? "thumbnail_url AS thumbnailUrl"
@@ -178,7 +178,7 @@ export class ExternalMysqlAdapter {
         WHERE (updated_at > ? OR (updated_at = ? AND CAST(external_row_id AS CHAR) > ?))
         ORDER BY updated_at ASC, CAST(external_row_id AS CHAR) ASC
         LIMIT ?`,
-        this.cursorValues(cursor, limit)
+        this.cursorValues(cursor, limit),
       );
 
       return rows.map((row) => this.toLeadRow(row));
@@ -189,7 +189,7 @@ export class ExternalMysqlAdapter {
     credentials: ExternalMysqlCredentialsInputDto,
     sslMode: ExternalConnectorSslModeDto,
     cursor: ExternalSyncCursorValue,
-    limit: number
+    limit: number,
   ): Promise<ExternalEventRow[]> {
     return this.withConnection(credentials, sslMode, async (connection) => {
       const rows = await this.query<RowDataPacket>(
@@ -220,7 +220,7 @@ export class ExternalMysqlAdapter {
         WHERE (updated_at > ? OR (updated_at = ? AND CAST(external_row_id AS CHAR) > ?))
         ORDER BY updated_at ASC, CAST(external_row_id AS CHAR) ASC
         LIMIT ?`,
-        this.cursorValues(cursor, limit)
+        this.cursorValues(cursor, limit),
       );
 
       return rows.map((row) => this.toEventRow(row));
@@ -230,13 +230,14 @@ export class ExternalMysqlAdapter {
   private async withConnection<T>(
     credentials: ExternalMysqlCredentialsInputDto,
     sslMode: ExternalConnectorSslModeDto,
-    operation: (connection: ExternalMysqlConnection) => Promise<T>
+    operation: (connection: ExternalMysqlConnection) => Promise<T>,
   ): Promise<T> {
     const connection = await this.connectionFactory(
-      this.connectionOptions(credentials, sslMode)
+      this.connectionOptions(credentials, sslMode),
     );
 
     try {
+      await this.query(connection, "SET SESSION TRANSACTION READ ONLY", []);
       return await operation(connection);
     } finally {
       await connection.end();
@@ -245,7 +246,7 @@ export class ExternalMysqlAdapter {
 
   private connectionOptions(
     credentials: ExternalMysqlCredentialsInputDto,
-    sslMode: ExternalConnectorSslModeDto
+    sslMode: ExternalConnectorSslModeDto,
   ): ConnectionOptions {
     return {
       host: credentials.host,
@@ -255,7 +256,7 @@ export class ExternalMysqlAdapter {
       password: credentials.password,
       connectTimeout: this.positiveIntegerEnv(
         "WPPTRACK_EXTERNAL_MYSQL_CONNECT_TIMEOUT_MS",
-        5_000
+        5_000,
       ),
       timezone: "Z",
       dateStrings: true,
@@ -267,23 +268,23 @@ export class ExternalMysqlAdapter {
           ? undefined
           : {
               rejectUnauthorized: sslMode === "verify_identity",
-              ...(credentials.sslCa ? { ca: credentials.sslCa } : {})
-            }
+              ...(credentials.sslCa ? { ca: credentials.sslCa } : {}),
+            },
     };
   }
 
   private async query<T extends RowDataPacket>(
     connection: ExternalMysqlConnection,
     sql: string,
-    values: unknown[]
+    values: unknown[],
   ): Promise<T[]> {
     const [rows] = await connection.query<T[]>({
       sql,
       values,
       timeout: this.positiveIntegerEnv(
         "WPPTRACK_EXTERNAL_MYSQL_QUERY_TIMEOUT_MS",
-        10_000
-      )
+        10_000,
+      ),
     });
 
     return rows;
@@ -292,7 +293,7 @@ export class ExternalMysqlAdapter {
   private async viewHasColumn(
     connection: ExternalMysqlConnection,
     viewName: string,
-    columnName: string
+    columnName: string,
   ): Promise<boolean> {
     try {
       const rows = await this.query<RowDataPacket>(
@@ -302,7 +303,7 @@ export class ExternalMysqlAdapter {
           WHERE TABLE_SCHEMA = DATABASE()
             AND TABLE_NAME = ?
             AND COLUMN_NAME = ?`,
-        [viewName, columnName]
+        [viewName, columnName],
       );
 
       return Number(rows[0]?.columnCount ?? 0) > 0;
@@ -311,9 +312,17 @@ export class ExternalMysqlAdapter {
     }
   }
 
-  private cursorValues(cursor: ExternalSyncCursorValue, limit: number): unknown[] {
+  private cursorValues(
+    cursor: ExternalSyncCursorValue,
+    limit: number,
+  ): unknown[] {
     const timestamp = cursor.lastUpdatedAt ?? new Date(0);
-    return [timestamp, timestamp, cursor.lastExternalId ?? "", this.safeLimit(limit)];
+    return [
+      timestamp,
+      timestamp,
+      cursor.lastExternalId ?? "",
+      this.safeLimit(limit),
+    ];
   }
 
   private safeLimit(limit: number): number {
@@ -334,7 +343,10 @@ export class ExternalMysqlAdapter {
       city: this.optionalString(row.city),
       state: this.optionalString(row.state),
       country: this.optionalString(row.country),
-      firstMessageAt: this.requiredString(row.firstMessageAt, "first_message_at"),
+      firstMessageAt: this.requiredString(
+        row.firstMessageAt,
+        "first_message_at",
+      ),
       lastMessageAt: this.optionalString(row.lastMessageAt),
       qualifiedAt: this.optionalString(row.qualifiedAt),
       purchasedAt: this.optionalString(row.purchasedAt),
@@ -343,7 +355,7 @@ export class ExternalMysqlAdapter {
       sourceUrl: this.optionalString(row.sourceUrl),
       thumbnailUrl: this.optionalString(row.thumbnailUrl),
       status: this.optionalString(row.status),
-      updatedAt: this.requiredString(row.updatedAt, "updated_at")
+      updatedAt: this.requiredString(row.updatedAt, "updated_at"),
     };
   }
 
@@ -361,18 +373,23 @@ export class ExternalMysqlAdapter {
       transactionId: this.optionalString(row.transactionId),
       phone: this.requiredString(row.phone, "phone"),
       occurredAt: this.requiredString(row.occurredAt, "occurred_at"),
-      eventLocalDate: this.requiredString(row.eventLocalDate, "event_local_date"),
+      eventLocalDate: this.requiredString(
+        row.eventLocalDate,
+        "event_local_date",
+      ),
       adId: this.optionalString(row.adId),
       adSetId: this.optionalString(row.adSetId),
       campaignId: this.optionalString(row.campaignId),
       ctwaClid: this.optionalString(row.ctwaClid),
       sourceUrl: this.optionalString(row.sourceUrl),
       valueCents:
-        value === null || value === undefined ? null : Number.parseInt(String(value), 10),
+        value === null || value === undefined
+          ? null
+          : Number.parseInt(String(value), 10),
       currency: this.optionalString(row.currency),
       valueSource: this.optionalString(row.valueSource),
       duplicateCount: Number.parseInt(String(row.duplicateCount ?? 0), 10) || 0,
-      updatedAt: this.requiredString(row.updatedAt, "updated_at")
+      updatedAt: this.requiredString(row.updatedAt, "updated_at"),
     };
   }
 
@@ -397,14 +414,24 @@ export class ExternalMysqlAdapter {
 
   private positiveIntegerEnv(name: string, fallback: number): number {
     const parsed = Number.parseInt(this.env[name] ?? "", 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    return Number.isFinite(parsed) && parsed > 0
+      ? Math.min(parsed, 30_000)
+      : fallback;
   }
 
   private errorCode(error: unknown): string {
     if (error && typeof error === "object" && "code" in error) {
       const code = String((error as { code?: unknown }).code ?? "").trim();
-      if (code) {
-        return code.slice(0, 100);
+      if (
+        [
+          "ER_ACCESS_DENIED_ERROR",
+          "ECONNREFUSED",
+          "ETIMEDOUT",
+          "PROTOCOL_SEQUENCE_TIMEOUT",
+          "ENOTFOUND",
+        ].includes(code)
+      ) {
+        return code;
       }
     }
 

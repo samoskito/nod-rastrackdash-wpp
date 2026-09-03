@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import {
   canonicalTrackingEventTypes,
@@ -21,10 +26,11 @@ import {
   type ExternalDataConnectorDto,
   type ExternalDataConnectorUpdateInputDto,
   type ExternalSyncInputDto,
-  type ExternalSyncQueuedResultDto
+  type ExternalSyncQueuedResultDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { ExternalCredentialEncryptionService } from "./external-credential-encryption.service";
+import { ExternalConnectorEgressPolicyService } from "./external-connector-egress-policy.service";
 import { ExternalMysqlAdapter } from "./external-mysql.adapter";
 import { ExternalSyncQueueService } from "./external-sync-queue.service";
 
@@ -76,21 +82,81 @@ export class ExternalDataService {
     private readonly credentialEncryption: ExternalCredentialEncryptionService,
     @Inject(ExternalMysqlAdapter)
     private readonly mysqlAdapter: ExternalMysqlAdapter,
+    @Inject(ExternalConnectorEgressPolicyService)
+    private readonly egressPolicy: ExternalConnectorEgressPolicyService,
     @Inject(ExternalSyncQueueService)
-    private readonly syncQueue: ExternalSyncQueueService
+    private readonly syncQueue: ExternalSyncQueueService,
   ) {}
+
+  async listWorkspaceConnectors(
+    workspaceId: string,
+    _actorUserId: string,
+  ): Promise<ExternalDataConnectorDto[]> {
+    return this.listConnectors(workspaceId) as Promise<
+      ExternalDataConnectorDto[]
+    >;
+  }
+
+  async createWorkspaceConnector(
+    workspaceId: string,
+    input: ExternalDataConnectorCreateInputDto,
+    actorUserId: string,
+  ): Promise<ExternalDataConnectorDto> {
+    if (input.workspaceId !== workspaceId) {
+      throw new BadRequestException("Workspace do conector invalido");
+    }
+    if (input.syncEnabled || !input.shadowMode || input.capiSendEnabled) {
+      throw new BadRequestException(
+        "Este conector opera somente em modo leitura",
+      );
+    }
+    await this.egressPolicy.assertAllowed(input.credentials);
+    return this.createConnector(input, actorUserId);
+  }
+
+  async testWorkspaceConnection(
+    workspaceId: string,
+    connectorId: string,
+    actorUserId: string,
+  ): Promise<ExternalConnectionTestResultDto> {
+    const connector = await this.getWorkspaceConnector(
+      workspaceId,
+      connectorId,
+    );
+    const credentials = this.credentialEncryption.decrypt(connector);
+    const resolvedCredentials =
+      await this.egressPolicy.resolveAllowed(credentials);
+    return this.testConnectionForConnector(
+      connector,
+      resolvedCredentials,
+      actorUserId,
+    );
+  }
+
+  async getWorkspaceConnectorStatus(
+    workspaceId: string,
+    connectorId: string,
+    _actorUserId: string,
+  ): Promise<ExternalDataConnectorDto> {
+    return this.toDto(
+      await this.getWorkspaceConnector(workspaceId, connectorId),
+    );
+  }
 
   async listConnectors(
     workspaceId?: string,
-    includeHealth = false
+    includeHealth = false,
   ): Promise<ExternalDataConnectorDto[] | ExternalConnectorHealthDto[]> {
     const connectors = (await this.prisma.externalDataConnector.findMany({
       where: workspaceId ? { workspaceId } : undefined,
       include: {
         cursors: { orderBy: { stream: "asc" } },
-        capiCutovers: { where: { status: "active" }, orderBy: { activatedAt: "asc" } }
+        capiCutovers: {
+          where: { status: "active" },
+          orderBy: { activatedAt: "asc" },
+        },
       },
-      orderBy: [{ workspaceId: "asc" }, { createdAt: "desc" }]
+      orderBy: [{ workspaceId: "asc" }, { createdAt: "desc" }],
     })) as ConnectorWithCursors[];
 
     if (!includeHealth) {
@@ -98,32 +164,34 @@ export class ExternalDataService {
     }
 
     const totalsByConnector = await this.ingestionTotals(
-      connectors.map((connector) => connector.id)
+      connectors.map((connector) => connector.id),
     );
-    const reconciliationByConnector = await this.buildReconciliations(connectors);
+    const reconciliationByConnector =
+      await this.buildReconciliations(connectors);
 
     return connectors.map((connector) =>
       externalConnectorHealthSchema.parse({
         connector: this.toDto(connector),
-        totals: totalsByConnector.get(connector.id) ?? this.emptyIngestionTotals(),
-        reconciliation: reconciliationByConnector.get(connector.id)
-      })
+        totals:
+          totalsByConnector.get(connector.id) ?? this.emptyIngestionTotals(),
+        reconciliation: reconciliationByConnector.get(connector.id),
+      }),
     );
   }
 
   async createConnector(
     input: ExternalDataConnectorCreateInputDto,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalDataConnectorDto> {
     if (input.capiSendEnabled || !input.shadowMode) {
       throw new BadRequestException(
-        "O conector deve ser criado em modo sombra antes do corte CAPI"
+        "O conector deve ser criado em modo sombra antes do corte CAPI",
       );
     }
 
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: input.workspaceId },
-      select: { id: true }
+      select: { id: true },
     });
 
     if (!workspace) {
@@ -143,9 +211,9 @@ export class ExternalDataService {
         shadowMode: input.shadowMode,
         capiSendEnabled: input.capiSendEnabled,
         purchaseAverageValueCents: input.purchaseAverageValueCents ?? null,
-        defaultCurrency: input.defaultCurrency
+        defaultCurrency: input.defaultCurrency,
       },
-      include: { cursors: true, capiCutovers: true }
+      include: { cursors: true, capiCutovers: true },
     })) as ConnectorWithCursors;
     const dto = this.toDto(connector);
 
@@ -154,7 +222,7 @@ export class ExternalDataService {
       actorUserId,
       action: "external_connector.created",
       targetId: connector.id,
-      afterSummary: this.auditSummary(dto)
+      afterSummary: this.auditSummary(dto),
     });
 
     return dto;
@@ -163,15 +231,16 @@ export class ExternalDataService {
   async updateConnector(
     connectorId: string,
     input: ExternalDataConnectorUpdateInputDto,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalDataConnectorDto> {
     const current = await this.getConnector(connectorId);
     const before = this.toDto(current);
-    const enablesReading = input.status === "active" || input.syncEnabled === true;
+    const enablesReading =
+      input.status === "active" || input.syncEnabled === true;
 
     if (input.capiSendEnabled === true || input.shadowMode === false) {
       throw new BadRequestException(
-        "Use o gate de corte CAPI para transferir o envio ao WppTrack"
+        "Use o gate de corte CAPI para transferir o envio ao WppTrack",
       );
     }
 
@@ -180,12 +249,14 @@ export class ExternalDataService {
       (input.status === "disabled" || input.syncEnabled === false)
     ) {
       throw new BadRequestException(
-        "Reverta os cortes CAPI ativos antes de desligar o conector"
+        "Reverta os cortes CAPI ativos antes de desligar o conector",
       );
     }
 
     if (enablesReading && current.lastConnectionStatus !== "connected") {
-      throw new BadRequestException("Teste a conexao e as views antes de ativar a sincronizacao");
+      throw new BadRequestException(
+        "Teste a conexao e as views antes de ativar a sincronizacao",
+      );
     }
 
     const data: Prisma.ExternalDataConnectorUpdateInput = {
@@ -193,20 +264,28 @@ export class ExternalDataService {
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
       ...(input.sslMode !== undefined ? { sslMode: input.sslMode } : {}),
-      ...(input.syncEnabled !== undefined ? { syncEnabled: input.syncEnabled } : {}),
-      ...(input.shadowMode !== undefined ? { shadowMode: input.shadowMode } : {}),
-      ...(input.capiSendEnabled !== undefined ? { capiSendEnabled: input.capiSendEnabled } : {}),
+      ...(input.syncEnabled !== undefined
+        ? { syncEnabled: input.syncEnabled }
+        : {}),
+      ...(input.shadowMode !== undefined
+        ? { shadowMode: input.shadowMode }
+        : {}),
+      ...(input.capiSendEnabled !== undefined
+        ? { capiSendEnabled: input.capiSendEnabled }
+        : {}),
       ...(input.purchaseAverageValueCents !== undefined
         ? { purchaseAverageValueCents: input.purchaseAverageValueCents }
         : {}),
-      ...(input.defaultCurrency !== undefined ? { defaultCurrency: input.defaultCurrency } : {})
+      ...(input.defaultCurrency !== undefined
+        ? { defaultCurrency: input.defaultCurrency }
+        : {}),
     };
 
     if (input.credentials) {
       const existing = this.credentialEncryption.decrypt(current);
       const credentials = externalMysqlCredentialsInputSchema.parse({
         ...existing,
-        ...input.credentials
+        ...input.credentials,
       });
       Object.assign(data, this.credentialEncryption.encrypt(credentials));
     }
@@ -221,8 +300,11 @@ export class ExternalDataService {
       data,
       include: {
         cursors: { orderBy: { stream: "asc" } },
-        capiCutovers: { where: { status: "active" }, orderBy: { activatedAt: "asc" } }
-      }
+        capiCutovers: {
+          where: { status: "active" },
+          orderBy: { activatedAt: "asc" },
+        },
+      },
     })) as ConnectorWithCursors;
     const dto = this.toDto(updated);
 
@@ -232,7 +314,7 @@ export class ExternalDataService {
       action: "external_connector.updated",
       targetId: updated.id,
       beforeSummary: this.auditSummary(before),
-      afterSummary: this.auditSummary(dto)
+      afterSummary: this.auditSummary(dto),
     });
 
     return dto;
@@ -240,10 +322,24 @@ export class ExternalDataService {
 
   async testConnection(
     connectorId: string,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalConnectionTestResultDto> {
     const connector = await this.getConnector(connectorId);
     const credentials = this.credentialEncryption.decrypt(connector);
+    const resolvedCredentials =
+      await this.egressPolicy.resolveAllowed(credentials);
+    return this.testConnectionForConnector(
+      connector,
+      resolvedCredentials,
+      actorUserId,
+    );
+  }
+
+  private async testConnectionForConnector(
+    connector: ConnectorWithCursors,
+    credentials: ReturnType<ExternalCredentialEncryptionService["decrypt"]>,
+    actorUserId: string,
+  ): Promise<ExternalConnectionTestResultDto> {
     const sslMode = externalConnectorSslModeSchema.parse(connector.sslMode);
     const result = await this.mysqlAdapter.testConnection(credentials, sslMode);
 
@@ -252,8 +348,8 @@ export class ExternalDataService {
       data: {
         lastConnectionTestAt: new Date(),
         lastConnectionStatus: result.status,
-        ...(result.ok ? { lastSyncErrorCode: null } : {})
-      }
+        ...(result.ok ? { lastSyncErrorCode: null } : {}),
+      },
     });
     await this.createAudit({
       workspaceId: connector.workspaceId,
@@ -266,8 +362,8 @@ export class ExternalDataService {
         latencyMs: result.latencyMs,
         leadsViewAvailable: result.leadsViewAvailable,
         eventsViewAvailable: result.eventsViewAvailable,
-        errorCode: result.errorCode
-      }
+        errorCode: result.errorCode,
+      },
     });
 
     return result;
@@ -276,7 +372,7 @@ export class ExternalDataService {
   async enqueueSync(
     connectorId: string,
     input: ExternalSyncInputDto,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalSyncQueuedResultDto> {
     const connector = await this.getConnector(connectorId);
 
@@ -288,14 +384,14 @@ export class ExternalDataService {
       connectorId,
       workspaceId: connector.workspaceId,
       streams: input.streams,
-      requestedByUserId: actorUserId
+      requestedByUserId: actorUserId,
     });
     await this.createAudit({
       workspaceId: connector.workspaceId,
       actorUserId,
       action: "external_connector.sync_requested",
       targetId: connector.id,
-      afterSummary: { streams: result.streams, jobId: result.jobId }
+      afterSummary: { streams: result.streams, jobId: result.jobId },
     });
 
     return result;
@@ -303,7 +399,7 @@ export class ExternalDataService {
 
   async enqueueLeadsReimport(
     connectorId: string,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalSyncQueuedResultDto> {
     const connector = await this.getConnector(connectorId);
 
@@ -320,14 +416,14 @@ export class ExternalDataService {
       workspaceId: connector.workspaceId,
       streams: ["leads"],
       projectionRefresh: true,
-      requestedByUserId: actorUserId
+      requestedByUserId: actorUserId,
     });
     await this.createAudit({
       workspaceId: connector.workspaceId,
       actorUserId,
       action: "external_connector.leads_reimport_requested",
       targetId: connector.id,
-      afterSummary: { streams: result.streams, jobId: result.jobId }
+      afterSummary: { streams: result.streams, jobId: result.jobId },
     });
 
     return result;
@@ -337,40 +433,44 @@ export class ExternalDataService {
     const connector = await this.getConnector(connectorId);
     const [totalsByConnector, reconciliations] = await Promise.all([
       this.ingestionTotals([connectorId]),
-      this.buildReconciliations([connector])
+      this.buildReconciliations([connector]),
     ]);
 
     return externalConnectorHealthSchema.parse({
       connector: this.toDto(connector),
       totals: totalsByConnector.get(connectorId) ?? this.emptyIngestionTotals(),
-      reconciliation: reconciliations.get(connectorId)
+      reconciliation: reconciliations.get(connectorId),
     });
   }
 
   async activateCapiCutover(
     connectorId: string,
     input: ExternalCapiCutoverActivateInputDto,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalCapiCutoverResultDto> {
     const health = await this.getHealth(connectorId);
     const event = health.reconciliation?.events.find(
-      (candidate) => candidate.eventType === input.eventType
+      (candidate) => candidate.eventType === input.eventType,
     );
 
     if (!event) {
-      throw new BadRequestException("Evento externo nao encontrado no gate CAPI");
+      throw new BadRequestException(
+        "Evento externo nao encontrado no gate CAPI",
+      );
     }
     if (event.capiActive) {
-      throw new BadRequestException("O WppTrack ja assumiu este tipo de evento");
+      throw new BadRequestException(
+        "O WppTrack ja assumiu este tipo de evento",
+      );
     }
     if (!event.readyForCutover) {
       throw new BadRequestException(
-        "Resolva os bloqueios deste evento antes de assumir o envio"
+        "Resolva os bloqueios deste evento antes de assumir o envio",
       );
     }
     if (event.operationalRows !== input.expectedOperationalRows) {
       throw new BadRequestException(
-        "Os totais mudaram. Atualize o gate e confirme o corte novamente"
+        "Os totais mudaram. Atualize o gate e confirme o corte novamente",
       );
     }
 
@@ -382,12 +482,14 @@ export class ExternalDataService {
         where: {
           connectorId,
           eventType: input.eventType,
-          status: "active"
-        }
+          status: "active",
+        },
       });
 
       if (existing) {
-        throw new BadRequestException("O WppTrack ja assumiu este tipo de evento");
+        throw new BadRequestException(
+          "O WppTrack ja assumiu este tipo de evento",
+        );
       }
 
       const archived = await transaction.conversionEventLog.updateMany({
@@ -395,13 +497,13 @@ export class ExternalDataService {
           externalConnectorId: connectorId,
           eventName,
           status: "ready_to_send",
-          eventOccurredAt: { lt: activatedAt }
+          eventOccurredAt: { lt: activatedAt },
         },
         data: {
           status: "shadow_observed",
           errorCode: null,
-          errorMessage: null
-        }
+          errorMessage: null,
+        },
       });
       const created = await transaction.externalCapiCutover.create({
         data: {
@@ -411,19 +513,19 @@ export class ExternalDataService {
           status: "active",
           activatedAt,
           activatedByUserId: actorUserId,
-          shadowArchivedRows: archived.count
-        }
+          shadowArchivedRows: archived.count,
+        },
       });
       const activeCount = await transaction.externalCapiCutover.count({
-        where: { connectorId, status: "active" }
+        where: { connectorId, status: "active" },
       });
 
       await transaction.externalDataConnector.update({
         where: { id: connectorId },
         data: {
           capiSendEnabled: activeCount > 0,
-          shadowMode: activeCount < canonicalTrackingEventTypes.length
-        }
+          shadowMode: activeCount < canonicalTrackingEventTypes.length,
+        },
       });
 
       return created;
@@ -435,7 +537,7 @@ export class ExternalDataService {
         connectorId,
         workspaceId: connector.workspaceId,
         streams: ["events"],
-        requestedByUserId: actorUserId
+        requestedByUserId: actorUserId,
       });
       syncJobId = sync.jobId;
     } catch {
@@ -450,28 +552,28 @@ export class ExternalDataService {
       beforeSummary: {
         eventType: input.eventType,
         operationalRows: input.expectedOperationalRows,
-        legacyDelivery: "n8n"
+        legacyDelivery: "n8n",
       },
       afterSummary: {
         eventType: input.eventType,
         activatedAt: cutover.activatedAt.toISOString(),
         shadowArchivedRows: cutover.shadowArchivedRows,
         deliveryOwner: "wpptrack",
-        syncJobId
-      }
+        syncJobId,
+      },
     });
 
     return externalCapiCutoverResultSchema.parse({
       connectorId,
       cutover: this.cutoverDto(cutover),
-      syncJobId
+      syncJobId,
     });
   }
 
   async rollbackCapiCutover(
     connectorId: string,
     input: ExternalCapiCutoverRollbackInputDto,
-    actorUserId: string
+    actorUserId: string,
   ): Promise<ExternalCapiCutoverResultDto> {
     const connector = await this.getConnector(connectorId);
     const rolledBackAt = new Date();
@@ -480,13 +582,15 @@ export class ExternalDataService {
         where: {
           connectorId,
           eventType: input.eventType,
-          status: "active"
+          status: "active",
         },
-        orderBy: { activatedAt: "desc" }
+        orderBy: { activatedAt: "desc" },
       });
 
       if (!active) {
-        throw new BadRequestException("Este tipo de evento nao esta ativo no WppTrack");
+        throw new BadRequestException(
+          "Este tipo de evento nao esta ativo no WppTrack",
+        );
       }
 
       const eventName = this.conversionEventName(input.eventType);
@@ -494,32 +598,32 @@ export class ExternalDataService {
         where: {
           externalConnectorId: connectorId,
           eventName,
-          status: "ready_to_send"
+          status: "ready_to_send",
         },
         data: {
           status: "shadow_observed",
           errorCode: null,
-          errorMessage: null
-        }
+          errorMessage: null,
+        },
       });
       const updated = await transaction.externalCapiCutover.update({
         where: { id: active.id },
         data: {
           status: "rolled_back",
           rolledBackAt,
-          rolledBackByUserId: actorUserId
-        }
+          rolledBackByUserId: actorUserId,
+        },
       });
       const activeCount = await transaction.externalCapiCutover.count({
-        where: { connectorId, status: "active" }
+        where: { connectorId, status: "active" },
       });
 
       await transaction.externalDataConnector.update({
         where: { id: connectorId },
         data: {
           capiSendEnabled: activeCount > 0,
-          shadowMode: activeCount < canonicalTrackingEventTypes.length
-        }
+          shadowMode: activeCount < canonicalTrackingEventTypes.length,
+        },
       });
 
       return { cutover: updated, archivedRows: archived.count };
@@ -532,45 +636,56 @@ export class ExternalDataService {
       targetId: connectorId,
       beforeSummary: {
         eventType: input.eventType,
-        deliveryOwner: "wpptrack"
+        deliveryOwner: "wpptrack",
       },
       afterSummary: {
         eventType: input.eventType,
         rolledBackAt:
-          rollback.cutover.rolledBackAt?.toISOString() ?? rolledBackAt.toISOString(),
+          rollback.cutover.rolledBackAt?.toISOString() ??
+          rolledBackAt.toISOString(),
         deliveryOwner: "n8n",
-        cancelledReadyRows: rollback.archivedRows
-      }
+        cancelledReadyRows: rollback.archivedRows,
+      },
     });
 
     return externalCapiCutoverResultSchema.parse({
       connectorId,
       cutover: this.cutoverDto(rollback.cutover),
-      syncJobId: null
+      syncJobId: null,
     });
   }
 
   private async buildReconciliations(
-    connectors: ConnectorWithCursors[]
+    connectors: ConnectorWithCursors[],
   ): Promise<Map<string, ExternalConnectorReconciliationDto>> {
-    const reconciliations = new Map<string, ExternalConnectorReconciliationDto>();
+    const reconciliations = new Map<
+      string,
+      ExternalConnectorReconciliationDto
+    >();
     if (!connectors.length) {
       return reconciliations;
     }
 
     const connectorIds = connectors.map((connector) => connector.id);
-    const workspaceIds = [...new Set(connectors.map((connector) => connector.workspaceId))];
+    const workspaceIds = [
+      ...new Set(connectors.map((connector) => connector.workspaceId)),
+    ];
     const eventNames = ["LeadSubmitted", "QualifiedLead", "Purchase"];
-    const activeConversionLinks = await this.prisma.externalIngestionRecord.findMany({
-      where: {
-        connectorId: { in: connectorIds },
-        stream: "events",
-        eventType: { in: [...canonicalTrackingEventTypes] },
-        status: { in: ["imported", "duplicate"] },
-        conversionEventLogId: { not: null }
-      },
-      select: { connectorId: true, eventType: true, conversionEventLogId: true }
-    });
+    const activeConversionLinks =
+      await this.prisma.externalIngestionRecord.findMany({
+        where: {
+          connectorId: { in: connectorIds },
+          stream: "events",
+          eventType: { in: [...canonicalTrackingEventTypes] },
+          status: { in: ["imported", "duplicate"] },
+          conversionEventLogId: { not: null },
+        },
+        select: {
+          connectorId: true,
+          eventType: true,
+          conversionEventLogId: true,
+        },
+      });
     const activeConversionIdsByConnector = new Map<string, Set<string>>();
     const expectedConversionIdsByConnector = new Map<
       string,
@@ -580,7 +695,9 @@ export class ExternalDataService {
       if (!link.conversionEventLogId || !link.eventType) {
         continue;
       }
-      const ids = activeConversionIdsByConnector.get(link.connectorId) ?? new Set<string>();
+      const ids =
+        activeConversionIdsByConnector.get(link.connectorId) ??
+        new Set<string>();
       ids.add(link.conversionEventLogId);
       activeConversionIdsByConnector.set(link.connectorId, ids);
 
@@ -593,18 +710,18 @@ export class ExternalDataService {
       idsByEvent.set(eventType, eventIds);
       expectedConversionIdsByConnector.set(link.connectorId, idsByEvent);
     }
-    const activeDeliveryFilters = [...activeConversionIdsByConnector.entries()].map(
-      ([externalConnectorId, ids]) => ({
-        externalConnectorId,
-        id: { in: [...ids] }
-      })
-    );
+    const activeDeliveryFilters = [
+      ...activeConversionIdsByConnector.entries(),
+    ].map(([externalConnectorId, ids]) => ({
+      externalConnectorId,
+      id: { in: [...ids] },
+    }));
     const [
       ingestionGroups,
       historicalGroups,
       deliveryGroups,
       metaConnections,
-      metaDestinations
+      metaDestinations,
     ] = await Promise.all([
       this.prisma.externalIngestionRecord.groupBy({
         by: ["connectorId", "eventType", "status", "errorCode"],
@@ -612,12 +729,12 @@ export class ExternalDataService {
           connectorId: { in: connectorIds },
           stream: "events",
           eventType: { in: [...canonicalTrackingEventTypes] },
-          status: { not: "removed" }
+          status: { not: "removed" },
         },
         _count: { _all: true },
         _sum: { duplicateCount: true },
         _min: { occurredAt: true },
-        _max: { occurredAt: true }
+        _max: { occurredAt: true },
       }),
       this.prisma.externalIngestionRecord.groupBy({
         by: ["connectorId", "eventType"],
@@ -626,23 +743,28 @@ export class ExternalDataService {
           stream: "events",
           eventType: { in: [...canonicalTrackingEventTypes] },
           externalRowId: { startsWith: "historical-lead:" },
-          status: { in: ["imported", "duplicate"] }
+          status: { in: ["imported", "duplicate"] },
         },
-        _count: { _all: true }
+        _count: { _all: true },
       }),
       activeDeliveryFilters.length
         ? this.prisma.conversionEventLog.groupBy({
-            by: ["externalConnectorId", "eventName", "status", "businessSource"],
+            by: [
+              "externalConnectorId",
+              "eventName",
+              "status",
+              "businessSource",
+            ],
             where: {
               OR: activeDeliveryFilters,
-              eventName: { in: eventNames }
+              eventName: { in: eventNames },
             },
-            _count: { _all: true }
+            _count: { _all: true },
           })
         : Promise.resolve([]),
       this.prisma.metaIntegration.findMany({
         where: { workspaceId: { in: workspaceIds } },
-        select: { workspaceId: true, status: true, encryptedAccessToken: true }
+        select: { workspaceId: true, status: true, encryptedAccessToken: true },
       }),
       this.prisma.metaConversionDestination.findMany({
         where: { workspaceId: { in: workspaceIds } },
@@ -650,9 +772,9 @@ export class ExternalDataService {
           workspaceId: true,
           status: true,
           pixelId: true,
-          pageId: true
-        }
-      })
+          pageId: true,
+        },
+      }),
     ]);
     const eventsByConnector = new Map<
       string,
@@ -665,7 +787,7 @@ export class ExternalDataService {
       const activeCutovers = new Map(
         connector.capiCutovers
           .filter((cutover) => cutover.status === "active")
-          .map((cutover) => [cutover.eventType, cutover.activatedAt] as const)
+          .map((cutover) => [cutover.eventType, cutover.activatedAt] as const),
       );
       const events = new Map<
         CanonicalTrackingEventTypeDto,
@@ -695,7 +817,7 @@ export class ExternalDataService {
           readyForCutover: false,
           cutoverAt: activeCutovers.get(eventType)?.toISOString() ?? null,
           firstOccurredAt: null,
-          lastOccurredAt: null
+          lastOccurredAt: null,
         });
       }
       eventsByConnector.set(connector.id, events);
@@ -727,9 +849,12 @@ export class ExternalDataService {
       event.duplicateDeliveries += Math.max(0, group._sum.duplicateCount ?? 0);
       event.firstOccurredAt = this.earlierDate(
         event.firstOccurredAt,
-        group._min.occurredAt
+        group._min.occurredAt,
       );
-      event.lastOccurredAt = this.laterDate(event.lastOccurredAt, group._max.occurredAt);
+      event.lastOccurredAt = this.laterDate(
+        event.lastOccurredAt,
+        group._max.occurredAt,
+      );
 
       if (["imported", "duplicate"].includes(group.status)) {
         event.acceptedRows += group._count._all;
@@ -759,14 +884,14 @@ export class ExternalDataService {
     const eventTypeByName = new Map<string, CanonicalTrackingEventTypeDto>([
       ["LeadSubmitted", "conversation_started"],
       ["QualifiedLead", "qualified_lead"],
-      ["Purchase", "purchase"]
+      ["Purchase", "purchase"],
     ]);
     const acceptedPaidStatuses = new Set([
       "ready_to_send",
       "sent",
       "imported",
       "not_eligible",
-      "shadow_observed"
+      "shadow_observed",
     ]);
 
     for (const group of deliveryGroups) {
@@ -792,7 +917,10 @@ export class ExternalDataService {
         event.shadowObservedRows += group._count._all;
       }
 
-      if (group.businessSource === "paid" && !acceptedPaidStatuses.has(group.status)) {
+      if (
+        group.businessSource === "paid" &&
+        !acceptedPaidStatuses.has(group.status)
+      ) {
         event.blockedDeliveryRows += group._count._all;
       }
     }
@@ -823,8 +951,8 @@ export class ExternalDataService {
         ...event,
         operationalRows: Math.max(
           0,
-          event.acceptedRows - event.historicalRows - event.notEligibleRows
-        )
+          event.acceptedRows - event.historicalRows - event.notEligibleRows,
+        ),
       }));
       const blockers: ExternalConnectorReconciliationDto["blockers"] = [];
       const addBlocker = (code: string, message: string) => {
@@ -832,41 +960,61 @@ export class ExternalDataService {
       };
 
       if (connector.status !== "active") {
-        addBlocker("CONNECTOR_INACTIVE", "Ative o conector externo antes do corte CAPI.");
+        addBlocker(
+          "CONNECTOR_INACTIVE",
+          "Ative o conector externo antes do corte CAPI.",
+        );
       }
       if (!connector.syncEnabled) {
-        addBlocker("SYNC_DISABLED", "Ative a sincronizacao automatica do conector.");
+        addBlocker(
+          "SYNC_DISABLED",
+          "Ative a sincronizacao automatica do conector.",
+        );
       }
       if (connector.lastConnectionStatus !== "connected") {
-        addBlocker("CONNECTION_NOT_VALIDATED", "Valide novamente a conexao MySQL.");
+        addBlocker(
+          "CONNECTION_NOT_VALIDATED",
+          "Valide novamente a conexao MySQL.",
+        );
       }
       if (connector.lastSyncStatus !== "completed") {
-        addBlocker("SYNC_NOT_COMPLETED", "Conclua uma sincronizacao sem falhas.");
+        addBlocker(
+          "SYNC_NOT_COMPLETED",
+          "Conclua uma sincronizacao sem falhas.",
+        );
       }
       if (
         !connector.cursors.some(
-          (cursor) => cursor.stream === "events" && cursor.lastSyncedAt
+          (cursor) => cursor.stream === "events" && cursor.lastSyncedAt,
         )
       ) {
-        addBlocker("EVENT_CURSOR_MISSING", "Sincronize o fluxo de eventos ao menos uma vez.");
+        addBlocker(
+          "EVENT_CURSOR_MISSING",
+          "Sincronize o fluxo de eventos ao menos uma vez.",
+        );
       }
       const activeCutoverCount = connector.capiCutovers.filter(
-        (cutover) => cutover.status === "active"
+        (cutover) => cutover.status === "active",
       ).length;
       const expectedCapiEnabled = activeCutoverCount > 0;
-      const expectedShadowMode = activeCutoverCount < canonicalTrackingEventTypes.length;
+      const expectedShadowMode =
+        activeCutoverCount < canonicalTrackingEventTypes.length;
       if (
         connector.capiSendEnabled !== expectedCapiEnabled ||
         connector.shadowMode !== expectedShadowMode
       ) {
         addBlocker(
           "CAPI_MODE_INCONSISTENT",
-          "O modo CAPI nao corresponde aos tipos de evento assumidos pelo WppTrack."
+          "O modo CAPI nao corresponde aos tipos de evento assumidos pelo WppTrack.",
         );
       }
 
-      const metaConnection = metaConnectionByWorkspace.get(connector.workspaceId);
-      const metaDestination = metaDestinationByWorkspace.get(connector.workspaceId);
+      const metaConnection = metaConnectionByWorkspace.get(
+        connector.workspaceId,
+      );
+      const metaDestination = metaDestinationByWorkspace.get(
+        connector.workspaceId,
+      );
       const connectionConfigured =
         metaConnection?.status === "connected" &&
         Boolean(metaConnection.encryptedAccessToken);
@@ -876,10 +1024,16 @@ export class ExternalDataService {
         Boolean(metaDestination.pageId);
 
       if (!connectionConfigured) {
-        addBlocker("META_CONNECTION_MISSING", "Conecte a conta Meta deste workspace.");
+        addBlocker(
+          "META_CONNECTION_MISSING",
+          "Conecte a conta Meta deste workspace.",
+        );
       }
       if (!destinationConfigured) {
-        addBlocker("META_DESTINATION_MISSING", "Configure Pixel e Pagina do destino CAPI.");
+        addBlocker(
+          "META_DESTINATION_MISSING",
+          "Configure Pixel e Pagina do destino CAPI.",
+        );
       }
 
       const baseReadyForCutover =
@@ -888,7 +1042,7 @@ export class ExternalDataService {
         connector.lastConnectionStatus === "connected" &&
         connector.lastSyncStatus === "completed" &&
         connector.cursors.some(
-          (cursor) => cursor.stream === "events" && cursor.lastSyncedAt
+          (cursor) => cursor.stream === "events" && cursor.lastSyncedAt,
         ) &&
         connectionConfigured &&
         destinationConfigured &&
@@ -900,19 +1054,19 @@ export class ExternalDataService {
         if (event.operationalRows === 0) {
           addBlocker(
             `EVENT_NOT_OBSERVED_${event.eventType.toUpperCase()}`,
-            `Aguarde o primeiro evento real de ${eventLabel}.`
+            `Aguarde o primeiro evento real de ${eventLabel}.`,
           );
         }
         if (event.blockingRejectedRows > 0) {
           addBlocker(
             `REJECTED_${event.eventType.toUpperCase()}`,
-            `${event.blockingRejectedRows} evento(s) de ${eventLabel} falharam na ingestao.`
+            `${event.blockingRejectedRows} evento(s) de ${eventLabel} falharam na ingestao.`,
           );
         }
         if (event.pendingRows > 0) {
           addBlocker(
             `PENDING_${event.eventType.toUpperCase()}`,
-            `${event.pendingRows} evento(s) de ${eventLabel} estao pendentes.`
+            `${event.pendingRows} evento(s) de ${eventLabel} estao pendentes.`,
           );
         }
 
@@ -920,13 +1074,13 @@ export class ExternalDataService {
         if (event.matchedRows < expectedMatches) {
           addBlocker(
             `UNMATCHED_${event.eventType.toUpperCase()}`,
-            `${expectedMatches - event.matchedRows} evento(s) de ${eventLabel} nao possuem conversao vinculada.`
+            `${expectedMatches - event.matchedRows} evento(s) de ${eventLabel} nao possuem conversao vinculada.`,
           );
         }
         if (event.blockedDeliveryRows > 0) {
           addBlocker(
             `DELIVERY_BLOCKED_${event.eventType.toUpperCase()}`,
-            `${event.blockedDeliveryRows} evento(s) pagos de ${eventLabel} nao estao prontos para CAPI.`
+            `${event.blockedDeliveryRows} evento(s) pagos de ${eventLabel} nao estao prontos para CAPI.`,
           );
         }
 
@@ -942,20 +1096,24 @@ export class ExternalDataService {
 
       const readyForCutover =
         activeCutoverCount < canonicalTrackingEventTypes.length &&
-        reconciledEvents.every((event) => event.capiActive || event.readyForCutover);
+        reconciledEvents.every(
+          (event) => event.capiActive || event.readyForCutover,
+        );
       const onlyWaitingForSamples =
         blockers.length > 0 &&
-        blockers.every((blocker) => blocker.code.startsWith("EVENT_NOT_OBSERVED_"));
+        blockers.every((blocker) =>
+          blocker.code.startsWith("EVENT_NOT_OBSERVED_"),
+        );
       const state =
         activeCutoverCount === canonicalTrackingEventTypes.length
           ? "live"
           : activeCutoverCount > 0
             ? "partial"
-          : readyForCutover
-            ? "ready"
-            : onlyWaitingForSamples
-              ? "collecting"
-              : "blocked";
+            : readyForCutover
+              ? "ready"
+              : onlyWaitingForSamples
+                ? "collecting"
+                : "blocked";
 
       const reconciliation = externalConnectorReconciliationSchema.parse({
         connectorId: connector.id,
@@ -967,10 +1125,10 @@ export class ExternalDataService {
           connectionConfigured,
           destinationConfigured,
           pixelId: metaDestination?.pixelId ?? null,
-          pageId: metaDestination?.pageId ?? null
+          pageId: metaDestination?.pageId ?? null,
         },
         events: reconciledEvents,
-        blockers
+        blockers,
       });
       reconciliations.set(connector.id, reconciliation);
     }
@@ -978,17 +1136,22 @@ export class ExternalDataService {
     return reconciliations;
   }
 
-  private reconciliationEventLabel(eventType: CanonicalTrackingEventTypeDto): string {
+  private reconciliationEventLabel(
+    eventType: CanonicalTrackingEventTypeDto,
+  ): string {
     const labels: Record<CanonicalTrackingEventTypeDto, string> = {
       conversation_started: "conversa",
       qualified_lead: "lead qualificado",
-      purchase: "compra"
+      purchase: "compra",
     };
 
     return labels[eventType];
   }
 
-  private earlierDate(current: string | null, candidate: Date | null): string | null {
+  private earlierDate(
+    current: string | null,
+    candidate: Date | null,
+  ): string | null {
     if (!candidate) {
       return current;
     }
@@ -998,7 +1161,10 @@ export class ExternalDataService {
     return current;
   }
 
-  private laterDate(current: string | null, candidate: Date | null): string | null {
+  private laterDate(
+    current: string | null,
+    candidate: Date | null,
+  ): string | null {
     if (!candidate) {
       return current;
     }
@@ -1009,9 +1175,12 @@ export class ExternalDataService {
   }
 
   private async ingestionTotals(
-    connectorIds: string[]
+    connectorIds: string[],
   ): Promise<Map<string, ExternalConnectorHealthDto["totals"]>> {
-    const totalsByConnector = new Map<string, ExternalConnectorHealthDto["totals"]>();
+    const totalsByConnector = new Map<
+      string,
+      ExternalConnectorHealthDto["totals"]
+    >();
 
     if (!connectorIds.length) {
       return totalsByConnector;
@@ -1021,11 +1190,12 @@ export class ExternalDataService {
       by: ["connectorId", "status", "errorCode"],
       where: { connectorId: { in: connectorIds } },
       _count: { _all: true },
-      _sum: { duplicateCount: true }
+      _sum: { duplicateCount: true },
     });
 
     for (const group of groups) {
-      const totals = totalsByConnector.get(group.connectorId) ?? this.emptyIngestionTotals();
+      const totals =
+        totalsByConnector.get(group.connectorId) ?? this.emptyIngestionTotals();
       if (group.status !== "removed") {
         totals.duplicates += Math.max(0, group._sum.duplicateCount ?? 0);
       }
@@ -1058,23 +1228,48 @@ export class ExternalDataService {
       rejected: 0,
       quarantined: 0,
       failed: 0,
-      pending: 0
+      pending: 0,
     };
   }
 
-  private async getConnector(connectorId: string): Promise<ConnectorWithCursors> {
+  private async getConnector(
+    connectorId: string,
+  ): Promise<ConnectorWithCursors> {
     const connector = (await this.prisma.externalDataConnector.findUnique({
       where: { id: connectorId },
       include: {
         cursors: { orderBy: { stream: "asc" } },
-        capiCutovers: { where: { status: "active" }, orderBy: { activatedAt: "asc" } }
-      }
+        capiCutovers: {
+          where: { status: "active" },
+          orderBy: { activatedAt: "asc" },
+        },
+      },
     })) as ConnectorWithCursors | null;
 
     if (!connector) {
       throw new NotFoundException("Conector externo nao encontrado");
     }
 
+    return connector;
+  }
+
+  private async getWorkspaceConnector(
+    workspaceId: string,
+    connectorId: string,
+  ): Promise<ConnectorWithCursors> {
+    const connector = (await this.prisma.externalDataConnector.findFirst({
+      where: { id: connectorId, workspaceId },
+      include: {
+        cursors: { orderBy: { stream: "asc" } },
+        capiCutovers: {
+          where: { status: "active" },
+          orderBy: { activatedAt: "asc" },
+        },
+      },
+    })) as ConnectorWithCursors | null;
+
+    if (!connector)
+      throw new NotFoundException("Conector externo nao encontrado");
     return connector;
   }
 
@@ -1090,11 +1285,14 @@ export class ExternalDataService {
       syncEnabled: connector.syncEnabled,
       shadowMode: connector.shadowMode,
       capiSendEnabled: connector.capiSendEnabled,
-      capiCutovers: connector.capiCutovers.map((cutover) => this.cutoverDto(cutover)),
+      capiCutovers: connector.capiCutovers.map((cutover) =>
+        this.cutoverDto(cutover),
+      ),
       purchaseAverageValueCents: connector.purchaseAverageValueCents,
       defaultCurrency: connector.defaultCurrency,
       hasCredentials: true,
-      lastConnectionTestAt: connector.lastConnectionTestAt?.toISOString() ?? null,
+      lastConnectionTestAt:
+        connector.lastConnectionTestAt?.toISOString() ?? null,
       lastConnectionStatus: connector.lastConnectionStatus,
       lastSyncStartedAt: connector.lastSyncStartedAt?.toISOString() ?? null,
       lastSyncCompletedAt: connector.lastSyncCompletedAt?.toISOString() ?? null,
@@ -1104,14 +1302,16 @@ export class ExternalDataService {
         stream: cursor.stream,
         lastExternalId: cursor.lastExternalId,
         lastUpdatedAt: cursor.lastUpdatedAt?.toISOString() ?? null,
-        lastSyncedAt: cursor.lastSyncedAt?.toISOString() ?? null
+        lastSyncedAt: cursor.lastSyncedAt?.toISOString() ?? null,
       })),
       createdAt: connector.createdAt.toISOString(),
-      updatedAt: connector.updatedAt.toISOString()
+      updatedAt: connector.updatedAt.toISOString(),
     });
   }
 
-  private auditSummary(connector: ExternalDataConnectorDto): Prisma.InputJsonValue {
+  private auditSummary(
+    connector: ExternalDataConnectorDto,
+  ): Prisma.InputJsonValue {
     return {
       name: connector.name,
       provider: connector.provider,
@@ -1123,11 +1323,11 @@ export class ExternalDataService {
       capiSendEnabled: connector.capiSendEnabled,
       capiCutovers: connector.capiCutovers.map((cutover) => ({
         eventType: cutover.eventType,
-        activatedAt: cutover.activatedAt
+        activatedAt: cutover.activatedAt,
       })),
       purchaseAverageValueCents: connector.purchaseAverageValueCents,
       defaultCurrency: connector.defaultCurrency,
-      hasCredentials: true
+      hasCredentials: true,
     } as Prisma.InputJsonValue;
   }
 
@@ -1150,16 +1350,18 @@ export class ExternalDataService {
         targetId: input.targetId,
         resultStatus: input.resultStatus ?? "success",
         beforeSummary: input.beforeSummary ?? Prisma.JsonNull,
-        afterSummary: input.afterSummary ?? Prisma.JsonNull
-      }
+        afterSummary: input.afterSummary ?? Prisma.JsonNull,
+      },
     });
   }
 
-  private conversionEventName(eventType: CanonicalTrackingEventTypeDto): string {
+  private conversionEventName(
+    eventType: CanonicalTrackingEventTypeDto,
+  ): string {
     const names: Record<CanonicalTrackingEventTypeDto, string> = {
       conversation_started: "LeadSubmitted",
       qualified_lead: "QualifiedLead",
-      purchase: "Purchase"
+      purchase: "Purchase",
     };
 
     return names[eventType];
@@ -1179,7 +1381,7 @@ export class ExternalDataService {
       status: cutover.status,
       activatedAt: cutover.activatedAt.toISOString(),
       shadowArchivedRows: cutover.shadowArchivedRows,
-      rolledBackAt: cutover.rolledBackAt?.toISOString() ?? null
+      rolledBackAt: cutover.rolledBackAt?.toISOString() ?? null,
     };
   }
 }

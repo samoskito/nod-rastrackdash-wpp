@@ -61,31 +61,33 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 0 | onboarding, Dokploy, Git/GitHub, envs, providers BYO e docs | público | **CONCLUÍDA** | PR #24, merge `7ba875a` |
 | Fase 1 | bootstrap persistente, `platform_owner`, RBAC, convites e proteção de owner | público | **CONCLUÍDA** | PR #25, merge `6212b33` |
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
-| Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **PENDENTE — ÚLTIMA FEATURE DE CÓDIGO** | necessária para conectar banco externo já populado, seguindo o padrão Dash com IA/Barbieri; executar somente depois do banner |
-| Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA NO HISTÓRICO F5.1–F5.7** | registry, UAZAPI BYO, NOD API, WAHA, Z-API, parsers e alertas já estão no `main` |
+| Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A CONCLUÍDA LOCALMENTE — HOMOLOGAÇÃO REAL PENDENTE** | commit local `ff9741b`; 20 testes focados, shared build, API typecheck/build, Prettier, diff-check e revisão independente NO-BLOCK; MySQL implementado, PostgreSQL ainda não suportado |
+| Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; Z-API/NOD API/GupShup/Umbler ainda sem E2E real |
 
-### Estado atual detalhado
+### Estado atual detalhado — atualizado em 2026-09-03
 
-- Última fase aceita localmente: Fase 2 base, com hardening posterior ainda aguardando homologação individual.
-- Commits da Fase 2 base: backend `6f5b6a3`; frontend `b4c31e7`; merge `374cc48`.
-- Hardening local adicional: `525886a` (autoativação da licença), `5d743d5` (SMTP opcional no backend) e `51781b1` (UI/onboarding SMTP opcional).
-- Gates locais: licensing 54 testes; backoffice workspace 19/19; web typecheck/build verdes; shared build verde; `git diff --check` verde. A suíte completa shared mantém 9 falhas baseline de exports não relacionados.
-- Migrations: nenhuma.
-- Commit/push/PR/merge/deploy: hardening publicado em `origin/main` até `454725c`; deploy homologado pelo Samuel em 2026-08-27 (commit confirmado no build, licença autoativada no boot sem curl, workspace criado sem SMTP com mensagem de link manual, link manual one-time funcionando, senha de bootstrap removida).
-- Próxima prioridade: consolidar/homologar WhatsApp BYO por instalação/workspace; depois banner de atualização; Fase 3 externa por último.
-- Fase 3 permanece obrigatória, mas foi movida para a última feature: conexão de banco externo MySQL/PostgreSQL já populado, seguindo o padrão de integração usado no Dash com IA/Barbieri.
+- Fase 2: concluída e homologada em instalação individual.
+- WhatsApp/Fase 4: implementada nos PRs #28–#41; UAZAPI e WAHA homologados, demais providers sem E2E real nesta instalação.
+- Dokploy e documentação: PR #42 mergeado; clone público via Git e deploy validados.
+- Banner de atualização: PRs #2/#3 mergeados.
+- Fase 3A: implementação backend somente leitura concluída no commit local `ff9741b`, com MySQL, controller, escopo por workspace, egress/SSRF fail-closed, credenciais protegidas e testes verdes.
+- Revisão independente Fase 3A: **NO-BLOCK**. Não houve migration.
+- Limitação da Fase 3A: PostgreSQL ainda não é suportado e não houve conexão real a banco externo por ausência de infraestrutura de homologação.
+- Próxima etapa da Fase 3: homologação real do conector MySQL e definição/implementação de PostgreSQL somente após adapter e testes próprios.
 
-### Decisão de ordenação — 2026-08-26
+### Decisão de ordenação — atualizada em 2026-09-03
 
 O modelo operacional confirmado por Samuel é **uma instalação por aluno, com banco principal, deploy e backoffice próprios**. A existência de workspaces internos não implica operação cross-installation.
 
 Ordem de execução vigente:
 
-1. fechar e validar a Fase 2 na instalação individual, incluindo ativação automática da licença, criação sem SMTP e link manual;
-2. implementar/consolidar WhatsApp BYO por instalação/workspace, sem QR, criação de instância ou cobrança;
-3. implementar o banner de atualização e as instruções de atualização para alunos;
-4. implementar a Fase 3 como última feature: conexão opcional a banco externo MySQL/PostgreSQL já populado, seguindo o padrão usado no Dash com IA/Barbieri;
-5. homologar e preparar release.
+1. Fases 0, 1 e 2: concluídas e homologadas;
+2. WhatsApp/Fase 4: implementada, com UAZAPI e WAHA homologados;
+3. Fase 3A: implementada, revisada e commitada localmente;
+4. homologar conexão real MySQL;
+5. avaliar PostgreSQL com adapter/testes reais;
+6. revisão Meta e segurança operacional geral;
+7. homologação final, publicação e release.
 
 A Fase 3 é necessária, mas não é dependência do funcionamento normal do backoffice. O diff parcial não aceito de conectores permanece fora de commit e não deve orientar a próxima fase.
 

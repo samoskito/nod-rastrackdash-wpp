@@ -8,6 +8,8 @@ import { ConversionEventsModule } from "../conversion-events/conversion-events.m
 import { LeadsModule } from "../leads/leads.module";
 import { ExternalAutoSyncService } from "./external-auto-sync.service";
 import { ExternalCredentialEncryptionService } from "./external-credential-encryption.service";
+import { BackofficeExternalDataController } from "./backoffice-external-data.controller";
+import { ExternalConnectorEgressPolicyService } from "./external-connector-egress-policy.service";
 import { ExternalDataService } from "./external-data.service";
 import { ExternalEventIngestionService } from "./external-event-ingestion.service";
 import { ExternalMysqlAdapter } from "./external-mysql.adapter";
@@ -22,19 +24,20 @@ import { ExternalSyncService } from "./external-sync.service";
     QueueModule,
     ConversionEventsModule,
     LeadsModule,
-    BullModule.registerQueue({ name: EXTERNAL_DATA_SYNC_QUEUE })
+    BullModule.registerQueue({ name: EXTERNAL_DATA_SYNC_QUEUE }),
   ],
-  controllers: [],
+  controllers: [BackofficeExternalDataController],
   providers: [
     ExternalCredentialEncryptionService,
+    ExternalConnectorEgressPolicyService,
     ExternalMysqlAdapter,
     ExternalEventIngestionService,
     ExternalSyncService,
     ExternalSyncQueueService,
     ExternalSyncProcessor,
     ExternalAutoSyncService,
-    ExternalDataService
+    ExternalDataService,
   ],
-  exports: [ExternalDataService, ExternalSyncQueueService]
+  exports: [ExternalDataService, ExternalSyncQueueService],
 })
 export class ExternalDataModule {}
