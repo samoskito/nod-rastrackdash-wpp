@@ -10,6 +10,7 @@ import {
 import { PrismaService } from "../common/prisma/prisma.service";
 import { LeadsService } from "../leads/leads.service";
 import { ExternalCredentialEncryptionService } from "./external-credential-encryption.service";
+import { ExternalConnectorEgressPolicyService } from "./external-connector-egress-policy.service";
 import {
   ExternalEventIngestionService,
   type ExternalEventConnectorContext
@@ -76,6 +77,8 @@ export class ExternalSyncService {
     private readonly credentialEncryption: ExternalCredentialEncryptionService,
     @Inject(ExternalMysqlAdapter)
     private readonly mysqlAdapter: ExternalMysqlAdapter,
+    @Inject(ExternalConnectorEgressPolicyService)
+    private readonly egressPolicy: ExternalConnectorEgressPolicyService,
     @Inject(ExternalEventIngestionService)
     private readonly eventIngestion: ExternalEventIngestionService
   ) {}
@@ -105,6 +108,8 @@ export class ExternalSyncService {
     const streams = this.normalizeStreams(requestedStreams);
     const projectionRefresh = options.projectionRefresh === true;
     const credentials = this.credentialEncryption.decrypt(connector);
+    const resolvedCredentials =
+      await this.egressPolicy.resolveAllowed(credentials);
     const sslMode = externalConnectorSslModeSchema.parse(connector.sslMode);
     const context = await this.connectorContext(connector);
     const startedAt = new Date();
@@ -143,11 +148,11 @@ export class ExternalSyncService {
             ? await this.syncLeads(
                 connector,
                 context,
-                credentials,
+                resolvedCredentials,
                 sslMode,
                 projectionRefresh
               )
-            : await this.syncEvents(context, credentials, sslMode);
+            : await this.syncEvents(context, resolvedCredentials, sslMode);
         this.addCounts(counts, streamCounts);
       }
 
