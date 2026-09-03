@@ -46,7 +46,11 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
 3. Só depois de ler os documentos acima, e antes de rodar qualquer
    comando, me pergunte (sem segredos, só decisões):
    a) Alvo do deploy: Docker local (dev/homolog na minha máquina),
-      VPS com Dokploy, ou outro provedor (Vercel + outro host)?
+      VPS com Dokploy, ou outro provedor (Vercel + outro host)? Se for
+      Dokploy, conduza também o preflight de clone público em
+      `docs/setup/dokploy.md#01-preflight-do-clone-git-público` antes de
+      criar o serviço da API. O provider continua sendo `Git`, sem login
+      GitHub do aluno.
    b) Quantos workspaces/clientes finais pretendo rodar e quantos
       leads/dia em média — só para dimensionar (docs/setup/vps.md).
    c) Quais provedores de WhatsApp pretendo usar: Uazapi BYO, NOD API
@@ -152,6 +156,13 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    Dokploy que você não confirmou comigo, nem automações que este
    repositório não suporta. Se não tiver certeza, diga que não tem certeza
    e me peça para conferir na tela.
+
+   Se o Dokploy falhar antes do build com `could not read Username` e
+   `expected flush after ref listing`, não peça credenciais GitHub nem
+   troque para o provider GitHub: pare, leia a entrada correspondente em
+   `docs/setup/troubleshooting.md` e conduza o diagnóstico no host/worker
+   do Dokploy. Esse é um problema de transporte Git/HTTP2 do ambiente,
+   não uma configuração do aluno dentro da aplicação.
 
 8. Nunca remova o rodapé residual "RastrackDash · powered by PalmUP" nem
    sugira uma forma de escondê-lo — é uma regra fixa do produto
