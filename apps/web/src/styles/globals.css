@@ -3990,6 +3990,33 @@ td span {
   min-width: 210px;
 }
 
+.workspace-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  align-items: center;
+  margin-top: 5px;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.workspace-id-row > span {
+  font-weight: 700;
+}
+
+.workspace-id-row code {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.workspace-id-copy-button {
+  min-height: 26px;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
 .owner-access-controls {
   display: grid;
   gap: 8px;
@@ -8840,12 +8867,11 @@ html[data-presentation-mode="active"] .provider-conversion-secret {
   padding: 18px 16px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(17, 29, 26, 0.72) 0%,
-      rgba(12, 23, 21, 0.48) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    rgba(17, 29, 26, 0.72) 0%,
+    rgba(12, 23, 21, 0.48) 100%
+  );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 

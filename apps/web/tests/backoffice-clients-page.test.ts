@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 describe("backoffice clients page", () => {
-  it("lists real workspaces with slug, status and responsible", async () => {
+  it("lists real workspaces with IDs, slug, status and responsible", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse([activeWorkspace, pendingWorkspace]),
     );
@@ -63,12 +63,27 @@ describe("backoffice clients page", () => {
     const html = await renderPage(await BackofficeClientsPage());
 
     expect(html).toContain("Loja Ativa");
+    expect(html).toContain("Workspace ID");
+    expect(html).toContain("ws_active");
     expect(html).toContain("loja-ativa");
     expect(html).toContain("ativo@cliente.com");
     expect(html).toContain("Loja Pendente");
+    expect(html).toContain("ws_pending");
     expect(html).toContain("pendente@cliente.com");
     expect(html).toContain("Ativação pendente");
     expect(html).toContain("2 workspaces");
+  });
+
+  it("offers an accessible copy control for each workspace ID", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse([activeWorkspace, pendingWorkspace]),
+    );
+
+    const html = await renderPage(await BackofficeClientsPage());
+
+    expect(html).toContain('aria-label="Copiar ID do workspace Loja Ativa"');
+    expect(html).toContain('aria-label="Copiar ID do workspace Loja Pendente"');
+    expect(html).toContain(">Copiar ID</button>");
   });
 
   it("offers an entry action into each listed workspace", async () => {
@@ -79,9 +94,7 @@ describe("backoffice clients page", () => {
     const html = await renderPage(await BackofficeClientsPage());
 
     expect(html).toContain('aria-label="Entrar no workspace Loja Ativa"');
-    expect(html).toContain(
-      'aria-label="Entrar no workspace Loja Pendente"',
-    );
+    expect(html).toContain('aria-label="Entrar no workspace Loja Pendente"');
   });
 
   it("uses natural pt-BR singular for a single workspace", async () => {
