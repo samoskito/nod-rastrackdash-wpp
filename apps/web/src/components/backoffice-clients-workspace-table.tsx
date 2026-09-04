@@ -1,5 +1,6 @@
 import type { BackofficeWorkspaceListDto } from "@wpptrack/shared";
 import { formatDateTime } from "../lib/date-time";
+import { BackofficeClientsCopyWorkspaceIdButton } from "./backoffice-clients-copy-workspace-id-button";
 import { BackofficeClientsEnterWorkspaceButton } from "./backoffice-clients-enter-workspace-button";
 import { BackofficeClientsResponsibleCell } from "./backoffice-clients-responsible-cell";
 
@@ -31,6 +32,14 @@ export function BackofficeClientsWorkspaceTable({
             <tr key={workspace.id}>
               <td>
                 <strong>{workspace.name}</strong>
+                <div className="workspace-id-row">
+                  <span>Workspace ID</span>
+                  <code>{workspace.id}</code>
+                  <BackofficeClientsCopyWorkspaceIdButton
+                    workspaceId={workspace.id}
+                    workspaceName={workspace.name}
+                  />
+                </div>
               </td>
               <td>{workspace.slug}</td>
               <td>
