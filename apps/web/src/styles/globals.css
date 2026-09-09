@@ -4069,7 +4069,9 @@ td span {
 .delete-workspace-action {
   display: grid;
   gap: 8px;
-  min-width: 220px;
+  width: 220px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .delete-workspace-action label {
@@ -4078,7 +4080,14 @@ td span {
   font-size: 12px;
 }
 
+.delete-workspace-action .action-note {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
 .delete-workspace-action input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: rgba(5, 8, 7, 0.76);
@@ -4090,7 +4099,13 @@ td span {
 
 .delete-workspace-action-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.delete-workspace-action-buttons .button {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .connector-create-disclosure {
@@ -12976,6 +12991,8 @@ button.meta-manual-entry[aria-expanded="true"] {
 
 .operations-panel > .table-wrap,
 .client-workspaces-table {
+  width: 100%;
+  min-width: 0;
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
