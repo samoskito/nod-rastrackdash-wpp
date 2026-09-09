@@ -4066,6 +4066,33 @@ td span {
   font-size: 12px;
 }
 
+.delete-workspace-action {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.delete-workspace-action label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.delete-workspace-action input[type="text"] {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(5, 8, 7, 0.76);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 9px;
+}
+
+.delete-workspace-action-buttons {
+  display: flex;
+  gap: 6px;
+}
+
 .connector-create-disclosure {
   margin: 8px 0 18px;
   border-top: 1px solid var(--border);

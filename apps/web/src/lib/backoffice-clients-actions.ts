@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type {
   BackofficeWorkspaceActivationReissueResultDto,
   BackofficeWorkspaceCreateResultDto,
+  BackofficeWorkspaceDeleteResultDto,
 } from "@wpptrack/shared";
 import { isApiRequestError, serverApiFetch } from "./server-api";
 
@@ -131,6 +132,49 @@ export async function resendActivationEmailAction(
     return actionState(
       "error",
       apiErrorMessage(error, "Não foi possível reenviar o e-mail."),
+    );
+  }
+}
+
+export async function deleteBackofficeWorkspaceAction(
+  _previousState: BackofficeClientsActionState,
+  formData: FormData,
+): Promise<BackofficeClientsActionState> {
+  const workspaceId = formText(formData, "workspaceId");
+  const workspaceName = formText(formData, "workspaceName");
+  const workspaceSlug = formText(formData, "workspaceSlug");
+  const confirmation = formText(formData, "confirmation");
+
+  if (!workspaceId || !workspaceSlug) {
+    return actionState("error", "Workspace não identificado.");
+  }
+
+  if (!confirmation || confirmation !== workspaceSlug) {
+    return actionState(
+      "error",
+      "Digite o slug do workspace exatamente para confirmar a exclusão.",
+    );
+  }
+
+  try {
+    await serverApiFetch<BackofficeWorkspaceDeleteResultDto>(
+      `/backoffice/workspaces/${encodeURIComponent(workspaceId)}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation }),
+      },
+    );
+
+    revalidatePath(CLIENTS_PATH);
+
+    return actionState(
+      "success",
+      `Workspace "${workspaceName}" (${workspaceSlug}) excluído.`,
+    );
+  } catch (error) {
+    return actionState(
+      "error",
+      apiErrorMessage(error, "Não foi possível excluir o workspace."),
     );
   }
 }

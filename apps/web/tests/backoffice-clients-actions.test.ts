@@ -19,6 +19,7 @@ vi.mock("../src/lib/server-api", () => ({
 
 import {
   createBackofficeWorkspaceAction,
+  deleteBackofficeWorkspaceAction,
   generateActivationLinkAction,
   resendActivationEmailAction,
   type BackofficeClientsActionState,
@@ -237,6 +238,90 @@ describe("resendActivationEmailAction", () => {
 
     expect(result.status).toBe("error");
     expect(result.message).toBe("Responsavel do workspace nao encontrado");
+  });
+});
+
+describe("deleteBackofficeWorkspaceAction", () => {
+  it("rejects an empty confirmation without calling the API", async () => {
+    const result = await deleteBackofficeWorkspaceAction(
+      initialState,
+      form({
+        workspaceId: "ws_1",
+        workspaceName: "Cliente Exemplo",
+        workspaceSlug: "cliente-exemplo",
+      }),
+    );
+
+    expect(result.status).toBe("error");
+    expect(serverApiFetch).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects a confirmation that does not match the slug without calling the API", async () => {
+    const result = await deleteBackofficeWorkspaceAction(
+      initialState,
+      form({
+        workspaceId: "ws_1",
+        workspaceName: "Cliente Exemplo",
+        workspaceSlug: "cliente-exemplo",
+        confirmation: "cliente-exempl",
+      }),
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("slug");
+    expect(serverApiFetch).not.toHaveBeenCalled();
+  });
+
+  it("deletes the workspace and revalidates the clients list on a matching confirmation", async () => {
+    serverApiFetch.mockResolvedValueOnce({
+      deleted: true,
+      workspaceId: "ws_1",
+    });
+
+    const result = await deleteBackofficeWorkspaceAction(
+      initialState,
+      form({
+        workspaceId: "ws_1",
+        workspaceName: "Cliente Exemplo",
+        workspaceSlug: "cliente-exemplo",
+        confirmation: "cliente-exemplo",
+      }),
+    );
+
+    expect(serverApiFetch).toHaveBeenCalledWith("/backoffice/workspaces/ws_1", {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation: "cliente-exemplo" }),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/backoffice/clients");
+    expect(result.status).toBe("success");
+    expect(result.message).toContain("Cliente Exemplo");
+    expect(result.message).toContain("cliente-exemplo");
+  });
+
+  it("surfaces the API's pt-BR error message and never fabricates success", async () => {
+    serverApiFetch.mockRejectedValueOnce(
+      apiError(
+        "Workspace possui dados vinculados e nao pode ser excluido",
+        409,
+      ),
+    );
+
+    const result = await deleteBackofficeWorkspaceAction(
+      initialState,
+      form({
+        workspaceId: "ws_1",
+        workspaceName: "Cliente Exemplo",
+        workspaceSlug: "cliente-exemplo",
+        confirmation: "cliente-exemplo",
+      }),
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.message).toBe(
+      "Workspace possui dados vinculados e nao pode ser excluido",
+    );
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 

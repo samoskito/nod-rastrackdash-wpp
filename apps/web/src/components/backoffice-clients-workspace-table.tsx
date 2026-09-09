@@ -1,6 +1,7 @@
 import type { BackofficeWorkspaceListDto } from "@wpptrack/shared";
 import { formatDateTime } from "../lib/date-time";
 import { BackofficeClientsCopyWorkspaceIdButton } from "./backoffice-clients-copy-workspace-id-button";
+import { BackofficeClientsDeleteWorkspaceForm } from "./backoffice-clients-delete-workspace-form";
 import { BackofficeClientsEnterWorkspaceButton } from "./backoffice-clients-enter-workspace-button";
 import { BackofficeClientsResponsibleCell } from "./backoffice-clients-responsible-cell";
 
@@ -25,6 +26,7 @@ export function BackofficeClientsWorkspaceTable({
             <th>Responsável</th>
             <th>Criado em</th>
             <th>Acesso</th>
+            <th>Excluir</th>
           </tr>
         </thead>
         <tbody>
@@ -61,6 +63,13 @@ export function BackofficeClientsWorkspaceTable({
                 <BackofficeClientsEnterWorkspaceButton
                   workspaceId={workspace.id}
                   workspaceName={workspace.name}
+                />
+              </td>
+              <td>
+                <BackofficeClientsDeleteWorkspaceForm
+                  workspaceId={workspace.id}
+                  workspaceName={workspace.name}
+                  workspaceSlug={workspace.slug}
                 />
               </td>
             </tr>

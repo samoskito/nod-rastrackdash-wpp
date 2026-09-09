@@ -120,6 +120,18 @@ describe("backoffice clients page", () => {
     expect(html).toContain("Gerar link de ativação");
   });
 
+  it("offers a delete action per workspace requiring the slug to confirm", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse([activeWorkspace, pendingWorkspace]),
+    );
+
+    const html = await renderPage(await BackofficeClientsPage());
+
+    expect(html).toContain('aria-label="Excluir workspace Loja Ativa"');
+    expect(html).toContain('aria-label="Excluir workspace Loja Pendente"');
+    expect(html).not.toContain("Confirmar exclusão do workspace");
+  });
+
   it("always renders the create-workspace form fields", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse([]));
 
