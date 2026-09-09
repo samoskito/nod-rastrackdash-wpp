@@ -61,35 +61,88 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 0 | onboarding, Dokploy, Git/GitHub, envs, providers BYO e docs | público | **CONCLUÍDA** | PR #24, merge `7ba875a` |
 | Fase 1 | bootstrap persistente, `platform_owner`, RBAC, convites e proteção de owner | público | **CONCLUÍDA** | PR #25, merge `6212b33` |
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
-| Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A CONCLUÍDA LOCALMENTE — HOMOLOGAÇÃO REAL PENDENTE** | commit local `ff9741b`; 20 testes focados, shared build, API typecheck/build, Prettier, diff-check e revisão independente NO-BLOCK; MySQL implementado, PostgreSQL ainda não suportado |
-| Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; Z-API/NOD API/GupShup/Umbler ainda sem E2E real |
+| Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A MERGEADA — SMOKE REAL PAUSADO** | PR #43 merge `a48e93d`; API deployada; listagem autenticada OK no workspace `cmtbvwoop0000qa2swt9x8amu`; create/test MySQL real pausado até MySQL público fictício no Dokploy; PostgreSQL ainda não suportado |
+| Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; GupShup/Umbler existem como inbound webhook no código, mas a UX/aluno e a paridade com o app de referência ainda precisam de fechamento |
 
-### Estado atual detalhado — atualizado em 2026-09-03
+### Checkpoint MySQL — pausado em 2026-09-04
 
-- Fase 2: concluída e homologada em instalação individual.
-- WhatsApp/Fase 4: implementada nos PRs #28–#41; UAZAPI e WAHA homologados, demais providers sem E2E real nesta instalação.
-- Dokploy e documentação: PR #42 mergeado; clone público via Git e deploy validados.
-- Banner de atualização: PRs #2/#3 mergeados.
-- Fase 3A: implementação backend somente leitura concluída no commit local `ff9741b`, com MySQL, controller, escopo por workspace, egress/SSRF fail-closed, credenciais protegidas e testes verdes.
-- Revisão independente Fase 3A: **NO-BLOCK**. Não houve migration.
-- Limitação da Fase 3A: PostgreSQL ainda não é suportado e não houve conexão real a banco externo por ausência de infraestrutura de homologação.
-- Próxima etapa da Fase 3: homologação real do conector MySQL e definição/implementação de PostgreSQL somente após adapter e testes próprios.
+Registro exato de onde paramos, para retomar sem perder contexto:
 
-### Decisão de ordenação — atualizada em 2026-09-03
+| Item | Estado | Evidência |
+|---|---|---|
+| Backend Fase 3A | **MERGEADO** | PR #43 → `a48e93d` |
+| Workspace ID no backoffice | **MERGEADO** | PR #44 → `3f0de68` |
+| API deployada | **SIM** | `https://aula.nodinfra.com.br/health` e `/health/ready` OK |
+| Web com Workspace ID | **SIM** | Samuel copiou `cmtbvwoop0000qa2swt9x8amu` |
+| Smoke auth + list conectores | **OK** | `GET .../external-connectors` → `200 []`, sem secrets |
+| Create/test MySQL real | **PAUSADO** | falta MySQL fictício **público** na porta 3306 |
+| PostgreSQL external | **NÃO INICIADO** | sem adapter/testes reais |
+| UI de conectores no backoffice | **NÃO EXISTE** | Fase 3A foi só backend |
+| Migration | **NENHUMA** | não necessária na 3A |
 
-O modelo operacional confirmado por Samuel é **uma instalação por aluno, com banco principal, deploy e backoffice próprios**. A existência de workspaces internos não implica operação cross-installation.
+#### Decisão técnica já fechada para retomar MySQL
 
-Ordem de execução vigente:
+- **Não** usar banco real de cliente.
+- Conector aceita apenas destino **público** + porta **3306** (bloqueia localhost/RFC1918/host interno Dokploy).
+- Caminho escolhido por Samuel: MySQL fictício **no Dokploy com 3306 pública**, sem provedor externo.
+- Próximos passos quando retomar:
+  1. criar serviço MySQL `mysql-smoke-external` no Dokploy;
+  2. database `smoke_external` + user read-only + 1 tabela fake;
+  3. expor host público:3306;
+  4. `POST` create conector read-only;
+  5. `POST .../test` + `GET .../status`;
+  6. validar bloqueio de destino privado e ausência de secrets no payload.
 
-1. Fases 0, 1 e 2: concluídas e homologadas;
-2. WhatsApp/Fase 4: implementada, com UAZAPI e WAHA homologados;
-3. Fase 3A: implementada, revisada e commitada localmente;
-4. homologar conexão real MySQL;
-5. avaliar PostgreSQL com adapter/testes reais;
-6. revisão Meta e segurança operacional geral;
-7. homologação final, publicação e release.
+### Prioridade máxima — pedidos urgentes dos alunos (2026-09-04)
 
-A Fase 3 é necessária, mas não é dependência do funcionamento normal do backoffice. O diff parcial não aceito de conectores permanece fora de commit e não deve orientar a próxima fase.
+Samuel elevou estes 3 itens à **prioridade máxima**, acima do restante do plano de melhorias e acima da retomada do MySQL:
+
+| Prio | Pedido | Já estava no plano? | Estado real no código (`main` @ `3f0de68`) | Ação |
+|---:|---|---|---|---|
+| **P0.1** | Botão para **excluir workspace** no backoffice | **Parcial / gap** — Fase 2 cobre criar/listar/responsáveis/suporte, mas **não** delete de workspace na UI/API de backoffice | `BackofficeWorkspacesController` só tem `GET/POST` + activation; existe script break-glass `apps/api/scripts/delete-workspace.js`, **sem botão** | Implementar delete seguro no backoffice (platform_owner), com confirmação, anti-IDOR, auditoria e ordem FK-safe; depois UI |
+| **P0.2** | Trazer conexões **GupShup e Umbler** para o app do aluno | **Sim** — fila WhatsApp / homologação E2E e inbound genérico | Já existem parsers/conexões inbound (`gupshup`, `umbler`), painel inbound e regras; **não** estão no registry de “Conexões WhatsApp” (`uazapi_byo/waha/zapi/nod_api`) | Fechar paridade de UX/aluno: onboarding claro em Integrações, webhook copiável, docs e homologação; portar o que faltar do app de referência sem reintroduzir billing/QR |
+| **P0.3** | Conexão/parser **direto com Meta** (Samuel tem payload) | **Sim** — item Meta/Facebook e webhook Meta parcial | Meta manual + CAPI + `GET/POST /webhooks/meta` já existem; falta validar/estender parser com o payload real do Samuel | Receber payload (redigido), mapear contrato atual vs desejado, implementar/ajustar parser com testes e fail-closed |
+
+### Fila ativa reordenada — 2026-09-04
+
+| Ordem | Item | Status | Observação |
+|---:|---|---|---|
+| **1** | **P0.1 Excluir workspace no backoffice** | **PRÓXIMA** | prioridade máxima dos alunos |
+| **2** | **P0.2 GupShup + Umbler no app do aluno** | **NA FILA** | base inbound já existe; fechar UX/paridade/homologação |
+| **3** | **P0.3 Meta direto / parser com payload real** | **NA FILA** | Samuel fornece payload; não inventar contrato |
+| 4 | Retomada smoke MySQL fictício no Dokploy | **PAUSADA** | só depois dos P0 |
+| 5 | Doc de atualização do aluno (redeploy API/Web) | **PENDENTE** | necessária para aula; banner de versão ainda separado |
+| 6 | Banner de atualização de versão | **PENDENTE / A CONFIRMAR** | plano histórico citava; validar o que já entrou vs o que falta |
+| 7 | PostgreSQL external connector | **PENDENTE** | só com adapter + testes reais |
+| 8 | Segurança operacional geral + release | **PENDENTE** | após P0 e homologações |
+
+### Estado atual detalhado — atualizado em 2026-09-04
+
+- `main` atual: `3f0de68` (Workspace ID no backoffice).
+- Fase 3A backend MySQL: mergeada no PR #43 (`a48e93d`), deploy da API confirmado.
+- Smoke MySQL: **auth/list OK**; create/test **pausado** por decisão de prioridade e por falta de MySQL público fictício.
+- Workspace de teste da instalação aula: `cmtbvwoop0000qa2swt9x8amu` (Agência Palmup).
+- Delete de workspace: **gap confirmado** para o aluno (criar sim, excluir não).
+- GupShup/Umbler: **existem no produto** como inbound webhook; a demanda é trazer/fechar a experiência no app do aluno e homologar.
+- Meta: conexão manual e webhook base existem; demanda urgente é parser/conexão direta com payload real fornecido por Samuel.
+- MySQL, banner e release ficam **depois** dos 3 P0.
+
+### Decisão de ordenação — atualizada em 2026-09-04
+
+O modelo operacional continua: **uma instalação por aluno**, com banco/deploy/backoffice próprios.
+
+Ordem vigente **agora**:
+
+1. **P0.1** — excluir workspace no backoffice;
+2. **P0.2** — GupShup + Umbler no app do aluno;
+3. **P0.3** — Meta direto/parser com payload do Samuel;
+4. retomar smoke MySQL fictício no Dokploy (3306 pública);
+5. doc de atualização do aluno;
+6. banner de atualização (se ainda incompleto);
+7. PostgreSQL external, se necessário;
+8. segurança final + release.
+
+A Fase 3A MySQL **não está abandonada**: está **mergeada e pausada** no ponto de homologação real.
 
 ## Fase 2 — Backoffice real multi-cliente
 
