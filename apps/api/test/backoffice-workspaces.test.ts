@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { createHash as nodeCreateHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   backofficeWorkspaceCreateInputSchema,
+  backofficeWorkspaceDeleteInputSchema,
   type BackofficeWorkspaceCreateInputDto,
 } from "@wpptrack/shared";
 import { Prisma, type PlatformRole } from "@prisma/client";
@@ -21,6 +23,7 @@ type UserState = {
   email: string;
   passwordHash: string | null;
   platformRole: PlatformRole | null;
+  lastWorkspaceId?: string | null;
 };
 
 type State = {
@@ -51,6 +54,13 @@ type State = {
     workspaceId: string | null;
     afterSummary?: unknown;
   }>;
+  sessions: Array<{
+    id: string;
+    userId: string;
+    activeWorkspaceId: string | null;
+    supportWorkspaceId: string | null;
+    supportWorkspaceStartedAt: Date | null;
+  }>;
 };
 
 function makeHarness(initialUsers: UserState[] = []) {
@@ -61,6 +71,7 @@ function makeHarness(initialUsers: UserState[] = []) {
     members: [],
     tokens: [],
     audits: [],
+    sessions: [],
   };
   let nextId = 1;
   const id = (prefix: string) => `${prefix}_${nextId++}`;
@@ -90,6 +101,16 @@ function makeHarness(initialUsers: UserState[] = []) {
         )!;
         Object.assign(user, data);
         return user;
+      }),
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        let count = 0;
+        for (const user of state.users) {
+          if (user.lastWorkspaceId === where.lastWorkspaceId) {
+            Object.assign(user, data);
+            count += 1;
+          }
+        }
+        return { count };
       }),
     },
     workspace: {
@@ -127,6 +148,13 @@ function makeHarness(initialUsers: UserState[] = []) {
         state.workspaces.push(workspace);
         return workspace;
       }),
+      delete: vi.fn(async ({ where }: any) => {
+        const index = state.workspaces.findIndex(
+          (workspace) => workspace.id === where.id,
+        );
+        if (index < 0) throw new Error("workspace not found");
+        return state.workspaces.splice(index, 1)[0];
+      }),
     },
     workspaceMember: {
       create: vi.fn(async ({ data }: any) => {
@@ -158,6 +186,13 @@ function makeHarness(initialUsers: UserState[] = []) {
         };
       }),
       failCreate: false,
+      deleteMany: vi.fn(async ({ where }: any) => {
+        const before = state.members.length;
+        state.members = state.members.filter(
+          (member) => member.workspaceId !== where.workspaceId,
+        );
+        return { count: before - state.members.length };
+      }),
     },
     authActionToken: {
       updateMany: vi.fn(async ({ where, data }: any) => {
@@ -181,11 +216,43 @@ function makeHarness(initialUsers: UserState[] = []) {
         state.tokens.push(token);
         return token;
       }),
+      deleteMany: vi.fn(async ({ where }: any) => {
+        const before = state.tokens.length;
+        state.tokens = state.tokens.filter(
+          (token) => token.workspaceId !== where.workspaceId,
+        );
+        return { count: before - state.tokens.length };
+      }),
     },
     auditLog: {
       create: vi.fn(async ({ data }: any) => {
         state.audits.push(data);
         return data;
+      }),
+      deleteMany: vi.fn(async ({ where }: any) => {
+        const before = state.audits.length;
+        state.audits = state.audits.filter(
+          (audit) => audit.workspaceId !== where.workspaceId,
+        );
+        return { count: before - state.audits.length };
+      }),
+    },
+    authSession: {
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        let count = 0;
+        for (const session of state.sessions) {
+          const activeMatch =
+            where.activeWorkspaceId !== undefined &&
+            session.activeWorkspaceId === where.activeWorkspaceId;
+          const supportMatch =
+            where.supportWorkspaceId !== undefined &&
+            session.supportWorkspaceId === where.supportWorkspaceId;
+          if (activeMatch || supportMatch) {
+            Object.assign(session, data);
+            count += 1;
+          }
+        }
+        return { count };
       }),
     },
     $queryRaw: vi.fn(async () => {
@@ -196,6 +263,70 @@ function makeHarness(initialUsers: UserState[] = []) {
       return 1;
     }),
   };
+  for (const delegate of [
+    "purchaseValueAdjustment",
+    "purchaseReviewItem",
+    "purchaseReview",
+    "providerConversionRuleExecution",
+    "providerConversionDecisionAudit",
+    "providerConversionShadowComparison",
+    "providerConversionRuleChannel",
+    "providerConversionRuleEndpoint",
+    "providerConversionRuleConfig",
+    "conversionRule",
+    "conversionCatalogVariant",
+    "conversionCatalogAttribute",
+    "conversionCatalog",
+    "inboundWebhookReplayItem",
+    "inboundWebhookReplayBatch",
+    "inboundWebhookProductionItem",
+    "inboundWebhookEvent",
+    "inboundWebhookDelivery",
+    "inboundWebhookChannelRoute",
+    "inboundWebhookChannel",
+    "inboundWebhookConnection",
+    "externalIngestionRecord",
+    "externalCapiCutover",
+    "externalSyncCursor",
+    "externalDataConnector",
+    "metaAdDestinationAssignment",
+    "metaReportingAccountDestination",
+    "metaAdDailyInsight",
+    "metaAd",
+    "metaAdSetDailyInsight",
+    "metaAdSet",
+    "metaCampaignDailyInsight",
+    "metaCampaign",
+    "metaReportingAccount",
+    "metaConversionDestination",
+    "metaAssetSnapshot",
+    "metaBusinessConnection",
+    "metaCredential",
+    "metaIntegration",
+    "uazapiChatLabelState",
+    "lead",
+    "whatsappInstance",
+    "conversionEventLog",
+    "funnelStageConfiguration",
+    "diagnosticEvent",
+    "webhookLog",
+    "integrationLog",
+    "jobAttempt",
+    "workspaceOpsAlertDelivery",
+    "workspaceOpsAlertSettings",
+    "workspaceInvite",
+  ]) {
+    prisma[delegate] = {
+      deleteMany: vi.fn(async () => {
+        events.push(`delete:${delegate}`);
+        return { count: 0 };
+      }),
+    };
+  }
+  prisma.providerConversionDecisionAudit.updateMany = vi.fn(async () => {
+    events.push("update:providerConversionDecisionAudit");
+    return { count: 0 };
+  });
   prisma.$transaction = vi.fn(async (callback: (tx: any) => unknown) => {
     const snapshot = structuredClone(state);
     try {
@@ -206,6 +337,7 @@ function makeHarness(initialUsers: UserState[] = []) {
       state.members = snapshot.members;
       state.tokens = snapshot.tokens;
       state.audits = snapshot.audits;
+      state.sessions = snapshot.sessions;
       throw error;
     }
   });
@@ -248,6 +380,20 @@ describe("backoffice workspace contracts", () => {
       backofficeWorkspaceCreateInputSchema.safeParse({
         ...input(),
         responsible: { ...input().responsible, password: "secret" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires an exact, strict deletion confirmation payload", () => {
+    expect(
+      backofficeWorkspaceDeleteInputSchema.safeParse({
+        confirmation: "cliente-real",
+      }).success,
+    ).toBe(true);
+    expect(
+      backofficeWorkspaceDeleteInputSchema.safeParse({
+        confirmation: "cliente-real",
+        workspaceId: "workspace_1",
       }).success,
     ).toBe(false);
   });
@@ -774,6 +920,166 @@ describe("platform workspace access", () => {
     expect(JSON.stringify(result)).not.toContain("bcrypt-hash");
     expect(JSON.stringify(result)).not.toContain("token");
   });
+
+  it("permanently deletes only the route workspace, clears context, and retains global users", async () => {
+    const harness = makeHarness([
+      {
+        id: "workspace-user",
+        name: "Workspace User",
+        email: "member@example.com",
+        passwordHash: "bcrypt-hash",
+        platformRole: null,
+        lastWorkspaceId: "workspace-delete",
+      },
+      {
+        id: "outside-user",
+        name: "Outside User",
+        email: "outside@example.com",
+        passwordHash: "bcrypt-hash-outside",
+        platformRole: null,
+        lastWorkspaceId: "workspace-keep",
+      },
+    ]);
+    harness.state.workspaces.push(
+      {
+        id: "workspace-delete",
+        name: "Delete Me",
+        slug: "delete-me",
+        operationalStatus: "active",
+        createdAt: new Date("2026-08-26T10:00:00.000Z"),
+      },
+      {
+        id: "workspace-keep",
+        name: "Keep Me",
+        slug: "keep-me",
+        operationalStatus: "active",
+        createdAt: new Date("2026-08-26T10:00:00.000Z"),
+      },
+    );
+    harness.state.members.push({
+      id: "member-delete",
+      workspaceId: "workspace-delete",
+      userId: "workspace-user",
+      role: "owner",
+    });
+    harness.state.sessions.push({
+      id: "session-owner",
+      userId: owner.id,
+      activeWorkspaceId: "workspace-delete",
+      supportWorkspaceId: "workspace-delete",
+      supportWorkspaceStartedAt: new Date("2026-08-26T10:00:00.000Z"),
+    });
+    harness.state.audits.push({
+      action: "old-workspace-audit",
+      workspaceId: "workspace-delete",
+    });
+    const service = new PlatformWorkspaceAccessService(
+      harness.prisma as never,
+      emailQueue as never,
+    );
+
+    const result = await service.deleteWorkspace(
+      "workspace-delete",
+      { confirmation: "delete-me" },
+      owner,
+    );
+
+    expect(result).toEqual({ deleted: true, workspaceId: "workspace-delete" });
+    expect(harness.state.workspaces.map((workspace) => workspace.id)).toEqual([
+      "workspace-keep",
+    ]);
+    expect(harness.state.users.map((user) => user.id)).toEqual([
+      "workspace-user",
+      "outside-user",
+    ]);
+    expect(harness.state.users[0]?.lastWorkspaceId).toBeNull();
+    expect(harness.state.users[1]?.lastWorkspaceId).toBe("workspace-keep");
+    expect(harness.state.sessions[0]).toMatchObject({
+      activeWorkspaceId: null,
+      supportWorkspaceId: null,
+      supportWorkspaceStartedAt: null,
+    });
+    expect(harness.state.audits).toEqual([
+      expect.objectContaining({
+        workspaceId: null,
+        actorUserId: owner.id,
+        action: "backoffice.workspace_deleted",
+        targetId: "workspace-delete",
+        afterSummary: { slug: "delete-me" },
+      }),
+    ]);
+  });
+
+  it("deletes Restrict dependents before their workspace-scoped parents", async () => {
+    const harness = makeHarness();
+    harness.state.workspaces.push({
+      id: "workspace-delete",
+      name: "Delete Me",
+      slug: "delete-me",
+      operationalStatus: "active",
+      createdAt: new Date("2026-08-26T10:00:00.000Z"),
+    });
+    const service = new PlatformWorkspaceAccessService(
+      harness.prisma as never,
+      emailQueue as never,
+    );
+
+    await service.deleteWorkspace(
+      "workspace-delete",
+      { confirmation: "delete-me" },
+      owner,
+    );
+
+    const before = (first: string, second: string) => {
+      expect(harness.events.indexOf(first)).toBeGreaterThanOrEqual(0);
+      expect(harness.events.indexOf(second)).toBeGreaterThanOrEqual(0);
+      expect(harness.events.indexOf(first)).toBeLessThan(
+        harness.events.indexOf(second),
+      );
+    };
+
+    before("delete:conversionCatalogVariant", "delete:conversionCatalog");
+    before("delete:conversionCatalogAttribute", "delete:conversionCatalog");
+    before("delete:conversionCatalog", "delete:providerConversionRuleConfig");
+    before("delete:diagnosticEvent", "delete:conversionEventLog");
+    before(
+      "update:providerConversionDecisionAudit",
+      "delete:providerConversionDecisionAudit",
+    );
+  });
+
+  it("rejects a wrong confirmation and an unknown route id without deleting another workspace", async () => {
+    const harness = makeHarness();
+    harness.state.workspaces.push({
+      id: "workspace-keep",
+      name: "Keep Me",
+      slug: "keep-me",
+      operationalStatus: "active",
+      createdAt: new Date("2026-08-26T10:00:00.000Z"),
+    });
+    const service = new PlatformWorkspaceAccessService(
+      harness.prisma as never,
+      emailQueue as never,
+    );
+
+    await expect(
+      service.deleteWorkspace(
+        "workspace-keep",
+        { confirmation: "different-workspace" },
+        owner,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.deleteWorkspace(
+        "workspace-missing",
+        { confirmation: "keep-me" },
+        owner,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(harness.state.workspaces.map((workspace) => workspace.id)).toEqual([
+      "workspace-keep",
+    ]);
+  });
 });
 
 function knownUniqueConstraint(target: readonly string[]) {
@@ -785,10 +1091,14 @@ function knownUniqueConstraint(target: readonly string[]) {
 }
 
 describe("backoffice workspace controller authorization", () => {
-  it("lets owner/operator list, blocks common users, and blocks operator creation", async () => {
+  it("permits only owners to delete, while preserving auth and payload failures", async () => {
     const access = {
       listWorkspaces: vi.fn(async () => []),
       createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(async () => ({
+        deleted: true,
+        workspaceId: "workspace-1",
+      })),
       createClientOwnerActivationLink: vi.fn(async () => ({
         ok: true,
         mode: "activation",
@@ -808,6 +1118,9 @@ describe("backoffice workspace controller authorization", () => {
         return token === "operator" ? operator : owner;
       }),
       assertPlatformOwner: vi.fn(async (token: string) => {
+        if (token === "unauthenticated") {
+          throw new UnauthorizedException();
+        }
         if (token !== "owner") throw new ForbiddenException();
         return owner;
       }),
@@ -827,6 +1140,30 @@ describe("backoffice workspace controller authorization", () => {
     );
     await expect(
       controller.create("owner", { ...input(), extra: true } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await controller.delete("owner", "workspace-1", {
+      confirmation: "workspace-1",
+    });
+    expect(access.deleteWorkspace).toHaveBeenCalledWith(
+      "workspace-1",
+      { confirmation: "workspace-1" },
+      owner,
+    );
+    await expect(
+      controller.delete("operator", "workspace-1", {
+        confirmation: "workspace-1",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.delete("unauthenticated", "workspace-1", {
+        confirmation: "workspace-1",
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      controller.delete("owner", "workspace-1", {
+        confirmation: "workspace-1",
+        workspaceId: "workspace-2",
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await controller.createActivationLink("owner", "workspace-1", "user-1");
     expect(access.createClientOwnerActivationLink).toHaveBeenCalledWith(

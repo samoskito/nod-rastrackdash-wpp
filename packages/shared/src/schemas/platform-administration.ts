@@ -52,6 +52,17 @@ export const backofficeWorkspaceCreateInputSchema = z
   })
   .strict();
 
+/**
+ * The slug is a stable, human-verifiable identifier displayed in the
+ * backoffice. Requiring it again makes workspace deletion deliberate while
+ * keeping the route parameter as the sole authority for the target.
+ */
+export const backofficeWorkspaceDeleteInputSchema = z
+  .object({
+    confirmation: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
 export const backofficeWorkspaceResponsibleSchema = z
   .object({
     id: z.string().min(1),
@@ -94,6 +105,13 @@ export const backofficeWorkspaceActivationReissueResultSchema = z
   })
   .strict();
 
+export const backofficeWorkspaceDeleteResultSchema = z
+  .object({
+    deleted: z.literal(true),
+    workspaceId: z.string().min(1),
+  })
+  .strict();
+
 export type PlatformUserProvisionInputDto = z.infer<
   typeof platformUserProvisionInputSchema
 >;
@@ -107,6 +125,9 @@ export type PlatformUserProvisionResultDto = z.infer<
 export type BackofficeWorkspaceCreateInputDto = z.infer<
   typeof backofficeWorkspaceCreateInputSchema
 >;
+export type BackofficeWorkspaceDeleteInputDto = z.infer<
+  typeof backofficeWorkspaceDeleteInputSchema
+>;
 export type BackofficeWorkspaceResponsibleDto = z.infer<
   typeof backofficeWorkspaceResponsibleSchema
 >;
@@ -119,4 +140,7 @@ export type BackofficeWorkspaceCreateResultDto = z.infer<
 >;
 export type BackofficeWorkspaceActivationReissueResultDto = z.infer<
   typeof backofficeWorkspaceActivationReissueResultSchema
+>;
+export type BackofficeWorkspaceDeleteResultDto = z.infer<
+  typeof backofficeWorkspaceDeleteResultSchema
 >;

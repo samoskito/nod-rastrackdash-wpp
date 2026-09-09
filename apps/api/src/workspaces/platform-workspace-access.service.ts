@@ -14,10 +14,14 @@ import { Prisma, type PlatformRole } from "@prisma/client";
 import {
   backofficeWorkspaceCreateInputSchema,
   backofficeWorkspaceCreateResultSchema,
+  backofficeWorkspaceDeleteInputSchema,
+  backofficeWorkspaceDeleteResultSchema,
   backofficeWorkspaceActivationReissueResultSchema,
   backofficeWorkspaceListSchema,
   type BackofficeWorkspaceCreateInputDto,
   type BackofficeWorkspaceCreateResultDto,
+  type BackofficeWorkspaceDeleteInputDto,
+  type BackofficeWorkspaceDeleteResultDto,
   type BackofficeWorkspaceActivationReissueResultDto,
   type BackofficeWorkspaceDto,
 } from "@wpptrack/shared";
@@ -357,6 +361,178 @@ export class PlatformWorkspaceAccessService {
     } as const;
 
     return backofficeWorkspaceCreateResultSchema.parse(response);
+  }
+
+  async deleteWorkspace(
+    workspaceId: string,
+    rawInput: BackofficeWorkspaceDeleteInputDto,
+    actor: PlatformAdminUser,
+  ): Promise<BackofficeWorkspaceDeleteResultDto> {
+    if (actor.role !== "platform_owner") {
+      throw new ForbiddenException(
+        "Acao restrita ao proprietario da plataforma",
+      );
+    }
+
+    const parsed = backofficeWorkspaceDeleteInputSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      throw new BadRequestException("Payload invalido");
+    }
+
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { id: true, slug: true },
+      });
+
+      // Keep not-found uniform. The request body never chooses the target.
+      if (!workspace) {
+        throw new NotFoundException("Workspace nao encontrado");
+      }
+
+      if (parsed.data.confirmation !== workspace.slug) {
+        throw new BadRequestException("Confirmacao do workspace invalida");
+      }
+
+      await this.clearWorkspaceSessionContext(tx, workspace.id);
+      await this.deleteWorkspaceScopedData(tx, workspace.id);
+      await tx.workspace.delete({ where: { id: workspace.id } });
+
+      // This audit row deliberately has no workspace FK because the target no
+      // longer exists. It contains only diagnostic identifiers, never secrets.
+      await tx.auditLog.create({
+        data: {
+          workspaceId: null,
+          actorUserId: actor.id,
+          actorType: actor.role,
+          action: "backoffice.workspace_deleted",
+          targetType: "Workspace",
+          targetId: workspace.id,
+          resultStatus: "success",
+          afterSummary: { slug: workspace.slug },
+        },
+      });
+
+      return workspace.id;
+    });
+
+    this.logger.log(
+      `Workspace deleted by platform owner; workspaceId=${deleted} actorUserId=${actor.id}`,
+    );
+
+    return backofficeWorkspaceDeleteResultSchema.parse({
+      deleted: true,
+      workspaceId: deleted,
+    });
+  }
+
+  private async clearWorkspaceSessionContext(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+  ): Promise<void> {
+    // Do this explicitly instead of relying solely on FK SetNull so active or
+    // support context cannot survive partway through the deletion transaction.
+    await tx.authSession.updateMany({
+      where: { activeWorkspaceId: workspaceId },
+      data: { activeWorkspaceId: null },
+    });
+    await tx.authSession.updateMany({
+      where: { supportWorkspaceId: workspaceId },
+      data: {
+        supportWorkspaceId: null,
+        supportWorkspaceStartedAt: null,
+      },
+    });
+    await tx.user.updateMany({
+      where: { lastWorkspaceId: workspaceId },
+      data: { lastWorkspaceId: null },
+    });
+  }
+
+  /**
+   * Deletes every workspace-owned delegate in dependency order. User rows and
+   * other global identities are intentionally absent from this method.
+   */
+  private async deleteWorkspaceScopedData(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+  ): Promise<void> {
+    const where = { workspaceId };
+
+    await tx.purchaseValueAdjustment.deleteMany({ where });
+    await tx.purchaseReviewItem.deleteMany({ where });
+    await tx.purchaseReview.deleteMany({ where });
+    await tx.providerConversionRuleExecution.deleteMany({ where });
+    // ProviderConversionDecisionAudit has a Restrict self-reference. Clear it
+    // first so every version chain can be removed in this transaction.
+    await tx.providerConversionDecisionAudit.updateMany({
+      where,
+      data: {
+        supersedesDecisionWorkspaceId: null,
+        supersedesDecisionId: null,
+      },
+    });
+    await tx.providerConversionDecisionAudit.deleteMany({ where });
+    await tx.providerConversionShadowComparison.deleteMany({ where });
+    await tx.providerConversionRuleChannel.deleteMany({ where });
+    await tx.providerConversionRuleEndpoint.deleteMany({ where });
+    // ConversionCatalog.providerRule is Restrict, so its dependents and the
+    // catalog itself must go before the provider rule configuration.
+    await tx.conversionCatalogVariant.deleteMany({ where });
+    await tx.conversionCatalogAttribute.deleteMany({ where });
+    await tx.conversionCatalog.deleteMany({ where });
+    await tx.providerConversionRuleConfig.deleteMany({ where });
+    await tx.conversionRule.deleteMany({ where });
+
+    await tx.inboundWebhookReplayItem.deleteMany({ where });
+    await tx.inboundWebhookReplayBatch.deleteMany({ where });
+    await tx.inboundWebhookProductionItem.deleteMany({ where });
+    await tx.inboundWebhookEvent.deleteMany({ where });
+    await tx.inboundWebhookDelivery.deleteMany({ where });
+    await tx.inboundWebhookChannelRoute.deleteMany({ where });
+    await tx.inboundWebhookChannel.deleteMany({ where });
+    await tx.inboundWebhookConnection.deleteMany({ where });
+
+    await tx.externalIngestionRecord.deleteMany({ where });
+    await tx.externalCapiCutover.deleteMany({ where });
+    await tx.externalSyncCursor.deleteMany({
+      where: { connector: { is: { workspaceId } } },
+    });
+    await tx.externalDataConnector.deleteMany({ where });
+
+    await tx.metaAdDestinationAssignment.deleteMany({ where });
+    await tx.metaReportingAccountDestination.deleteMany({ where });
+    await tx.metaAdDailyInsight.deleteMany({ where });
+    await tx.metaAd.deleteMany({ where });
+    await tx.metaAdSetDailyInsight.deleteMany({ where });
+    await tx.metaAdSet.deleteMany({ where });
+    await tx.metaCampaignDailyInsight.deleteMany({ where });
+    await tx.metaCampaign.deleteMany({ where });
+    await tx.metaReportingAccount.deleteMany({ where });
+    await tx.metaConversionDestination.deleteMany({ where });
+    await tx.metaAssetSnapshot.deleteMany({ where });
+    await tx.metaBusinessConnection.deleteMany({ where });
+    await tx.metaCredential.deleteMany({ where });
+    await tx.metaIntegration.deleteMany({ where });
+
+    await tx.uazapiChatLabelState.deleteMany({ where });
+    await tx.lead.deleteMany({ where });
+    await tx.whatsappInstance.deleteMany({ where });
+    // DiagnosticEvent references conversion, webhook, integration, and job
+    // records through Restrict relations, so it must be removed first.
+    await tx.diagnosticEvent.deleteMany({ where });
+    await tx.conversionEventLog.deleteMany({ where });
+    await tx.funnelStageConfiguration.deleteMany({ where });
+
+    await tx.webhookLog.deleteMany({ where });
+    await tx.integrationLog.deleteMany({ where });
+    await tx.jobAttempt.deleteMany({ where });
+    await tx.workspaceOpsAlertDelivery.deleteMany({ where });
+    await tx.workspaceOpsAlertSettings.deleteMany({ where });
+    await tx.authActionToken.deleteMany({ where });
+    await tx.workspaceInvite.deleteMany({ where });
+    await tx.workspaceMember.deleteMany({ where });
+    await tx.auditLog.deleteMany({ where });
   }
 
   async reissueClientOwnerActivation(
