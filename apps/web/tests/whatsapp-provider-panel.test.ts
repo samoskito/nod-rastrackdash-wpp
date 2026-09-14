@@ -101,9 +101,7 @@ describe("WhatsappProviderPanel edit flow", () => {
       "URL da API",
     ) as HTMLInputElement;
     const sessionInput = editForm.getByLabelText("Sessao") as HTMLInputElement;
-    const secretInput = editForm.getByLabelText(
-      /api key/i,
-    ) as HTMLInputElement;
+    const secretInput = editForm.getByLabelText(/api key/i) as HTMLInputElement;
 
     expect(baseUrlInput.value).toBe("https://waha.example.test");
     expect(sessionInput.value).toBe("support");
@@ -124,9 +122,7 @@ describe("WhatsappProviderPanel edit flow", () => {
       await screen.findByTestId("whatsapp-connection-edit-connection_1"),
     );
 
-    const secretInput = editForm.getByLabelText(
-      /api key/i,
-    ) as HTMLInputElement;
+    const secretInput = editForm.getByLabelText(/api key/i) as HTMLInputElement;
     fireEvent.change(secretInput, { target: { value: "new-secret" } });
 
     fireEvent.click(editForm.getByRole("button", { name: /salvar altera/i }));
@@ -148,15 +144,12 @@ describe("WhatsappProviderPanel edit flow", () => {
       await screen.findByTestId("whatsapp-connection-edit-connection_1"),
     );
 
-    const secretInput = editForm.getByLabelText(
-      /api key/i,
-    ) as HTMLInputElement;
+    const secretInput = editForm.getByLabelText(/api key/i) as HTMLInputElement;
     fireEvent.change(secretInput, { target: { value: "leaked-on-error" } });
 
-    const submitButton = editForm.getByRole(
-      "button",
-      { name: /salvar altera/i },
-    ) as HTMLButtonElement;
+    const submitButton = editForm.getByRole("button", {
+      name: /salvar altera/i,
+    }) as HTMLButtonElement;
     fireEvent.click(submitButton);
 
     await waitFor(() => {
@@ -225,5 +218,12 @@ describe("WhatsappProviderPanel receiver instruction", () => {
       ) as HTMLElement,
     );
     expect(secretPanel.queryByText(/uazapi/i)).toBeNull();
+  });
+
+  it("points students to the inbound webhooks block for Umbler Talk and Gupshup", () => {
+    renderPanel();
+
+    expect(screen.getByText(/umbler talk ou gupshup/i)).not.toBeNull();
+    expect(screen.getByText(/bloco de webhooks logo abaixo/i)).not.toBeNull();
   });
 });

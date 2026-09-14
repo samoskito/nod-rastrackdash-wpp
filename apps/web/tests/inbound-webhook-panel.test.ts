@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   InboundWebhookPanel,
+  inboundPasteInstruction,
   inboundWebhookProviderLabel,
   type InboundWebhookConnectionView,
 } from "../src/app/(app)/integrations/inbound-webhook-panel";
@@ -205,7 +206,17 @@ describe("inbound webhook panel", () => {
     expect(html).toContain('<select name="provider"');
     expect(html).toContain('<option value="umbler" selected="">Umbler Talk');
     expect(html).toContain('<option value="gupshup">Gupshup</option>');
-    expect(html).toContain("controle quais canais enviam conversoes");
+    expect(html).toContain("Umbler Talk e Gupshup (webhooks)");
+    expect(html).toContain("Conecte a Umbler Talk ou a Gupshup aqui");
+  });
+
+  it("gives provider-specific paste instructions for the one-time webhook URL", () => {
+    expect(inboundPasteInstruction("umbler")).toBe(
+      "Cole esta URL no painel/webhook da Umbler Talk.",
+    );
+    expect(inboundPasteInstruction("gupshup")).toBe(
+      "Cole esta URL no painel/webhook da Gupshup.",
+    );
   });
 
   it("keeps integrations focused on connection health and links to trigger settings", () => {

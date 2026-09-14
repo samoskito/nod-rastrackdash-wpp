@@ -247,6 +247,11 @@ export function WhatsappProviderPanel({
         </div>
       </div>
 
+      <p className="muted">
+        Usa Umbler Talk ou Gupshup? Essas plataformas sao configuradas no bloco
+        de webhooks logo abaixo, e nao nesta lista.
+      </p>
+
       <div
         className="inbound-counter-grid"
         data-testid="whatsapp-provider-statuses"
@@ -281,10 +286,10 @@ export function WhatsappProviderPanel({
               }
             >
               {providerCards.map((card) => (
-                  <option key={card.id} value={card.id}>
-                    {card.title}
-                  </option>
-                ))}
+                <option key={card.id} value={card.id}>
+                  {card.title}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -448,8 +453,16 @@ export function WhatsappProviderPanel({
                   onSubmit={submitEdit}
                   onInvalid={(event) => clearCredentials(event.currentTarget)}
                 >
-                  <input type="hidden" name="connectionId" value={connection.id} />
-                  <input type="hidden" name="provider" value={connection.provider} />
+                  <input
+                    type="hidden"
+                    name="connectionId"
+                    value={connection.id}
+                  />
+                  <input
+                    type="hidden"
+                    name="provider"
+                    value={connection.provider}
+                  />
                   <label>
                     <span className="field-label">Provedor</span>
                     <input

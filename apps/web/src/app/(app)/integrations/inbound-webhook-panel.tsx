@@ -73,6 +73,18 @@ export function inboundWebhookProviderLabel(provider: string): string {
   return labels[provider] ?? provider;
 }
 
+const inboundPasteInstructions: Record<string, string> = {
+  gupshup: "Cole esta URL no painel/webhook da Gupshup.",
+  umbler: "Cole esta URL no painel/webhook da Umbler Talk.",
+};
+
+export function inboundPasteInstruction(provider: string): string {
+  return (
+    inboundPasteInstructions[provider] ??
+    `Cole esta URL no painel/webhook da ${inboundWebhookProviderLabel(provider)}.`
+  );
+}
+
 export function InboundWebhookPanel({
   capabilities,
   connections,
@@ -169,7 +181,7 @@ export function InboundWebhookPanel({
       setCopied(true);
       setNotice({
         tone: "success",
-        message: `URL copiada. Cadastre-a agora na ${inboundWebhookProviderLabel(oneTimeSecret.provider)}.`,
+        message: `URL copiada. ${inboundPasteInstruction(oneTimeSecret.provider)}`,
       });
     } catch {
       setNotice({
@@ -184,10 +196,10 @@ export function InboundWebhookPanel({
       <div className="inbound-webhook-heading">
         <div>
           <span className="eyebrow">Fontes de mensagens</span>
-          <h2>Webhooks de plataformas WhatsApp</h2>
+          <h2>Umbler Talk e Gupshup (webhooks)</h2>
           <p className="muted">
-            Receba mensagens de campanha, valide as rotas e controle quais
-            canais enviam conversoes automaticamente.
+            Conecte a Umbler Talk ou a Gupshup aqui: gere a URL do webhook, cole
+            no painel do provedor e acompanhe as mensagens recebidas.
           </p>
         </div>
         {canManage && capabilities.enabled ? (
@@ -264,6 +276,9 @@ export function InboundWebhookPanel({
               Cadastre este webhook na{" "}
               {inboundWebhookProviderLabel(oneTimeSecret.provider)} agora
             </strong>
+            <p className="muted">
+              {inboundPasteInstruction(oneTimeSecret.provider)}
+            </p>
           </div>
           <input
             readOnly
