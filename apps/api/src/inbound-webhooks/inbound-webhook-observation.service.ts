@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { InboundWebhookJobPayload } from "../common/queue/queue.constants";
-import { hashPhoneIdentity } from "../common/phone/phone-identity";
+import {
+  hashPhoneIdentity,
+  normalizePhoneIdentity,
+} from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
 import {
   ProviderConversionObservationService,
@@ -12,6 +15,10 @@ import { InboundWebhookDiagnosticsService } from "./inbound-webhook-diagnostics.
 import { InboundWebhookPayloadEncryptionService } from "./inbound-webhook-payload-encryption.service";
 import { InboundWebhookProductionIntakeService } from "./inbound-webhook-production-intake.service";
 import { InboundWebhookProductionQueueService } from "./inbound-webhook-production-queue.service";
+import {
+  provisionalChannelOrganizationId,
+  provisionalChannelProviderChannelId,
+} from "./inbound-webhook-provisional-channel";
 import type {
   InboundWebhookDeliveryNormalizedSummary,
   InboundWebhookEventClassification,
@@ -58,6 +65,10 @@ type DeterministicFailure = {
   code: string;
   classification?: InboundWebhookEventClassification;
   result?: InboundWebhookParserResult;
+};
+
+type PersistedChannelIdentity = {
+  id: string;
 };
 
 type PersistedObservation = {
@@ -358,8 +369,7 @@ export class InboundWebhookObservationService {
         },
       });
 
-      for (const providerConversionExecutionId of
-        reevaluated.eligibleExecutionIds) {
+      for (const providerConversionExecutionId of reevaluated.eligibleExecutionIds) {
         try {
           await this.productionQueue.enqueueProviderConversion({
             providerConversionExecutionId,
@@ -707,32 +717,12 @@ export class InboundWebhookObservationService {
       const routableChannelIds = new Set<string>();
 
       for (const event of result.events) {
-        const channel = await transaction.inboundWebhookChannel.upsert({
-          where: {
-            connectionId_organizationId_providerChannelId: {
-              connectionId: delivery.connectionId,
-              organizationId: event.organizationId,
-              providerChannelId: event.channel.providerChannelId,
-            },
-          },
-          create: {
-            workspaceId: delivery.workspaceId,
-            connectionId: delivery.connectionId,
-            organizationId: event.organizationId,
-            providerChannelId: event.channel.providerChannelId,
-            connectedPhone: event.channel.connectedPhone,
-            channelName: event.channel.name,
-            status: "discovered",
-            conversionEngineMode: "canonical",
-            firstSeenAt: processedAt,
-            lastSeenAt: processedAt,
-          },
-          update: {
-            connectedPhone: event.channel.connectedPhone,
-            channelName: event.channel.name,
-            lastSeenAt: processedAt,
-          },
-        });
+        const channel = await this.upsertChannelForEvent(
+          transaction,
+          delivery,
+          event,
+          processedAt,
+        );
 
         if (
           event.classification === "eligible_route_resolved" ||
@@ -816,6 +806,87 @@ export class InboundWebhookObservationService {
         createdEventCount: created.count,
         routableChannelIds: [...routableChannelIds],
       };
+    });
+  }
+
+  /**
+   * Resolves the InboundWebhookChannel row for an observed event.
+   *
+   * Anti-duplicate merge (P0.2): a student may have already registered a
+   * provisional channel for this connection/phone (see
+   * inbound-webhook-provisional-channel.ts) before any webhook arrived, so
+   * conversion rules could be created against it right away. When the real
+   * webhook shows up, look that provisional row up by its stable placeholder
+   * providerChannelId and update it in place with the real identity — same
+   * channel id, so routes/rules already scoped to it keep working — instead
+   * of inserting a second channel for the same number.
+   */
+  private async upsertChannelForEvent(
+    transaction: Prisma.TransactionClient,
+    delivery: LoadedDelivery,
+    event: ParsedInboundWebhookEvent,
+    processedAt: Date,
+  ): Promise<PersistedChannelIdentity> {
+    const normalizedPhone = normalizePhoneIdentity(
+      event.channel.connectedPhone,
+    );
+
+    if (normalizedPhone) {
+      const provisional = await transaction.inboundWebhookChannel.findUnique({
+        where: {
+          connectionId_organizationId_providerChannelId: {
+            connectionId: delivery.connectionId,
+            organizationId: provisionalChannelOrganizationId(
+              delivery.connectionId,
+            ),
+            providerChannelId:
+              provisionalChannelProviderChannelId(normalizedPhone),
+          },
+        },
+        select: { id: true, channelName: true },
+      });
+
+      if (provisional) {
+        return transaction.inboundWebhookChannel.update({
+          where: { id: provisional.id },
+          data: {
+            organizationId: event.organizationId,
+            providerChannelId: event.channel.providerChannelId,
+            connectedPhone: event.channel.connectedPhone,
+            channelName: event.channel.name ?? provisional.channelName,
+            lastSeenAt: processedAt,
+          },
+          select: { id: true },
+        });
+      }
+    }
+
+    return transaction.inboundWebhookChannel.upsert({
+      where: {
+        connectionId_organizationId_providerChannelId: {
+          connectionId: delivery.connectionId,
+          organizationId: event.organizationId,
+          providerChannelId: event.channel.providerChannelId,
+        },
+      },
+      create: {
+        workspaceId: delivery.workspaceId,
+        connectionId: delivery.connectionId,
+        organizationId: event.organizationId,
+        providerChannelId: event.channel.providerChannelId,
+        connectedPhone: event.channel.connectedPhone,
+        channelName: event.channel.name,
+        status: "discovered",
+        conversionEngineMode: "canonical",
+        firstSeenAt: processedAt,
+        lastSeenAt: processedAt,
+      },
+      update: {
+        connectedPhone: event.channel.connectedPhone,
+        channelName: event.channel.name,
+        lastSeenAt: processedAt,
+      },
+      select: { id: true },
     });
   }
 

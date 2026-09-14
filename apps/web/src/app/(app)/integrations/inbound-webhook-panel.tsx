@@ -55,6 +55,7 @@ export type InboundWebhookPanelProps = {
   rotateSecretAction: InboundWebhookAction;
   setConnectionStatusAction: InboundWebhookAction;
   removeConnectionAction: InboundWebhookAction;
+  createChannelAction: InboundWebhookAction;
   setChannelStatusAction: InboundWebhookAction;
   saveRoutesAction: InboundWebhookAction;
 };
@@ -96,6 +97,7 @@ export function InboundWebhookPanel({
   rotateSecretAction,
   setConnectionStatusAction,
   removeConnectionAction,
+  createChannelAction,
   setChannelStatusAction,
   saveRoutesAction,
 }: InboundWebhookPanelProps) {
@@ -543,9 +545,26 @@ export function InboundWebhookPanel({
                       <span>Prontidao</span>
                       <span>Ultimo evento</span>
                     </div>
+                    {canManage && connection.provider !== "uazapi" ? (
+                      <ChannelCreateForm
+                        connectionId={connection.id}
+                        pending={
+                          pendingAction === `create-channel-${connection.id}`
+                        }
+                        onCreate={(values) =>
+                          runConnectionAction(
+                            `create-channel-${connection.id}`,
+                            createChannelAction,
+                            values,
+                          )
+                        }
+                      />
+                    ) : null}
                     {channels.length === 0 ? (
                       <p className="muted inbound-channel-empty">
-                        Os canais aparecerao depois do primeiro payload valido.
+                        Nenhum canal cadastrado ainda. Cadastre o numero
+                        conectado para liberar as regras de conversao antes do
+                        primeiro lead chegar.
                       </p>
                     ) : (
                       channels.map((channel) => {
@@ -688,6 +707,82 @@ export function InboundWebhookPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function ChannelCreateForm({
+  connectionId,
+  pending,
+  onCreate,
+}: {
+  connectionId: string;
+  pending: boolean;
+  onCreate: (values: Record<string, string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [connectedPhone, setConnectedPhone] = useState("");
+  const [channelName, setChannelName] = useState("");
+
+  if (!open) {
+    return (
+      <button
+        className="button inbound-channel-create-toggle"
+        type="button"
+        onClick={() => setOpen(true)}
+      >
+        <Plus size={15} aria-hidden="true" />
+        Cadastrar canal/numero
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="inbound-channel-create-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onCreate({ connectionId, connectedPhone, channelName });
+        setConnectedPhone("");
+        setChannelName("");
+        setOpen(false);
+      }}
+    >
+      <label>
+        <span className="field-label">Numero conectado</span>
+        <input
+          value={connectedPhone}
+          onChange={(event) => setConnectedPhone(event.target.value)}
+          placeholder="Ex.: (11) 99999-8888"
+          inputMode="tel"
+          minLength={8}
+          maxLength={32}
+          required
+          disabled={pending}
+        />
+      </label>
+      <label>
+        <span className="field-label">Nome do canal (opcional)</span>
+        <input
+          value={channelName}
+          onChange={(event) => setChannelName(event.target.value)}
+          maxLength={160}
+          placeholder="Ex.: Comercial - unidade 1"
+          disabled={pending}
+        />
+      </label>
+      <button className="button primary" type="submit" disabled={pending}>
+        <Plus size={15} aria-hidden="true" />
+        {pending ? "Cadastrando..." : "Cadastrar canal"}
+      </button>
+      <button
+        className="button"
+        type="button"
+        onClick={() => setOpen(false)}
+        disabled={pending}
+      >
+        Cancelar
+      </button>
+    </form>
   );
 }
 

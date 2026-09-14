@@ -171,6 +171,22 @@ export const inboundWebhookChannelStatusUpdateInputSchema = z.object({
   status: inboundWebhookMutableChannelStatusSchema,
 });
 
+// Lets a student register the WhatsApp number/channel the moment a
+// Umbler/Gupshup connection exists, before any inbound webhook arrives, so
+// conversion rules can be created against it immediately. The API assigns a
+// provisional identity; a later real webhook merges into the same row.
+export const inboundWebhookChannelCreateInputSchema = z.object({
+  connectedPhone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(32)
+    .refine((value) => /\d{8,}/u.test(value.replace(/\D/gu, "")), {
+      message: "Informe um numero de telefone valido",
+    }),
+  channelName: inboundWebhookDisplayNameSchema.nullable().optional(),
+});
+
 export const inboundWebhookChannelRouteInputSchema = z.object({
   metaBusinessConnectionId: idSchema,
   metaReportingAccountId: idSchema.nullable().optional(),
@@ -949,6 +965,9 @@ export type InboundWebhookConnectionStatusUpdateInputDto = z.infer<
 >;
 export type InboundWebhookChannelStatusUpdateInputDto = z.infer<
   typeof inboundWebhookChannelStatusUpdateInputSchema
+>;
+export type InboundWebhookChannelCreateInputDto = z.infer<
+  typeof inboundWebhookChannelCreateInputSchema
 >;
 export type InboundWebhookChannelRouteInputDto = z.infer<
   typeof inboundWebhookChannelRouteInputSchema

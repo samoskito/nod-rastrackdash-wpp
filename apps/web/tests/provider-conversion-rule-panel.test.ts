@@ -56,6 +56,29 @@ const channel = {
   updatedAt: "2026-07-21T11:00:00.000Z",
 } satisfies InboundWebhookChannelDto;
 
+// A channel a student registered right after connecting Umbler/Gupshup,
+// before any inbound webhook has arrived (P0.2). No provider identity, no
+// routes, no CTWA observed yet — it must still unlock "Nova regra".
+const provisionalChannel = {
+  ...channel,
+  id: "channel_provisional",
+  organizationId: "provisional:connection_1",
+  providerChannelId: "provisional:5511999990000",
+  status: "discovered",
+  routes: [],
+  readiness: {
+    ...channel.readiness,
+    state: "waiting",
+    blockers: ["route_not_configured", "ctwa_not_observed"],
+    routeCount: 0,
+    validRouteCount: 0,
+    totalCtwa: 0,
+    routedCtwa: 0,
+    retainedCtwa: 0,
+    retainedRoutedCtwa: 0,
+  },
+} satisfies InboundWebhookChannelDto;
+
 const catalogRule = {
   id: "provider_rule_catalog",
   workspaceId: "workspace_1",
@@ -140,6 +163,22 @@ describe("provider conversion rule panel", () => {
     expect(html).not.toContain("Salvar canais");
     expect(html).not.toContain("Editar aliases");
     expect(html).not.toContain("Auditar compras reconhecidas");
+  });
+
+  it("hides Nova regra and points to channel registration when no channel exists yet (P0.2)", () => {
+    const html = renderPanel({ rules: [], channels: [] });
+
+    expect(html).not.toContain("Nova regra");
+    expect(html).toContain("Nenhum canal cadastrado nesta conexao ainda");
+    expect(html).not.toMatch(/aguard(e|ando).{0,40}webhook/iu);
+    expect(html).not.toMatch(/primeiro payload/iu);
+  });
+
+  it("unlocks Nova regra as soon as a provisional channel exists, before any webhook (P0.2)", () => {
+    const html = renderPanel({ rules: [], channels: [provisionalChannel] });
+
+    expect(html).toContain("Nova regra");
+    expect(html).not.toContain("Nenhum canal cadastrado nesta conexao ainda");
   });
 
   it("offers explicit production activation for a certified automation rule", () => {
@@ -853,10 +892,8 @@ describe("provider conversion rule panel", () => {
         averageValue: "",
         contentName: "",
         primaryPhrase: "A sua consulta esta agendada",
-        variationPhrases:
-          "consulta confirmada\nestou confirmando sua consulta",
-        exampleMessage:
-          "Perfeito, estou confirmando sua consulta para as 14h.",
+        variationPhrases: "consulta confirmada\nestou confirmando sua consulta",
+        exampleMessage: "Perfeito, estou confirmando sua consulta para as 14h.",
         valueMode: "fixed",
         messageAuthorScope: "team",
         onChange: () => undefined,
@@ -943,10 +980,12 @@ function renderPanel({
   rules,
   canManage = true,
   connectionProvider = "umbler",
+  channels = [channel],
 }: {
   rules: ProviderConversionRuleDto[];
   canManage?: boolean;
   connectionProvider?: "umbler" | "gupshup" | "uazapi";
+  channels?: InboundWebhookChannelDto[];
 }) {
   const action = vi.fn(async (_formData: FormData) => ({
     ok: true as const,
@@ -957,7 +996,7 @@ function renderPanel({
     createElement(ProviderConversionRulePanel, {
       connectionId: "connection_1",
       connectionProvider,
-      channels: [channel],
+      channels,
       rules,
       enabled: true,
       canManage,

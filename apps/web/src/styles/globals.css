@@ -8497,6 +8497,47 @@ html[data-presentation-mode="active"] .inbound-webhook-secret {
   border-top: 1px solid var(--border);
 }
 
+.inbound-channel-create-toggle {
+  margin: 12px;
+}
+
+.inbound-channel-create-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 1.1fr) auto auto;
+  align-items: end;
+  gap: 12px;
+  margin: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.inbound-channel-create-form label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.inbound-channel-create-form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(5, 8, 7, 0.84);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.inbound-channel-create-form input:focus {
+  border-color: rgba(66, 240, 168, 0.72);
+  box-shadow: 0 0 0 3px rgba(18, 184, 132, 0.16);
+}
+
 .inbound-route-editor {
   display: grid;
   min-width: 0;
@@ -9932,6 +9973,14 @@ html[data-presentation-mode="active"] .provider-conversion-secret {
   }
 
   .inbound-webhook-create .button {
+    width: 100%;
+  }
+
+  .inbound-channel-create-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inbound-channel-create-form .button {
     width: 100%;
   }
 

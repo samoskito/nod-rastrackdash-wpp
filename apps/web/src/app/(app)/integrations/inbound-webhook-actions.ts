@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  inboundWebhookChannelCreateInputSchema,
   inboundWebhookChannelRoutesUpdateInputSchema,
   inboundWebhookChannelStatusUpdateInputSchema,
   inboundWebhookConnectionCreateInputSchema,
@@ -181,6 +182,39 @@ export async function removeInboundWebhookConnectionAction(
     };
   } catch {
     return failure("Nao foi possivel remover esta conexao.");
+  }
+}
+
+export async function createInboundWebhookChannelAction(
+  formData: FormData,
+): Promise<InboundWebhookActionResult> {
+  const connectionId = formId(formData, "connectionId");
+  const input = inboundWebhookChannelCreateInputSchema.safeParse({
+    connectedPhone: formText(formData, "connectedPhone"),
+    channelName: formText(formData, "channelName"),
+  });
+
+  if (!connectionId || !input.success) {
+    return failure(invalidFormMessage);
+  }
+
+  try {
+    await serverApiFetch<unknown>(
+      `/integrations/inbound-webhooks/${encodeURIComponent(connectionId)}/channels`,
+      {
+        method: "POST",
+        body: JSON.stringify(input.data),
+      },
+    );
+
+    revalidatePath(integrationsPath);
+    return {
+      ok: true,
+      message:
+        "Canal cadastrado. Ja e possivel criar regras de conversao para ele antes de qualquer mensagem chegar.",
+    };
+  } catch {
+    return failure("Nao foi possivel cadastrar o canal.");
   }
 }
 

@@ -9,6 +9,7 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("../src/lib/server-api", () => ({ serverApiFetch }));
 
 import {
+  createInboundWebhookChannelAction,
   createInboundWebhookConnectionAction,
   removeInboundWebhookChannelRouteAction,
   removeInboundWebhookConnectionAction,
@@ -176,6 +177,66 @@ describe("inbound webhook server actions", () => {
       message: "Conexao removida. O historico de observacao foi preservado.",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
+  });
+
+  it("registers a provisional channel before any webhook has arrived (P0.2)", async () => {
+    serverApiFetch.mockResolvedValueOnce({
+      id: "channel_provisional",
+      connectionId: "connection_1",
+      organizationId: "provisional:connection_1",
+      providerChannelId: "provisional:5511999998888",
+      connectedPhone: "5511999998888",
+      channelName: "Comercial",
+      status: "discovered",
+    });
+
+    const result = await createInboundWebhookChannelAction(
+      form({
+        connectionId: "connection_1",
+        connectedPhone: "(11) 99999-8888",
+        channelName: "Comercial",
+      }),
+    );
+
+    expect(serverApiFetch).toHaveBeenCalledWith(
+      "/integrations/inbound-webhooks/connection_1/channels",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          connectedPhone: "(11) 99999-8888",
+          channelName: "Comercial",
+        }),
+      },
+    );
+    expect(result).toEqual({
+      ok: true,
+      message:
+        "Canal cadastrado. Ja e possivel criar regras de conversao para ele antes de qualquer mensagem chegar.",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/integrations");
+  });
+
+  it("rejects an invalid phone number before calling the API", async () => {
+    const result = await createInboundWebhookChannelAction(
+      form({ connectionId: "connection_1", connectedPhone: "abc" }),
+    );
+
+    expect(serverApiFetch).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+  });
+
+  it("reports failure when the channel cannot be created", async () => {
+    serverApiFetch.mockRejectedValueOnce(new Error("boom"));
+
+    const result = await createInboundWebhookChannelAction(
+      form({ connectionId: "connection_1", connectedPhone: "11999998888" }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Nao foi possivel cadastrar o canal.",
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -210,6 +210,33 @@ describe("inbound webhook panel", () => {
     expect(html).toContain("Conecte a Umbler Talk ou a Gupshup aqui");
   });
 
+  it("lets a manager register a channel before any webhook arrives (P0.2)", () => {
+    const html = renderPanel({
+      connections: [connectionViewWithoutChannels()],
+    });
+
+    expect(html).toContain("Cadastrar canal/numero");
+    expect(html).toContain("Nenhum canal cadastrado ainda");
+    expect(html).not.toMatch(/primeiro payload/i);
+  });
+
+  it("hides manual channel registration for auto-bridged UAZAPI instances", () => {
+    const html = renderPanel({
+      connections: [connectionViewWithoutChannels({ provider: "uazapi" })],
+    });
+
+    expect(html).not.toContain("Cadastrar canal/numero");
+  });
+
+  it("hides manual channel registration from analysts without manage permission", () => {
+    const html = renderPanel({
+      connections: [connectionViewWithoutChannels()],
+      canManage: false,
+    });
+
+    expect(html).not.toContain("Cadastrar canal/numero");
+  });
+
   it("gives provider-specific paste instructions for the one-time webhook URL", () => {
     expect(inboundPasteInstruction("umbler")).toBe(
       "Cole esta URL no painel/webhook da Umbler Talk.",
@@ -368,6 +395,24 @@ describe("inbound webhook panel", () => {
   });
 });
 
+function connectionViewWithoutChannels(
+  connectionOverrides: Partial<
+    InboundWebhookConnectionView["overview"]["connection"]
+  > = {},
+): InboundWebhookConnectionView {
+  return {
+    ...connectionView,
+    overview: {
+      ...connectionView.overview,
+      connection: {
+        ...connectionView.overview.connection,
+        ...connectionOverrides,
+      },
+    },
+    channels: [],
+  };
+}
+
 function renderPanel({
   canManage = true,
   connections = [connectionView],
@@ -392,6 +437,7 @@ function renderPanel({
       rotateSecretAction: action,
       setConnectionStatusAction: action,
       removeConnectionAction: action,
+      createChannelAction: action,
       setChannelStatusAction: action,
       saveRoutesAction: action,
     }),

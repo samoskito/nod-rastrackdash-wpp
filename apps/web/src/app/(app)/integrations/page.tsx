@@ -13,10 +13,7 @@ import type {
   CurrentWorkspaceDto,
   WhatsappConnectionDto,
 } from "@wpptrack/shared";
-import {
-  metaAssetsSchema,
-  whatsappConnectionsSchema,
-} from "@wpptrack/shared";
+import { metaAssetsSchema, whatsappConnectionsSchema } from "@wpptrack/shared";
 import {
   Activity,
   Database,
@@ -35,6 +32,7 @@ import { serverApiFetch } from "../../../lib/server-api";
 import { getCurrentWorkspace } from "../../../lib/current-workspace";
 import { MetaConversionDestinationForm } from "./meta-conversion-destination-form";
 import {
+  createInboundWebhookChannelAction,
   createInboundWebhookConnectionAction,
   removeInboundWebhookConnectionAction,
   rotateInboundWebhookSecretAction,
@@ -869,12 +867,11 @@ export default async function IntegrationsPage({
   const manualEnabled =
     metaCapabilitiesResult.state === "real" && metaCapabilities.manualEnabled;
   const oauthConnected = legacyMetaConnected && oauthEnabled;
-  const metaManualResult =
-    oauthConnected
-      ? await getMetaOAuthAdvancedConfiguration()
-      : manualEnabled
-        ? await getMetaManualConfiguration()
-        : ({ data: null, state: "empty" } as const);
+  const metaManualResult = oauthConnected
+    ? await getMetaOAuthAdvancedConfiguration()
+    : manualEnabled
+      ? await getMetaManualConfiguration()
+      : ({ data: null, state: "empty" } as const);
   const inboundWebhookResult = await getInboundWebhookData();
   const whatsappConnectionsResult = await getWhatsappConnections();
   const legacyWhatsappInstancesResult = await getLegacyWhatsappInstances();
@@ -897,9 +894,7 @@ export default async function IntegrationsPage({
     pipelineResult.state,
     workspaceResult.state,
     metaCapabilitiesResult.state,
-    ...(oauthConnected || manualEnabled
-      ? [metaManualResult.state]
-      : []),
+    ...(oauthConnected || manualEnabled ? [metaManualResult.state] : []),
     ...(inboundWebhookData?.capabilities.enabled
       ? [inboundWebhookResult.state]
       : []),
@@ -1226,8 +1221,8 @@ export default async function IntegrationsPage({
                     </form>
                   ) : (
                     <span className="action-note warn">
-                      Permissoes temporariamente indisponiveis. A API validara
-                      a acao ao continuar.
+                      Permissoes temporariamente indisponiveis. A API validara a
+                      acao ao continuar.
                     </span>
                   )}
                 </div>
@@ -1254,7 +1249,9 @@ export default async function IntegrationsPage({
           ) : (
             <div className="connection-callout integration-meta-unavailable">
               <div>
-                <span className="micro-label">Configuracao Meta indisponivel</span>
+                <span className="micro-label">
+                  Configuracao Meta indisponivel
+                </span>
                 <strong>Nao foi possivel confirmar os modos de conexao</strong>
                 <p className="muted">
                   Tente novamente quando a configuracao da Meta estiver
@@ -1509,6 +1506,7 @@ export default async function IntegrationsPage({
                 setInboundWebhookConnectionStatusAction
               }
               removeConnectionAction={removeInboundWebhookConnectionAction}
+              createChannelAction={createInboundWebhookChannelAction}
               setChannelStatusAction={setInboundWebhookChannelStatusAction}
               saveRoutesAction={saveInboundWebhookChannelRoutesAction}
             />

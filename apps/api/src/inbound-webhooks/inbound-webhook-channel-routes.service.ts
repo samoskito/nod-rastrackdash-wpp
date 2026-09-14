@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -9,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type {
+  InboundWebhookChannelCreateInputDto,
   InboundWebhookChannelDto,
   InboundWebhookChannelReadinessBlockerDto,
   InboundWebhookChannelReadinessDto,
@@ -17,6 +19,7 @@ import type {
   InboundWebhookChannelRoutesUpdateInputDto,
   InboundWebhookChannelStatusUpdateInputDto,
 } from "@wpptrack/shared";
+import { normalizePhoneIdentity } from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
 import {
   type InboundWebhookMetaRoutePreview,
@@ -30,6 +33,10 @@ import {
   requireInboundWebhookChannel,
   resourceNotFoundMessage,
 } from "./inbound-webhook-production-activation";
+import {
+  provisionalChannelOrganizationId,
+  provisionalChannelProviderChannelId,
+} from "./inbound-webhook-provisional-channel";
 
 const validRouteStatus = "valid";
 const removedRouteStatus = "inactive";
@@ -135,6 +142,94 @@ export class InboundWebhookChannelRoutesService {
     return channels.map((channel) =>
       this.toChannelDto(channel, readinessByChannel.get(channel.id)),
     );
+  }
+
+  /**
+   * Lets a manager register the connected number before any webhook has
+   * arrived (P0.2), so conversion rules can be created immediately instead
+   * of waiting for the first live lead. See inbound-webhook-provisional-channel.ts
+   * for the placeholder identity strategy and how a later real webhook
+   * merges into this same channel row.
+   */
+  async createProvisionalChannel(
+    workspaceId: string,
+    connectionId: string,
+    input: InboundWebhookChannelCreateInputDto,
+    actorUserId: string,
+  ): Promise<InboundWebhookChannelDto> {
+    const connection = await this.requireCreatableConnection(
+      workspaceId,
+      connectionId,
+    );
+    const normalizedPhone = normalizePhoneIdentity(input.connectedPhone);
+
+    if (!normalizedPhone) {
+      throw new BadRequestException("Numero de telefone invalido");
+    }
+
+    const channelName = input.channelName?.trim() || null;
+    const now = new Date();
+
+    const channel = await this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.inboundWebhookChannel.findFirst({
+        where: {
+          workspaceId,
+          connectionId: connection.id,
+          connectedPhone: normalizedPhone,
+        },
+        include: channelInclude,
+      });
+
+      if (existing) {
+        if (!channelName || existing.channelName) {
+          return existing;
+        }
+
+        return transaction.inboundWebhookChannel.update({
+          where: { id: existing.id },
+          data: { channelName },
+          include: channelInclude,
+        });
+      }
+
+      const created = await transaction.inboundWebhookChannel.create({
+        data: {
+          workspaceId,
+          connectionId: connection.id,
+          organizationId: provisionalChannelOrganizationId(connection.id),
+          providerChannelId:
+            provisionalChannelProviderChannelId(normalizedPhone),
+          connectedPhone: normalizedPhone,
+          channelName,
+          status: "discovered",
+          conversionEngineMode: "canonical",
+          firstSeenAt: now,
+          lastSeenAt: now,
+        },
+        include: channelInclude,
+      });
+
+      await this.createAudit(transaction, {
+        workspaceId,
+        actorUserId,
+        action: "inbound_webhook.channel_provisioned",
+        targetType: "InboundWebhookChannel",
+        targetId: created.id,
+        resultStatus: "created",
+        beforeSummary: { channelId: null },
+        afterSummary: this.channelRoutesAuditSummary(created, []),
+      });
+
+      return created;
+    });
+
+    const readinessByChannel = await this.loadChannelReadiness(
+      workspaceId,
+      connection.id,
+      [channel],
+    );
+
+    return this.toChannelDto(channel, readinessByChannel.get(channel.id));
   }
 
   async replaceRoutes(
@@ -1006,6 +1101,37 @@ export class InboundWebhookChannelRoutesService {
     if (!connection) {
       this.throwNotFound();
     }
+  }
+
+  private async requireCreatableConnection(
+    workspaceId: string,
+    connectionId: string,
+  ): Promise<{ id: string; provider: string }> {
+    const connection = await this.prisma.inboundWebhookConnection.findFirst({
+      where: {
+        id: connectionId,
+        workspaceId,
+        removedAt: null,
+      },
+      select: {
+        id: true,
+        provider: true,
+      },
+    });
+
+    if (!connection) {
+      this.throwNotFound();
+    }
+
+    // UAZAPI/NOD channels are bridged automatically from the WhatsApp
+    // instance; manual provisional creation only applies to Umbler/Gupshup.
+    if (connection.provider === "uazapi") {
+      throw new BadRequestException(
+        "Este provedor cadastra o canal automaticamente",
+      );
+    }
+
+    return connection;
   }
 
   private async requireChannel(

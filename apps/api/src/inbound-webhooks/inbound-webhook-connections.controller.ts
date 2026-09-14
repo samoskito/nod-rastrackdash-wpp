@@ -12,6 +12,7 @@ import {
   Put,
 } from "@nestjs/common";
 import {
+  inboundWebhookChannelCreateInputSchema,
   inboundWebhookChannelRoutesUpdateInputSchema,
   inboundWebhookChannelStatusUpdateInputSchema,
   inboundWebhookConnectionCreateInputSchema,
@@ -100,6 +101,27 @@ export class InboundWebhookConnectionsController {
     const { workspaceId } = await this.getCurrentWorkspaceContext(refreshToken);
 
     return this.channelRoutesService.listChannels(workspaceId, connectionId);
+  }
+
+  @Post(":connectionId/channels")
+  async createChannel(
+    @AuthToken() refreshToken: string,
+    @Param("connectionId") connectionId: string,
+    @Body() body: unknown,
+  ) {
+    const context = await this.requireManager(refreshToken);
+    const parsed = inboundWebhookChannelCreateInputSchema.safeParse(body);
+
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+
+    return this.channelRoutesService.createProvisionalChannel(
+      context.workspaceId,
+      connectionId,
+      parsed.data,
+      context.userId,
+    );
   }
 
   @Post(":connectionId/rotate-secret")

@@ -77,12 +77,14 @@ const conversionRuleOriginLabels: Record<ConversionRuleOrigin, string> = {
   catalog: "Catalogo estruturado",
 };
 
-const conversionEventCategoryLabels: Record<ConversionEventCategoryDto, string> =
-  {
-    journey: "Jornada",
-    conversion: "Conversao",
-    operational: "Operacional",
-  };
+const conversionEventCategoryLabels: Record<
+  ConversionEventCategoryDto,
+  string
+> = {
+  journey: "Jornada",
+  conversion: "Conversao",
+  operational: "Operacional",
+};
 
 /** structured_catalog continua restrito a Purchase (ver contrato em shared). */
 const catalogOriginEventName = "Purchase" satisfies ConversionEventNameDto;
@@ -429,6 +431,16 @@ export function ProviderConversionRulePanel({
           ) : null}
         </div>
       </header>
+
+      {canManage && enabled && channels.length === 0 ? (
+        <div className="feedback-banner warn" role="status">
+          <span>
+            Nenhum canal cadastrado nesta conexao ainda. Cadastre o numero
+            conectado em Integracoes para liberar a criacao de regras — nao e
+            preciso esperar a primeira mensagem chegar.
+          </span>
+        </div>
+      ) : null}
 
       {oneTimeSecret ? (
         <div className="provider-conversion-secret-group">
@@ -909,7 +921,8 @@ export function ProviderConversionRulePanel({
                       </span>
                     </div>
                     <span>
-                      {eventLabel(rule)} / {uazapiAutomation
+                      {eventLabel(rule)} /{" "}
+                      {uazapiAutomation
                         ? "Lista WhatsApp (chat_labels)"
                         : triggerLabel(rule)}
                       {messagePhrase ? ` / ${valueModeLabel(rule)}` : ""} /{" "}
@@ -924,7 +937,7 @@ export function ProviderConversionRulePanel({
                             : "Aguardando contato entrar na lista. Em producao, apenas leads pagos podem gerar eventos."
                           : automation
                             ? `Ultimo callback: ${formatDateTime(rule.endpoint?.lastDeliveryAt ?? null)}`
-                          : `${rule.catalog?.variants.length ?? 0} variante(s) cadastrada(s)`}
+                            : `${rule.catalog?.variants.length ?? 0} variante(s) cadastrada(s)`}
                     </small>
                   </div>
                 </div>
@@ -1812,12 +1825,7 @@ function PurchaseAuditRow({ review }: { review: PurchaseReviewDto }) {
 }
 
 type ExecutionAuditFilter =
-  | "all"
-  | "observed"
-  | "eligible"
-  | "materialized"
-  | "blocked"
-  | "failed";
+  "all" | "observed" | "eligible" | "materialized" | "blocked" | "failed";
 
 function ExecutionRuleAudit({
   rule,
@@ -1826,9 +1834,8 @@ function ExecutionRuleAudit({
   rule: ProviderConversionRuleDto;
   loadAuditAction: ProviderRuleAction;
 }) {
-  const [audit, setAudit] = useState<ProviderConversionRuleExecutionAuditDto | null>(
-    null,
-  );
+  const [audit, setAudit] =
+    useState<ProviderConversionRuleExecutionAuditDto | null>(null);
   const [filter, setFilter] = useState<ExecutionAuditFilter>("all");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -1869,7 +1876,9 @@ function ExecutionRuleAudit({
           <ListChecks size={17} aria-hidden="true" />
           <span>
             <strong>Auditar execucoes reconhecidas</strong>
-            <small>Diagnostico e status desta regra fora do fluxo de compra</small>
+            <small>
+              Diagnostico e status desta regra fora do fluxo de compra
+            </small>
           </span>
         </span>
         <span className="status-chip">
@@ -1895,11 +1904,31 @@ function ExecutionRuleAudit({
             >
               <AuditMetric label="Total" value={audit.summary.total} />
               <AuditMetric label="Observados" value={audit.summary.observed} />
-              <AuditMetric label="Elegiveis" value={audit.summary.eligible} tone="info" />
-              <AuditMetric label="Eventos criados" value={audit.summary.materialized} tone="success" />
-              <AuditMetric label="Duplicados" value={audit.summary.duplicate} tone="warn" />
-              <AuditMetric label="Bloqueados" value={audit.summary.blocked} tone="warn" />
-              <AuditMetric label="Falhas" value={audit.summary.failed} tone="warn" />
+              <AuditMetric
+                label="Elegiveis"
+                value={audit.summary.eligible}
+                tone="info"
+              />
+              <AuditMetric
+                label="Eventos criados"
+                value={audit.summary.materialized}
+                tone="success"
+              />
+              <AuditMetric
+                label="Duplicados"
+                value={audit.summary.duplicate}
+                tone="warn"
+              />
+              <AuditMetric
+                label="Bloqueados"
+                value={audit.summary.blocked}
+                tone="warn"
+              />
+              <AuditMetric
+                label="Falhas"
+                value={audit.summary.failed}
+                tone="warn"
+              />
             </div>
 
             <div className="provider-callback-toolbar">
@@ -2006,11 +2035,13 @@ function ExecutionAuditRow({
         <small>{executionReasonLabel(item.reasonCode)}</small>
       </span>
       <span>
-        <strong>{item.leadName ?? item.phoneDisplay ?? "Lead nao localizado"}</strong>
+        <strong>
+          {item.leadName ?? item.phoneDisplay ?? "Lead nao localizado"}
+        </strong>
         <small>
           {item.valueCents !== null && item.currency
             ? formatMoney(item.valueCents, item.currency)
-            : item.matchedTriggerPhrase ?? "Sem valor identificado"}
+            : (item.matchedTriggerPhrase ?? "Sem valor identificado")}
         </small>
       </span>
       <span className="provider-callback-row-actions">
@@ -2233,8 +2264,7 @@ export function UmblerAutomationPayloadPanel({
         <li>Cole o corpo JSON acima no campo de body da acao HTTP.</li>
         <li>
           Mapeie contact.phone, conversation.id e conversation.created_at_utc
-          para os campos reais do contato e da conversa na automacao da
-          Umbler.
+          para os campos reais do contato e da conversa na automacao da Umbler.
         </li>
       </ol>
     </div>
@@ -2255,9 +2285,8 @@ function UmblerAutomationSetupDetails({
       </summary>
       <div className="provider-conversion-payload-helper-body">
         <p className="action-note">
-          A URL secreta so aparece uma vez, na criacao da regra. Se perdeu,
-          gere uma nova URL acima e repita a configuracao na automacao da
-          Umbler.
+          A URL secreta so aparece uma vez, na criacao da regra. Se perdeu, gere
+          uma nova URL acima e repita a configuracao na automacao da Umbler.
         </p>
         <UmblerAutomationPayloadPanel eventName={eventName} />
       </div>
@@ -2409,8 +2438,7 @@ export function MessagePhraseFields({
           }
         />
         <small className="action-note">
-          Secretarias nem sempre usam a mesma frase. Cadastre variacoes
-          comuns.
+          Secretarias nem sempre usam a mesma frase. Cadastre variacoes comuns.
         </small>
       </label>
 
@@ -2419,7 +2447,9 @@ export function MessagePhraseFields({
           <span className="field-label">Exemplo da mensagem</span>
           <textarea
             value={exampleMessage}
-            onChange={(event) => onChange({ exampleMessage: event.target.value })}
+            onChange={(event) =>
+              onChange({ exampleMessage: event.target.value })
+            }
             rows={3}
             maxLength={2_000}
             placeholder={
@@ -3232,7 +3262,9 @@ export function mergeTriggerPhrases(
   primaryPhrase: string,
   variationPhrases: string,
 ): string {
-  return [primaryPhrase, variationPhrases].filter((part) => part.trim()).join("\n");
+  return [primaryPhrase, variationPhrases]
+    .filter((part) => part.trim())
+    .join("\n");
 }
 
 function emptyVariant(id: number, attributeCount: number): CatalogVariantDraft {
@@ -3359,11 +3391,7 @@ function automationAuditTone(
   status: ProviderConversionAutomationAuditItemDto["status"],
 ): "" | "warn" | "bad" | "neutral" {
   if (status === "materialized") return "";
-  if (
-    status === "observed" ||
-    status === "eligible" ||
-    status === "ignored"
-  ) {
+  if (status === "observed" || status === "eligible" || status === "ignored") {
     return "neutral";
   }
   if (status === "blocked" || status === "duplicate") return "warn";
