@@ -122,6 +122,24 @@ export async function rotateWhatsappWebhookTokenAction(
   }
 }
 
+export async function deleteWhatsappConnectionAction(
+  formData: FormData,
+): Promise<WhatsappProviderActionResult> {
+  const connectionId = formText(formData, "connectionId");
+  if (!connectionId) return failure("Conexao WhatsApp invalida.");
+
+  try {
+    await serverApiFetch(
+      `/integrations/whatsapp-connections/${encodeURIComponent(connectionId)}`,
+      { method: "DELETE" },
+    );
+    revalidatePath(integrationsPath);
+    return { ok: true, message: "Conexao excluida.", connectionId };
+  } catch {
+    return failure("Nao foi possivel excluir a conexao WhatsApp.");
+  }
+}
+
 export async function loadWhatsappConnectionForEditAction(
   connectionId: string,
 ): Promise<WhatsappConnectionEditResult> {
@@ -178,7 +196,10 @@ export async function updateWhatsappConnectionAction(
   }
 }
 
-function editConnectionInput(provider: ProviderId, formData: FormData): unknown {
+function editConnectionInput(
+  provider: ProviderId,
+  formData: FormData,
+): unknown {
   const name = formText(formData, "name");
   const displayName = formText(formData, "displayName") ?? null;
   const secret = formText(formData, "secret");

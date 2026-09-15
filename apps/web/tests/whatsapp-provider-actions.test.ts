@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createWhatsappConnectionAction,
+  deleteWhatsappConnectionAction,
   loadWhatsappConnectionForEditAction,
   rotateWhatsappWebhookTokenAction,
   testWhatsappConnectionAction,
@@ -251,7 +252,9 @@ describe("WhatsApp provider actions", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(JSON.stringify(result)).not.toContain("rotated-secret-do-not-return");
+    expect(JSON.stringify(result)).not.toContain(
+      "rotated-secret-do-not-return",
+    );
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:3333/integrations/whatsapp-connections/connection_1/edit",
       expect.objectContaining({
@@ -283,5 +286,42 @@ describe("WhatsApp provider actions", () => {
 
     expect(result.ok).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("calls the DELETE contract and reports success", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    const result = await deleteWhatsappConnectionAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result).toMatchObject({ ok: true, connectionId: "connection_1" });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/integrations/whatsapp-connections/connection_1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("fails closed without calling the API when connectionId is missing", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+
+    const result = await deleteWhatsappConnectionAction(form({}));
+
+    expect(result.ok).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("reports a friendly error when the delete request fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ message: "boom" }), { status: 500 }),
+    );
+
+    const result = await deleteWhatsappConnectionAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result.ok).toBe(false);
   });
 });

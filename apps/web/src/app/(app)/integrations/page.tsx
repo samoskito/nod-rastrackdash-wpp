@@ -46,6 +46,7 @@ import {
 } from "./inbound-webhook-panel";
 import {
   createWhatsappConnectionAction,
+  deleteWhatsappConnectionAction,
   loadWhatsappConnectionForEditAction,
   rotateWhatsappWebhookTokenAction,
   testWhatsappConnectionAction,
@@ -374,7 +375,9 @@ async function getWhatsappConnections(): Promise<
       return { data: [], state: "error" };
     }
     return {
-      data: parsed.data,
+      data: parsed.data.filter(
+        (connection) => connection.status !== "suspended",
+      ),
       state: "real",
     };
   } catch {
@@ -1488,6 +1491,7 @@ export default async function IntegrationsPage({
             rotateAction={rotateWhatsappWebhookTokenAction}
             editAction={updateWhatsappConnectionAction}
             loadEditAction={loadWhatsappConnectionForEditAction}
+            deleteAction={deleteWhatsappConnectionAction}
           />
 
           {inboundWebhookData &&

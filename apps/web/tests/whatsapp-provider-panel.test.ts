@@ -40,6 +40,8 @@ function renderPanel(
     rotateAction: ReturnType<typeof vi.fn>;
     editAction: ReturnType<typeof vi.fn>;
     loadEditAction: ReturnType<typeof vi.fn>;
+    deleteAction: ReturnType<typeof vi.fn>;
+    canManage: boolean;
   }> = {},
 ) {
   const noopAction = vi.fn(async () => ({ ok: true as const, message: "ok" }));
@@ -60,12 +62,13 @@ function renderPanel(
 
   const props = {
     connections: overrides.connections ?? [connection],
-    canManage: true,
+    canManage: overrides.canManage ?? true,
     createAction: overrides.createAction ?? noopAction,
     testAction: overrides.testAction ?? noopAction,
     rotateAction: overrides.rotateAction ?? noopAction,
     editAction: overrides.editAction ?? noopAction,
     loadEditAction,
+    deleteAction: overrides.deleteAction ?? noopAction,
   };
 
   render(createElement(WhatsappProviderPanel, props));
@@ -225,5 +228,100 @@ describe("WhatsappProviderPanel receiver instruction", () => {
 
     expect(screen.getByText(/umbler talk ou gupshup/i)).not.toBeNull();
     expect(screen.getByText(/bloco de webhooks logo abaixo/i)).not.toBeNull();
+  });
+});
+
+describe("WhatsappProviderPanel delete flow", () => {
+  it("does not call the DELETE endpoint via a native confirm dialog", () => {
+    const confirmSpy = vi.spyOn(window, "confirm");
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /excluir/i }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("requires typing the exact connection name before enabling the confirm button", async () => {
+    const deleteAction = vi.fn(async () => ({
+      ok: true as const,
+      message: "Conexao excluida.",
+    }));
+    renderPanel({ deleteAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /excluir/i }));
+    const confirmPanel = within(
+      await screen.findByTestId(
+        "whatsapp-connection-delete-confirm-connection_1",
+      ),
+    );
+
+    const confirmButton = confirmPanel.getByRole("button", {
+      name: /confirmar exclus/i,
+    }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+
+    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusao/i), {
+      target: { value: "wrong name" },
+    });
+    expect(confirmButton.disabled).toBe(true);
+
+    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusao/i), {
+      target: { value: connection.name },
+    });
+    expect(confirmButton.disabled).toBe(false);
+
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(deleteAction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("cancels the delete confirmation without calling the action", () => {
+    const deleteAction = vi.fn(async () => ({
+      ok: true as const,
+      message: "Conexao excluida.",
+    }));
+    renderPanel({ deleteAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /excluir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+
+    expect(
+      screen.queryByTestId("whatsapp-connection-delete-confirm-connection_1"),
+    ).toBeNull();
+    expect(deleteAction).not.toHaveBeenCalled();
+  });
+
+  it("shows an error and keeps the panel open when the delete action fails", async () => {
+    const deleteAction = vi.fn(async () => ({
+      ok: false as const,
+      message: "Nao foi possivel excluir a conexao WhatsApp.",
+    }));
+    renderPanel({ deleteAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /excluir/i }));
+    const confirmPanel = within(
+      await screen.findByTestId(
+        "whatsapp-connection-delete-confirm-connection_1",
+      ),
+    );
+    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusao/i), {
+      target: { value: connection.name },
+    });
+    fireEvent.click(
+      confirmPanel.getByRole("button", { name: /confirmar exclus/i }),
+    );
+
+    await screen.findByText(/nao foi possivel excluir/i);
+    expect(
+      screen.getByTestId("whatsapp-connection-delete-confirm-connection_1"),
+    ).not.toBeNull();
+  });
+
+  it("does not render the Excluir control for read-only users", () => {
+    renderPanel({ canManage: false });
+
+    expect(screen.queryByRole("button", { name: /excluir/i })).toBeNull();
   });
 });

@@ -1,7 +1,14 @@
 "use client";
 
 import type { WhatsappConnectionDto } from "@wpptrack/shared";
-import { Copy, Pencil, RefreshCw, Stethoscope, Webhook } from "lucide-react";
+import {
+  Copy,
+  Pencil,
+  RefreshCw,
+  Stethoscope,
+  Trash2,
+  Webhook,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type {
@@ -76,6 +83,7 @@ export function WhatsappProviderPanel({
   rotateAction,
   editAction,
   loadEditAction,
+  deleteAction,
 }: {
   connections: WhatsappConnectionDto[];
   canManage: boolean;
@@ -84,6 +92,7 @@ export function WhatsappProviderPanel({
   rotateAction: WhatsappProviderAction;
   editAction: WhatsappProviderAction;
   loadEditAction: WhatsappProviderLoadEditAction;
+  deleteAction: WhatsappProviderAction;
 }) {
   const router = useRouter();
   const [provider, setProvider] = useState<ProviderId>("uazapi_byo");
@@ -100,6 +109,8 @@ export function WhatsappProviderPanel({
   const [editData, setEditData] = useState<WhatsappConnectionEditData | null>(
     null,
   );
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -212,6 +223,47 @@ export function WhatsappProviderPanel({
       setNotice({
         ok: false,
         message: "Nao foi possivel atualizar a conexao WhatsApp.",
+      });
+    } finally {
+      setPending(null);
+    }
+  }
+
+  function openDeleteConfirm(connectionId: string) {
+    if (pending) return;
+    if (deleteConfirmId === connectionId) {
+      closeDeleteConfirm();
+      return;
+    }
+    closeEdit();
+    setNotice(null);
+    setDeleteConfirmId(connectionId);
+    setDeleteConfirmText("");
+  }
+
+  function closeDeleteConfirm() {
+    setDeleteConfirmId(null);
+    setDeleteConfirmText("");
+  }
+
+  async function confirmDelete(connection: WhatsappConnectionDto) {
+    if (pending) return;
+    const key = `delete-${connection.id}`;
+    setPending(key);
+    setNotice(null);
+    const formData = new FormData();
+    formData.set("connectionId", connection.id);
+    try {
+      const result = await deleteAction(formData);
+      setNotice(result);
+      if (result.ok) {
+        closeDeleteConfirm();
+        router.refresh();
+      }
+    } catch {
+      setNotice({
+        ok: false,
+        message: "Nao foi possivel excluir a conexao WhatsApp.",
       });
     } finally {
       setPending(null);
@@ -443,6 +495,65 @@ export function WhatsappProviderPanel({
                       ? "Carregando..."
                       : "Editar"}
                   </button>
+                  <button
+                    className="button danger"
+                    type="button"
+                    disabled={
+                      Boolean(pending) && deleteConfirmId !== connection.id
+                    }
+                    onClick={() => openDeleteConfirm(connection.id)}
+                  >
+                    <Trash2 size={15} aria-hidden="true" />
+                    Excluir
+                  </button>
+                </div>
+              ) : null}
+
+              {canManage && deleteConfirmId === connection.id ? (
+                <div
+                  className="inbound-connection-delete-confirm"
+                  data-testid={`whatsapp-connection-delete-confirm-${connection.id}`}
+                >
+                  <p className="action-note warn">
+                    Isso desativa a conexao e ela deixa de aparecer na lista.
+                    Para confirmar, digite o nome{" "}
+                    <strong>{connection.name}</strong> abaixo.
+                  </p>
+                  <label>
+                    <span className="field-label">Nome da conexao</span>
+                    <input
+                      autoComplete="off"
+                      value={deleteConfirmText}
+                      onChange={(event) =>
+                        setDeleteConfirmText(event.target.value)
+                      }
+                      aria-label={`Confirmar exclusao da conexao ${connection.name} digitando o nome`}
+                    />
+                  </label>
+                  <div className="inbound-connection-actions">
+                    <button
+                      className="button danger"
+                      type="button"
+                      disabled={
+                        pending === `delete-${connection.id}` ||
+                        deleteConfirmText.trim() !== connection.name
+                      }
+                      onClick={() => void confirmDelete(connection)}
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                      {pending === `delete-${connection.id}`
+                        ? "Excluindo..."
+                        : "Confirmar exclusao"}
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={Boolean(pending)}
+                      onClick={closeDeleteConfirm}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               ) : null}
 

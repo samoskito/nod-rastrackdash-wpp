@@ -8234,6 +8234,30 @@ html[data-presentation-mode="active"] .inbound-webhook-secret {
   padding: 16px;
 }
 
+.inbound-connection-delete-confirm {
+  display: grid;
+  gap: 8px;
+  width: 260px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.inbound-connection-delete-confirm label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.inbound-connection-delete-confirm .action-note {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.inbound-connection-delete-confirm input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .inbound-counter-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
