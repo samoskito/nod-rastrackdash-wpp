@@ -241,6 +241,7 @@ export class InboundWebhookConnectionsService {
         config.apiPublicUrl,
         connection.id,
         secret,
+        connection.provider,
       ),
     };
   }
@@ -300,6 +301,7 @@ export class InboundWebhookConnectionsService {
         config.apiPublicUrl,
         connection.id,
         secret,
+        connection.provider,
       ),
       rotatedAt: connection.updatedAt.toISOString(),
     };
@@ -490,11 +492,21 @@ export class InboundWebhookConnectionsService {
     apiPublicUrl: string,
     connectionId: string,
     secret: string,
+    provider?: string,
   ): string {
     const url = new URL(
       `/webhooks/inbound/${encodeURIComponent(connectionId)}`,
       apiPublicUrl,
     );
+
+    // Meta Cloud sends the verification token separately as hub.verify_token
+    // during its GET handshake. Keeping it out of the callback URL avoids
+    // exposing it in Meta's configured endpoint while other providers retain
+    // their existing query-token callback contract.
+    if (provider === "meta_cloud") {
+      return url.toString();
+    }
+
     url.searchParams.set("token", secret);
 
     return url.toString();

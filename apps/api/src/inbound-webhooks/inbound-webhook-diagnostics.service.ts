@@ -5,10 +5,31 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import type { InboundWebhookEventClassification } from "./providers/inbound-webhook-parser";
 
 type ObservationRouteStatus =
-  | "resolved"
-  | "unresolved"
-  | "not_applicable"
-  | "not_evaluated";
+  "resolved" | "unresolved" | "not_applicable" | "not_evaluated";
+
+type DiagnosticSource =
+  | "meta"
+  | "uazapi"
+  | "umbler"
+  | "gupshup"
+  | "asaas"
+  | "external_mysql"
+  | "internal"
+  | "waha"
+  | "zapi";
+
+function diagnosticSourceForProvider(
+  provider: InboundWebhookProviderDto,
+): DiagnosticSource {
+  // Meta Cloud WhatsApp inbound reuses the existing Meta diagnostic source in
+  // F1 to avoid an extra DiagnosticSource enum migration. Payload detail still
+  // lives in summaryPayload.provider.
+  if (provider === "meta_cloud") {
+    return "meta";
+  }
+
+  return provider;
+}
 
 export type InboundWebhookObservationDiagnosticInput = {
   workspaceId: string;
@@ -55,6 +76,7 @@ export class InboundWebhookDiagnosticsService {
     input: InboundWebhookObservationDiagnosticInput,
   ): Promise<void> {
     const idempotencyKey = `inbound-webhook-observation:${input.deliveryId}`;
+    const diagnosticSource = diagnosticSourceForProvider(input.provider);
     const summaryPayload = this.json({
       provider: input.provider,
       connectionId: input.connectionId,
@@ -81,7 +103,7 @@ export class InboundWebhookDiagnosticsService {
       if (existing) {
         if (
           existing.workspaceId !== input.workspaceId ||
-          existing.source !== input.provider
+          existing.source !== diagnosticSource
         ) {
           throw new Error("Inbound webhook diagnostic context mismatch");
         }
@@ -92,7 +114,7 @@ export class InboundWebhookDiagnosticsService {
       const webhook = await transaction.webhookLog.create({
         data: {
           workspaceId: input.workspaceId,
-          source: input.provider,
+          source: diagnosticSource,
           eventType: input.eventType,
           status: "received",
           idempotencyKey,
@@ -104,7 +126,7 @@ export class InboundWebhookDiagnosticsService {
       await transaction.diagnosticEvent.create({
         data: {
           workspaceId: input.workspaceId,
-          source: input.provider,
+          source: diagnosticSource,
           eventType: input.eventType,
           severity: "info",
           status: "received",
@@ -129,18 +151,18 @@ export class InboundWebhookDiagnosticsService {
         status: input.status,
         title: input.title,
         message: input.message,
-        errorCode: input.errorCode,
+        webhookLogId: null,
         summaryPayload: this.json({
           deliveryId: input.deliveryId ?? null,
           connectionId: input.connectionId ?? null,
-          operation: input.operation,
           errorCode: input.errorCode,
+          operation: input.operation,
         }),
       },
     });
   }
 
-  private json(value: object): Prisma.InputJsonValue {
-    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+  private json(value: unknown): Prisma.InputJsonValue {
+    return value as Prisma.InputJsonValue;
   }
 }

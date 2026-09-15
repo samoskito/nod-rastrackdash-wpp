@@ -18,6 +18,7 @@ export type InboundWebhookOneTimeSecret = {
   connectionId: string;
   provider: InboundWebhookProviderDto;
   webhookUrl: string;
+  verifyToken?: string;
 };
 
 export type InboundWebhookActionResult = {
@@ -38,6 +39,23 @@ const connectionStatusOperationalErrors = new Set([
   "Todo canal ativo precisa de uma rota Meta valida",
   "Workspace sem contrato com acesso ativo",
 ]);
+
+function oneTimeSecretForProvider(input: {
+  connectionId: string;
+  provider: InboundWebhookProviderDto;
+  webhookUrl: string;
+  secret: string;
+}): InboundWebhookOneTimeSecret {
+  const credential = {
+    connectionId: input.connectionId,
+    provider: input.provider,
+    webhookUrl: input.webhookUrl,
+  };
+
+  return input.provider === "meta_cloud"
+    ? { ...credential, verifyToken: input.secret }
+    : credential;
+}
 
 export async function createInboundWebhookConnectionAction(
   formData: FormData,
@@ -71,11 +89,12 @@ export async function createInboundWebhookConnectionAction(
       ok: true,
       message:
         "Conexao de webhook criada. Copie a URL agora; ela nao sera exibida novamente.",
-      oneTimeSecret: {
+      oneTimeSecret: oneTimeSecretForProvider({
         connectionId: result.data.connection.id,
         provider: result.data.connection.provider,
         webhookUrl: result.data.webhookUrl,
-      },
+        secret: result.data.secret,
+      }),
     };
   } catch {
     return failure("Nao foi possivel criar a conexao de webhook.");
@@ -111,11 +130,12 @@ export async function rotateInboundWebhookSecretAction(
       ok: true,
       message:
         "Segredo rotacionado. Copie a nova URL agora; ela nao sera exibida novamente.",
-      oneTimeSecret: {
+      oneTimeSecret: oneTimeSecretForProvider({
         connectionId: result.data.connectionId,
         provider: result.data.provider,
         webhookUrl: result.data.webhookUrl,
-      },
+        secret: result.data.secret,
+      }),
     };
   } catch {
     return failure("Nao foi possivel rotacionar o segredo desta conexao.");

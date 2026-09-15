@@ -1,5 +1,7 @@
 import {
   Controller,
+  Get,
+  Header,
   Headers,
   HttpCode,
   HttpException,
@@ -9,9 +11,11 @@ import {
   Post,
   Query,
   RawBody,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { InboundWebhookIngestionService } from "./inbound-webhook-ingestion.service";
 import { InboundConversionAutomationIngestionService } from "./inbound-conversion-automation-ingestion.service";
+import { InboundWebhookMetaCloudVerificationService } from "./inbound-webhook-meta-cloud-verification.service";
 
 @Controller("webhooks/inbound")
 export class InboundWebhookPublicController {
@@ -22,7 +26,28 @@ export class InboundWebhookPublicController {
     private readonly ingestion: InboundWebhookIngestionService,
     @Inject(InboundConversionAutomationIngestionService)
     private readonly conversionAutomationIngestion: InboundConversionAutomationIngestionService,
+    @Inject(InboundWebhookMetaCloudVerificationService)
+    private readonly metaCloudVerification: InboundWebhookMetaCloudVerificationService,
   ) {}
+
+  @Get(":connectionId")
+  @Header("Content-Type", "text/plain; charset=utf-8")
+  async verifyMetaCloudWebhook(
+    @Param("connectionId") connectionId: string,
+    @Query("hub.mode") mode: unknown,
+    @Query("hub.verify_token") verifyToken: unknown,
+    @Query("hub.challenge") challenge: unknown,
+  ): Promise<string> {
+    if (
+      mode !== "subscribe" ||
+      typeof challenge !== "string" ||
+      !(await this.metaCloudVerification.matches(connectionId, verifyToken))
+    ) {
+      throw new UnauthorizedException("Nao autorizado");
+    }
+
+    return challenge;
+  }
 
   @Post("conversions/:endpointId")
   @HttpCode(202)

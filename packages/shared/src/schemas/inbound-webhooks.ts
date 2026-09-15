@@ -2,7 +2,12 @@ import { z } from "zod";
 import { conversionEventNameSchema } from "./conversion-events";
 import { providerConversionDecisionCodeSchema } from "./provider-conversion-decisions";
 
-export const inboundWebhookProviders = ["umbler", "gupshup", "uazapi"] as const;
+export const inboundWebhookProviders = [
+  "umbler",
+  "gupshup",
+  "uazapi",
+  "meta_cloud",
+] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",
   "certified",

@@ -37,6 +37,12 @@ const capabilities = {
       parserReleaseStatus: "observation_only",
       creationEnabled: true,
     },
+    {
+      provider: "meta_cloud",
+      parserVersion: "v1",
+      parserReleaseStatus: "observation_only",
+      creationEnabled: true,
+    },
   ],
 } satisfies InboundWebhookCapabilitiesDto;
 
@@ -195,19 +201,27 @@ describe("inbound webhook panel", () => {
     );
   });
 
-  it("shows Umbler and Gupshup in an extensible provider selector", () => {
+  it("shows Umbler, Gupshup and Meta Cloud in an extensible provider selector", () => {
     const html = renderPanel({ connections: [] });
 
     expect(inboundWebhookProviderLabel("umbler")).toBe("Umbler Talk");
     expect(inboundWebhookProviderLabel("gupshup")).toBe("Gupshup");
+    expect(inboundWebhookProviderLabel("meta_cloud")).toBe(
+      "Meta WhatsApp (Cloud API)",
+    );
     expect(inboundWebhookProviderLabel("future-provider")).toBe(
       "future-provider",
     );
     expect(html).toContain('<select name="provider"');
     expect(html).toContain('<option value="umbler" selected="">Umbler Talk');
     expect(html).toContain('<option value="gupshup">Gupshup</option>');
-    expect(html).toContain("Umbler Talk e Gupshup (webhooks)");
-    expect(html).toContain("Conecte a Umbler Talk ou a Gupshup aqui");
+    expect(html).toContain(
+      '<option value="meta_cloud">Meta WhatsApp (Cloud API)</option>',
+    );
+    expect(html).toContain("Webhooks de entrada");
+    expect(html).toContain(
+      "parser de mensagens sera disponibilizado posteriormente",
+    );
   });
 
   it("lets a manager register a channel before any webhook arrives (P0.2)", () => {
@@ -243,6 +257,9 @@ describe("inbound webhook panel", () => {
     );
     expect(inboundPasteInstruction("gupshup")).toBe(
       "Cole esta URL no painel/webhook da Gupshup.",
+    );
+    expect(inboundPasteInstruction("meta_cloud")).toBe(
+      "Cole URL e token em App Meta → Configurar webhooks → Verificar e salvar.",
     );
   });
 

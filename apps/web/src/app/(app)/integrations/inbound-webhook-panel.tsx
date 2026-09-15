@@ -68,6 +68,7 @@ type PanelNotice = {
 export function inboundWebhookProviderLabel(provider: string): string {
   const labels: Record<string, string> = {
     gupshup: "Gupshup",
+    meta_cloud: "Meta WhatsApp (Cloud API)",
     umbler: "Umbler Talk",
   };
 
@@ -76,6 +77,8 @@ export function inboundWebhookProviderLabel(provider: string): string {
 
 const inboundPasteInstructions: Record<string, string> = {
   gupshup: "Cole esta URL no painel/webhook da Gupshup.",
+  meta_cloud:
+    "Cole URL e token em App Meta → Configurar webhooks → Verificar e salvar.",
   umbler: "Cole esta URL no painel/webhook da Umbler Talk.",
 };
 
@@ -193,15 +196,35 @@ export function InboundWebhookPanel({
     }
   }
 
+  async function copyVerifyToken() {
+    if (!oneTimeSecret) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(oneTimeSecret.verifyToken ?? "");
+      setNotice({
+        tone: "success",
+        message: "Token de verificacao copiado.",
+      });
+    } catch {
+      setNotice({
+        tone: "error",
+        message: "Nao foi possivel copiar automaticamente. Selecione o token.",
+      });
+    }
+  }
+
   return (
     <section className="surface-panel inbound-webhook-panel">
       <div className="inbound-webhook-heading">
         <div>
           <span className="eyebrow">Fontes de mensagens</span>
-          <h2>Umbler Talk e Gupshup (webhooks)</h2>
+          <h2>Webhooks de entrada</h2>
           <p className="muted">
-            Conecte a Umbler Talk ou a Gupshup aqui: gere a URL do webhook, cole
-            no painel do provedor e acompanhe as mensagens recebidas.
+            Configure Umbler Talk, Gupshup ou Meta WhatsApp (Cloud API). A
+            conexao Meta nesta etapa verifica apenas a assinatura do webhook; o
+            parser de mensagens sera disponibilizado posteriormente.
           </p>
         </div>
         {canManage && capabilities.enabled ? (
@@ -296,6 +319,24 @@ export function InboundWebhookPanel({
             )}
             {copied ? "Copiada" : "Copiar URL"}
           </button>
+          {oneTimeSecret.provider === "meta_cloud" ? (
+            <>
+              <input
+                readOnly
+                value={oneTimeSecret.verifyToken ?? ""}
+                aria-label="Token de verificacao Meta"
+                data-presentation-sensitive-field="true"
+              />
+              <button
+                className="button"
+                type="button"
+                onClick={copyVerifyToken}
+              >
+                <Copy size={16} aria-hidden="true" />
+                Copiar token
+              </button>
+            </>
+          ) : null}
           <button
             className="icon-button"
             type="button"

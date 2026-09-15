@@ -91,7 +91,9 @@ const opsAlertSettingsDefaults: Pick<
   debounceHours: 6,
 };
 
-function defaultOpsAlertSettings(workspaceId: string): WorkspaceOpsAlertSettingsDto {
+function defaultOpsAlertSettings(
+  workspaceId: string,
+): WorkspaceOpsAlertSettingsDto {
   return workspaceOpsAlertSettingsSchema.parse({
     id: null,
     workspaceId,
@@ -371,6 +373,7 @@ function inboundProviderLabel(provider: string): string {
     umbler: "Umbler Talk",
     gupshup: "Gupshup",
     uazapi: "UAZAPI",
+    meta_cloud: "Meta WhatsApp (Cloud API)",
   };
   return labels[provider] ?? provider;
 }
@@ -698,7 +701,8 @@ export default async function SettingsPage() {
     workspace?.permissions.canGrantMemberManager &&
     (!isPlatformSupport || isPlatformOwnerSupport),
   );
-  const opsAlertFormValues = opsAlertSettings.settings ?? opsAlertSettingsDefaults;
+  const opsAlertFormValues =
+    opsAlertSettings.settings ?? opsAlertSettingsDefaults;
   const opsAlertStatusLabel =
     opsAlertSettings.state === "forbidden"
       ? "Sem permissao"
@@ -1523,8 +1527,8 @@ export default async function SettingsPage() {
                     <strong>Nenhuma conexao WhatsApp disponivel</strong>
                     <span>
                       Crie a conexao em Integracoes (Umbler, Gupshup, etc.);
-                      depois os canais aparecem aqui para configurar os
-                      gatilhos no mesmo lugar.
+                      depois os canais aparecem aqui para configurar os gatilhos
+                      no mesmo lugar.
                     </span>
                     <Link className="button" href="/integrations">
                       Abrir Integracoes
@@ -1550,8 +1554,8 @@ export default async function SettingsPage() {
             <span className="eyebrow">Operacao</span>
             <h2 id="settings-ops-alerts-title">Alertas WhatsApp</h2>
             <p>
-              Aviso no celular se a instancia NOD desconectar ou o webhook
-              ficar sem entrega.
+              Aviso no celular se a instancia NOD desconectar ou o webhook ficar
+              sem entrega.
             </p>
           </div>
           <span
@@ -1614,9 +1618,7 @@ export default async function SettingsPage() {
                     </label>
                     <label>
                       <input
-                        defaultChecked={
-                          opsAlertFormValues.webhookSilenceAlerts
-                        }
+                        defaultChecked={opsAlertFormValues.webhookSilenceAlerts}
                         name="webhookSilenceAlerts"
                         type="checkbox"
                       />
@@ -1649,8 +1651,8 @@ export default async function SettingsPage() {
                 </details>
                 <div className="form-command-row">
                   <span>
-                    Silencio padrao 24h. Nao dispara se o telefone estiver
-                    vazio ou os alertas estiverem desligados.
+                    Silencio padrao 24h. Nao dispara se o telefone estiver vazio
+                    ou os alertas estiverem desligados.
                   </span>
                   <PendingSubmitButton
                     className="button primary"
@@ -1663,7 +1665,6 @@ export default async function SettingsPage() {
           )}
         </div>
       </section>
-
     </section>
   );
 }

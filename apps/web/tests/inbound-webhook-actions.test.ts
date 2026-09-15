@@ -84,6 +84,39 @@ describe("inbound webhook server actions", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });
 
+  it("returns Meta Cloud's raw verify token only in the one-time result", async () => {
+    const metaConnection = {
+      ...connection,
+      provider: "meta_cloud" as const,
+      displayName: "Meta Comercial",
+    };
+    const webhookUrl =
+      "https://api.wpptrack.test/webhooks/inbound/connection_meta_1";
+    serverApiFetch.mockResolvedValueOnce({
+      connection: { ...metaConnection, id: "connection_meta_1" },
+      secret: firstSecret,
+      webhookUrl,
+    });
+
+    const result = await createInboundWebhookConnectionAction(
+      form({ provider: "meta_cloud", displayName: "Meta Comercial" }),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      message:
+        "Conexao de webhook criada. Copie a URL agora; ela nao sera exibida novamente.",
+      oneTimeSecret: {
+        connectionId: "connection_meta_1",
+        provider: "meta_cloud",
+        webhookUrl,
+        verifyToken: firstSecret,
+      },
+    });
+    expect(webhookUrl).not.toContain("token=");
+    expect(result.message).not.toContain(firstSecret);
+  });
+
   it("rotates the secret without sending it in the request path or body", async () => {
     const webhookUrl = `https://api.wpptrack.test/webhooks/inbound/connection_1?token=${rotatedSecret}`;
     serverApiFetch.mockResolvedValueOnce({

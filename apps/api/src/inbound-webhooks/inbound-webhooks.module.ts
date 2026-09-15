@@ -16,6 +16,7 @@ import { InboundWebhookConnectionsService } from "./inbound-webhook-connections.
 import { InboundWebhookDiagnosticsService } from "./inbound-webhook-diagnostics.service";
 import { InboundWebhookIngestionService } from "./inbound-webhook-ingestion.service";
 import { InboundWebhookMaintenanceService } from "./inbound-webhook-maintenance.service";
+import { InboundWebhookMetaCloudVerificationService } from "./inbound-webhook-meta-cloud-verification.service";
 import { InboundWebhookMetaRouteReaderService } from "./inbound-webhook-meta-route-reader.service";
 import { InboundWebhookObservationService } from "./inbound-webhook-observation.service";
 import { InboundWebhookPayloadEncryptionService } from "./inbound-webhook-payload-encryption.service";
@@ -57,6 +58,7 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
     InboundWebhookDiagnosticsService,
     InboundWebhookIngestionService,
     InboundWebhookMaintenanceService,
+    InboundWebhookMetaCloudVerificationService,
     InboundWebhookMetaRouteReaderService,
     InboundWebhookObservationService,
     InboundWebhookPayloadEncryptionService,

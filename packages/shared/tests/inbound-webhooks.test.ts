@@ -298,6 +298,7 @@ describe("inbound webhook contracts", () => {
   it("accepts the registered observation providers", () => {
     expect(inboundWebhookProviderSchema.parse("umbler")).toBe("umbler");
     expect(inboundWebhookProviderSchema.parse("gupshup")).toBe("gupshup");
+    expect(inboundWebhookProviderSchema.parse("meta_cloud")).toBe("meta_cloud");
     expect(() => inboundWebhookProviderSchema.parse("data_crazy")).toThrow();
   });
 
