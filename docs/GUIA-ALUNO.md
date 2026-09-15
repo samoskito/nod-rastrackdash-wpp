@@ -103,6 +103,17 @@ Escolha ao menos um provedor e configure as variáveis correspondentes (tabela e
 
 Preencher `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` só disponibiliza aquele provedor (uma instância única do deployment todo) no backend — não cria nada por workspace. Só a conexão de webhook inbound (Umbler/Gupshup) é criada por workspace em `/integrations`. Confirme depois em `/integrations` que o provedor escolhido aparece `connected`.
 
+⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API, desligadas por padrão.** Isso vale para **qualquer origem** que use gatilhos (UAZAPI, NOD API, WAHA, Z-API, Umbler, Gupshup, etc.). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. Checklist do mentor, direto na env da API (Dokploy):
+
+1. `INBOUND_WEBHOOKS_ENABLED=true`
+2. `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gere com: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`
+3. `INBOUND_CONVERSION_RULES_ENABLED=true`
+4. `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (obrigatório em produção)
+5. Redeploy da API
+6. Confirme em `/settings#whatsapp-triggers` (com a conexão WhatsApp/origem já criada) que **Nova regra** aparece disponível
+
+Detalhe completo de cada variável em [`setup/environment.md`](setup/environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
+
 ## 11. Marca (whitelabel) — opcional
 
 Defina `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR` para personalizar sua agência (veja [`../docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)). O rodapé residual **`RastrackDash · powered by PalmUP`** é fixo e não pode ser removido nem escondido, com ou sem essas variáveis.

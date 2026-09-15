@@ -112,6 +112,13 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** reconecte diretamente no painel/instância do provedor; confirme host/porta acessíveis a partir do servidor da API (não só do seu navegador). Lembre que Uazapi BYO/WAHA/Z-API/NOD API são **uma única instância para todo o deployment**, configurada pela env — não existe uma instância "por workspace" nem uma tela para criar mais de uma; se o status aparece igual em todos os workspaces, isso é o comportamento esperado, não um bug (veja [`whatsapp-providers.md`](whatsapp-providers.md)).
 - **Verificação:** `/integrations` volta a mostrar `connected` para o provedor.
 
+## Recebo leads/webhooks mas não aparece Nova regra
+
+- **Diagnóstico:** confira na env da API se `INBOUND_WEBHOOKS_ENABLED`, `INBOUND_CONVERSION_RULES_ENABLED` e (em produção) `INBOUND_WEBHOOK_PRODUCTION_ENABLED` estão `true`, e se `INBOUND_WEBHOOK_ENCRYPTION_KEY` está preenchida — veja [`environment.md`](environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
+- **Causa provável:** o padrão de todas as `INBOUND_*` é desligado (`false`/vazio); receber leads/webhooks (UAZAPI, NOD, WAHA, Z-API, etc.) não depende dessas variáveis, mas **Gatilhos de conversão → Nova regra** depende — sem elas ligadas, a tela fica sem criar regra mesmo com leads chegando normalmente. Também pode ser um deploy antigo que ainda não aplicou uma env alterada.
+- **Correção:** defina `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gerada com node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (produção) direto no painel de env do serviço da API; redeploy a API (e o web também, se a versão publicada estiver desatualizada).
+- **Verificação:** com uma conexão WhatsApp/origem já existente, `/settings#whatsapp-triggers` mostra **Nova regra** disponível.
+
 ## Meta não conectado / relatórios falham com "meta not configured"
 
 - **Diagnóstico:** `/integrations`; `GET /onboarding/status` (campo `metaConnected`).

@@ -166,6 +166,14 @@ No serviço da API, abra o **painel/formulário de variáveis de ambiente do ser
 
 - **`EMAIL_PROVIDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM_*`** — **opcional**, nunca um requisito para criar workspace/cliente no passo 13. Preencha só se você já decidiu que o responsável de cada workspace deve receber um e-mail automático de ativação; senão, deixe em branco e use o link de ativação manual descrito no passo 13. Tabela completa e exemplo de valores sem segredo real em [`environment.md`](environment.md#e-mail-smtp-byo). `SMTP_USER`/`SMTP_PASSWORD` são segredo do seu provedor SMTP — preencha direto no painel do Dokploy, nunca em chat.
 
+### 6.5 Gatilhos de conversão — obrigatórias no caminho do aluno
+
+- **`INBOUND_WEBHOOKS_ENABLED=true`**, **`INBOUND_CONVERSION_RULES_ENABLED=true`** e **`INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`** — sem essas três, **Gatilhos de conversão → Nova regra** não aparece, mesmo com UAZAPI/NOD/WAHA/Z-API (ou outra origem) já recebendo leads. O padrão de todas as `INBOUND_*` é desligado. Isso vale para **qualquer provedor** que use gatilhos de conversão, não só Umbler/Gupshup.
+- **`INBOUND_WEBHOOK_ENCRYPTION_KEY`** — gere com `node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))"` e cole direto no painel do Dokploy. Formato completo, checklist e o motivo de cada variável em [`environment.md`](environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
+- Depois de preencher, faça **redeploy da API**.
+
+**Validação:** com uma conexão WhatsApp/origem já existente (passo 13), abra `/settings#whatsapp-triggers` no ambiente publicado e confirme que **Nova regra** aparece disponível.
+
 ### 6.6 Segredos gerados
 
 Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR_ENCRYPTION_KEY`, `META_TOKEN_ENCRYPTION_KEY`, e demais `replace-me-*`) — gere valores **novos** para produção, nunca reutilize os de desenvolvimento local. Use `openssl rand -hex 32` (macOS/Linux) ou o PowerShell com `RandomNumberGenerator` (Windows) — nunca `Get-Random`, que não é criptograficamente seguro. Comandos prontos em [`environment.md`](environment.md#gerar-segredos-com-segurança-jwt_-_encryption_key-tokens-de-webhook).
@@ -262,6 +270,7 @@ A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em c
 5. Só depois conecte o provedor WhatsApp escolhido.
 
 - **WhatsApp:** preencha na env da API as variáveis do provedor escolhido (`UAZAPI_*`, `WAHA_*`, `ZAPI_*` ou `NOD_API_BROKER_URL`) — tabela completa em [`environment.md`](environment.md). Redeploy da API após adicionar. ⚠️ Isso configura **uma única instância daquele provedor para todo o deployment** — não por workspace; não existe UI para criar mais de uma instância desses quatro provedores (a própria tela de Integrações avisa isso). O único modelo confirmadamente por workspace/multi-instância é a conexão de webhook inbound (Umbler/Gupshup), criada em `/integrations`. Veja o contrato completo, inclusive o que ainda não tem webhook inbound confirmado, em [`whatsapp-providers.md`](whatsapp-providers.md).
+  ⚠️ **Gatilhos de conversão exigem as envs `INBOUND_*` do passo [6.5](#65-gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno)** — sem `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`, **Nova regra** não aparece, mesmo com o provedor de WhatsApp já `connected` e recebendo leads.
 
 **Validação:** `/integrations` mostra Meta e o provedor de WhatsApp escolhido como **conectados**.
 

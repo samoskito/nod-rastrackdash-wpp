@@ -52,8 +52,55 @@ Convenção de colunas:
 | `NEXT_PUBLIC_API_URL` | Sim | URL pública da sua API | `.env` do web / env do projeto Vercel | Não (é exposta ao navegador de propósito) |
 | `API_PUBLIC_URL` | Sim | URL pública da sua API | `.env` da API / env do serviço | Não |
 | `API_PORT` | Sim (tem padrão `3333`) | Porta que você expõe para a API. **No Dokploy, defina `API_PORT=3000`** — o `Dockerfile` faz `EXPOSE 3000`, e essa variável precisa bater exatamente com a porta interna do container configurada no serviço (veja [`dokploy.md`](dokploy.md#6-variáveis-de-ambiente-da-api)); sem isso a API sobe na porta padrão `3333` e o Dokploy não a alcança | `.env` da API / env do serviço | Não |
-| `INBOUND_WEBHOOKS_ENABLED` e demais `INBOUND_*` | Não (tem padrão) | Flags de feature do produto | `.env` da API | Não |
+| `INBOUND_WEBHOOKS_ENABLED` e demais `INBOUND_*` | **Sim, para Gatilhos de conversão** (padrão é `false`/desligado) — veja a seção dedicada [Gatilhos de conversão](#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno) abaixo | Flags de feature do produto | `.env` da API | `INBOUND_WEBHOOK_ENCRYPTION_KEY` **sim**, as demais não |
 | `WPPTRACK_*_MS`, `WPPTRACK_EXTERNAL_SYNC_*`, `WPPTRACK_EXTERNAL_MYSQL_*` | Não (têm padrão) | Tuning de performance/timeout — mantenha o padrão salvo se tiver um motivo específico para ajustar | `.env` da API | Não |
+
+## Gatilhos de conversão — obrigatórias no caminho do aluno
+
+⚠️ **O padrão de todas as `INBOUND_*` é desligado (`false`/vazio).** Isso
+significa que, mesmo com UAZAPI, NOD API, WAHA, Z-API ou outro provedor já
+recebendo leads/webhooks, a tela **Gatilhos de conversão → Nova regra** não
+aparece — não é bug, é a feature desligada. Gatilhos de conversão valem para
+**qualquer origem** que use esse módulo (UAZAPI, NOD API, WAHA, Z-API, Umbler,
+Gupshup e demais integrações futuras). Se o aluno precisa criar regras de
+conversão, estas variáveis são **obrigatórias**, não opcionais:
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
+| `INBOUND_WEBHOOKS_ENABLED` | **Sim** — defina `true` | Fixo | `.env` da API / env do serviço | Não |
+| `INBOUND_WEBHOOK_ENCRYPTION_KEY` | **Sim** | Você gera (comando abaixo) — Base64 de 32 bytes, string de 44 caracteres terminando em `=` | `.env` da API / env do serviço | **Sim** |
+| `INBOUND_CONVERSION_RULES_ENABLED` | **Sim** — defina `true` | Fixo | `.env` da API / env do serviço | Não |
+| `INBOUND_WEBHOOK_PRODUCTION_ENABLED` | **Sim em produção** (Dokploy/deploy do aluno) | Fixo | `.env` da API / env do serviço | Não |
+| `INBOUND_CONVERSION_PRODUCTION_ENABLED` | Não — mantenha `false` a menos que você queira intencionalmente habilitar envio em produção | Fixo | `.env` da API | Não |
+| `INBOUND_WEBHOOK_REPLAY_ENABLED` | Não — mantenha `false` a menos que precise reprocessar webhooks | Fixo | `.env` da API | Não |
+
+Gere a chave de criptografia (Base64 de 32 bytes) com Node — mesmo comando em
+qualquer sistema operacional com Node instalado:
+
+```bash
+node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Alternativa com `openssl`, gerando já no formato Base64 esperado (não use
+`openssl rand -hex 32` aqui — esse gera hexadecimal, formato errado para esta
+variável):
+
+```bash
+openssl rand -base64 32
+```
+
+Cole o valor gerado **direto no painel de env do serviço** (Dokploy) ou no
+`.env` local — nunca em chat nem em arquivo commitado.
+
+**Checklist mínimo do aluno** para liberar Gatilhos de conversão:
+
+1. `INBOUND_WEBHOOKS_ENABLED=true`
+2. `INBOUND_WEBHOOK_ENCRYPTION_KEY=<chave gerada acima>`
+3. `INBOUND_CONVERSION_RULES_ENABLED=true`
+4. `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (obrigatório em produção/Dokploy)
+5. `API_PUBLIC_URL=https://<domínio da sua API>` (já obrigatória — ver seção Core acima)
+6. Redeploy da API
+7. Confirmar em `/settings#whatsapp-triggers` (depois de já existir uma conexão WhatsApp/origem) que **Nova regra** está disponível
 
 ## Banco de dados / autenticação
 
