@@ -74,6 +74,7 @@ export class InboundWebhookPublicController {
     @Query("token") token: unknown,
     @Headers("content-type") contentType: string | undefined,
     @Headers("x-attempt") providerAttempt: unknown,
+    @Headers("x-hub-signature-256") metaCloudSignature256: unknown,
     @RawBody() rawBody: Buffer | undefined,
   ) {
     const startedAt = Date.now();
@@ -84,6 +85,7 @@ export class InboundWebhookPublicController {
         token,
         contentType,
         providerAttempt,
+        metaCloudSignature256,
         rawBody,
       });
       const durationMs = Date.now() - startedAt;
