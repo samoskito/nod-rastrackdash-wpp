@@ -182,9 +182,11 @@ Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR
 
 - `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` — preenchidos de fato no passo 12. Você pode deixar `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY` em branco só até lá: sem licença ativa a API bloqueia **toda escrita** com `423` (inclusive criar workspace/cliente no passo 13).
 
-### 6.8 Provedores de WhatsApp (deixe para o passo 13)
+### 6.8 Provedores de WhatsApp (opcionais) e Meta
 
-- Provedores de WhatsApp que você for usar (`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL`) — preenchidos no passo 13. Antes de escolher, leia [`whatsapp-providers.md`](whatsapp-providers.md): preencher a env do provedor não cria sozinho uma conexão para nenhum workspace, e nem todo provedor tem webhook inbound confirmado hoje.
+- **`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL` são opcionais.** As conexões de WhatsApp de cada workspace são criadas na própria UI (`/integrations`), com as credenciais digitadas lá; essas variáveis só servem como **padrão do deployment** quando a conexão não traz aquele campo. Leia [`whatsapp-providers.md`](whatsapp-providers.md) antes de escolher — nem todo provedor tem receiver inbound pronto.
+- **`API_PUBLIC_URL` precisa estar correta** (passo 6.2) para o botão **Gerar receiver** funcionar: a URL do receiver é montada a partir dela.
+- **`META_APP_SECRET`** — o App Secret do app Meta. Só é opcional enquanto uma conexão **Meta WhatsApp (Cloud API)** estiver em observação; sem ele, ativar o envio automático faz a API **recusar** os POSTs da Meta. Se você pretende usar essa origem em produção, preencha agora.
 
 **Nunca** cole esses valores em um `.env` commitado no repositório nem em um chat de IA — preencha direto no formulário do Dokploy. Se um agente de IA estiver conduzindo esta etapa, ele deve **pedir para você digitar cada segredo diretamente no Dokploy**, nunca pedir para você colá-lo na conversa.
 
@@ -250,14 +252,16 @@ Preencha na env da API (passo 6), se ainda não preencheu:
 - `LICENSE_ACCOUNT_IDENTITY` — o e-mail **exato** da sua conta de compra (um valor diferente retorna `403` na ativação).
 - `LICENSE_SERVER_URL` — normalmente já vem preenchido a partir do `.env.example`; não altere sem orientação da PalmUP.
 
-Redeploy da API se você editou envs depois do passo 7. Depois do redeploy, ative a licença (a rota fica liberada mesmo com a instância bloqueada):
+Redeploy da API se você editou envs depois do passo 7. **A ativação acontece sozinha no boot** — a API faz uma tentativa antes de aceitar conexões e registra `license_auto_activation_succeeded` ou `license_auto_activation_failed` no log do serviço.
+
+Só se essa tentativa falhar, use o fallback manual (a rota fica liberada mesmo com a instância bloqueada):
 
 ```bash
 curl -s -X POST https://api.seudominio.com/license-client/activate \
   -H 'content-type: application/json' -d '{}'
 ```
 
-A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em chat.
+A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em chat. Não existe tela de administração de licenças: se a chave não for reconhecida, fale com o suporte da PalmUP informando o e-mail da compra.
 
 **Validação:** logado no web publicado, `/backoffice/license` mostra licença **utilizável**. Enquanto não estiver, o passo 13 (workspace/cliente) falha com `423` — isso é esperado, é o bloqueio de licença. Se der `403` ou "não configurada", veja [Licença 403](troubleshooting.md#licença-403não-configurada).
 
@@ -266,13 +270,17 @@ A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em c
 1. Confirme que `SETUP_PLATFORM_ADMIN_EMAIL`/`SETUP_PLATFORM_ADMIN_PASSWORD` foram preenchidas no passo 6.3 e que a API já foi redeployada depois disso (passo 7) — o bootstrap roda automaticamente nesse redeploy, antes da API aceitar conexões; não é uma etapa manual separada.
 2. Logue no web publicado com o e-mail/senha definidos em `SETUP_PLATFORM_ADMIN_EMAIL`/`SETUP_PLATFORM_ADMIN_PASSWORD` e valide que abre `/backoffice/clients`. Se cair em `/overview`, o bootstrap não rodou como esperado — consulte [`troubleshooting.md`](troubleshooting.md#login-abre-overview-em-vez-de-backofficeclients) antes de tentar de novo. Confirmado o acesso, **remova `SETUP_PLATFORM_ADMIN_PASSWORD`** do painel (ou limpe o valor) e faça redeploy — sem a senha preenchida, o bootstrap simplesmente para de rodar a cada boot; é seguro fazer isso.
 3. Esse login ainda não tem workspace nenhum — o bootstrap cria só a conta de plataforma. Crie o primeiro workspace/cliente em `/backoffice/clients`. SMTP (passo 6.4) é **opcional** e não bloqueia esse passo: com SMTP configurado, o responsável recebe um e-mail de ativação; sem SMTP (ou se o envio falhar), a resposta traz `deliveryStatus: manual_link_required` e você gera o link de ativação manual pelo botão correspondente na própria lista de workspaces, enviando-o você mesmo ao responsável.
-4. Para Meta, mantenha `META_CONNECTION_MODES=manual`, siga [`meta-manual.md`](meta-manual.md) e conecte o App ID/token de usuário do sistema (ou token permanente) no workspace criado. Não há OAuth/social login no MVP.
-5. Só depois conecte o provedor WhatsApp escolhido.
+4. Para **Meta Ads**, mantenha `META_CONNECTION_MODES=manual`, siga [`meta-manual.md`](meta-manual.md) e conecte o App ID/token de usuário do sistema (ou token permanente) no workspace criado. Não há OAuth/social login no MVP. Isso conecta **anúncios/Pixel**, não mensagens.
+5. Só depois conecte o WhatsApp.
 
-- **WhatsApp:** preencha na env da API as variáveis do provedor escolhido (`UAZAPI_*`, `WAHA_*`, `ZAPI_*` ou `NOD_API_BROKER_URL`) — tabela completa em [`environment.md`](environment.md). Redeploy da API após adicionar. ⚠️ Isso configura **uma única instância daquele provedor para todo o deployment** — não por workspace; não existe UI para criar mais de uma instância desses quatro provedores (a própria tela de Integrações avisa isso). O único modelo confirmadamente por workspace/multi-instância é a conexão de webhook inbound (Umbler/Gupshup), criada em `/integrations`. Veja o contrato completo, inclusive o que ainda não tem webhook inbound confirmado, em [`whatsapp-providers.md`](whatsapp-providers.md).
-  ⚠️ **Gatilhos de conversão exigem as envs `INBOUND_*` do passo [6.5](#65-gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno)** — sem `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`, **Nova regra** não aparece, mesmo com o provedor de WhatsApp já `connected` e recebendo leads.
+- **WhatsApp — tudo pela UI, em `/integrations`.** Não há env obrigatória aqui:
+  - **Uazapi (BYO), WAHA, Z-API, NOD API** → painel **"Provedores e receivers"**. Crie a conexão com as credenciais do cliente, clique em **Testar**, depois em **Gerar receiver** e cole a URL completa (com `?token=`) no painel do provedor. Receiver inbound pronto para Uazapi, WAHA e Z-API; **NOD API ainda não tem** (responde `501`).
+  - **Umbler Talk, Gupshup, Meta WhatsApp (Cloud API)** → painel **"Webhooks de entrada"**. Gere o webhook, cole no painel da plataforma (no Meta Cloud são **dois** valores: URL de callback e Verify token) e **cadastre o canal/número na hora** — não espere o primeiro lead.
+  - As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` do passo 6.8 continuam valendo apenas como padrão do deployment. Contrato completo e matriz do que já recebe mensagem em [`whatsapp-providers.md`](whatsapp-providers.md).
+  ⚠️ **Meta WhatsApp (Cloud API) serve para atribuição de CTWA, não para gatilho de atendente** — esse webhook não entrega as mensagens que o seu time envia. Para gatilho por palavra-chave/tag do atendente, use Uazapi (BYO) ou Umbler Talk.
+  ⚠️ **Gatilhos de conversão exigem as envs `INBOUND_*` do passo [6.5](#65-gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno)** — sem `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`, **Nova regra** não aparece, mesmo com o provedor já `connected` e recebendo leads.
 
-**Validação:** `/integrations` mostra Meta e o provedor de WhatsApp escolhido como **conectados**.
+**Validação:** `/integrations` mostra Meta Ads conectado e ao menos uma conexão de WhatsApp funcionando; se você usa gatilhos, `/settings#whatsapp-triggers` lista a origem e abre **Nova regra**.
 
 ## 14. Marca opcional e verificação pós-deploy
 
@@ -283,7 +291,7 @@ Depois das integrações, se desejar, configure `BRAND_*` conforme [`../CUSTOMIZ
 3. Logue no web publicado, sem erro de CORS no console.
 4. `/backoffice` → checklist de onboarding completo.
 5. `/backoffice/license` → licença "utilizável".
-6. `/integrations` → Meta e ao menos um provedor de WhatsApp conectados.
+6. `/integrations` → Meta Ads conectado e ao menos uma conexão de WhatsApp (provedor com receiver **ou** webhook de entrada) funcionando.
 
 Se qualquer item falhar, vá para [`troubleshooting.md`](troubleshooting.md) antes de tentar de novo às cegas.
 

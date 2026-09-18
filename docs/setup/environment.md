@@ -178,6 +178,11 @@ usuário/cliente comum com seu próprio workspace — use
 explicitamente se recusa a criar ou alterar qualquer conta que já tenha um
 papel de plataforma — ele não é (e não deve ser usado como) caminho para o
 primeiro `platform_owner`.
+
+### Login com Google (opcional)
+
+| Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
+|---|---|---|---|---|
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_OAUTH_STATE_SECRET` | Só se `AUTH_GOOGLE_ENABLED=true` | Console do Google Cloud (OAuth) | `.env` da API / env do serviço | `GOOGLE_CLIENT_SECRET` e `GOOGLE_OAUTH_STATE_SECRET` **sim**; `GOOGLE_CLIENT_ID`/`GOOGLE_REDIRECT_URI` não |
 
 ## Licença (PalmUP)
@@ -191,11 +196,25 @@ primeiro `platform_owner`.
 O template é **fail-closed**: com `LICENSE_SERVER_URL` preenchido (o padrão do
 `.env.example`), enquanto não houver uma ativação válida a leitura continua
 liberada, mas toda operação de escrita responde `423` — inclusive criar
-workspace/cliente. Preencha `LICENSE_KEY`/`LICENSE_ACCOUNT_IDENTITY`, reinicie a
-API e ative a licença (`POST /license-client/activate`) antes de criar seus
-clientes. O cliente de licença só fica inerte (sem travar nada) quando
+workspace/cliente. O cliente de licença só fica inerte (sem travar nada) quando
 `LICENSE_SERVER_URL` está **vazio** — cenário de desenvolvimento local do
 template, não de uso do produto.
+
+**A ativação é automática no boot.** Com `LICENSE_KEY` e
+`LICENSE_ACCOUNT_IDENTITY` preenchidas, a API faz **uma** tentativa de
+ativação antes de começar a aceitar conexões
+(`LicenseAutoActivationService`) e registra `license_auto_activation_succeeded`
+ou `license_auto_activation_failed` no log. Não há retry dentro do mesmo
+processo — um novo boot tenta de novo (a ativação remota é idempotente
+para a mesma chave/identidade/fingerprint). `POST /license-client/activate`
+continua existindo como **fallback manual**, liberado mesmo com a
+instância bloqueada.
+
+**Não existe tela de administração de licenças neste produto.** O aluno
+tem apenas `/backoffice/license`, que mostra o estado da própria
+instância. Recuperar ou reemitir uma chave é operação interna da PalmUP:
+oriente o aluno a procurar o suporte com o **e-mail da compra**, nunca a
+"procurar a licença em alguma tela de admin" — esse caminho não existe.
 
 ## E-mail (SMTP BYO)
 
@@ -219,20 +238,37 @@ EMAIL_FROM_NAME=RastrackDash
 EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 ```
 
-## Meta Ads
+## Meta (Ads e WhatsApp Cloud API)
 
 | Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
 |---|---|---|---|---|
 | `META_APP_ID` | Só se for usar integração Meta via App próprio | Meta for Developers | `.env` da API | Não |
-| `META_APP_SECRET` | Idem | Meta for Developers | `.env` local / env do serviço | **Sim** |
+| `META_APP_SECRET` | **Sim para produção do Meta WhatsApp (Cloud API)** — veja abaixo | Meta for Developers → App Secret do **mesmo app** do webhook | `.env` local / env do serviço | **Sim** |
 | `META_CONNECTION_MODES` | Sim para o MVP do aluno | Defina exatamente `manual` | `.env` da API / env do serviço | Não |
 | `META_GRAPH_API_VERSION` | Não (tem padrão) | Documentação Graph API | `.env` da API | Não |
 | `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
-| `META_WEBHOOK_VERIFY_TOKEN` | Só se for usar webhooks Meta | Você define | `.env` local / env do serviço | **Sim** |
+| `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`) | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
 
 Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há login social Facebook nem OAuth como caminho alternativo: o token do usuário do sistema é informado por workspace na UI de **Integrações**, nunca em variável pública — veja [`meta-manual.md`](meta-manual.md).
+
+### `META_APP_SECRET` e o webhook do Meta WhatsApp (Cloud API)
+
+O webhook de mensagens do Meta WhatsApp (Cloud API) **não** usa
+`META_WEBHOOK_VERIFY_TOKEN`: o Verify token é gerado pelo produto, por
+conexão, e mostrado uma única vez ao criar a conexão em `/integrations`.
+`META_APP_SECRET` serve para validar o header `x-hub-signature-256` de
+cada POST:
+
+| `META_APP_SECRET` | Conexão em **observação** | Conexão em **produção** |
+|---|---|---|
+| Preenchido | Aceita só com assinatura válida | Aceita só com assinatura válida |
+| Vazio | Aceita e registra o aviso `meta_cloud_signature_unverified` | **Recusa com `404`** |
+
+Ou seja: opcional para homologar, **obrigatório antes de ativar o envio
+automático** numa conexão `meta_cloud`. É o App Secret do app Meta, não o
+token permanente do Graph de [`meta-manual.md`](meta-manual.md).
 
 ## URLs, cookie e primeiro administrador
 
@@ -258,42 +294,52 @@ Não use `https://`, barra final nem o hostname completo da API em `AUTH_COOKIE_
 
 ## Provedores de WhatsApp
 
-Preencher `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` disponibiliza
-**uma única instância daquele provedor para o deployment inteiro** — não
-por workspace, e não existe UI para criar mais de uma (a própria tela de
-Integrações avisa isso ao aluno). O único modelo genuinamente por
-workspace/multi-instância neste template é a conexão de webhook inbound
-(Umbler/Gupshup), criável em `/integrations`. O contrato completo de cada
-provedor — inclusive quais têm webhook inbound confirmado hoje e quais
-ainda são "a confirmar" — está em
+⚠️ **Estas variáveis deixaram de ser o caminho principal.** As conexões de
+WhatsApp são criadas **por workspace** na própria UI (`/integrations` →
+painel "Provedores e receivers"), com as credenciais digitadas ali e
+guardadas criptografadas. As envs abaixo continuam sendo lidas como
+**padrão do deployment**: o adapter usa a credencial salva na conexão e só
+cai na env quando aquele campo não foi preenchido na conexão. Elas também
+alimentam o card de status global "Instância Uazapi (BYO)" no rodapé de
+`/integrations`.
+
+Umbler Talk, Gupshup e Meta WhatsApp (Cloud API) **não têm variável de
+ambiente** — são conexões de webhook de entrada criadas em
+`/integrations`. O contrato completo, a matriz do que já recebe mensagem
+e o que ainda não, está em
 [`whatsapp-providers.md`](whatsapp-providers.md) — leia antes de configurar.
 
 | Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
 |---|---|---|---|---|
-| `UAZAPI_BASE_URL`, `UAZAPI_TOKEN` | Só se usar `uazapi_byo` | Sua própria instância Uazapi | `.env` local / env do serviço | `UAZAPI_TOKEN` **sim** |
-| `UAZAPI_WEBHOOK_AUTH_TOKEN` | Não — só se você optar pelo endpoint global legado `POST /webhooks/uazapi` | Você define | `.env` local / env do serviço | **Sim** |
-| `WAHA_BASE_URL`, `WAHA_API_KEY` | Só se usar `waha` | Sua própria instância [WAHA](https://github.com/devlikeape/waha) self-hosted | `.env` local / env do serviço | `WAHA_API_KEY` **sim** |
+| `UAZAPI_BASE_URL`, `UAZAPI_TOKEN` | Não — padrão do deployment para `uazapi_byo` | Sua própria instância Uazapi | `.env` local / env do serviço | `UAZAPI_TOKEN` **sim** |
+| `UAZAPI_WEBHOOK_AUTH_TOKEN` | Não — só para o endpoint global legado `POST /webhooks/uazapi` | Você define | `.env` local / env do serviço | **Sim** |
+| `WAHA_BASE_URL`, `WAHA_API_KEY` | Não — padrão do deployment para `waha` | Sua própria instância [WAHA](https://github.com/devlikeape/waha) self-hosted | `.env` local / env do serviço | `WAHA_API_KEY` **sim** |
 | `WAHA_SESSION` | Não (padrão `default`) | Nome da sessão na sua instância WAHA | `.env` da API | Não |
-| `ZAPI_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN` | Só se usar `zapi` | Painel [Z-API](https://www.z-api.io/) | `.env` local / env do serviço | `ZAPI_TOKEN` **sim** |
+| `ZAPI_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN` | Não — padrão do deployment para `zapi` | Painel [Z-API](https://www.z-api.io/) | `.env` local / env do serviço | `ZAPI_TOKEN` **sim** |
+| `API_PUBLIC_URL` | **Sim, para gerar receiver** | URL pública da sua API (já obrigatória na seção Core) | `.env` da API / env do serviço | Não |
 | `DISCONNECT_ALERTS_ENABLED`, `DISCONNECT_ALERT_STREAK`, `DISCONNECT_ALERT_INTERVAL_MS` | Não (opcional) | Decisão sua | `.env` da API | Não |
 | `OPS_ALERT_WEBHOOK_URL` | Só se `DISCONNECT_ALERTS_ENABLED=true` | Webhook do seu Slack/Discord/etc. | `.env` local / env do serviço | **Sim** (trate a URL como sensível — permite postar no seu canal) |
 
+O receiver de cada conexão é gerado na UI (botão **Gerar receiver**) na
+forma `{API_PUBLIC_URL}/webhooks/whatsapp/{ID_DA_CONEXAO}?token=...`. Sem
+`API_PUBLIC_URL` válida a geração falha com erro explícito.
+
 ⚠️ **`UAZAPI_WEBHOOK_AUTH_TOKEN` é o segredo do endpoint global legado**
-(`POST /webhooks/uazapi`, um único valor para toda a instância, não por
-workspace). O endpoint continua existindo no código, mas tanto ele quanto
-a rota por instância (`POST /webhooks/uazapi/instances/:instanceId`)
-dependem de um registro `WhatsappInstance` já existente — e este template
-**não tem, hoje, nenhum caminho confirmado (UI ou API) que crie esse
-registro**. Preencher este token sozinho não resolve isso. Prefira a
-conexão inbound genérica (Umbler/Gupshup), que é self-service e tem
-segredo próprio rotacionável. Detalhes, o aviso completo e a matriz de
-webhook em [`whatsapp-providers.md`](whatsapp-providers.md).
+(`POST /webhooks/uazapi`, um único valor para toda a instância). Esse
+endpoint e a rota `POST /webhooks/uazapi/instances/:instanceId` só
+enxergam registros com `provider = "uazapi"` (valor legado) — o painel
+atual grava `uazapi_byo`, então **as conexões criadas pela UI não passam
+por essas rotas**. Não preencha este token esperando que ele ligue uma
+conexão nova: use o receiver por conexão. Matriz completa em
+[`whatsapp-providers.md`](whatsapp-providers.md#matriz-de-ingestão-inbound-o-que-realmente-chega-hoje).
 
 Nunca defina `UAZAPI_ADMIN_TOKEN` — essa variável não existe neste template e não deve ser reintroduzida (token de frota interno da PalmUP).
 
 Não existem hoje variáveis de ambiente para Data Crazy ou Zap Responder —
 esses dois provedores não têm adapter, parser nem contrato implementado
-neste código (veja [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy-e-zap-responder)); não invente valores para eles.
+neste código (veja [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy-e-zap-responder)); não invente valores para eles. Para conectar
+a Meta "direto", como esses serviços fazem, o caminho pronto é a conexão
+**Meta WhatsApp (Cloud API)** em `/integrations`, sem env alguma.
 
 ## NOD API broker
 
@@ -301,7 +347,7 @@ neste código (veja [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy-e
 |---|---|---|---|---|
 | `NOD_API_BROKER_URL` | Só se usar o provedor `nod_api` (add-on licenciado) | Fornecido pela PalmUP (já vem preenchido no `.env.example`) | `.env` / env do serviço | Não |
 
-O provedor `nod_api` autentica usando `LICENSE_KEY` + fingerprint da instância — não existe token administrativo separado para configurar aqui.
+O provedor `nod_api` autentica usando `LICENSE_KEY` + fingerprint da instância — não existe token administrativo separado para configurar aqui. O status/health do `nod_api` funciona, mas o **receiver inbound ainda não existe** (a rota responde `501`).
 
 ## Branding (whitelabel)
 
@@ -350,22 +396,31 @@ LICENSE_SERVER_URL=[já vem preenchido no .env.example — não altere sem orien
 LICENSE_KEY=[PREENCHER NO DOKPLOY]
 LICENSE_ACCOUNT_IDENTITY=[e-mail exato da sua conta de compra]
 
-# ---- WhatsApp — preencha só o(s) provedor(es) que for usar ----
-UAZAPI_BASE_URL=[PREENCHER]
-UAZAPI_TOKEN=[PREENCHER NO DOKPLOY]
-UAZAPI_WEBHOOK_AUTH_TOKEN=[GERAR]
-WAHA_BASE_URL=[PREENCHER]
-WAHA_API_KEY=[PREENCHER NO DOKPLOY]
-ZAPI_BASE_URL=[PREENCHER]
-ZAPI_INSTANCE_ID=[PREENCHER]
-ZAPI_TOKEN=[PREENCHER NO DOKPLOY]
+# ---- WhatsApp — OPCIONAL: apenas o padrão do deployment. As conexões de
+#      cada workspace são criadas em /integrations, com credenciais na UI ----
+UAZAPI_BASE_URL=[OPCIONAL]
+UAZAPI_TOKEN=[OPCIONAL, PREENCHER NO DOKPLOY]
+WAHA_BASE_URL=[OPCIONAL]
+WAHA_API_KEY=[OPCIONAL, PREENCHER NO DOKPLOY]
+ZAPI_BASE_URL=[OPCIONAL]
+ZAPI_INSTANCE_ID=[OPCIONAL]
+ZAPI_TOKEN=[OPCIONAL, PREENCHER NO DOKPLOY]
 NOD_API_BROKER_URL=[já vem preenchido no .env.example — só se tiver o add-on licenciado]
 
-# ---- Meta Ads — só se for usar App próprio ----
-META_APP_ID=[PREENCHER]
-META_APP_SECRET=[PREENCHER NO DOKPLOY]
-META_WEBHOOK_VERIFY_TOKEN=[GERAR]
+# ---- Gatilhos de conversão (sem estas quatro, "Nova regra" não aparece) ----
+INBOUND_WEBHOOKS_ENABLED=true
+INBOUND_WEBHOOK_ENCRYPTION_KEY=[GERAR — Base64 de 32 bytes]
+INBOUND_CONVERSION_RULES_ENABLED=true
+INBOUND_WEBHOOK_PRODUCTION_ENABLED=true
+
+# ---- Meta ----
 META_CONNECTION_MODES=manual
+META_APP_ID=[PREENCHER — só se usar App próprio]
+# App Secret do app Meta. Obrigatório antes de ativar o envio automático
+# em uma conexão Meta WhatsApp (Cloud API).
+META_APP_SECRET=[PREENCHER NO DOKPLOY]
+# Só para o webhook de Meta Ads (/webhooks/meta).
+META_WEBHOOK_VERIFY_TOKEN=[GERAR]
 
 # ---- Opcional ----
 BRAND_NAME=[opcional]
