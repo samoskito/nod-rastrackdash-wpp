@@ -291,62 +291,13 @@ export function InboundWebhookPanel({
       ) : null}
 
       {oneTimeSecret ? (
-        <div
-          className="inbound-webhook-secret"
-          data-presentation-sensitive-action="true"
-        >
-          <div>
-            <span className="micro-label">URL exibida uma unica vez</span>
-            <strong>
-              Cadastre este webhook na{" "}
-              {inboundWebhookProviderLabel(oneTimeSecret.provider)} agora
-            </strong>
-            <p className="muted">
-              {inboundPasteInstruction(oneTimeSecret.provider)}
-            </p>
-          </div>
-          <input
-            readOnly
-            value={oneTimeSecret.webhookUrl}
-            aria-label={`URL privada do webhook ${inboundWebhookProviderLabel(oneTimeSecret.provider)}`}
-            data-presentation-sensitive-field="true"
-          />
-          <button className="button" type="button" onClick={copyWebhookUrl}>
-            {copied ? (
-              <Check size={16} aria-hidden="true" />
-            ) : (
-              <Copy size={16} aria-hidden="true" />
-            )}
-            {copied ? "Copiada" : "Copiar URL"}
-          </button>
-          {oneTimeSecret.provider === "meta_cloud" ? (
-            <>
-              <input
-                readOnly
-                value={oneTimeSecret.verifyToken ?? ""}
-                aria-label="Token de verificacao Meta"
-                data-presentation-sensitive-field="true"
-              />
-              <button
-                className="button"
-                type="button"
-                onClick={copyVerifyToken}
-              >
-                <Copy size={16} aria-hidden="true" />
-                Copiar token
-              </button>
-            </>
-          ) : null}
-          <button
-            className="icon-button"
-            type="button"
-            title="Ocultar URL"
-            aria-label="Ocultar URL"
-            onClick={() => setOneTimeSecret(null)}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
+        <InboundWebhookOneTimeSecretPanel
+          secret={oneTimeSecret}
+          urlCopied={copied}
+          onCopyUrl={copyWebhookUrl}
+          onCopyVerifyToken={copyVerifyToken}
+          onDismiss={() => setOneTimeSecret(null)}
+        />
       ) : null}
 
       {notice ? (
@@ -748,6 +699,95 @@ export function InboundWebhookPanel({
         )}
       </div>
     </section>
+  );
+}
+
+export function InboundWebhookOneTimeSecretPanel({
+  secret,
+  urlCopied,
+  onCopyUrl,
+  onCopyVerifyToken,
+  onDismiss,
+}: {
+  secret: InboundWebhookOneTimeSecret;
+  urlCopied: boolean;
+  onCopyUrl: () => void;
+  onCopyVerifyToken: () => void;
+  onDismiss: () => void;
+}) {
+  const providerLabel = inboundWebhookProviderLabel(secret.provider);
+  const showVerifyToken = secret.provider === "meta_cloud";
+
+  return (
+    <div
+      className="inbound-webhook-secret"
+      data-presentation-sensitive-action="true"
+    >
+      <div className="inbound-webhook-secret-heading">
+        <div>
+          <span className="micro-label">
+            {showVerifyToken
+              ? "URL e token exibidos uma unica vez"
+              : "URL exibida uma unica vez"}
+          </span>
+          <strong>Cadastre este webhook na {providerLabel} agora</strong>
+          <p className="muted">{inboundPasteInstruction(secret.provider)}</p>
+        </div>
+        <button
+          className="icon-button"
+          type="button"
+          title={showVerifyToken ? "Ocultar URL e token" : "Ocultar URL"}
+          aria-label={showVerifyToken ? "Ocultar URL e token" : "Ocultar URL"}
+          onClick={onDismiss}
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="inbound-webhook-secret-field">
+        <span className="micro-label">URL de callback</span>
+        <div className="inbound-webhook-secret-field-row">
+          <input
+            readOnly
+            value={secret.webhookUrl}
+            aria-label={`URL privada do webhook ${providerLabel}`}
+            data-presentation-sensitive-field="true"
+          />
+          <button className="button" type="button" onClick={onCopyUrl}>
+            {urlCopied ? (
+              <Check size={16} aria-hidden="true" />
+            ) : (
+              <Copy size={16} aria-hidden="true" />
+            )}
+            {urlCopied ? "Copiada" : "Copiar URL"}
+          </button>
+        </div>
+      </div>
+
+      {showVerifyToken ? (
+        <div className="inbound-webhook-secret-field">
+          <span className="micro-label">
+            Verify token (token de verificacao)
+          </span>
+          <div className="inbound-webhook-secret-field-row">
+            <input
+              readOnly
+              value={secret.verifyToken ?? ""}
+              aria-label="Token de verificacao Meta"
+              data-presentation-sensitive-field="true"
+            />
+            <button
+              className="button"
+              type="button"
+              onClick={onCopyVerifyToken}
+            >
+              <Copy size={16} aria-hidden="true" />
+              Copiar token
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
