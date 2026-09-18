@@ -5,6 +5,7 @@ describe("InboundWebhookParserRegistry", () => {
   it.each([
     ["umbler", "v1"],
     ["gupshup", "v1"],
+    ["meta_cloud", "v1"],
     ["waha", "v1"],
     ["zapi", "v1"],
   ])("resolves the default %s %s parser", (provider, parserVersion) => {

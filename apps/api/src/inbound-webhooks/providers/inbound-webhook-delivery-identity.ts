@@ -4,7 +4,8 @@ export type InboundWebhookDeliveryIdentity = {
   ingressKey: string;
   externalDeliveryId: string | null;
   providerEventType: string | null;
-  identitySource: "provider_event_id" | "raw_body_sha256";
+  identitySource:
+    "provider_event_id" | "provider_message_id" | "raw_body_sha256";
 };
 
 export function rawBodyDeliveryIdentity(

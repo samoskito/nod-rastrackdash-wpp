@@ -1,4 +1,9 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import {
   BadRequestException,
   Inject,
@@ -23,6 +28,7 @@ import {
   type InboundWebhookDeliveryIdentity,
 } from "./providers/inbound-webhook-delivery-identity";
 import { extractUmblerV1DeliveryIdentity } from "./providers/umbler/umbler-v1-delivery-identity";
+import { extractMetaCloudV1DeliveryIdentity } from "./providers/meta-cloud/meta-cloud-v1-delivery-identity";
 import { MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES } from "./inbound-webhook-limits";
 
 export { MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES } from "./inbound-webhook-limits";
@@ -49,6 +55,7 @@ export type InboundWebhookIngestionInput = {
   token: unknown;
   contentType: string | undefined;
   providerAttempt: unknown;
+  metaCloudSignature256?: unknown;
   rawBody: Buffer | undefined;
 };
 
@@ -79,6 +86,35 @@ export function parseInboundWebhookProviderAttempt(
   return Number(normalized);
 }
 
+export function matchesMetaCloudSignature256(
+  appSecret: string | undefined,
+  rawBody: Buffer,
+  signature: unknown,
+): boolean {
+  if (
+    !appSecret ||
+    appSecret.trim().length === 0 ||
+    typeof signature !== "string"
+  ) {
+    return false;
+  }
+
+  const signatureHex = signature.startsWith("sha256=")
+    ? signature.slice("sha256=".length)
+    : null;
+
+  if (!signatureHex || !/^[a-f0-9]{64}$/i.test(signatureHex)) {
+    return false;
+  }
+
+  const expected = createHmac("sha256", appSecret).update(rawBody).digest();
+  const received = Buffer.from(signatureHex, "hex");
+
+  return (
+    received.length === expected.length && timingSafeEqual(received, expected)
+  );
+}
+
 @Injectable()
 export class InboundWebhookIngestionService {
   private readonly logger = new Logger(InboundWebhookIngestionService.name);
@@ -96,11 +132,13 @@ export class InboundWebhookIngestionService {
     input: InboundWebhookIngestionInput,
   ): Promise<InboundWebhookIngestionResult> {
     this.assertFeatureEnabled();
+    const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
     const connection = await this.authenticateConnection(
       input.connectionId,
       input.token,
+      rawBody,
+      input.metaCloudSignature256,
     );
-    const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
     const providerAttempt = parseInboundWebhookProviderAttempt(
       input.providerAttempt,
     );
@@ -193,6 +231,8 @@ export class InboundWebhookIngestionService {
   private async authenticateConnection(
     connectionId: string,
     token: unknown,
+    rawBody: Buffer,
+    metaCloudSignature256: unknown,
   ): Promise<PublicInboundWebhookConnection> {
     let connection: PublicInboundWebhookConnection | null;
 
@@ -210,18 +250,35 @@ export class InboundWebhookIngestionService {
       throw new ServiceUnavailableException(publicPersistenceFailureMessage);
     }
 
-    const tokenMatches = matchesInboundWebhookSecret(
-      connection?.secretHash,
-      token,
-    );
+    const isMetaCloud = connection?.provider === "meta_cloud";
+    const metaAppSecret = this.env.META_APP_SECRET;
+    const authenticated = isMetaCloud
+      ? metaAppSecret && metaAppSecret.trim().length > 0
+        ? matchesMetaCloudSignature256(
+            metaAppSecret,
+            rawBody,
+            metaCloudSignature256,
+          )
+        : connection?.status === "observation"
+      : matchesInboundWebhookSecret(connection?.secretHash, token);
 
     if (
       !connection ||
-      !tokenMatches ||
+      !authenticated ||
       connection.removedAt !== null ||
       !["observation", "production"].includes(connection.status)
     ) {
       throw new NotFoundException(publicConnectionNotFoundMessage);
+    }
+
+    if (isMetaCloud && (!metaAppSecret || metaAppSecret.trim().length === 0)) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "inbound_webhook.meta_cloud_signature_unverified",
+          connectionId: connection.id,
+          mode: "observation_fallback",
+        }),
+      );
     }
 
     return connection;
@@ -265,6 +322,13 @@ export class InboundWebhookIngestionService {
       connection.parserRelease.version === "v1"
     ) {
       return extractUmblerV1DeliveryIdentity(rawBody);
+    }
+
+    if (
+      connection.provider === "meta_cloud" &&
+      connection.parserRelease.version === "v1"
+    ) {
+      return extractMetaCloudV1DeliveryIdentity(rawBody);
     }
 
     return rawBodyDeliveryIdentity(rawBody);
@@ -475,8 +539,7 @@ export class InboundWebhookIngestionService {
     results: PromiseSettledResult<unknown>[],
   ): void {
     const failures = results.filter(
-      (result): result is PromiseRejectedResult =>
-        result.status === "rejected",
+      (result): result is PromiseRejectedResult => result.status === "rejected",
     );
 
     if (failures.length === 0) {
@@ -489,9 +552,7 @@ export class InboundWebhookIngestionService {
         connectionId,
         deliveryId,
         failureCount: failures.length,
-        failureTypes: failures.map((failure) =>
-          this.errorType(failure.reason),
-        ),
+        failureTypes: failures.map((failure) => this.errorType(failure.reason)),
       }),
     );
   }

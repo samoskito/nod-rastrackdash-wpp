@@ -1,5 +1,6 @@
 import type { InboundWebhookParser } from "./inbound-webhook-parser";
 import { GupshupV1Parser } from "./gupshup/gupshup-v1.parser";
+import { MetaCloudV1Parser } from "./meta-cloud/meta-cloud-v1.parser";
 import { UmblerV1Parser } from "./umbler/umbler-v1.parser";
 import { WahaV1Parser } from "./waha/waha-v1.parser";
 import { ZapiV1Parser } from "./zapi/zapi-v1.parser";
@@ -46,6 +47,7 @@ function defaultParsers(): InboundWebhookParser[] {
   return [
     new UmblerV1Parser(),
     new GupshupV1Parser(),
+    new MetaCloudV1Parser(),
     new WahaV1Parser(),
     new ZapiV1Parser(),
   ];
