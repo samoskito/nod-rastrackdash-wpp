@@ -27,10 +27,11 @@ Os dois caminhos convergem nos mesmos passos de produto: licença, admin, worksp
 1. Escolha o caminho acima ([`local.md`](local.md) ou [`vps.md`](vps.md) → [`dokploy.md`](dokploy.md)).
 2. `pnpm setup` ou cópia manual de `.env.example` → `.env` (preencher `replace-me-*`) — veja a tabela completa em [`environment.md`](environment.md).
 3. Banco + migrations (`prisma migrate deploy` / `dev`).
-4. **Cliente de licença** — `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY` → confira `/backoffice/license`.
+4. **Cliente de licença** — `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY`; a ativação acontece sozinha no boot da API → confira `/backoffice/license`.
 5. Crie o primeiro administrador e o primeiro workspace/cliente.
-6. [Meta manual](meta-manual.md) (usuário do sistema).
-7. WhatsApp: Uazapi BYO / NOD API / WAHA / Z-API / Umbler / Gupshup — leia o contrato de cada um, inclusive a matriz de autenticação de webhook, em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
+6. [Meta Ads manual](meta-manual.md) (usuário do sistema) — anúncios e Pixel, não mensagens.
+7. WhatsApp, tudo em `/integrations`: **Provedores e receivers** (Uazapi BYO, NOD API, WAHA, Z-API) e **Webhooks de entrada** (Umbler Talk, Gupshup, Meta WhatsApp Cloud API). Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
+   - Precisa de **Gatilhos de conversão → Nova regra**? As envs `INBOUND_*` são **obrigatórias** e vêm desligadas por padrão.
 8. Personalização de marca opcional: `BRAND_*` (rodapé residual não removível).
 9. Deploy Dokploy (API) + Vercel (web) — ou permaneça local.
 10. [Guia de cobrança](billing/README.md) — opcional, gateway BYO do aluno.
@@ -59,8 +60,8 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [VPS — dimensionamento](vps.md) · [Deploy com Dokploy](dokploy.md)
 - [Variáveis de ambiente](environment.md)
 - [Troubleshooting](troubleshooting.md)
-- [Meta manual](meta-manual.md)
-- [Provedores de WhatsApp (BYO) e matriz de webhook](whatsapp-providers.md)
+- [Meta Ads manual](meta-manual.md)
+- [Provedores de WhatsApp, receivers e matriz de webhook](whatsapp-providers.md)
 - [Guia de cobrança (BYO)](billing/README.md)
 
 ## Release

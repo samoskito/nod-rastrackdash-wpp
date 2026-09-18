@@ -63,13 +63,50 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** nenhuma correção é necessária para continuar — use o botão de gerar link de ativação na lista de workspaces em `/backoffice/clients` e envie esse link manualmente ao responsável (WhatsApp, e-mail avulso etc.). Se preferir enviar e-mails automáticos depois, preencha SMTP e novos workspaces passam a usar `deliveryStatus: "queued"`; workspaces já criados continuam exigindo link manual até o responsável ativar a conta.
 - **Verificação:** o responsável consegue acessar o link de ativação gerado e concluir o próprio cadastro.
 
-## Webhook Uazapi "não autorizado" (401)
+## Receiver do provedor responde 401 (Uazapi / WAHA / Z-API)
 
-- **Diagnóstico:** identifique qual rota está sendo chamada — `POST /webhooks/uazapi` (global) ou `POST /webhooks/uazapi/instances/:instanceId` (por instância). Os dois exigem, além do token, um registro `WhatsappInstance` já existente cujo `providerInstanceId` bata com o payload recebido (o backend faz esse lookup antes de aceitar o evento).
-- **Causa provável mais comum:** não é só token errado — **este template não tem, hoje, nenhum caminho confirmado (UI ou API) que crie esse registro `WhatsappInstance`**. Sem ele, as duas rotas sempre respondem `401`, mesmo com o token certo. Veja o aviso confirmado em [`whatsapp-providers.md`](whatsapp-providers.md#aviso-confirmado-sobre-uazapi-no-modelo-de-webhook-inbound) antes de gastar tempo tentando "corrigir" o token.
-- **Causa secundária (se o registro existir por outro meio):** no endpoint global, o token enviado não bate com `UAZAPI_WEBHOOK_AUTH_TOKEN` da env; no endpoint por instância, o Bearer enviado não bate com `WhatsappInstance.webhookTokenHash`.
-- **Correção:** se você não provisionou o `WhatsappInstance` por algum caminho fora deste repositório (script interno, acesso direto ao banco), trate isso como um bloqueio de produto — não um passo de configuração — e não invente uma solução; registre a lacuna. Se o registro existe e ainda assim dá `401`, confirme o token correspondente à rota usada.
+- **Diagnóstico:** confirme qual URL está no painel do provedor. A rota correta é a gerada pelo botão **Gerar receiver** em `/integrations`: `POST {API_PUBLIC_URL}/webhooks/whatsapp/{ID_DA_CONEXAO}?token=...` — a URL **completa**, com o `?token=`.
+- **Causas prováveis, em ordem:**
+  - **URL antiga.** Cada clique em **Gerar receiver** invalida o token anterior. Se você gerou duas vezes, só a última URL vale.
+  - **Só a parte antes do `?`.** Alguns painéis cortam a query string ao colar — confirme que o `?token=...` foi salvo.
+  - **WAHA:** o `payload.session` da entrega precisa ser **exatamente** a Sessão salva na conexão. Trocou a sessão na WAHA? Clique em **Gerar receiver** de novo (isso regrava a sessão a partir da configuração salva) e recole a URL.
+  - **Z-API:** o `body.instanceId` da entrega precisa ser **exatamente** o Instance ID salvo na conexão.
+  - **Conexão excluída/desativada:** conexão em `suspended` rejeita tudo.
+  - **Rota legada:** `POST /webhooks/uazapi` e `POST /webhooks/uazapi/instances/:id` só enxergam registros com `provider = "uazapi"` (valor legado); o painel atual grava `uazapi_byo`. Se você configurou uma dessas duas URLs, troque pelo receiver por conexão — preencher `UAZAPI_WEBHOOK_AUTH_TOKEN` não resolve.
+- **Correção:** gere o receiver de novo, cole a URL completa no painel do provedor e confirme os campos de vínculo (Sessão na WAHA, Instance ID na Z-API).
 - **Verificação:** o próximo evento de teste chega sem `401` nos logs da API.
+
+## Receiver do NOD API responde 501
+
+- **Diagnóstico:** a resposta traz "Receiver inbound para nod_api ainda nao esta disponivel".
+- **Causa:** o `nod_api` tem adapter de status/health, mas **ainda não tem parser/receiver inbound** neste código. Não é configuração.
+- **Correção:** para receber mensagens hoje, use Uazapi (BYO), WAHA, Z-API, Umbler, Gupshup ou Meta WhatsApp (Cloud API) — veja [`whatsapp-providers.md`](whatsapp-providers.md#matriz-de-ingestão-inbound-o-que-realmente-chega-hoje). Não invente uma URL alternativa.
+- **Verificação:** com um provedor com receiver pronto, o evento de teste é aceito com `202`.
+
+## Meta WhatsApp (Cloud API): a Meta recusa o webhook na verificação
+
+- **Diagnóstico:** a Meta mostra erro ao clicar em verificar e salvar; a API responde `401` no `GET /webhooks/inbound/:id`.
+- **Causas prováveis:**
+  - **Verify token errado.** Ele é gerado pelo produto e mostrado **uma única vez** ao criar a conexão — não é `META_WEBHOOK_VERIFY_TOKEN` (essa variável é do webhook de **Meta Ads**). Perdeu? Use **Gerar nova URL** na conexão e recadastre os dois valores na Meta.
+  - **`?token=` colado na URL.** A URL do Meta Cloud **não** leva query string; o token viaja no handshake.
+  - **Conexão removida** ou de outro workspace.
+  - **`INBOUND_WEBHOOKS_ENABLED` desligada**, o que faz a rota se comportar como inexistente.
+- **Correção:** recrie/rotacione a conexão, copie **URL de callback** e **Verify token** em campos separados na Meta, e confirme as envs `INBOUND_*`.
+- **Verificação:** a Meta aceita e salva o webhook; a assinatura do campo `messages` fica disponível.
+
+## Meta WhatsApp (Cloud API): parou de receber depois de "Ativar envios automáticos"
+
+- **Diagnóstico:** a Meta passa a registrar falha de entrega; a API responde `404` nos POSTs daquela conexão. O log tinha, antes disso, o aviso `inbound_webhook.meta_cloud_signature_unverified`.
+- **Causa:** sem `META_APP_SECRET` preenchida, a API só aceita POSTs de uma conexão `meta_cloud` enquanto ela está em **observação**. Ao colocar a conexão em produção, as entregas passam a exigir a assinatura `x-hub-signature-256` — que não pode ser validada sem o segredo.
+- **Correção:** preencha `META_APP_SECRET` com o **App Secret do mesmo app Meta** (não é o token permanente do Graph), redeploy a API. Se precisar voltar a receber já, use **Voltar para observação** na conexão enquanto configura.
+- **Verificação:** os POSTs voltam a ser aceitos com `202` e o aviso `meta_cloud_signature_unverified` some do log.
+
+## Meta WhatsApp (Cloud API): chegam mensagens mas nenhum lead
+
+- **Diagnóstico:** na conexão, o contador **"Sem CTWA"** sobe e **"CTWA roteado"** fica em zero.
+- **Causa:** é o contrato do produto, não um bug — só mensagem de entrada vinda de um anúncio **Click-to-WhatsApp pago** (com `referral.ctwa_clid`) vira lead. Conversa orgânica, contato salvo ou mensagem iniciada pelo cliente fora do anúncio é classificada como `ignored_no_ctwa`.
+- **Correção:** teste clicando no próprio anúncio CTWA ativo. Se você esperava gatilho por **palavra-chave ou tag do atendente**, essa origem não serve: o webhook do Cloud API não entrega mensagens enviadas pelo seu time. Use **Uazapi (BYO)** ou **Umbler Talk** (veja [`whatsapp-providers.md`](whatsapp-providers.md#regra-de-produto-que-vale-para-todos-só-ctwa-vira-lead)).
+- **Verificação:** uma mensagem originada de clique no anúncio aparece em **"CTWA roteado"** ou **"CTWA pendente"**.
 
 ## Aparece UI OAuth/social do Facebook
 
@@ -87,9 +124,10 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 ## Licença `403`/"não configurada"
 
-- **Diagnóstico:** `/backoffice/license`; log da API no momento da ativação (`activate()`).
-- **Causa provável:** `LICENSE_ACCOUNT_IDENTITY` não é exatamente o e-mail da conta vinculada à chave (retorna `403`), ou `LICENSE_KEY`/`LICENSE_SERVER_URL` estão vazios/errados ("não configurada").
-- **Correção:** confirme com a PalmUP qual e-mail está vinculado à chave e ajuste `LICENSE_ACCOUNT_IDENTITY` para bater exatamente; confirme que `LICENSE_KEY` foi colada sem espaços extras.
+- **Diagnóstico:** `/backoffice/license`; no log da API, logo após o boot, procure `license_auto_activation_succeeded`, `license_auto_activation_failed`, `license_auto_activation_skipped_not_configured` ou `license_auto_activation_skipped_inert`.
+- **Causa provável:** `LICENSE_ACCOUNT_IDENTITY` não é exatamente o e-mail da conta vinculada à chave (retorna `403`), ou `LICENSE_KEY`/`LICENSE_SERVER_URL` estão vazios/errados (`skipped_not_configured` / "não configurada"). `skipped_inert` significa `LICENSE_SERVER_URL` vazio — modo de desenvolvimento, sem licenciamento.
+- **Correção:** confirme com a PalmUP qual e-mail está vinculado à chave e ajuste `LICENSE_ACCOUNT_IDENTITY` para bater exatamente; confirme que `LICENSE_KEY` foi colada sem espaços extras; redeploy (a ativação é tentada de novo a cada boot, e é idempotente). Se preferir forçar sem reiniciar, use o fallback `POST /license-client/activate`.
+- **Não procure a chave numa tela:** não existe UI de listagem/busca/reemissão de licenças neste produto. Se a chave sumiu ou não é reconhecida, o caminho é o suporte da PalmUP, informando o **e-mail usado na compra**.
 - **Verificação:** `/backoffice/license` mostra `usable: true`.
 
 ## Escrita bloqueada com `423` (licença não ativada)
@@ -99,7 +137,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
   - `license_required`: `LICENSE_SERVER_URL` configurado e nenhuma ativação válida ainda (chave ausente ou ativação nunca executada);
   - `activation_failed`: `LICENSE_KEY` preenchida, mas a última tentativa de ativação falhou (chave errada, `403` de identidade, servidor fora);
   - `revoked`/`expired`/`grace_exceeded`: licença bloqueada pelo servidor ou grace de 72h esgotado.
-- **Correção:** preencha `LICENSE_KEY` e `LICENSE_ACCOUNT_IDENTITY` (veja [`environment.md`](environment.md)), reinicie a API e chame `POST /license-client/activate` — essa rota, `/health` e `/auth` continuam liberadas durante o bloqueio. Para `revoked`/`expired`, renove ou fale com o suporte da PalmUP.
+- **Correção:** preencha `LICENSE_KEY` e `LICENSE_ACCOUNT_IDENTITY` (veja [`environment.md`](environment.md)) e reinicie/redeploy a API — a ativação é tentada automaticamente no boot. Se ainda assim falhar, chame `POST /license-client/activate` como fallback; essa rota, `/health` e `/auth` continuam liberadas durante o bloqueio. Para `revoked`/`expired`, renove ou fale com o suporte da PalmUP.
 - **Verificação:** `/backoffice/license` mostra `usable: true`, o banner some e a escrita volta a funcionar.
 
 ## WhatsApp não conecta (Uazapi / WAHA / Z-API)
@@ -109,8 +147,15 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
   - `needs_reconnect`: sessão/instância precisa escanear QR de novo na sua própria instância Uazapi/WAHA/Z-API (fora deste template).
   - `disconnected`: variáveis do provedor ausentes ou instância parada.
   - `error`: URL/token errados ou instância inacessível pela rede onde a API roda.
-- **Correção:** reconecte diretamente no painel/instância do provedor; confirme host/porta acessíveis a partir do servidor da API (não só do seu navegador). Lembre que Uazapi BYO/WAHA/Z-API/NOD API são **uma única instância para todo o deployment**, configurada pela env — não existe uma instância "por workspace" nem uma tela para criar mais de uma; se o status aparece igual em todos os workspaces, isso é o comportamento esperado, não um bug (veja [`whatsapp-providers.md`](whatsapp-providers.md)).
+- **Correção:** reconecte diretamente no painel/instância do provedor; confirme host/porta acessíveis a partir do servidor da API (não só do seu navegador); use **Editar** na conexão para corrigir URL/token. O botão **Testar** usa as credenciais salvas **naquela conexão** e só cai nas variáveis de ambiente quando o campo não foi preenchido na UI — se um workspace continua errado depois de corrigir a env, é porque a conexão dele tem credencial própria (veja [`whatsapp-providers.md`](whatsapp-providers.md#envs-de-provedor-o-que-elas-fazem-hoje)).
 - **Verificação:** `/integrations` volta a mostrar `connected` para o provedor.
+
+## "Instância Uazapi (BYO)" no rodapé de Integrações diz que é instância única
+
+- **Diagnóstico:** o card no fim de `/integrations` mostra o texto "Esta edição conecta uma única instância Uazapi configurada por variável de ambiente".
+- **Causa:** esse card é o **status global do deployment**, lido de `UAZAPI_BASE_URL`/`UAZAPI_TOKEN`. Ele não descreve o painel **"Provedores e receivers"** logo acima, que é por workspace e aceita várias conexões.
+- **Correção:** nenhuma — são dois painéis com escopos diferentes. Para conexões por cliente, use sempre o painel "Provedores e receivers".
+- **Verificação:** duas conexões diferentes criadas em workspaces diferentes aparecem cada uma no seu workspace, com status próprio no botão **Testar**.
 
 ## Recebo leads/webhooks mas não aparece Nova regra
 
@@ -119,10 +164,28 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** defina `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gerada com node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (produção) direto no painel de env do serviço da API; redeploy a API (e o web também, se a versão publicada estiver desatualizada).
 - **Verificação:** com uma conexão WhatsApp/origem já existente, `/settings#whatsapp-triggers` mostra **Nova regra** disponível.
 
-## Meta não conectado / relatórios falham com "meta not configured"
+## As envs `INBOUND_*` estão ligadas, mas a origem não aparece em Gatilhos
+
+- **Diagnóstico:** `/settings#whatsapp-triggers` abre, mas a lista "Origens conectadas" está vazia (ou não lista a conexão que você criou).
+- **Causa provável, por origem:**
+  - **Umbler, Gupshup, Meta WhatsApp (Cloud API):** a origem aparece assim que a conexão existe em `/integrations` → **Webhooks de entrada**. Se você criou a conexão no painel **"Provedores e receivers"**, criou outra coisa — são painéis diferentes.
+  - **Uazapi:** a origem é criada automaticamente pelo produto, mas só quando chega pelo receiver uma mensagem **enviada pelo número conectado** (atendente) ou uma mudança de etiqueta. Uma mensagem apenas recebida do cliente não cria a origem. Responda uma conversa pelo número conectado e recarregue.
+  - **WAHA e Z-API:** recebem leads normalmente, mas **ainda não têm** criação automática de origem na central de Gatilhos. É lacuna conhecida do produto, não configuração.
+  - **NOD API:** sem receiver inbound (`501`), não há origem.
+- **Correção:** use o painel certo para cada plataforma e, no caso da Uazapi, gere um evento de atendente/etiqueta. Não tente criar uma conexão inbound `uazapi` na mão — a API recusa de propósito ("Conexoes UAZAPI sao criadas automaticamente a partir da instancia WhatsApp").
+- **Verificação:** a origem aparece em "Origens conectadas" com o número de canais, e **Nova regra** abre o formulário.
+
+## Canal/número não aparece para escolher na regra (Umbler/Gupshup/Meta Cloud)
+
+- **Diagnóstico:** a conexão existe, mas a regra não lista canal nenhum, ou a conexão mostra "Nenhum canal cadastrado ainda".
+- **Causa:** o canal ainda não foi cadastrado. **Você não precisa esperar o primeiro webhook** — essa orientação está desatualizada.
+- **Correção:** na conexão, use **Cadastrar canal/número** e informe o número conectado. O produto cria um canal provisório; quando a primeira mensagem real daquele número chegar, ela é mesclada no mesmo canal (nada duplica).
+- **Verificação:** o canal aparece na conexão e fica selecionável em **Nova regra**.
+
+## Meta Ads não conectado / relatórios falham com "meta not configured"
 
 - **Diagnóstico:** `/integrations`; `GET /onboarding/status` (campo `metaConnected`).
-- **Causa provável:** token do usuário do sistema não foi colado na UI de integrações do workspace atual, ou expirou/foi revogado no Meta Business Suite.
+- **Causa provável:** token do usuário do sistema não foi colado na UI de integrações do workspace atual, ou expirou/foi revogado no Meta Business Suite. Cuidado com a confusão mais comum: configurar o **Meta WhatsApp (Cloud API)** não conecta o **Meta Ads** — são duas integrações diferentes (veja [`meta-manual.md`](meta-manual.md#-não-confunda-são-duas-integrações-meta-diferentes)).
 - **Correção:** siga [`meta-manual.md`](meta-manual.md) para gerar e colar um novo token no workspace certo.
 - **Verificação:** `/integrations` mostra Meta conectado e os relatórios voltam a popular.
 

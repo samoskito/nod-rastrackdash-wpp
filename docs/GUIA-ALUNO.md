@@ -10,9 +10,11 @@ Esta é a jornada completa: da compra da licença até ter clientes reais operan
 
 ## 1. Compra e licença
 
-1. Receba da PalmUP a chave de licença (`LICENSE_KEY`) por e-mail e/ou WhatsApp após a compra.
+1. Receba da PalmUP a chave de licença (`LICENSE_KEY`) por e-mail e/ou WhatsApp após a compra no Guru.
 2. Anote o e-mail da sua conta de compra — ele vai virar `LICENSE_ACCOUNT_IDENTITY` e **precisa ser idêntico** ao vinculado na PalmUP; um valor diferente faz a ativação retornar `403`.
 3. Leia o [README do aluno](../README.pt-BR.md) para confirmar os papéis acima antes de seguir.
+
+**Não achou o e-mail com a chave?** Fale com o suporte da PalmUP informando o **e-mail usado na compra** — a recuperação/reemissão é feita pela operação interna da PalmUP. **Não existe nenhuma tela neste produto para listar, buscar ou reemitir licenças**, nem no seu painel nem em backoffice: a única tela de licença que você tem é `/backoffice/license`, e ela mostra apenas o estado da **sua própria instância**. Se alguém (ou uma IA) te mandar "procurar a licença no admin", está inventando um caminho que não existe.
 
 ## 2. Escolha o caminho de instalação
 
@@ -74,9 +76,10 @@ Esse comando cria a conta **e** um workspace, com você como `owner` dele (`pnpm
 ## 7. Ativar a licença
 
 1. Preencha `LICENSE_SERVER_URL` (já vem no `.env.example`), `LICENSE_KEY` e `LICENSE_ACCOUNT_IDENTITY` — sempre em `.env` local ou env do serviço, nunca commitado.
-2. Reinicie a API e ative a licença: `POST /license-client/activate` (rota liberada mesmo com a instância bloqueada; a chave sai do `.env`, você não cola nada em chat).
+2. Reinicie/redeploy a API. **A ativação acontece sozinha no boot**, antes da API aceitar conexões — você não precisa chamar nada à mão no caminho normal.
 3. Abra `/backoffice/license` e confirme que a licença aparece como **utilizável**.
-4. Se ver `403`, confira se `LICENSE_ACCOUNT_IDENTITY` é exatamente o e-mail vinculado à sua compra ([`setup/troubleshooting.md`](setup/troubleshooting.md)).
+4. Só se a ativação automática falhar (o log mostra `license_auto_activation_failed`), use o fallback manual: `POST /license-client/activate` — essa rota fica liberada mesmo com a instância bloqueada, e a chave sai da env; você não cola nada em chat.
+5. Se ver `403`, confira se `LICENSE_ACCOUNT_IDENTITY` é exatamente o e-mail vinculado à sua compra ([`setup/troubleshooting.md`](setup/troubleshooting.md)). Se a chave não for reconhecida, fale com o suporte da PalmUP com o e-mail da compra — não existe tela de busca/reemissão de licença neste produto.
 
 Sem licença ativa a instância fica **bloqueada para escrita** (`423`): você consegue logar e navegar, mas não criar workspace/cliente no passo 8. Ative antes de seguir.
 
@@ -88,22 +91,54 @@ Logue com o administrador criado, crie seu primeiro workspace para um cliente fi
 
 ## 9. Conectar Meta Ads
 
-Siga o [guia manual de Meta](setup/meta-manual.md): criar/usar um usuário do sistema no Gerenciador de Negócios do cliente, gerar um token e colá-lo na UI de **Integrações** do workspace — nunca em `.env` público nem em chat.
+Siga o [guia manual de Meta Ads](setup/meta-manual.md): criar/usar um usuário do sistema no Gerenciador de Negócios do cliente, gerar um token e colá-lo na UI de **Integrações** do workspace — nunca em `.env` público nem em chat.
+
+⚠️ Isso é a conexão de **anúncios** (Pixel, conta de anúncios, destino de conversão). Ela **não** recebe mensagem nenhuma. Quem traz mensagem é o passo 10.
 
 ## 10. Conectar WhatsApp
 
-Escolha ao menos um provedor e configure as variáveis correspondentes (tabela em [`setup/environment.md`](setup/environment.md)). Antes de decidir, leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) — o contrato completo de cada um, inclusive quais já têm webhook inbound confirmado e quais ainda não:
+Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escolher — lá está o contrato completo, a matriz do que já funciona e o que ainda não. Existem **dois painéis diferentes** em `/integrations`, e escolher o errado é o erro mais comum:
 
-- **Uazapi BYO** — sua própria instância Uazapi (`UAZAPI_*`). ⚠️ É **uma única instância para todo o deployment**, não por workspace — a própria tela de Integrações avisa isso; não existe passo de "criar instância" separado.
-- **NOD API** — broker gerenciado pela PalmUP, add-on licenciado (`NOD_API_BROKER_URL`, usa a `LICENSE_KEY`); mesmo escopo de instância única acima.
-- **WAHA** — sua própria instância self-hosted [WAHA](https://github.com/devlikeape/waha) (`WAHA_*`); mesmo escopo de instância única.
-- **Z-API** — sua própria instância [Z-API](https://www.z-api.io/) (`ZAPI_*`); mesmo escopo de instância única.
-- **Umbler / Gupshup** — este sim é por workspace de verdade: conexão de webhook inbound genérica, criada em `/integrations`, com segredo próprio por conexão (não têm variável de ambiente).
-- **Data Crazy / Zap Responder** — ainda **não implementados** neste código (nenhum adapter, parser ou variável) — não tente configurá-los agora.
+### 10.1 Painel "Provedores e receivers" — Uazapi, NOD API, WAHA, Z-API
 
-Preencher `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` só disponibiliza aquele provedor (uma instância única do deployment todo) no backend — não cria nada por workspace. Só a conexão de webhook inbound (Umbler/Gupshup) é criada por workspace em `/integrations`. Confirme depois em `/integrations` que o provedor escolhido aparece `connected`.
+São conexões **por workspace**, criadas na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
 
-⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API, desligadas por padrão.** Isso vale para **qualquer origem** que use gatilhos (UAZAPI, NOD API, WAHA, Z-API, Umbler, Gupshup, etc.). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. Checklist do mentor, direto na env da API (Dokploy):
+- **Uazapi (BYO)** — sua própria instância Uazapi (URL da API, Token, Instance ID opcional). Receiver inbound **pronto**. É o único provedor que também avalia **mensagem do atendente** e **etiquetas** para gatilhos.
+- **NOD API** — broker gerenciado pela PalmUP, add-on licenciado (Instance ID + Instance token; autentica com a sua `LICENSE_KEY`). Status funciona; **receiver inbound ainda não existe**.
+- **WAHA** — sua instância self-hosted [WAHA](https://github.com/devlikeape/waha) (URL da API, API key, Sessão). Receiver inbound **pronto**.
+- **Z-API** — sua instância [Z-API](https://www.z-api.io/) (URL da API, Instance ID, Token). Receiver inbound **pronto**.
+
+Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, com `?token=`, e cole no campo de webhook do painel do provedor) → confirme `connected`. Para trocar credenciais use **Editar**; para remover use **Excluir**, que pede o **nome exato da conexão** digitado para confirmar.
+
+As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
+
+### 10.2 Painel "Webhooks de entrada" — Umbler, Gupshup, Meta WhatsApp (Cloud API)
+
+Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
+
+1. **Adicionar conexão** → escolha a plataforma → **Gerar webhook** e copie a **URL de callback** (aparece uma única vez) para o painel da Umbler/Gupshup.
+2. **Cadastre o canal/número agora**, com o botão **Cadastrar canal/número** — você **não precisa** esperar o primeiro lead chegar. O canal fica provisório e é mesclado automaticamente quando a primeira mensagem real daquele número chegar.
+3. Vá em `/settings#whatsapp-triggers` → **Gatilhos de conversão** → **Nova regra**, limitando a regra aos canais que devem converter.
+
+### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
+
+É a opção para conectar **seu número oficial da Meta sem intermediário**, no mesmo papel que Kinbox/DataCrazy cumprem quando "conectam a Meta". Não é a conexão de Meta Ads do passo 9 e não usa o token do Gerenciador de Negócios.
+
+1. `/integrations` → **Webhooks de entrada** → **Adicionar conexão** → **Meta WhatsApp (Cloud API)** → **Gerar webhook**.
+2. Copie **URL de callback** e **Verify token** (os dois aparecem uma única vez, em linhas separadas). Aqui a URL **não** leva `?token=`.
+3. No app Meta: **Configurar webhooks** → cole URL e Verify token → verificar e salvar.
+4. Assine o campo **`messages`**. Sem isso a Meta valida e nunca envia nada.
+5. Cadastre o canal/número e configure a rota Meta do canal.
+
+**O que já funciona:** atribuição de **CTWA** — o produto lê `referral.ctwa_clid` e `referral.source_id` (ID do anúncio) das mensagens recebidas e gera lead/conversão a partir delas.
+
+**O que não funciona, e não é configuração:** gatilho por **palavra-chave ou tag do atendente**. O webhook do Cloud API entrega só as mensagens que o número **recebe** — nunca as que o seu time envia. Para gatilho de atendente use **Uazapi (BYO)** ou **Umbler Talk**. Gatilhos vindos de CRM/call center são **futuro**, não existem hoje.
+
+**Antes de ativar envio automático** nessa conexão, preencha `META_APP_SECRET` (o App Secret do app Meta, não o token do Graph) e redeploy: sem ele, a conexão em produção passa a **recusar** os POSTs da Meta.
+
+**Data Crazy / Zap Responder** continuam **não implementados** (nenhum adapter, parser ou variável) — não tente configurá-los.
+
+⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API, desligadas por padrão.** Isso vale para **qualquer origem** que use gatilhos (Uazapi, NOD API, WAHA, Z-API, Umbler, Gupshup, Meta Cloud). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. Checklist do mentor, direto na env da API (Dokploy):
 
 1. `INBOUND_WEBHOOKS_ENABLED=true`
 2. `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gere com: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`
@@ -113,6 +148,8 @@ Preencher `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` só disponibiliza aq
 6. Confirme em `/settings#whatsapp-triggers` (com a conexão WhatsApp/origem já criada) que **Nova regra** aparece disponível
 
 Detalhe completo de cada variável em [`setup/environment.md`](setup/environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
+
+A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. **WAHA e Z-API** recebem leads normalmente, mas **ainda não** têm essa criação automática de origem na central de Gatilhos — é uma lacuna conhecida, não um passo esquecido.
 
 ## 11. Marca (whitelabel) — opcional
 
@@ -125,7 +162,8 @@ Repita, no ambiente publicado (não só localmente):
 - `GET /health` e `GET /health/ready` → OK
 - `/backoffice` → checklist completo
 - `/backoffice/license` → licença utilizável
-- `/integrations` → Meta e ao menos um provedor de WhatsApp conectados
+- `/integrations` → Meta Ads conectado e ao menos uma conexão de WhatsApp (provedor com receiver **ou** webhook de entrada) funcionando
+- Se usa gatilhos: `/settings#whatsapp-triggers` mostra a origem e o botão **Nova regra**
 - Se usou Dokploy: sem crash-loop no log do serviço da API ([`setup/troubleshooting.md`](setup/troubleshooting.md) tem o roteiro de diagnóstico)
 
 ## Referência rápida
@@ -134,7 +172,7 @@ Repita, no ambiente publicado (não só localmente):
 - [Índice de guias de instalação](setup/README.md)
 - [Local (Docker Compose)](setup/local.md) · [VPS — dimensionamento](setup/vps.md) · [Deploy com Dokploy](setup/dokploy.md)
 - [Variáveis de ambiente](setup/environment.md) · [Troubleshooting](setup/troubleshooting.md)
-- [Meta manual](setup/meta-manual.md) · [Provedores de WhatsApp (BYO)](setup/whatsapp-providers.md) · [Cobrança BYO](setup/billing/README.md)
+- [Meta Ads manual](setup/meta-manual.md) · [Provedores de WhatsApp, receivers e webhooks](setup/whatsapp-providers.md) · [Cobrança BYO](setup/billing/README.md)
 - [Personalização permitida](CUSTOMIZATION.md)
 - [Matriz de aceite v1](release/ACCEPTANCE-v1.pt-BR.md) — o que já foi verificado nesta versão
 
