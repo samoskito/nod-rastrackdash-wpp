@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { AuthModule } from "../../auth/auth.module";
 import { PrismaModule } from "../../common/prisma/prisma.module";
 import { LicenseClientModule } from "../../licensing-client/license-client.module";
@@ -14,6 +14,7 @@ import { WhatsappProvidersBootstrapService } from "./whatsapp-providers-bootstra
 import { WhatsappConnectionsController } from "./whatsapp-connections.controller";
 import { WhatsappConnectionsService } from "./whatsapp-connections.service";
 import { ZapiWhatsappAdapter } from "./zapi-whatsapp.adapter";
+import { InboundWebhooksModule } from "../../inbound-webhooks/inbound-webhooks.module";
 
 export { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 export { UazapiByoAdapter } from "./uazapi-byo.adapter";
@@ -37,7 +38,13 @@ export type {
  * LicenseClientService.getFingerprint()).
  */
 @Module({
-  imports: [AuthModule, LicenseClientModule, PrismaModule, WorkspacesModule],
+  imports: [
+    AuthModule,
+    LicenseClientModule,
+    PrismaModule,
+    WorkspacesModule,
+    forwardRef(() => InboundWebhooksModule),
+  ],
   providers: [
     // UazapiAdapter/WahaWhatsappAdapter/ZapiWhatsappAdapter need
     // INTEGRATION_ENV and this module declares no imports of its own
