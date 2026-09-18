@@ -7,7 +7,9 @@ import type {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { InboundWebhookOneTimeSecret } from "../src/app/(app)/integrations/inbound-webhook-actions";
 import {
+  InboundWebhookOneTimeSecretPanel,
   InboundWebhookPanel,
   inboundPasteInstruction,
   inboundWebhookProviderLabel,
@@ -263,6 +265,61 @@ describe("inbound webhook panel", () => {
     );
   });
 
+  it("shows the Meta callback URL and the verify token as readable labelled rows (F1.1)", () => {
+    const html = renderOneTimeSecret({
+      provider: "meta_cloud",
+      webhookUrl: "https://app.example.com/inbound/meta/abc123",
+      verifyToken: "verify_token_meta_123",
+    });
+
+    expect(html).toContain("URL de callback");
+    expect(html).toContain("Verify token");
+    expect(html).toContain(
+      'value="https://app.example.com/inbound/meta/abc123"',
+    );
+    expect(html).toContain('value="verify_token_meta_123"');
+    expect(html).toContain("Copiar URL");
+    expect(html).toContain("Copiar token");
+    expect(html).toContain(
+      "Cole URL e token em App Meta → Configurar webhooks → Verificar e salvar.",
+    );
+    expect(html).toContain('aria-label="Token de verificacao Meta"');
+    expect(
+      html.match(/class="inbound-webhook-secret-field-row"/g) ?? [],
+    ).toHaveLength(2);
+  });
+
+  it("keeps the sensitive presentation markers on the one-time Meta secret", () => {
+    const html = renderOneTimeSecret({
+      provider: "meta_cloud",
+      webhookUrl: "https://app.example.com/inbound/meta/abc123",
+      verifyToken: "verify_token_meta_123",
+    });
+
+    expect(html).toContain('data-presentation-sensitive-action="true"');
+    expect(
+      html.match(/data-presentation-sensitive-field="true"/g) ?? [],
+    ).toHaveLength(2);
+  });
+
+  it("keeps a URL-only one-time panel for Umbler and Gupshup", () => {
+    for (const provider of ["umbler", "gupshup"] as const) {
+      const html = renderOneTimeSecret({
+        provider,
+        webhookUrl: `https://app.example.com/inbound/${provider}/abc123`,
+      });
+
+      expect(html).toContain("URL de callback");
+      expect(html).toContain("Copiar URL");
+      expect(html).not.toContain("Verify token");
+      expect(html).not.toContain("Copiar token");
+      expect(
+        html.match(/class="inbound-webhook-secret-field-row"/g) ?? [],
+      ).toHaveLength(1);
+      expect(html).toContain(inboundPasteInstruction(provider));
+    }
+  });
+
   it("keeps integrations focused on connection health and links to trigger settings", () => {
     const html = renderPanel();
 
@@ -428,6 +485,21 @@ function connectionViewWithoutChannels(
     },
     channels: [],
   };
+}
+
+function renderOneTimeSecret(
+  secret: Omit<InboundWebhookOneTimeSecret, "connectionId"> &
+    Partial<Pick<InboundWebhookOneTimeSecret, "connectionId">>,
+) {
+  return renderToStaticMarkup(
+    createElement(InboundWebhookOneTimeSecretPanel, {
+      secret: { connectionId: "connection_1", ...secret },
+      urlCopied: false,
+      onCopyUrl: () => undefined,
+      onCopyVerifyToken: () => undefined,
+      onDismiss: () => undefined,
+    }),
+  );
 }
 
 function renderPanel({
