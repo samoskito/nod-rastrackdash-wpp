@@ -8,6 +8,7 @@ export type UazapiBridgeInstance = {
   workspaceId: string;
   name: string;
   providerInstanceId: string | null;
+  connectedPhone?: string | null;
   providerTokenEncrypted?: string | null;
   providerTokenIv?: string | null;
   providerTokenTag?: string | null;
@@ -87,10 +88,13 @@ export class UazapiConversionBridgeService {
           connectionId: connection.id,
           organizationId: instance.id,
           providerChannelId: instance.providerInstanceId || instance.id,
-          // The business's own WhatsApp number isn't captured by the uazapi
-          // parser yet; fall back to a stable non-empty identifier so the
-          // channel DTO stays valid until it's known.
-          connectedPhone: instance.providerInstanceId?.trim() || instance.id,
+          // A connection test can provide the business's actual WhatsApp
+          // number before any inbound event arrives. Existing webhook paths
+          // retain their stable fallback until they provide that identity.
+          connectedPhone:
+            instance.connectedPhone?.trim() ||
+            instance.providerInstanceId?.trim() ||
+            instance.id,
           channelName: instance.name,
           whatsappInstanceId: instance.id,
         },

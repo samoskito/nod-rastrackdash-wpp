@@ -1,5 +1,5 @@
 import { BullModule } from "@nestjs/bullmq";
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { PrismaModule } from "../common/prisma/prisma.module";
 import {
@@ -39,7 +39,7 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
     RuntimeModule,
     ConversionRulesModule,
     WorkspacesModule,
-    WhatsappProvidersModule,
+    forwardRef(() => WhatsappProvidersModule),
     BullModule.registerQueue({
       name: INBOUND_WEBHOOK_QUEUE,
     }),

@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma, WorkspaceRole } from "@prisma/client";
@@ -23,11 +24,13 @@ import { INTEGRATION_ENV } from "../integration.types";
 import { MetaTokenEncryptionService } from "../meta/meta-token-encryption.service";
 import { WorkspaceAccessPolicyService } from "../../workspaces/workspace-access-policy.service";
 import { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
+import { UazapiByoAdapter } from "./uazapi-byo.adapter";
 import type {
   WhatsappProviderConfig,
   WhatsappProviderId,
 } from "./whatsapp-provider.types";
 import { normalizeProviderBaseUrl } from "./whatsapp-provider-http";
+import { UazapiConversionBridgeService } from "../../inbound-webhooks/uazapi-conversion-bridge.service";
 
 type WorkspaceActor = {
   workspaceId: string;
@@ -77,6 +80,8 @@ export class WhatsappConnectionsService {
     private readonly registry: WhatsappProviderRegistry,
     private readonly accessPolicy: WorkspaceAccessPolicyService,
     @Inject(INTEGRATION_ENV) private readonly env: IntegrationEnv = process.env,
+    @Optional() private readonly uazapiByo?: UazapiByoAdapter,
+    @Optional() private readonly uazapiBridge?: UazapiConversionBridgeService,
   ) {}
 
   async listConnections(workspaceId: string): Promise<WhatsappConnectionDto[]> {
@@ -215,7 +220,8 @@ export class WhatsappConnectionsService {
       instanceId:
         existing.provider === "waha"
           ? this.extractConfigInstanceId(config)
-          : (existing.providerInstanceId ?? this.extractConfigInstanceId(config)),
+          : (existing.providerInstanceId ??
+            this.extractConfigInstanceId(config)),
       session: this.extractConfigSession(config),
     };
   }
@@ -286,13 +292,22 @@ export class WhatsappConnectionsService {
     const checkedAt = new Date();
     let status = "error";
     let message: string | undefined;
+    let uazapiIdentity:
+      | { providerInstanceId: string | null; connectedPhone: string | null }
+      | undefined;
 
     try {
       const config = this.decryptConfig(connection);
-      const adapter = this.registry.require(
-        this.requireProvider(connection.provider),
-      );
-      const health = await adapter.getHealth(config ?? undefined);
+      const health =
+        connection.provider === "uazapi_byo" &&
+        config?.provider === "uazapi_byo" &&
+        this.uazapiByo
+          ? await this.testUazapiConnection(config, (identity) => {
+              uazapiIdentity = identity;
+            })
+          : await this.registry
+              .require(this.requireProvider(connection.provider))
+              .getHealth(config ?? undefined);
       status = health.status;
       message = health.message;
     } catch (error) {
@@ -302,10 +317,28 @@ export class WhatsappConnectionsService {
           : "Erro ao testar conexao WhatsApp";
     }
 
+    const providerInstanceId = uazapiIdentity?.providerInstanceId?.trim();
     const updated = await this.prisma.whatsappInstance.update({
       where: { id: connection.id },
-      data: { lastHealthStatus: status, lastHealthCheckedAt: checkedAt },
+      data: {
+        lastHealthStatus: status,
+        lastHealthCheckedAt: checkedAt,
+        ...(providerInstanceId ? { providerInstanceId } : {}),
+      },
     });
+    if (
+      status === "connected" &&
+      uazapiIdentity?.connectedPhone?.trim() &&
+      this.uazapiBridge
+    ) {
+      await this.uazapiBridge.ensureBridge({
+        id: updated.id,
+        workspaceId: connection.workspaceId,
+        name: connection.name,
+        providerInstanceId: providerInstanceId ?? connection.providerInstanceId,
+        connectedPhone: uazapiIdentity.connectedPhone,
+      });
+    }
     await this.recordAudit({
       workspaceId: actor.workspaceId,
       actorUserId: actor.userId,
@@ -321,6 +354,21 @@ export class WhatsappConnectionsService {
       checkedAt: checkedAt.toISOString(),
       ...(message ? { message: this.redactMessage(message) } : {}),
     };
+  }
+
+  private async testUazapiConnection(
+    config: Extract<WhatsappProviderConfig, { provider: "uazapi_byo" }>,
+    setIdentity: (identity: {
+      providerInstanceId: string | null;
+      connectedPhone: string | null;
+    }) => void,
+  ) {
+    const result = await this.uazapiByo?.testSavedConnection(config);
+    if (!result) {
+      return this.registry.require("uazapi_byo").getHealth(config);
+    }
+    setIdentity(result);
+    return result.health;
   }
 
   async rotateWebhookToken(

@@ -1,5 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { UazapiAdapter } from "../uazapi/uazapi.adapter";
+import {
+  UazapiAdapter,
+  type UazapiConnectionResult,
+} from "../uazapi/uazapi.adapter";
 import type { IntegrationStatus } from "../integration.types";
 import type {
   WhatsappLabelListResult,
@@ -25,30 +28,7 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
     config?: WhatsappProviderConfig,
   ): Promise<WhatsappProviderHealthDto> {
     if (config?.provider === this.id) {
-      const baseUrl = config.config.baseUrl.trim();
-      const token = config.config.token.trim();
-      const checkedAt = new Date().toISOString();
-
-      if (!baseUrl || !token) {
-        return {
-          provider: this.id,
-          status: "disconnected",
-          checkedAt,
-          message: "Missing Uazapi connection credentials",
-        };
-      }
-
-      const connection = await this.uazapi.getInstanceStatusForConnection(
-        baseUrl,
-        token,
-      );
-
-      return {
-        provider: this.id,
-        status: this.mapConnectionStatus(connection.connectionStatus),
-        checkedAt,
-        message: this.connectionStatusMessage(connection.connectionStatus),
-      };
+      return (await this.testSavedConnection(config)).health;
     }
 
     const health = await this.uazapi.getHealth();
@@ -58,6 +38,63 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
       status: health.status,
       checkedAt: health.checkedAt,
       message: health.message,
+    };
+  }
+
+  /**
+   * Keeps the UAZAPI status identity available to the saved-connection test
+   * flow. The shared provider-health contract deliberately remains limited to
+   * health data, so other provider tests cannot provision trigger channels.
+   */
+  async testSavedConnection(
+    config: Extract<
+      WhatsappProviderConfig,
+      {
+        provider: "uazapi_byo";
+      }
+    >,
+  ): Promise<{
+    health: WhatsappProviderHealthDto;
+    providerInstanceId: string | null;
+    connectedPhone: string | null;
+  }> {
+    const baseUrl = config.config.baseUrl.trim();
+    const token = config.config.token.trim();
+    const checkedAt = new Date().toISOString();
+
+    if (!baseUrl || !token) {
+      return {
+        health: {
+          provider: this.id,
+          status: "disconnected",
+          checkedAt,
+          message: "Missing Uazapi connection credentials",
+        },
+        providerInstanceId: null,
+        connectedPhone: null,
+      };
+    }
+
+    const connection = await this.uazapi.getInstanceStatusForConnection(
+      baseUrl,
+      token,
+    );
+    return {
+      health: this.healthFromConnection(connection, checkedAt),
+      providerInstanceId: connection.providerInstanceId,
+      connectedPhone: connection.connectedPhone,
+    };
+  }
+
+  private healthFromConnection(
+    connection: UazapiConnectionResult,
+    checkedAt: string,
+  ): WhatsappProviderHealthDto {
+    return {
+      provider: this.id,
+      status: this.mapConnectionStatus(connection.connectionStatus),
+      checkedAt,
+      message: this.connectionStatusMessage(connection.connectionStatus),
     };
   }
 
