@@ -25,6 +25,7 @@ import { AuthService } from "../auth/auth.service";
 import { DiagnosticsService } from "../diagnostics/diagnostics.service";
 import { WorkspacesService } from "../workspaces/workspaces.service";
 import { MetaReportSyncQueueService } from "./meta-report-sync-queue.service";
+import { MetaInitialSyncPeriodService } from "./meta-initial-sync-period";
 import { MetaReportingService } from "./meta-reporting.service";
 
 type HeaderResponse = {
@@ -69,6 +70,8 @@ export class ReportingController {
     private readonly metaReportingService: MetaReportingService,
     @Inject(MetaReportSyncQueueService)
     private readonly metaReportSyncQueueService: MetaReportSyncQueueService,
+    @Inject(MetaInitialSyncPeriodService)
+    private readonly metaInitialSyncPeriodService: MetaInitialSyncPeriodService,
     @Inject(AuthService)
     private readonly authService: AuthService,
     @Inject(WorkspacesService)
@@ -386,6 +389,19 @@ export class ReportingController {
       workspaceId: workspace.id,
       since: period.since as string,
       until: period.until as string,
+    });
+  }
+
+  @Get("meta/initial-sync-period")
+  async getMetaInitialSyncPeriod(@AuthToken() refreshToken: string) {
+    const workspace = await this.getCurrentWorkspace(refreshToken);
+
+    if (!workspace.permissions.canManageIntegrations) {
+      throw new ForbiddenException("Sem permissao para sincronizar relatorios");
+    }
+
+    return this.metaInitialSyncPeriodService.resolve({
+      workspaceId: workspace.id,
     });
   }
 

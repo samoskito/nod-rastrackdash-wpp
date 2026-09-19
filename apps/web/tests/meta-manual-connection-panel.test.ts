@@ -321,7 +321,7 @@ describe("Meta manual connection panel", () => {
     );
     expect(html).toContain("BM Cliente");
     expect(html).toContain("Permissao de Insights ausente");
-    expect(html).toContain("Importar 90 dias");
+    expect(html).toContain("Importar historico inicial");
     expect(html).toContain("Auditar roteamento");
     expect(html).toContain('aria-label="Editar BM Cliente"');
     expect(html).toContain('aria-label="Remover BM Cliente"');

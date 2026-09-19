@@ -1077,7 +1077,7 @@ export function MetaManualConnectionPanel({
                   <History size={16} />
                   {pendingAction === "history"
                     ? "Enfileirando..."
-                    : "Importar 90 dias"}
+                    : "Importar historico inicial"}
                 </button>
               ) : null}
               <button

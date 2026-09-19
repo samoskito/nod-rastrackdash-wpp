@@ -10,6 +10,7 @@ import { IntegrationsModule } from "../integrations/integrations.module";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
 import { MetaReportSyncProcessor } from "./meta-report-sync.processor";
 import { MetaReportAutoSyncService } from "./meta-report-auto-sync.service";
+import { MetaInitialSyncPeriodService } from "./meta-initial-sync-period";
 import { MetaReportSyncQueueService } from "./meta-report-sync-queue.service";
 import { MetaReportingService } from "./meta-reporting.service";
 import { ReportingMetricsEngine } from "./reporting-metrics.engine";
@@ -32,6 +33,7 @@ import { WhatsappCampaignClassifierService } from "./whatsapp-campaign-classifie
   providers: [
     MetaReportingService,
     MetaReportAutoSyncService,
+    MetaInitialSyncPeriodService,
     MetaReportSyncQueueService,
     MetaReportSyncProcessor,
     ReportingMetricsEngine,
