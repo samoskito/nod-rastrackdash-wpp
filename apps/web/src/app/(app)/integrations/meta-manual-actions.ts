@@ -9,10 +9,7 @@ import type {
 } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
 import { isApiRequestError, serverApiFetch } from "../../../lib/server-api";
-import {
-  initialManualMetaSyncLookbackDays,
-  initialManualMetaSyncPeriod,
-} from "./meta-manual-sync-period";
+import type { InitialManualMetaSyncPeriod } from "./meta-manual-sync-period";
 
 export type MetaManualActionResult = {
   ok: boolean;
@@ -143,7 +140,7 @@ export async function createMetaManualConnectionAction(
       },
     );
 
-    const initialPeriod = initialManualMetaSyncPeriod();
+    const initialPeriod = await getInitialManualMetaSyncPeriod();
     let syncQueued = true;
 
     try {
@@ -160,7 +157,7 @@ export async function createMetaManualConnectionAction(
     return {
       ok: true,
       message: syncQueued
-        ? `Estrutura ativada. A importacao inicial dos ultimos ${initialManualMetaSyncLookbackDays} dias foi enfileirada.`
+        ? `Estrutura ativada. A importacao inicial de ${initialPeriod.since} a ${initialPeriod.until} foi enfileirada.`
         : "Estrutura ativada, mas o historico nao entrou na fila. Use Sincronizar Meta em Relatorios.",
       configuration,
     };
@@ -272,9 +269,8 @@ export async function removeMetaManualConnectionAction(
 }
 
 export async function syncMetaManualHistoryAction(): Promise<MetaManualActionResult> {
-  const period = initialManualMetaSyncPeriod();
-
   try {
+    const period = await getInitialManualMetaSyncPeriod();
     await serverApiFetch(
       `/reports/meta/sync?since=${period.since}&until=${period.until}`,
       { method: "POST" },
@@ -603,9 +599,8 @@ export async function setMetaOAuthAdvancedRoutingAction(
     let syncQueued = true;
 
     if (enabled) {
-      const period = initialManualMetaSyncPeriod();
-
       try {
+        const period = await getInitialManualMetaSyncPeriod();
         await serverApiFetch(
           `/reports/meta/sync?since=${period.since}&until=${period.until}`,
           { method: "POST" },
@@ -629,6 +624,12 @@ export async function setMetaOAuthAdvancedRoutingAction(
   } catch (error) {
     return failure(error, "Nao foi possivel alterar o roteamento OAuth.");
   }
+}
+
+async function getInitialManualMetaSyncPeriod(): Promise<InitialManualMetaSyncPeriod> {
+  return serverApiFetch<InitialManualMetaSyncPeriod>(
+    "/reports/meta/initial-sync-period",
+  );
 }
 
 function metaBusinessConnectionPayload(formData: FormData) {

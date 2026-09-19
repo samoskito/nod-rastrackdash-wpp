@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { ForbiddenException } from "@nestjs/common";
+import { describe, expect, it, vi } from "vitest";
 import {
   MAX_INITIAL_LOOKBACK_DAYS,
   MetaInitialSyncPeriodService,
   resolveMetaInitialSyncPeriod,
 } from "../src/reporting/meta-initial-sync-period";
+import { ReportingController } from "../src/reporting/reporting.controller";
 
 const now = new Date("2026-09-19T15:00:00.000Z");
 const timeZone = "America/Sao_Paulo";
@@ -128,5 +130,61 @@ describe("MetaInitialSyncPeriodService", () => {
         },
       },
     ]);
+  });
+});
+
+describe("ReportingController initial Meta sync period", () => {
+  it("resolves the backend-owned period for the authenticated workspace", async () => {
+    const period = {
+      since: "2026-09-13",
+      until: "2026-09-19",
+      anchorSource: "whatsapp_instance" as const,
+      lookbackDaysApplied: 7,
+    };
+    const resolve = vi.fn().mockResolvedValue(period);
+    const controller = new ReportingController(
+      {} as never,
+      {} as never,
+      { resolve } as never,
+      {
+        getSession: vi.fn().mockResolvedValue({ user: { id: "user-1" } }),
+      } as never,
+      {
+        getCurrentWorkspace: vi.fn().mockReturnValue({
+          id: "workspace-1",
+          permissions: { canManageIntegrations: true },
+        }),
+      } as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.getMetaInitialSyncPeriod("refresh-token"),
+    ).resolves.toEqual(period);
+    expect(resolve).toHaveBeenCalledWith({ workspaceId: "workspace-1" });
+  });
+
+  it("requires integration management permission", async () => {
+    const resolve = vi.fn();
+    const controller = new ReportingController(
+      {} as never,
+      {} as never,
+      { resolve } as never,
+      {
+        getSession: vi.fn().mockResolvedValue({ user: { id: "user-1" } }),
+      } as never,
+      {
+        getCurrentWorkspace: vi.fn().mockReturnValue({
+          id: "workspace-1",
+          permissions: { canManageIntegrations: false },
+        }),
+      } as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.getMetaInitialSyncPeriod("refresh-token"),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(resolve).not.toHaveBeenCalled();
   });
 });

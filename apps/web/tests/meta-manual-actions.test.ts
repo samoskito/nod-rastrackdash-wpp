@@ -18,7 +18,13 @@ import {
   removeMetaManualConnectionAction,
   syncMetaManualHistoryAction,
 } from "../src/app/(app)/integrations/meta-manual-actions";
-import { initialManualMetaSyncPeriod } from "../src/app/(app)/integrations/meta-manual-sync-period";
+
+const initialPeriod = {
+  since: "2026-07-08",
+  until: "2026-07-14",
+  anchorSource: "whatsapp_instance" as const,
+  lookbackDaysApplied: 7,
+};
 
 const discovery = {
   credential: {
@@ -115,13 +121,16 @@ describe("Meta manual server actions", () => {
   });
 
   it("builds the advanced matrix destination payload with explicit IDs", async () => {
-    serverApiFetch.mockResolvedValueOnce({
-      workspaceId: "workspace_1",
-      credentials: [],
-      businessConnections: [],
-      destinations: [],
-      reportingAccounts: [],
-    });
+    serverApiFetch
+      .mockResolvedValueOnce({
+        workspaceId: "workspace_1",
+        credentials: [],
+        businessConnections: [],
+        destinations: [],
+        reportingAccounts: [],
+      })
+      .mockResolvedValueOnce(initialPeriod)
+      .mockResolvedValueOnce({ status: "queued" });
     const formData = new FormData();
     formData.set("credentialId", "credential_1");
     formData.set("businessManagerId", "business_advertiser");
@@ -156,25 +165,27 @@ describe("Meta manual server actions", () => {
       }),
     );
     expect(serverApiFetch).toHaveBeenCalledWith(
-      "/reports/meta/sync?since=2026-04-16&until=2026-07-14",
+      "/reports/meta/initial-sync-period",
+    );
+    expect(serverApiFetch).toHaveBeenCalledWith(
+      "/reports/meta/sync?since=2026-07-08&until=2026-07-14",
       { method: "POST" },
     );
   });
 
-  it("builds a 90-day inclusive initial history period", () => {
-    expect(
-      initialManualMetaSyncPeriod(new Date("2026-07-14T15:00:00.000Z")),
-    ).toEqual({ since: "2026-04-16", until: "2026-07-14" });
-  });
-
   it("queues a new history import for an already saved structure", async () => {
-    serverApiFetch.mockResolvedValueOnce({ status: "queued" });
+    serverApiFetch
+      .mockResolvedValueOnce(initialPeriod)
+      .mockResolvedValueOnce({ status: "queued" });
 
     const result = await syncMetaManualHistoryAction();
 
     expect(result).toMatchObject({ ok: true });
     expect(serverApiFetch).toHaveBeenCalledWith(
-      "/reports/meta/sync?since=2026-04-16&until=2026-07-14",
+      "/reports/meta/initial-sync-period",
+    );
+    expect(serverApiFetch).toHaveBeenCalledWith(
+      "/reports/meta/sync?since=2026-07-08&until=2026-07-14",
       { method: "POST" },
     );
     expect(revalidatePath).toHaveBeenCalledWith("/reports");
