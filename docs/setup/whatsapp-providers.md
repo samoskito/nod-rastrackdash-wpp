@@ -16,7 +16,7 @@ qualquer provedor.
 | Modelo | Onde se cria | Escopo | Providers |
 |---|---|---|---|
 | **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → painel **"Provedores e receivers"** | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
-| **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → painel **"Webhooks de entrada"** | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
+| **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → painel **"Webhooks de entrada"** | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
 | **Meta Ads (conta de anúncios)** | `/integrations` → conexão manual Meta | Por workspace | `meta` — token de usuário do sistema, veja [`meta-manual.md`](meta-manual.md) |
 
 Os dois primeiros modelos entregam **mensagens**. O terceiro entrega
@@ -98,12 +98,12 @@ Em `/integrations`, no painel **Provedores e receivers**:
 | `POST /webhooks/whatsapp/:id` — **WAHA** | Idem | `payload.session` precisa ser **exatamente** a Sessão salva na conexão | **Pronto** |
 | `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel") |
-| `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
+| `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
 | `POST /webhooks/inbound/:id` — **Meta WhatsApp (Cloud API)** | `x-hub-signature-256` via `META_APP_SECRET`; **sem** `META_APP_SECRET`, só é aceito enquanto a conexão está em **observação** | — | **Pronto (CTWA)** — veja a seção Meta Cloud |
 | `GET /webhooks/inbound/:id` — handshake Meta Cloud | `hub.verify_token` comparado ao **Verify token** daquela conexão | `hub.mode=subscribe` | **Pronto** |
 | `POST /webhooks/uazapi` e `POST /webhooks/uazapi/instances/:id` (legado) | Env global `UAZAPI_WEBHOOK_AUTH_TOKEN` / hash por instância | Exigem uma linha `WhatsappInstance` com `provider = "uazapi"` (valor legado) — **o painel novo grava `uazapi_byo`**, então essas rotas não enxergam as conexões criadas pela UI | **Legado — use o receiver por conexão acima** |
 | `GET`/`POST /webhooks/meta` | `META_WEBHOOK_VERIFY_TOKEN` / `META_APP_SECRET` | Roteamento por `page_id` até o `MetaConversionDestination` | **Pronto** — é webhook de **Meta Ads**, não de mensagens |
-| Data Crazy, Zap Responder | — | — | **Não implementados** — nenhum adapter, parser ou valor de enum |
+| Zap Responder | — | — | **Não implementado** — não há contrato para este provedor |
 
 ## Regra de produto que vale para todos: só CTWA vira lead
 
@@ -119,6 +119,7 @@ O que muda de provedor para provedor é **quais mensagens chegam**:
 | Uazapi (BYO) | Sim | **Sim** — avalia regras de frase/tag do atendente |
 | Umbler Talk | Sim | **Sim** — o payload traz `OrganizationMember`/`Bot` |
 | Gupshup | Sim | Não — envelope Cloud API só traz mensagens recebidas |
+| Data Crazy | Sim | Não — mensagens inbound só viram lead quando têm CTWA |
 | Meta WhatsApp (Cloud API) | Sim | **Não** — veja abaixo |
 | WAHA / Z-API | Sim | Não (mensagens `fromMe` são classificadas `ignored_outbound`) |
 
@@ -196,6 +197,31 @@ envios automáticos" numa conexão `meta_cloud`, preencha
 `META_APP_SECRET` e faça redeploy da API** — senão as entregas param
 silenciosamente do ponto de vista da Meta.
 
+## Data Crazy — conexão de webhook de entrada (CTWA)
+
+Use Data Crazy como uma conexão inbound por workspace; ele não exige
+credencial ou variável de ambiente própria neste template.
+
+1. Em `/integrations` → **Webhooks de entrada** → **Adicionar conexão**,
+   escolha **Data Crazy**, dê um nome e clique em **Gerar webhook**.
+2. Copie a **URL de callback** completa, incluindo `?token=`. Ela aparece
+   uma única vez; se perder, use **Gerar nova URL**, que invalida a URL
+   anterior.
+3. No Data Crazy, crie uma automação HTTP para **mensagem recebida** e
+   cole essa URL. O contrato é
+   `{API_PUBLIC_URL}/webhooks/inbound/{ID_DA_CONEXAO}?token=...`.
+4. Aguarde o primeiro webhook: o canal é descoberto automaticamente a
+   partir da instância do Data Crazy. **Não há cadastro manual de canal
+   provisório nem número de telefone provisório** para esse provedor.
+5. Só mensagens inbound com atribuição **CTWA** se tornam leads
+   operacionais. Mensagens sem CTWA ficam registradas como
+   `ignored_no_ctwa`; gatilhos por palavra-chave, tag ou automação do
+   provedor não fazem parte do parser Data Crazy v1.
+6. Após uma entrega CTWA real ser processada em observação, um
+   administrador da instalação deve certificar o parser **Data Crazy v1**
+   no backoffice. Só então configure a rota Meta do canal e ative a
+   conexão em produção, no mesmo gate usado por Gupshup e Meta Cloud.
+
 ## Umbler Talk e Gupshup — conexão de webhook de entrada
 
 1. Em `/integrations` → **Webhooks de entrada** → **Adicionar conexão**,
@@ -251,8 +277,8 @@ Consequências práticas, confirmadas no código:
 
 ## Gatilhos de conversão exigem as envs `INBOUND_*`
 
-Vale para **qualquer origem** (Uazapi, NOD API, WAHA, Z-API, Umbler,
-Gupshup, Meta Cloud). O padrão de todas elas é **desligado**, então
+Vale para as origens que usam gatilhos (Uazapi, NOD API, WAHA, Z-API,
+Umbler, Gupshup e Meta Cloud). O padrão de todas elas é **desligado**, então
 leads podem chegar normalmente e **Nova regra** simplesmente não
 aparecer:
 
@@ -309,13 +335,24 @@ Depois, **redeploy da API**. Detalhe de cada variável em
   `body.instanceId` precisa bater com o Instance ID salvo.
 - Ainda **sem** ponte automática para a central de Gatilhos.
 
-### Data Crazy e Zap Responder
+### Data Crazy (`data_crazy`)
 
-**Não implementados neste código.** Não existe adapter, parser, nem valor
-de enum para nenhum dos dois. Não oriente o aluno a preencher variáveis
-de ambiente para esses nomes: não existe nada no backend para consumi-las.
-Se quiser conectar a Meta "direto", como esses serviços fazem, o caminho
-pronto é **Meta WhatsApp (Cloud API)** acima.
+- É uma conexão de webhook de entrada por workspace, criada em
+  `/integrations`; não há adapter de instância, número comercial no payload
+  ou variável de ambiente própria.
+- Cole a URL gerada, com `?token=`, em uma automação HTTP de **mensagem
+  recebida** do Data Crazy. O canal só aparece depois do primeiro webhook;
+  não tente cadastrar um canal provisório.
+- O parser Data Crazy v1 converte somente inbound com CTWA em lead. Depois
+  de observar uma entrega CTWA real, certifique o parser no backoffice antes
+  de ativar produção.
+- Palavra-chave, tag e outros gatilhos de automação do Data Crazy não fazem
+  parte deste parser v1.
+
+### Zap Responder
+
+**Ainda não implementado neste código.** Não há contrato para este
+provedor; não invente variáveis de ambiente para ele.
 
 ## Onde cada credencial vem
 
@@ -326,6 +363,7 @@ pronto é **Meta WhatsApp (Cloud API)** acima.
 | WAHA | Painel/configuração da própria instância WAHA self-hosted |
 | Z-API | Painel da conta Z-API do aluno |
 | Umbler / Gupshup | Painel de cada serviço — lá você cola a URL de callback (com `?token=`) gerada aqui |
+| Data Crazy | Automação HTTP de mensagem recebida — lá você cola a URL de callback (com `?token=`) gerada aqui |
 | Meta WhatsApp (Cloud API) | App Meta → WhatsApp → Configurar webhooks; o `META_APP_SECRET` é o App Secret do mesmo app |
 | Meta Ads | Gerenciador de Negócios (Meta Business Suite) — veja [`meta-manual.md`](meta-manual.md) |
 

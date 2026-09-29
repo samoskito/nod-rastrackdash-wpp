@@ -55,10 +55,12 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
       leads/dia em média — só para dimensionar (docs/setup/vps.md).
    c) Quais provedores de WhatsApp pretendo usar: Uazapi BYO, NOD API
       (add-on licenciado PalmUP), WAHA (self-host), Z-API e/ou webhook
-      inbound genérico (Umbler/Gupshup). Data Crazy e Zap Responder ainda
-      não têm contrato implementado neste código — se eu pedir um desses
-      dois, diga isso claramente em vez de fingir que existe suporte
-      (docs/setup/whatsapp-providers.md).
+      inbound (Umbler/Gupshup/Data Crazy). Data Crazy é suportado como
+      conexão de webhook inbound por workspace: a URL com `?token=` deve
+      ser colada em uma automação HTTP de mensagem recebida, e o canal só
+      aparece depois do primeiro webhook. Zap Responder ainda não tem
+      contrato implementado; se eu pedir esse provedor, diga isso
+      claramente (docs/setup/whatsapp-providers.md).
    d) Se quero personalizar marca (whitelabel) desde já ou depois.
    e) Se quero configurar SMTP agora, para o responsável de cada workspace
       receber um e-mail automático de ativação, ou prefiro deixar para
@@ -102,8 +104,10 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    deployment**, configurada só pela env (redeploy e pronto — não existe
    passo de "criar instância" nem uma por workspace, a própria tela de
    Integrações avisa isso); só a conexão de webhook inbound
-   (Umbler/Gupshup) é criada por workspace em `/integrations`, com
-   segredo próprio. Não confunda os dois modelos
+   (Umbler/Gupshup/Data Crazy) é criada por workspace em `/integrations`,
+   com segredo próprio. Para Data Crazy, a URL gerada com `?token=` vai na
+   automação HTTP de mensagem recebida; não existe canal provisório, pois o
+   canal é descoberto após o primeiro webhook. Não confunda os dois modelos
    (docs/setup/whatsapp-providers.md); (12) marca opcional; (13) health e
    checklist final de onboarding.
 
