@@ -36,6 +36,7 @@ import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
+import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
 import { LeadsService } from "../leads/leads.service";
@@ -373,7 +374,10 @@ export class InboundWebhookProductionService {
       parserVersion: connection.parserRelease.version,
       parserReleaseStatus: connection.parserRelease.status,
     });
-    const result = parser.parse(payload);
+    const result = parser.parse(
+      payload,
+      inboundWebhookParserContext(delivery.workspaceId),
+    );
     const parsedEvent = result.events.find(
       (candidate) => candidate.dedupeKey === item.event.dedupeKey,
     );
