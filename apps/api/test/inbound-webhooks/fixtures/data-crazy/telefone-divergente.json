@@ -1,0 +1,6 @@
+[
+  {
+    "leadId": "lead_fixture_003",
+    "body": "{\"telefone\":\"5511999999123\",\"mensagem\":\"{\\\"from\\\":\\\"551199999123\\\",\\\"type\\\":\\\"text\\\",\\\"messageData\\\":{\\\"id\\\":\\\"message_fixture_005\\\",\\\"date\\\":\\\"2026-09-10T10:34:00.000Z\\\",\\\"text\\\":\\\"Synthetic divergence message.\\\",\\\"contact\\\":{\\\"phoneNumber\\\":\\\"551199999123\\\"}},\\\"instanceData\\\":{\\\"id\\\":\\\"instance_fixture_001\\\",\\\"name\\\":\\\"Synthetic Sales Instance\\\"},\\\"referral\\\":{\\\"ctwa_clid\\\":\\\"ctwa_fixture_005\\\",\\\"source_id\\\":\\\"ad_fixture_005\\\"}}\"}"
+  }
+]

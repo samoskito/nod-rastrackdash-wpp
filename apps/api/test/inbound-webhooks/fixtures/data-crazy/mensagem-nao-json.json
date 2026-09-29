@@ -1,0 +1,6 @@
+[
+  {
+    "leadId": "lead_fixture_invalid_message",
+    "body": "{\"telefone\":\"5511999999123\",\"mensagem\":\"not-json\"}"
+  }
+]

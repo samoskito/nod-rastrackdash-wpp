@@ -222,7 +222,60 @@ describe("inbound webhook panel", () => {
     );
     expect(html).toContain("Webhooks de entrada");
     expect(html).toContain(
+      "Configure Umbler Talk, Gupshup, Data Crazy ou Meta WhatsApp (Cloud API).",
+    );
+    expect(html).not.toContain(
       "parser de mensagens sera disponibilizado posteriormente",
+    );
+  });
+
+  it("labels Data Crazy and explains where to paste the callback", () => {
+    expect(inboundWebhookProviderLabel("data_crazy")).toBe("Data Crazy");
+    expect(inboundPasteInstruction("data_crazy")).toBe(
+      "No Data Crazy, crie uma automacao de mensagem recebida com requisicao HTTP POST (JSON) e cole esta URL.",
+    );
+
+    const html = renderPanel({
+      connections: [],
+      capabilities: {
+        ...capabilities,
+        providers: [
+          ...capabilities.providers,
+          {
+            provider: "data_crazy",
+            parserVersion: "v1",
+            parserReleaseStatus: "observation_only",
+            creationEnabled: true,
+          },
+        ],
+      },
+    });
+
+    expect(html).toContain('<option value="data_crazy">Data Crazy</option>');
+  });
+
+  it("shows the Data Crazy one-time URL with its automation instruction", () => {
+    const html = renderOneTimeSecret({
+      provider: "data_crazy",
+      webhookUrl: "https://app.example.com/inbound/data_crazy/abc123",
+    });
+
+    expect(html).toContain("Cadastre este webhook no Data Crazy agora");
+    expect(html).toContain("Copiar URL");
+    expect(html).not.toContain("Verify token");
+    expect(html).toContain(inboundPasteInstruction("data_crazy"));
+  });
+
+  it("does not offer manual channel registration for Data Crazy and explains the automatic channel", () => {
+    const html = renderPanel({
+      connections: [connectionViewWithoutChannels({ provider: "data_crazy" })],
+    });
+
+    expect(html).toContain("Data Crazy - Observando");
+    expect(html).not.toContain("Cadastrar canal/numero");
+    expect(html).not.toContain("Nenhum canal cadastrado ainda");
+    expect(html).toContain(
+      "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar.",
     );
   });
 
@@ -505,9 +558,11 @@ function renderOneTimeSecret(
 function renderPanel({
   canManage = true,
   connections = [connectionView],
+  capabilities: panelCapabilities = capabilities,
 }: {
   canManage?: boolean;
   connections?: InboundWebhookConnectionView[];
+  capabilities?: InboundWebhookCapabilitiesDto;
 } = {}) {
   const action = vi.fn(async (_formData: FormData) => ({
     ok: true as const,
@@ -516,7 +571,7 @@ function renderPanel({
 
   return renderToStaticMarkup(
     createElement(InboundWebhookPanel, {
-      capabilities,
+      capabilities: panelCapabilities,
       connections,
       providerRules: [],
       providerRulesEnabled: true,

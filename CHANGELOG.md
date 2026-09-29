@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This is the **initial public release** of the `nod-rastrackdash-wpp` student template — there is no prior public version to diff against, so nothing below is "breaking" for existing consumers.
 
+## [Unreleased]
+
+### Added
+
+- **Data Crazy inbound webhook** support for CTWA messages, including
+  student setup guidance for connection, observation, certification and
+  production activation.
+
 ## [1.0.0] - 2026-08-24
 
 Student edition of RastrackDash: a sanitized, self-hostable export of the PalmUP WppTrack product, covering license activation, multi-provider WhatsApp, a simplified student backoffice, whitelabel branding, and AI-first setup docs.

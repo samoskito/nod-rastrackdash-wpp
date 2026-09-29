@@ -303,8 +303,8 @@ cai na env quando aquele campo não foi preenchido na conexão. Elas também
 alimentam o card de status global "Instância Uazapi (BYO)" no rodapé de
 `/integrations`.
 
-Umbler Talk, Gupshup e Meta WhatsApp (Cloud API) **não têm variável de
-ambiente** — são conexões de webhook de entrada criadas em
+Umbler Talk, Gupshup, Data Crazy e Meta WhatsApp (Cloud API) **não têm
+variável de ambiente específica do provedor** — são conexões de webhook de entrada criadas em
 `/integrations`. O contrato completo, a matriz do que já recebe mensagem
 e o que ainda não, está em
 [`whatsapp-providers.md`](whatsapp-providers.md) — leia antes de configurar.
@@ -335,11 +335,15 @@ conexão nova: use o receiver por conexão. Matriz completa em
 
 Nunca defina `UAZAPI_ADMIN_TOKEN` — essa variável não existe neste template e não deve ser reintroduzida (token de frota interno da PalmUP).
 
-Não existem hoje variáveis de ambiente para Data Crazy ou Zap Responder —
-esses dois provedores não têm adapter, parser nem contrato implementado
-neste código (veja [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy-e-zap-responder)); não invente valores para eles. Para conectar
-a Meta "direto", como esses serviços fazem, o caminho pronto é a conexão
-**Meta WhatsApp (Cloud API)** em `/integrations`, sem env alguma.
+**Data Crazy não precisa de variável de ambiente própria.** Crie a conexão
+inbound em `/integrations`, gere a URL com `?token=` e cole-a na automação
+HTTP de mensagem recebida do Data Crazy. Ele usa a stack inbound já
+existente, incluindo `INBOUND_WEBHOOKS_ENABLED` e, para produção,
+`INBOUND_WEBHOOK_PRODUCTION_ENABLED`; veja
+[`whatsapp-providers.md`](whatsapp-providers.md#data-crazy--conexão-de-webhook-de-entrada-ctwa).
+
+**Zap Responder** continua sem contrato implementado; não invente
+variáveis de ambiente para ele.
 
 ## NOD API broker
 

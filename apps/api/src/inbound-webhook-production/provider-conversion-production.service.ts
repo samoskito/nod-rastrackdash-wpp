@@ -51,6 +51,7 @@ import {
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
+import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
 import {
@@ -1405,7 +1406,10 @@ export class ProviderConversionProductionService {
       parserVersion: rule.connection.parserRelease.version,
       parserReleaseStatus: rule.connection.parserRelease.status,
     });
-    const result = parser.parse(payload);
+    const result = parser.parse(
+      payload,
+      inboundWebhookParserContext(execution.workspaceId),
+    );
     const parsedEvent = result.events.find(
       (event) => event.dedupeKey === execution.externalExecutionKey,
     );

@@ -67,6 +67,7 @@ type PanelNotice = {
 
 export function inboundWebhookProviderLabel(provider: string): string {
   const labels: Record<string, string> = {
+    data_crazy: "Data Crazy",
     gupshup: "Gupshup",
     meta_cloud: "Meta WhatsApp (Cloud API)",
     umbler: "Umbler Talk",
@@ -76,6 +77,8 @@ export function inboundWebhookProviderLabel(provider: string): string {
 }
 
 const inboundPasteInstructions: Record<string, string> = {
+  data_crazy:
+    "No Data Crazy, crie uma automacao de mensagem recebida com requisicao HTTP POST (JSON) e cole esta URL.",
   gupshup: "Cole esta URL no painel/webhook da Gupshup.",
   meta_cloud:
     "Cole URL e token em App Meta → Configurar webhooks → Verificar e salvar.",
@@ -87,6 +90,12 @@ export function inboundPasteInstruction(provider: string): string {
     inboundPasteInstructions[provider] ??
     `Cole esta URL no painel/webhook da ${inboundWebhookProviderLabel(provider)}.`
   );
+}
+
+// Data Crazy nao aceita cadastro manual de numero: o canal nasce do primeiro
+// webhook recebido (a API bloqueia o canal provisorio para esse provider).
+function allowsManualChannelRegistration(provider: string): boolean {
+  return provider !== "uazapi" && provider !== "data_crazy";
 }
 
 export function InboundWebhookPanel({
@@ -222,9 +231,9 @@ export function InboundWebhookPanel({
           <span className="eyebrow">Fontes de mensagens</span>
           <h2>Webhooks de entrada</h2>
           <p className="muted">
-            Configure Umbler Talk, Gupshup ou Meta WhatsApp (Cloud API). A
-            conexao Meta nesta etapa verifica apenas a assinatura do webhook; o
-            parser de mensagens sera disponibilizado posteriormente.
+            Configure Umbler Talk, Gupshup, Data Crazy ou Meta WhatsApp (Cloud
+            API). Cada conexao gera uma URL propria; so mensagens vindas de
+            anuncio (CTWA) viram lead.
           </p>
         </div>
         {canManage && capabilities.enabled ? (
@@ -537,7 +546,8 @@ export function InboundWebhookPanel({
                       <span>Prontidao</span>
                       <span>Ultimo evento</span>
                     </div>
-                    {canManage && connection.provider !== "uazapi" ? (
+                    {canManage &&
+                    allowsManualChannelRegistration(connection.provider) ? (
                       <ChannelCreateForm
                         connectionId={connection.id}
                         pending={
@@ -554,9 +564,9 @@ export function InboundWebhookPanel({
                     ) : null}
                     {channels.length === 0 ? (
                       <p className="muted inbound-channel-empty">
-                        Nenhum canal cadastrado ainda. Cadastre o numero
-                        conectado para liberar as regras de conversao antes do
-                        primeiro lead chegar.
+                        {connection.provider === "data_crazy"
+                          ? "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar. Envie uma mensagem de teste para liberar as regras."
+                          : "Nenhum canal cadastrado ainda. Cadastre o numero conectado para liberar as regras de conversao antes do primeiro lead chegar."}
                       </p>
                     ) : (
                       channels.map((channel) => {
@@ -716,6 +726,7 @@ export function InboundWebhookOneTimeSecretPanel({
   onDismiss: () => void;
 }) {
   const providerLabel = inboundWebhookProviderLabel(secret.provider);
+  const providerPreposition = secret.provider === "data_crazy" ? "no" : "na";
   const showVerifyToken = secret.provider === "meta_cloud";
 
   return (
@@ -730,7 +741,9 @@ export function InboundWebhookOneTimeSecretPanel({
               ? "URL e token exibidos uma unica vez"
               : "URL exibida uma unica vez"}
           </span>
-          <strong>Cadastre este webhook na {providerLabel} agora</strong>
+          <strong>
+            Cadastre este webhook {providerPreposition} {providerLabel} agora
+          </strong>
           <p className="muted">{inboundPasteInstruction(secret.provider)}</p>
         </div>
         <button

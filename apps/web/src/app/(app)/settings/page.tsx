@@ -374,6 +374,7 @@ function inboundProviderLabel(provider: string): string {
     gupshup: "Gupshup",
     uazapi: "UAZAPI",
     meta_cloud: "Meta WhatsApp (Cloud API)",
+    data_crazy: "Data Crazy",
   };
   return labels[provider] ?? provider;
 }

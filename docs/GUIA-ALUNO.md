@@ -112,7 +112,7 @@ Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, 
 
 As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
 
-### 10.2 Painel "Webhooks de entrada" — Umbler, Gupshup, Meta WhatsApp (Cloud API)
+### 10.2 Painel "Webhooks de entrada" — Umbler, Gupshup, Data Crazy e Meta WhatsApp (Cloud API)
 
 Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
 
@@ -120,9 +120,27 @@ Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gups
 2. **Cadastre o canal/número agora**, com o botão **Cadastrar canal/número** — você **não precisa** esperar o primeiro lead chegar. O canal fica provisório e é mesclado automaticamente quando a primeira mensagem real daquele número chegar.
 3. Vá em `/settings#whatsapp-triggers` → **Gatilhos de conversão** → **Nova regra**, limitando a regra aos canais que devem converter.
 
+**Data Crazy** também é uma conexão inbound por workspace, mas o fluxo de
+canal é diferente:
+
+1. **Adicionar conexão** → escolha **Data Crazy** → **Gerar webhook** e
+   copie a URL completa, com `?token=` (ela aparece uma única vez).
+2. No Data Crazy, crie uma automação HTTP de **mensagem recebida** e cole
+   essa URL. Não há variável de ambiente nem credencial específica de Data
+   Crazy neste template.
+3. Não cadastre um canal/número provisório: como o payload não traz o
+   telefone comercial, o canal aparece automaticamente só depois do
+   primeiro webhook.
+4. Apenas mensagens inbound com **CTWA** viram leads operacionais.
+   Palavra-chave, tag e outros gatilhos de automação do Data Crazy não
+   fazem parte do parser v1.
+5. Depois que uma entrega CTWA real for processada em observação, certifique
+   o parser **Data Crazy v1** no backoffice; então configure a rota Meta e
+   ative produção, no mesmo gate de Gupshup e Meta Cloud.
+
 ### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
 
-É a opção para conectar **seu número oficial da Meta sem intermediário**, no mesmo papel que Kinbox/DataCrazy cumprem quando "conectam a Meta". Não é a conexão de Meta Ads do passo 9 e não usa o token do Gerenciador de Negócios.
+É a opção para conectar **seu número oficial da Meta sem intermediário**, no mesmo papel que Kinbox/Data Crazy cumprem quando "conectam a Meta". Não é a conexão de Meta Ads do passo 9 e não usa o token do Gerenciador de Negócios.
 
 1. `/integrations` → **Webhooks de entrada** → **Adicionar conexão** → **Meta WhatsApp (Cloud API)** → **Gerar webhook**.
 2. Copie **URL de callback** e **Verify token** (os dois aparecem uma única vez, em linhas separadas). Aqui a URL **não** leva `?token=`.
@@ -136,9 +154,10 @@ Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gups
 
 **Antes de ativar envio automático** nessa conexão, preencha `META_APP_SECRET` (o App Secret do app Meta, não o token do Graph) e redeploy: sem ele, a conexão em produção passa a **recusar** os POSTs da Meta.
 
-**Data Crazy / Zap Responder** continuam **não implementados** (nenhum adapter, parser ou variável) — não tente configurá-los.
+**Zap Responder** ainda não é implementado neste código. **Data Crazy** é
+suportado como conexão inbound por webhook, conforme o passo 10.2.
 
-⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API, desligadas por padrão.** Isso vale para **qualquer origem** que use gatilhos (Uazapi, NOD API, WAHA, Z-API, Umbler, Gupshup, Meta Cloud). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. Checklist do mentor, direto na env da API (Dokploy):
+⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API, desligadas por padrão.** Isso vale para as origens que usam gatilhos (Uazapi, NOD API, WAHA, Z-API, Umbler, Gupshup e Meta Cloud). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. O Data Crazy v1 é CTWA inbound somente e não usa gatilho de palavra-chave/tag. Checklist do mentor, direto na env da API (Dokploy):
 
 1. `INBOUND_WEBHOOKS_ENABLED=true`
 2. `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gere com: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`
@@ -149,7 +168,7 @@ Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gups
 
 Detalhe completo de cada variável em [`setup/environment.md`](setup/environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
 
-A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. **WAHA e Z-API** recebem leads normalmente, mas **ainda não** têm essa criação automática de origem na central de Gatilhos — é uma lacuna conhecida, não um passo esquecido.
+A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). **Data Crazy** segue o fluxo CTWA de observação, certificação e produção do passo 10.2; o canal só é descoberto após o primeiro webhook. Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. **WAHA e Z-API** recebem leads normalmente, mas **ainda não** têm essa criação automática de origem na central de Gatilhos — é uma lacuna conhecida, não um passo esquecido.
 
 ## 11. Marca (whitelabel) — opcional
 

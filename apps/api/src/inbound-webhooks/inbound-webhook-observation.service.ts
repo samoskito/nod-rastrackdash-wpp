@@ -19,6 +19,7 @@ import {
   provisionalChannelOrganizationId,
   provisionalChannelProviderChannelId,
 } from "./inbound-webhook-provisional-channel";
+import { inboundWebhookParserContext } from "./providers/inbound-webhook-parser";
 import type {
   InboundWebhookDeliveryNormalizedSummary,
   InboundWebhookEventClassification,
@@ -581,7 +582,10 @@ export class InboundWebhookObservationService {
     }
 
     try {
-      return parser.parse(payload);
+      return parser.parse(
+        payload,
+        inboundWebhookParserContext(delivery.workspaceId),
+      );
     } catch {
       throw new InboundWebhookDeterministicFailure(
         "inbound_webhook_parser_execution_failed",

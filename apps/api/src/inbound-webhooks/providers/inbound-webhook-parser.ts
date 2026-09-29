@@ -40,6 +40,7 @@ export type InboundWebhookEventNormalizedSummary = {
   messageDirection: ParsedInboundWebhookMessageDirection;
   messageAuthorType: ParsedInboundWebhookMessageAuthorType;
   messageType: string | null;
+  phoneDivergenceDetected?: boolean;
   classification: InboundWebhookEventClassification;
   classificationReason: string;
 };
@@ -111,10 +112,23 @@ export type InboundWebhookParserResult = {
   error: InboundWebhookParserError | null;
 };
 
+export type InboundWebhookParserContext = {
+  organizationId?: string;
+};
+
+export function inboundWebhookParserContext(
+  workspaceId: string,
+): Readonly<InboundWebhookParserContext> {
+  return { organizationId: workspaceId };
+}
+
 export interface InboundWebhookParser {
   readonly provider: string;
   readonly parserVersion: string;
-  parse(payload: unknown): InboundWebhookParserResult;
+  parse(
+    payload: unknown,
+    context?: Readonly<InboundWebhookParserContext>,
+  ): InboundWebhookParserResult;
 }
 
 export type InboundWebhookEventDedupeIdentity = {

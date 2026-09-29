@@ -299,7 +299,24 @@ describe("inbound webhook contracts", () => {
     expect(inboundWebhookProviderSchema.parse("umbler")).toBe("umbler");
     expect(inboundWebhookProviderSchema.parse("gupshup")).toBe("gupshup");
     expect(inboundWebhookProviderSchema.parse("meta_cloud")).toBe("meta_cloud");
-    expect(() => inboundWebhookProviderSchema.parse("data_crazy")).toThrow();
+    expect(inboundWebhookProviderSchema.parse("data_crazy")).toBe(
+      "data_crazy",
+    );
+  });
+
+  it("rejects alternate spellings of the Data Crazy provider", () => {
+    for (const alias of ["datacrazy", "data-crazy", "DataCrazy"]) {
+      expect(() => inboundWebhookProviderSchema.parse(alias)).toThrow();
+    }
+  });
+
+  it("allows creating a Data Crazy connection", () => {
+    expect(
+      inboundWebhookConnectionCreateInputSchema.parse({
+        provider: "data_crazy",
+        displayName: "Data Crazy Comercial",
+      }),
+    ).toMatchObject({ provider: "data_crazy" });
   });
 
   it("accepts a bounded safe display name", () => {
