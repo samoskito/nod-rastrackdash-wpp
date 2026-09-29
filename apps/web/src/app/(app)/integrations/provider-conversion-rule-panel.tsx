@@ -131,7 +131,8 @@ type Notice = {
 
 export type ProviderConversionRulePanelProps = {
   connectionId: string;
-  connectionProvider: "umbler" | "gupshup" | "uazapi" | "meta_cloud";
+  connectionProvider:
+    "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy";
   channels: InboundWebhookChannelDto[];
   rules: ProviderConversionRuleDto[];
   enabled: boolean;

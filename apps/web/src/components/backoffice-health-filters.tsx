@@ -51,6 +51,7 @@ function SourceField({
         <option value="meta">Meta</option>
         <option value="umbler">Umbler</option>
         <option value="gupshup">Gupshup</option>
+        <option value="data_crazy">Data Crazy</option>
         <option value="uazapi">NOD API</option>
         <option value="asaas">Asaas</option>
         <option value="internal">Interno</option>
