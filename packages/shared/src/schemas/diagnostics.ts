@@ -14,7 +14,8 @@ export const diagnosticSources = [
   "external_mysql",
   "internal",
   "waha",
-  "zapi"
+  "zapi",
+  "data_crazy"
 ] as const;
 export const diagnosticSeverities = [
   "info",

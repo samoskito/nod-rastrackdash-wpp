@@ -1124,8 +1124,12 @@ export class InboundWebhookChannelRoutesService {
     }
 
     // UAZAPI/NOD channels are bridged automatically from the WhatsApp
-    // instance; manual provisional creation only applies to Umbler/Gupshup.
-    if (connection.provider === "uazapi") {
+    // instance. Data Crazy payloads carry no business phone, only an instance
+    // id, so a phone-keyed provisional channel could never be merged.
+    if (
+      connection.provider === "uazapi" ||
+      connection.provider === "data_crazy"
+    ) {
       throw new BadRequestException(
         "Este provedor cadastra o canal automaticamente",
       );

@@ -123,7 +123,15 @@ describe("MetaInitialSyncPeriodService", () => {
         args: {
           where: {
             workspaceId: "workspace-a",
-            provider: { in: ["umbler", "gupshup", "uazapi", "meta_cloud"] },
+            provider: {
+              in: [
+                "umbler",
+                "gupshup",
+                "uazapi",
+                "meta_cloud",
+                "data_crazy",
+              ],
+            },
             removedAt: null,
           },
           select: { createdAt: true },
