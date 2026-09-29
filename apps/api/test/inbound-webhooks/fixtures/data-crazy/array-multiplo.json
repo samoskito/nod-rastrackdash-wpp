@@ -1,0 +1,10 @@
+[
+  {
+    "leadId": "lead_fixture_001",
+    "body": "{\"telefone\":\"5511999999123\",\"mensagem\":\"{\\\"from\\\":\\\"551199999123\\\",\\\"type\\\":\\\"text\\\",\\\"messageData\\\":{\\\"id\\\":\\\"message_fixture_003\\\",\\\"date\\\":\\\"2026-09-10T10:32:00.000Z\\\",\\\"text\\\":\\\"Synthetic CTWA message.\\\",\\\"contact\\\":{\\\"phoneNumber\\\":\\\"551199999123\\\"}},\\\"instanceData\\\":{\\\"id\\\":\\\"instance_fixture_001\\\",\\\"name\\\":\\\"Synthetic Sales Instance\\\"},\\\"referral\\\":{\\\"ctwa_clid\\\":\\\"ctwa_fixture_003\\\",\\\"source_id\\\":\\\"ad_fixture_003\\\"}}\"}"
+  },
+  {
+    "leadId": "lead_fixture_002",
+    "body": "{\"telefone\":\"5511999999123\",\"mensagem\":\"{\\\"from\\\":\\\"551199999123\\\",\\\"type\\\":\\\"text\\\",\\\"messageData\\\":{\\\"id\\\":\\\"message_fixture_004\\\",\\\"date\\\":\\\"2026-09-10T10:33:00.000Z\\\",\\\"text\\\":\\\"Synthetic organic message.\\\",\\\"contact\\\":{\\\"phoneNumber\\\":\\\"551199999123\\\"}},\\\"instanceData\\\":{\\\"id\\\":\\\"instance_fixture_001\\\",\\\"name\\\":\\\"Synthetic Sales Instance\\\"}}\"}"
+  }
+]

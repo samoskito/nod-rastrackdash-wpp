@@ -8,6 +8,7 @@ describe("InboundWebhookParserRegistry", () => {
     ["meta_cloud", "v1"],
     ["waha", "v1"],
     ["zapi", "v1"],
+    ["data_crazy", "v1"],
   ])("resolves the default %s %s parser", (provider, parserVersion) => {
     const parser = new InboundWebhookParserRegistry().resolve({
       provider,

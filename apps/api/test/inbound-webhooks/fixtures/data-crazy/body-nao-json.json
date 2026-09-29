@@ -1,0 +1,6 @@
+[
+  {
+    "leadId": "lead_fixture_invalid_body",
+    "body": "not-json"
+  }
+]

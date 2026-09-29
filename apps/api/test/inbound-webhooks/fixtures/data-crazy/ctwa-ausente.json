@@ -1,0 +1,6 @@
+[
+  {
+    "leadId": "lead_fixture_002",
+    "body": "{\"telefone\":\"5511999999123\",\"mensagem\":\"{\\\"from\\\":\\\"551199999123\\\",\\\"type\\\":\\\"text\\\",\\\"messageData\\\":{\\\"id\\\":\\\"message_fixture_002\\\",\\\"date\\\":\\\"2026-09-10T10:31:00.000Z\\\",\\\"text\\\":\\\"https://example.invalid/preview/fixture-002\\\",\\\"contact\\\":{\\\"phoneNumber\\\":\\\"551199999123\\\",\\\"name\\\":\\\"Synthetic Contact\\\"}},\\\"instanceData\\\":{\\\"id\\\":\\\"instance_fixture_001\\\",\\\"name\\\":\\\"Synthetic Sales Instance\\\"}}\"}"
+  }
+]
