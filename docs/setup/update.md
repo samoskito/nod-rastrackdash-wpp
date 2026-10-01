@@ -50,12 +50,11 @@ Não apague nem regenere as envs que já existem (veja [O que você NÃO recria]
 
 ## Passo 3 — Redeploy da API (Dokploy)
 
-No serviço da API, dispare um **novo deploy** (o mesmo botão de deploy usado na instalação). Não mude repositório, branch, Dockerfile nem diretório de build.
+No serviço da API, dispare um **novo deploy** (o mesmo botão de deploy usado na instalação). Não mude repositório, branch, Dockerfile, diretório de build, comando de execução (Run Command), build args nem volumes.
 
 O que acontece, sem você rodar nada à mão:
 
-1. O Dokploy clona a `main` e builda a imagem pelo `Dockerfile` da raiz.
-   Para o painel indicar se esta instância acompanha a `main`, passe o SHA do commit como build arg `GIT_SHA` (por exemplo, `--build-arg GIT_SHA=<sha-do-commit>`; não é segredo). Use uma variável de build apenas se o seu provedor documentar que a disponibiliza: `$COMMIT` é um exemplo, não uma variável do Dokploy verificada por este guia.
+1. O Dokploy clona a `main` e builda a imagem pelo `Dockerfile` da raiz. Durante o build, a imagem registra sozinha qual commit foi instalado (linha `build identity:` no log de build) — você **não** informa SHA nenhum. Detalhes em [Versão instalada](#versão-instalada).
 2. Ao subir, o container executa:
    ```
    prisma migrate deploy && pnpm --filter @wpptrack/api start
@@ -92,6 +91,7 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 3. `/backoffice/license` → licença **utilizável**.
 4. `/integrations` → as conexões que já existiam continuam lá, com o status de antes.
 5. Se você usa gatilhos: `/settings#whatsapp-triggers` continua mostrando suas origens e **Nova regra**.
+6. Versão instalada conferida como em [Conferir depois do deploy](#conferir-depois-do-deploy).
 
 ### Exemplo: depois da atualização com Data Crazy
 
@@ -101,6 +101,76 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 - Passo a passo completo da conexão: [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy--conexão-de-webhook-de-entrada-ctwa) e passo 10.2 do [Guia do Aluno](../GUIA-ALUNO.md#102-painel-webhooks-de-entrada--umbler-gupshup-data-crazy-e-meta-whatsapp-cloud-api).
 
 Se **Webhooks de entrada** nem aparece, ou Data Crazy não está na lista, veja [Não apareceu Data Crazy / feature nova depois do merge](troubleshooting.md#não-apareceu-data-crazy--feature-nova-depois-do-merge).
+
+## Versão instalada
+
+O `/backoffice` mostra ao **dono da plataforma** se esta instância está na versão mais recente da `main` do template. Para isso, a API precisa saber **qual commit foi instalado** — e o build descobre isso sozinho.
+
+### Como funciona (não há nada para configurar)
+
+- O Dokploy clona o repositório com a pasta `.git`. Durante o build, o `Dockerfile` lê dessa pasta o commit exato (SHA completo, 40 caracteres) e grava só esse SHA dentro da imagem. A pasta `.git`, o histórico e o endereço do repositório (que pode conter token do provedor) **não** entram na imagem final.
+- Se o código buildado for diferente do commit (arquivo alterado, apagado ou adicionado depois do clone), o build **não** afirma versão nenhuma: grava "desconhecido".
+- A API compara esse SHA com a `main` pública no GitHub: igual → **em dia**; a `main` contém o seu commit e tem commits novos → **atualização disponível**; qualquer outra situação → **desconhecido**.
+
+### O que NÃO mexer
+
+Vale para instalação nova e para instância já no ar. Nada disto é necessário para a versão aparecer:
+
+| Campo no serviço da API (Dokploy) | Deixe como está |
+|---|---|
+| Comando de execução (Run Command / override de comando) | **Vazio** — o `Dockerfile` já roda migrations + start |
+| Build args (argumentos de build) | **Vazios** — não crie `GIT_SHA` |
+| Variáveis de ambiente | **Não** crie `GIT_SHA`: a API ignora esse valor em tempo de execução |
+| Volumes/mounts da API | **Nenhum** — é normal |
+| Banco, `LICENSE_*`, chaves `*_ENCRYPTION_KEY`, `JWT_*` | Inalterados (veja [O que você NÃO recria](#o-que-você-não-recria-nunca)) |
+
+Se você seguiu uma versão anterior deste guia e adicionou `GIT_SHA` como build arg ou env, pode apagar na próxima vez que mexer no serviço. Enquanto existir, ela é ignorada quando o build tem a pasta `.git` (o caso do Dokploy com provedor Git), então não atrapalha.
+
+### Conferir depois do deploy
+
+Um passo de cada vez:
+
+1. **Log de build** do deploy da API no Dokploy → procure a linha:
+   ```text
+   build identity: <40 caracteres hexadecimais> (source: git)
+   ```
+   Esse é o commit instalado, completo.
+2. **Compare** com o commit do deploy que o próprio Dokploy mostra no histórico de deploys (aparece como `Commit: <sha>`), ou com o SHA da `main` obtido pelo comando de preflight de [`dokploy.md`](dokploy.md#01-preflight-do-clone-git-público). Logo depois de um deploy da `main` pública, os três devem ser iguais.
+3. **`/backoffice`**, logado como dono da plataforma:
+   - `Versão instalada <7 primeiros caracteres>` → em dia. Os 7 caracteres batem com o início do SHA do passo 1.
+   - Aviso de atualização disponível → a `main` tem novidades depois do seu commit; siga este guia.
+   - `Não foi possível verificar atualizações` → veja a tabela abaixo. **Desconhecido não quer dizer em dia nem desatualizado.**
+
+> Se o passo de identidade aparecer como `CACHED` no log, o Docker reaproveitou um build anterior do **mesmo** código; use o passo 3 para conferir.
+
+### Quando aparece "Não foi possível verificar atualizações"
+
+| O que o log de build mostra | Causa | O que fazer |
+|---|---|---|
+| Nenhuma linha `build identity:` | A imagem é anterior a este recurso | Redeploy da API (passo 3) |
+| `build identity: unknown (no_git_metadata)` | O build não recebeu a pasta `.git` (upload de arquivo/zip, imagem pronta, cópia sem Git) | Use o provedor **Git** do [`dokploy.md`](dokploy.md#5-criar-o-serviço-da-api); ou veja [Build sem Git](#build-sem-git-fallback-honesto) |
+| `build identity: unknown (source_modified)` | O código buildado não bate com o commit (arquivos alterados/adicionados depois do clone) | Não edite arquivos no servidor; faça commit no seu fork e redeploy |
+| `build identity: unknown (invalid_build_arg)` | Build sem `.git` com um `GIT_SHA` que não é um SHA completo | Veja [Build sem Git](#build-sem-git-fallback-honesto) |
+| `build identity: unknown (git_metadata_unreadable)` | A pasta `.git` veio incompleta ou é um ponteiro de worktree | Redeploy limpo (sem cache) pelo provedor Git |
+| `build identity: <sha> (source: git)` | O build está certo; a comparação é que não fechou: GitHub fora do ar/limite de consultas (tenta de novo em até 15 min), ou o commit não é ancestral da `main` pública (fork com commits próprios, outra branch) | Aguarde e recarregue; para fork, sincronize com o upstream |
+
+### Fork ou branch própria
+
+- Fork sincronizado exatamente com a `main` pública → mesmo SHA → **em dia**.
+- Fork atrás da `main` pública, sem commits próprios → **atualização disponível**.
+- Fork com commits próprios, ou branch diferente → **desconhecido**. É o correto: não existe versão pública igual à sua para comparar.
+
+### Build sem Git (fallback honesto)
+
+Só para quem builda a imagem **sem** a pasta `.git` (por exemplo, a partir de um zip). Não se aplica ao fluxo do Dokploy com provedor Git e não foi validado no Dokploy — apenas em build Docker local.
+
+Nesse caso, é possível informar o commit exato no build: `--build-arg GIT_SHA=<SHA completo de 40 caracteres do código que está sendo buildado>`. Regras:
+
+- Precisa ser o SHA **do código buildado**, nunca o SHA mais recente da `main` "para ficar em dia".
+- SHA abreviado ou inválido → desconhecido.
+- Se o build tiver a pasta `.git`, o `GIT_SHA` é ignorado: o Git sempre vence. Com código alterado, o resultado é desconhecido mesmo com `GIT_SHA`.
+
+> **Para a IA que conduz o aluno:** nunca invente um commit, nunca copie o SHA da `main` para "corrigir" um desconhecido, nunca peça token/credencial do GitHub e nunca proponha `GIT_SHA` no fluxo Dokploy com provedor Git. Leia a linha `build identity:` do log e siga a tabela acima.
 
 ## Se algo der errado
 

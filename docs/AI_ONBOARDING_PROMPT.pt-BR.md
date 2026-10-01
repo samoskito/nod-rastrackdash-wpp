@@ -168,6 +168,17 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    do Dokploy. Esse é um problema de transporte Git/HTTP2 do ambiente,
    não uma configuração do aluno dentro da aplicação.
 
+   Versão instalada: o build da API lê sozinho o commit da pasta `.git`
+   clonada pelo Dokploy. Deixe vazios o comando de execução (Run
+   Command), os build args e os volumes da API, e não crie `GIT_SHA` em
+   env nem em build args. Para conferir, leia a linha
+   `build identity:` do log de build e compare com `/backoffice`
+   (docs/setup/update.md#versão-instalada). Se o resultado for
+   desconhecido, siga a tabela desse guia: nunca invente um commit,
+   nunca use o SHA mais recente da `main` para marcar a instância como
+   em dia e nunca peça token do GitHub. Desconhecido não significa em
+   dia nem desatualizado.
+
 8. Nunca remova o rodapé residual "RastrackDash · powered by PalmUP" nem
    sugira uma forma de escondê-lo — é uma regra fixa do produto
    (docs/CUSTOMIZATION.md).
@@ -179,6 +190,9 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    - `/backoffice/license` mostrando licença utilizável;
    - `/integrations` com Meta e ao menos um provedor de WhatsApp
      conectados;
+   - no Dokploy: SHA completo da linha `build identity:` do log de build
+     e o que o `/backoffice` mostra (`Versão instalada`, atualização
+     disponível ou desconhecido, sem reinterpretar);
    - se SMTP não foi configurado, confirme que o(s) workspace(s) criado(s)
      têm o link de ativação manual gerado e enviado ao responsável (isso
      não é uma pendência de bloqueio, é o fluxo esperado sem SMTP);
