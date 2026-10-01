@@ -189,6 +189,14 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** siga [`meta-manual.md`](meta-manual.md) para gerar e colar um novo token no workspace certo.
 - **Verificação:** `/integrations` mostra Meta conectado e os relatórios voltam a popular.
 
+## Não apareceu Data Crazy / feature nova depois do merge
+
+- **Sintoma:** a novidade já está na `main` do template (ex.: **Data Crazy** em `/integrations` → **Webhooks de entrada** → **Adicionar conexão**), mas a sua instância publicada não mostra.
+- **Diagnóstico seguro:** confira (1) se o seu deploy usa o repositório público na `main` ou um fork seu — e, se for fork, se ele foi sincronizado; (2) a data/commit do último deploy da **API** no Dokploy e do último deploy do **web** na Vercel; (3) se o log de boot da API mostrou as migrations aplicadas.
+- **Causa provável:** só um dos lados foi atualizado (API nova com web antigo, ou o contrário), o fork não foi sincronizado, ou o web foi "reiniciado" em vez de ganhar um build novo — telas novas e `NEXT_PUBLIC_*` só entram em build novo.
+- **Correção:** siga [`update.md`](update.md): sincronize o fork (se houver) → redeploy da API no Dokploy (as migrations rodam sozinhas no boot) → novo deploy de produção do web a partir da `main`. **Não reinstale**: banco, administrador, `LICENSE_*` e chaves de criptografia continuam os mesmos. Se o painel **Webhooks de entrada** aparece como indisponível, a causa é outra — confira as envs `INBOUND_*` em [Recebo leads/webhooks mas não aparece Nova regra](#recebo-leadswebhooks-mas-não-aparece-nova-regra).
+- **Verificação:** `/health/ready` retorna `200`, o login segue com o mesmo administrador, e **Data Crazy** aparece na lista de **Adicionar conexão** (a conexão nasce em observação — é esperado).
+
 ## Dokploy: crash-loop no deploy da API
 
 - **Diagnóstico:** logs do serviço no painel do Dokploy, olhando as primeiras linhas após o boot.

@@ -19,8 +19,9 @@ pnpm setup -- --dry-run
 |---|---|---|
 | **Local (Docker Compose)** | Desenvolver, homologar, conhecer o produto antes de decidir a VPS | [`local.md`](local.md) |
 | **VPS com Dokploy** | Deploy real da API/banco/Redis para uso com clientes | [`dokploy.md`](dokploy.md) (dimensionamento em [`vps.md`](vps.md)) |
+| **Atualizar instância já no ar** | Já instalou e quer as novidades da `main` (ex.: Data Crazy) **sem reinstalar** | [`update.md`](update.md) |
 
-Os dois caminhos convergem nos mesmos passos de produto: licença, admin, workspace, Meta, WhatsApp, marca.
+Os dois caminhos de instalação convergem nos mesmos passos de produto: licença, admin, workspace, Meta, WhatsApp, marca.
 
 ## Ordem recomendada
 
@@ -58,6 +59,7 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [Guia do Aluno — da compra ao primeiro workspace](../GUIA-ALUNO.md)
 - [Local (Docker Compose)](local.md)
 - [VPS — dimensionamento](vps.md) · [Deploy com Dokploy](dokploy.md)
+- [Atualizar uma instância que já está no ar](update.md)
 - [Variáveis de ambiente](environment.md)
 - [Troubleshooting](troubleshooting.md)
 - [Meta Ads manual](meta-manual.md)
