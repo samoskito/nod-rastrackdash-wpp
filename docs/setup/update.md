@@ -55,6 +55,7 @@ No serviço da API, dispare um **novo deploy** (o mesmo botão de deploy usado n
 O que acontece, sem você rodar nada à mão:
 
 1. O Dokploy clona a `main` e builda a imagem pelo `Dockerfile` da raiz.
+   Para o painel indicar se esta instância acompanha a `main`, passe o SHA do commit como build arg `GIT_SHA` (por exemplo, `--build-arg GIT_SHA=<sha-do-commit>`; não é segredo). Use uma variável de build apenas se o seu provedor documentar que a disponibiliza: `$COMMIT` é um exemplo, não uma variável do Dokploy verificada por este guia.
 2. Ao subir, o container executa:
    ```
    prisma migrate deploy && pnpm --filter @wpptrack/api start

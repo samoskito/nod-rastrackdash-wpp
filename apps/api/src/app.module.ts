@@ -20,6 +20,7 @@ import { LeadsModule } from "./leads/leads.module";
 import { LicenseClientModule } from "./licensing-client/license-client.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { ReportingModule } from "./reporting/reporting.module";
+import { TemplateVersionModule } from "./template-version/template-version.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
@@ -46,6 +47,7 @@ import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
     OpsAlertsModule,
     LicenseClientModule,
     OnboardingModule,
+    TemplateVersionModule,
   ],
   controllers: [HealthController],
   providers: [
