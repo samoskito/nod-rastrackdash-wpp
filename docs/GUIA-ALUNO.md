@@ -27,6 +27,8 @@ A arquitetura recomendada para produção é **Vercel para o web** + **Dokploy e
 
 Você pode seguir o caminho local primeiro e migrar para Dokploy depois — os passos de produto (3 em diante) são os mesmos nos dois caminhos.
 
+> **Já está no ar?** Se a sua instância já roda com clientes e você só quer as novidades do template (ex.: Data Crazy), **não reinstale**: siga [`setup/update.md`](setup/update.md) — redeploy da API (as migrations rodam sozinhas) e novo deploy do web, mantendo banco, administrador, licença e chaves.
+
 ## 3. Clonar, instalar e configurar o ambiente
 
 1. Clone o repositório e instale Node.js 20+, pnpm, Docker e Docker Compose (só necessário para o caminho local).
@@ -189,7 +191,7 @@ Repita, no ambiente publicado (não só localmente):
 
 - [Prompt oficial de onboarding com IA](AI_ONBOARDING_PROMPT.pt-BR.md)
 - [Índice de guias de instalação](setup/README.md)
-- [Local (Docker Compose)](setup/local.md) · [VPS — dimensionamento](setup/vps.md) · [Deploy com Dokploy](setup/dokploy.md)
+- [Local (Docker Compose)](setup/local.md) · [VPS — dimensionamento](setup/vps.md) · [Deploy com Dokploy](setup/dokploy.md) · [Atualizar instância já no ar](setup/update.md)
 - [Variáveis de ambiente](setup/environment.md) · [Troubleshooting](setup/troubleshooting.md)
 - [Meta Ads manual](setup/meta-manual.md) · [Provedores de WhatsApp, receivers e webhooks](setup/whatsapp-providers.md) · [Cobrança BYO](setup/billing/README.md)
 - [Personalização permitida](CUSTOMIZATION.md)

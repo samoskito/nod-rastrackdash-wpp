@@ -23,6 +23,21 @@ export const platformUserRoleUpdateInputSchema = z
 
 export const platformUserInvitationReissueInputSchema = z.object({}).strict();
 
+export const templateVersionStatusSchema = z.enum([
+  "current",
+  "behind",
+  "unknown",
+]);
+
+export const templateVersionSchema = z
+  .object({
+    deployedSha: z.string().nullable(),
+    latestMainSha: z.string().nullable(),
+    status: templateVersionStatusSchema,
+    updateGuideUrl: z.string().url(),
+  })
+  .strict();
+
 export const platformUserSchema = z.object({
   id: z.string().min(1),
   name: z.string().nullable(),
@@ -115,6 +130,7 @@ export const backofficeWorkspaceDeleteResultSchema = z
 export type PlatformUserProvisionInputDto = z.infer<
   typeof platformUserProvisionInputSchema
 >;
+export type TemplateVersionDto = z.infer<typeof templateVersionSchema>;
 export type PlatformUserRoleUpdateInputDto = z.infer<
   typeof platformUserRoleUpdateInputSchema
 >;

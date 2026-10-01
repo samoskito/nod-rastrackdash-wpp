@@ -6,6 +6,8 @@ Passo a passo **operacional** para levar a API, o PostgreSQL e o Redis do Rastra
 
 Antes de começar, dimensione a máquina com [`vps.md`](vps.md) (RAM/CPU conforme workspaces e leads/dia).
 
+> **Instância já instalada?** Este guia é para a primeira instalação. Para trazer novidades da `main` sem recriar banco, admin, licença ou chaves, use [`update.md`](update.md).
+
 ## 0. Pré-requisitos
 
 Confirme cada item antes de abrir o Dokploy:

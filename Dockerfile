@@ -49,7 +49,10 @@ FROM base AS runner
 
 WORKDIR /app
 
+ARG GIT_SHA=
+
 ENV NODE_ENV=production
+ENV GIT_SHA=${GIT_SHA}
 
 COPY --from=build /app ./
 

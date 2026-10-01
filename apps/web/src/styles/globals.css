@@ -15172,3 +15172,71 @@ button.meta-manual-entry[aria-expanded="true"] {
 .client-swap-dialog {
   max-width: min(560px, calc(100vw - 32px));
 }
+
+/* Backoffice status region: license banner + owner-only template version
+   banner, stacked above the standalone page (see backoffice-status-banners). */
+.backoffice-status-banners {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: var(--page-width-wide, 1520px);
+  margin: 0 auto;
+  padding: 24px var(--content-gutter, 26px) 0;
+}
+
+.backoffice-status-banners:empty {
+  display: none;
+}
+
+.feedback-banner.neutral {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.template-version-banner {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.template-version-banner-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.template-version-banner code,
+.template-version-current code {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.template-version-dismiss {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.template-version-dismiss:hover {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.template-version-dismiss:focus-visible {
+  border-color: var(--border-strong);
+  color: var(--ink);
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.template-version-current {
+  margin: 0;
+}
