@@ -186,6 +186,7 @@ Repita, no ambiente publicado (não só localmente):
 - `/integrations` → Meta Ads conectado e ao menos uma conexão de WhatsApp (provedor com receiver **ou** webhook de entrada) funcionando
 - Se usa gatilhos: `/settings#whatsapp-triggers` mostra a origem e o botão **Nova regra**
 - Se usou Dokploy: sem crash-loop no log do serviço da API ([`setup/troubleshooting.md`](setup/troubleshooting.md) tem o roteiro de diagnóstico)
+- Se usou Dokploy: o log de build mostra `build identity: <SHA de 40 caracteres> (source: git)` e o `/backoffice` mostra `Versão instalada` com os mesmos 7 primeiros caracteres. Você não configura isso — o build lê o commit sozinho. Se aparecer "Não foi possível verificar atualizações", siga [Versão instalada](setup/update.md#versão-instalada); nunca preencha um SHA à mão
 
 ## Referência rápida
 

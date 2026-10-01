@@ -197,6 +197,14 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** siga [`update.md`](update.md): sincronize o fork (se houver) → redeploy da API no Dokploy (as migrations rodam sozinhas no boot) → novo deploy de produção do web a partir da `main`. **Não reinstale**: banco, administrador, `LICENSE_*` e chaves de criptografia continuam os mesmos. Se o painel **Webhooks de entrada** aparece como indisponível, a causa é outra — confira as envs `INBOUND_*` em [Recebo leads/webhooks mas não aparece Nova regra](#recebo-leadswebhooks-mas-não-aparece-nova-regra).
 - **Verificação:** `/health/ready` retorna `200`, o login segue com o mesmo administrador, e **Data Crazy** aparece na lista de **Adicionar conexão** (a conexão nasce em observação — é esperado).
 
+## `/backoffice` diz "Não foi possível verificar atualizações"
+
+- **Sintoma:** o dono da plataforma vê `Não foi possível verificar atualizações` no `/backoffice`, em vez de `Versão instalada` ou do aviso de atualização disponível.
+- **Diagnóstico seguro:** abra o **log de build** do último deploy da API no Dokploy e procure a linha `build identity:`. Ela diz o commit instalado (`<sha> (source: git)`) ou o motivo do desconhecido (`unknown (...)`).
+- **Causa provável:** imagem anterior a este recurso (sem a linha), build sem pasta `.git`, código alterado depois do clone, fork/branch com commits que não estão na `main` pública, ou GitHub temporariamente indisponível.
+- **Correção:** siga a tabela de [Versão instalada](update.md#quando-aparece-não-foi-possível-verificar-atualizações). **Não** crie `GIT_SHA` em env ou build args no fluxo Dokploy com provedor Git, **não** cole o SHA da `main` para forçar "em dia" e **não** forneça token do GitHub.
+- **Verificação:** novo deploy com `build identity: <40 caracteres> (source: git)` no log e `/backoffice` mostrando `Versão instalada` (ou o aviso de atualização disponível).
+
 ## Dokploy: crash-loop no deploy da API
 
 - **Diagnóstico:** logs do serviço no painel do Dokploy, olhando as primeiras linhas após o boot.

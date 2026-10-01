@@ -53,6 +53,7 @@ Convenção de colunas:
 | `API_PUBLIC_URL` | Sim | URL pública da sua API | `.env` da API / env do serviço | Não |
 | `API_PORT` | Sim (tem padrão `3333`) | Porta que você expõe para a API. **No Dokploy, defina `API_PORT=3000`** — o `Dockerfile` faz `EXPOSE 3000`, e essa variável precisa bater exatamente com a porta interna do container configurada no serviço (veja [`dokploy.md`](dokploy.md#6-variáveis-de-ambiente-da-api)); sem isso a API sobe na porta padrão `3333` e o Dokploy não a alcança | `.env` da API / env do serviço | Não |
 | `INBOUND_WEBHOOKS_ENABLED` e demais `INBOUND_*` | **Sim, para Gatilhos de conversão** (padrão é `false`/desligado) — veja a seção dedicada [Gatilhos de conversão](#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno) abaixo | Flags de feature do produto | `.env` da API | `INBOUND_WEBHOOK_ENCRYPTION_KEY` **sim**, as demais não |
+| `GIT_SHA` | **Não — não crie.** O commit instalado é lido automaticamente da pasta `.git` durante o build; como env de runtime, `GIT_SHA` é ignorada. Só existe como build arg de fallback para builds **sem** `.git` — veja [Versão instalada](update.md#versão-instalada) | — | — | Não |
 | `WPPTRACK_*_MS`, `WPPTRACK_EXTERNAL_SYNC_*`, `WPPTRACK_EXTERNAL_MYSQL_*` | Não (têm padrão) | Tuning de performance/timeout — mantenha o padrão salvo se tiver um motivo específico para ajustar | `.env` da API | Não |
 
 ## Gatilhos de conversão — obrigatórias no caminho do aluno

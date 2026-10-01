@@ -126,6 +126,7 @@ Crie um **serviço de aplicação** no mesmo projeto, com estes campos:
 **Importante:**
 
 - **Não** aponte o diretório de build/contexto para `apps/api` — o build precisa da raiz do monorepo (o `Dockerfile` copia `packages/shared` e o workspace inteiro antes de compilar `apps/api`; um contexto restrito a `apps/api` quebra o build).
+- **Deixe vazios** o comando de execução (Run Command/override de comando), os build args e os volumes/mounts do serviço da API. O `Dockerfile` já roda migrations + start e já registra sozinho o commit instalado (veja [Versão instalada](update.md#versão-instalada)); não crie `GIT_SHA` nem em build args nem em env.
 - **Não clique em "Deploy" ainda.** O serviço pode ficar criado, sem build bem-sucedido, até PostgreSQL/Redis existirem (passos 2–4) e as variáveis de ambiente estarem completas (passo 6). Disparar o deploy antes disso só gera um crash-loop previsível.
 
 **Validação:** o serviço aparece criado no projeto, apontando para o repositório/branch/Dockerfile corretos, **ainda sem deploy disparado**.
@@ -201,14 +202,15 @@ Só agora, com PostgreSQL/Redis no ar (passos 2–4) e as envs do passo 6 preenc
 O que acontece no build (definido pelo `Dockerfile` na raiz — não customize comandos de build):
 
 1. Instala dependências do monorepo (`pnpm install --filter @wpptrack/api...`).
-2. `prisma generate`, build do `@wpptrack/shared` e do `@wpptrack/api`.
-3. Imagem final expõe a porta `3000` e, ao iniciar o container, roda:
+2. Em paralelo, lê o commit clonado pelo Dokploy e imprime `build identity: <sha> (source: git)` — é a versão que o `/backoffice` vai mostrar. A pasta `.git` é descartada antes de montar a imagem.
+3. `prisma generate`, build do `@wpptrack/shared` e do `@wpptrack/api`.
+4. Imagem final expõe a porta `3000` e, ao iniciar o container, roda:
    ```
    prisma migrate deploy && pnpm --filter @wpptrack/api start
    ```
    ou seja, **as migrations aplicam automaticamente a cada deploy**, antes da API aceitar tráfego — você não precisa (nem deve) rodar `prisma migrate deploy` manualmente contra produção.
 
-**Validação:** o log de build conclui sem erro; o log de runtime mostra as migrations sendo aplicadas (ou "no pending migrations") seguido da mensagem de start da API, **sem o container reiniciar em loop**.
+**Validação:** o log de build conclui sem erro e contém `build identity:` seguido de um SHA completo de 40 caracteres e `(source: git)`; o log de runtime mostra as migrations sendo aplicadas (ou "no pending migrations") seguido da mensagem de start da API, **sem o container reiniciar em loop**.
 
 ## 8. Migrations
 
@@ -294,6 +296,7 @@ Depois das integrações, se desejar, configure `BRAND_*` conforme [`../CUSTOMIZ
 4. `/backoffice` → checklist de onboarding completo.
 5. `/backoffice/license` → licença "utilizável".
 6. `/integrations` → Meta Ads conectado e ao menos uma conexão de WhatsApp (provedor com receiver **ou** webhook de entrada) funcionando.
+7. `/backoffice` (dono da plataforma) → `Versão instalada` com os mesmos 7 primeiros caracteres do SHA da linha `build identity:` do log de build (ou o aviso de atualização disponível, se a `main` recebeu commits depois do seu deploy). Se aparecer `Não foi possível verificar atualizações`, siga [Versão instalada](update.md#quando-aparece-não-foi-possível-verificar-atualizações) — não preencha SHA à mão.
 
 Se qualquer item falhar, vá para [`troubleshooting.md`](troubleshooting.md) antes de tentar de novo às cegas.
 
