@@ -50,7 +50,9 @@ import {
   type MetaCampaignAsset,
   type MetaCampaignDailyInsight,
   type MetaCampaignInsight,
+  type MetaPreviewEnrichmentStats,
 } from "../integrations/meta/meta.adapter";
+import { evaluateMetaPreviewUrlFreshness } from "../integrations/meta/meta-preview-url-freshness";
 import { MetaAdDestinationRoutingService } from "../integrations/meta/meta-ad-destination-routing.service";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 import { MetaConnectionResolverService } from "../integrations/meta/meta-connection-resolver.service";
@@ -158,6 +160,23 @@ type MetaReportingAccountRecord = {
   adAccountId: string;
   adAccountName: string;
   active: boolean;
+};
+
+/**
+ * Media previously saved for one workspace + reporting account, keyed by
+ * creative id so it is only ever applied to the same creative.
+ */
+type SavedAdMedia = {
+  /** Previews whose CDN expiry hint is safely in the future. */
+  reusablePreviewUrls: Map<string, string>;
+  /** Any saved preview, used only when enrichment of that creative failed. */
+  previewByCreative: Map<string, string>;
+  thumbnailByCreative: Map<string, string>;
+};
+
+type AdMediaResolutionCounters = {
+  preservedAfterFailure: number;
+  thumbnailsPreserved: number;
 };
 
 type ExistingClassificationRecord = {
@@ -547,7 +566,7 @@ export class MetaReportingService {
     const [
       campaigns,
       adSets,
-      ads,
+      adListing,
       campaignInsights,
       campaignDailyInsightsBatch,
       adSetInsights,
@@ -563,7 +582,11 @@ export class MetaReportingService {
         accessToken: input.accessToken,
         adAccountId,
       }),
-      this.metaAdapter.listAds({ accessToken: input.accessToken, adAccountId }),
+      this.listAdsReusingSavedMedia({
+        workspaceId: input.workspaceId,
+        accessToken: input.accessToken,
+        account: input.account,
+      }),
       this.metaAdapter.listCampaignInsights({
         accessToken: input.accessToken,
         adAccountId,
@@ -640,6 +663,25 @@ export class MetaReportingService {
             dailyInsights: adDailyInsightsBatch,
           })
         : adDailyInsightsBatch;
+    const { ads, previewStats, savedMedia } = adListing;
+    const mediaCounters: AdMediaResolutionCounters = {
+      preservedAfterFailure: 0,
+      thumbnailsPreserved: 0,
+    };
+    const mediaByAdId = new Map(
+      ads.map((ad) => [
+        ad.id,
+        this.resolveAdMedia(ad, savedMedia, mediaCounters),
+      ]),
+    );
+    this.logPreviewEnrichment({
+      workspaceId: input.workspaceId,
+      reportingAccountId: input.account.id,
+      adCount: ads.length,
+      stats: previewStats,
+      savedMedia,
+      counters: mediaCounters,
+    });
     const insightByCampaign = new Map(
       campaignInsights.map((item) => [item.campaignId, item]),
     );
@@ -804,6 +846,10 @@ export class MetaReportingService {
           workspaceId: input.workspaceId,
           account: input.account,
           ad,
+          media: mediaByAdId.get(ad.id) ?? {
+            previewUrl: null,
+            thumbnailUrl: null,
+          },
           destinationType: adSetById.get(ad.adSetId)?.destinationType ?? null,
           insight: insightByAd.get(ad.id),
           classification:
@@ -865,6 +911,173 @@ export class MetaReportingService {
       adSetsSynced: adSets.length,
       adsSynced: ads.length,
     };
+  }
+
+  private async listAdsReusingSavedMedia(input: {
+    workspaceId: string;
+    accessToken: string;
+    account: MetaReportingAccountRecord;
+  }): Promise<{
+    ads: MetaAdAsset[];
+    previewStats: MetaPreviewEnrichmentStats;
+    savedMedia: SavedAdMedia;
+  }> {
+    const savedMedia = await this.loadSavedAdMedia(input);
+    const { ads, previewStats } =
+      await this.metaAdapter.listAdsWithPreviewStats({
+        accessToken: input.accessToken,
+        adAccountId: input.account.adAccountId,
+        reusablePreviewUrls: savedMedia.reusablePreviewUrls,
+      });
+
+    return { ads, previewStats, savedMedia };
+  }
+
+  private async loadSavedAdMedia(input: {
+    workspaceId: string;
+    account: MetaReportingAccountRecord;
+  }): Promise<SavedAdMedia> {
+    // Scoped to this tenant and this exact ad account: media saved by another
+    // workspace or account is never reused, even for the same creative id.
+    const rows = (await this.prisma.metaAd.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        businessId: input.account.businessId,
+        adAccountId: input.account.adAccountId,
+        creativeId: { not: null },
+      },
+      select: { creativeId: true, previewUrl: true, thumbnailUrl: true },
+    })) as Array<{
+      creativeId: string | null;
+      previewUrl: string | null;
+      thumbnailUrl: string | null;
+    }>;
+    const now = new Date();
+    const savedMedia: SavedAdMedia = {
+      reusablePreviewUrls: new Map(),
+      previewByCreative: new Map(),
+      thumbnailByCreative: new Map(),
+    };
+    const reusableExpiryByCreative = new Map<string, number>();
+
+    for (const row of rows) {
+      const creativeId = row.creativeId;
+
+      if (!creativeId) {
+        continue;
+      }
+
+      if (row.thumbnailUrl && !savedMedia.thumbnailByCreative.has(creativeId)) {
+        savedMedia.thumbnailByCreative.set(creativeId, row.thumbnailUrl);
+      }
+
+      if (!row.previewUrl) {
+        continue;
+      }
+
+      if (!savedMedia.previewByCreative.has(creativeId)) {
+        savedMedia.previewByCreative.set(creativeId, row.previewUrl);
+      }
+
+      const freshness = evaluateMetaPreviewUrlFreshness(row.previewUrl, now);
+
+      if (
+        freshness.reusable &&
+        freshness.expiresAt.getTime() >
+          (reusableExpiryByCreative.get(creativeId) ?? 0)
+      ) {
+        reusableExpiryByCreative.set(creativeId, freshness.expiresAt.getTime());
+        savedMedia.reusablePreviewUrls.set(creativeId, row.previewUrl);
+        savedMedia.previewByCreative.set(creativeId, row.previewUrl);
+      }
+    }
+
+    return savedMedia;
+  }
+
+  /**
+   * Picks the media to persist for one ad. Prior media is only carried over
+   * for the same creative id: a failed lookup keeps that creative's saved
+   * preview, a thumbnail missing from the ads list keeps that creative's saved
+   * thumbnail. A changed or removed creative never inherits old media, and a
+   * creative Graph returned without media ("absent") is stored as null.
+   */
+  private resolveAdMedia(
+    ad: MetaAdAsset,
+    savedMedia: SavedAdMedia,
+    counters: AdMediaResolutionCounters,
+  ): { previewUrl: string | null; thumbnailUrl: string | null } {
+    let previewUrl = ad.previewUrl ?? null;
+    let thumbnailUrl = ad.thumbnailUrl ?? null;
+
+    if (!ad.creativeId) {
+      return { previewUrl: null, thumbnailUrl };
+    }
+
+    if (ad.previewSource === "failed") {
+      const priorPreview = savedMedia.previewByCreative.get(ad.creativeId);
+
+      if (priorPreview) {
+        previewUrl = priorPreview;
+        counters.preservedAfterFailure += 1;
+      }
+    }
+
+    if (!thumbnailUrl) {
+      const priorThumbnail = savedMedia.thumbnailByCreative.get(ad.creativeId);
+
+      if (priorThumbnail) {
+        thumbnailUrl = priorThumbnail;
+        counters.thumbnailsPreserved += 1;
+      }
+    }
+
+    return { previewUrl, thumbnailUrl };
+  }
+
+  private logPreviewEnrichment(input: {
+    workspaceId: string;
+    reportingAccountId: string;
+    adCount: number;
+    stats: MetaPreviewEnrichmentStats;
+    savedMedia: SavedAdMedia;
+    counters: AdMediaResolutionCounters;
+  }): void {
+    const { stats } = input;
+    const savedNotReusable =
+      input.savedMedia.previewByCreative.size -
+      input.savedMedia.reusablePreviewUrls.size;
+
+    // Aggregate counters only: no URLs, tokens or Graph error text.
+    this.logger.log(
+      [
+        "Meta preview enrichment",
+        `workspaceId=${input.workspaceId}`,
+        `reportingAccountId=${input.reportingAccountId}`,
+        `ads=${input.adCount}`,
+        `distinctCreatives=${stats.distinctCreatives}`,
+        `reused=${stats.creativesReused}`,
+        `requested=${stats.creativesRequested}`,
+        `succeeded=${stats.creativesSucceeded}`,
+        `failed=${stats.creativesFailed}`,
+        `absent=${stats.creativesWithoutPreview}`,
+        `creativeBatches=${stats.creativeBatchRequests}`,
+        `videosRequested=${stats.videosRequested}`,
+        `videosSucceeded=${stats.videosSucceeded}`,
+        `videosFailed=${stats.videosFailed}`,
+        `videoBatches=${stats.videoBatchRequests}`,
+        `rateLimited=${stats.failureReasons.rateLimited}`,
+        `serverError=${stats.failureReasons.serverError}`,
+        `clientError=${stats.failureReasons.clientError}`,
+        `missingItem=${stats.failureReasons.missingItem}`,
+        `notAttempted=${stats.failureReasons.notAttempted}`,
+        `transportError=${stats.failureReasons.transportError}`,
+        `unexpected=${stats.failureReasons.unexpected}`,
+        `savedNotReusable=${savedNotReusable}`,
+        `preservedAfterFailure=${input.counters.preservedAfterFailure}`,
+        `thumbnailsPreserved=${input.counters.thumbnailsPreserved}`,
+      ].join(" "),
+    );
   }
 
   private async resolveManualCampaignDailyInsights(input: {
@@ -3329,6 +3542,7 @@ export class MetaReportingService {
     workspaceId: string;
     account: MetaReportingAccountRecord;
     ad: MetaAdAsset;
+    media: { previewUrl: string | null; thumbnailUrl: string | null };
     destinationType: string | null;
     insight?: MetaAdInsight;
     classification: WhatsappClassification;
@@ -3345,8 +3559,8 @@ export class MetaReportingService {
       effectiveStatus: input.ad.effectiveStatus,
       destinationType: input.destinationType,
       creativeId: input.ad.creativeId,
-      thumbnailUrl: input.ad.thumbnailUrl ?? null,
-      previewUrl: input.ad.previewUrl ?? null,
+      thumbnailUrl: input.media.thumbnailUrl,
+      previewUrl: input.media.previewUrl,
       callToActionType: input.ad.callToActionType,
       detectedPixelIds: input.ad.detectedPixelIds,
       detectedPageIds: input.ad.detectedPageIds,
