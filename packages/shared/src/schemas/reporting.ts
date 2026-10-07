@@ -317,6 +317,26 @@ export const conversionAuditOverviewSchema = z.object({
   events: z.array(conversionAuditEventSchema),
 });
 
+// Server-side report ordering is limited to existing canonical row metrics.
+// CPL is costPerRealConversationCents; CPM is not exposed by report rows.
+export const reportSortKeySchema = z.enum([
+  "realConversations",
+  "qualifiedLead",
+  "purchases",
+  "costPerRealConversationCents",
+  "costPerQualifiedLeadCents",
+  "costPerPurchaseCents",
+]);
+
+export const reportSortDirectionSchema = z.enum(["desc", "asc"]);
+
+export const reportSortSchema = z
+  .object({
+    key: reportSortKeySchema,
+    direction: reportSortDirectionSchema.default("desc"),
+  })
+  .strict();
+
 export const reportFiltersSchema = z.object({
   businessId: z.string().min(1).optional(),
   adAccountId: z.string().min(1).optional(),
@@ -389,3 +409,6 @@ export type MetaWhatsappOverrideInputDto = z.infer<
   typeof metaWhatsappOverrideInputSchema
 >;
 export type ReportFiltersDto = z.infer<typeof reportFiltersSchema>;
+export type ReportSortKeyDto = z.infer<typeof reportSortKeySchema>;
+export type ReportSortDirectionDto = z.infer<typeof reportSortDirectionSchema>;
+export type ReportSortDto = z.infer<typeof reportSortSchema>;

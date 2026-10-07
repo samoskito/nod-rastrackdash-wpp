@@ -1901,6 +1901,55 @@ body {
   width: 112px;
 }
 
+.report-sort-column {
+  vertical-align: bottom;
+}
+
+.report-sort-button {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 2px 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-weight: 900;
+  letter-spacing: inherit;
+  text-align: right;
+  text-transform: inherit;
+}
+
+.report-sort-button.report-sort-cost {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.82;
+}
+
+.report-sort-button:hover,
+.report-sort-button.active {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.report-sort-button:focus-visible,
+.report-sort-toolbar button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 1px;
+}
+
+.report-sort-arrow {
+  flex: 0 0 auto;
+  color: var(--mint);
+}
+
+.report-sort-toolbar {
+  display: none;
+}
+
 .performance-entity-heading {
   display: flex;
   min-width: 0;
@@ -2183,6 +2232,37 @@ body {
 
   .reports-page .performance-table thead {
     display: none;
+  }
+
+  .reports-page .report-sort-toolbar {
+    display: grid;
+    gap: 8px;
+  }
+
+  .report-sort-toolbar > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .report-sort-toolbar button {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: rgba(5, 8, 7, 0.48);
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .report-sort-toolbar button.active {
+    background: var(--surface-3);
+    box-shadow: inset 0 -2px 0 var(--mint);
+    color: var(--ink);
   }
 
   .reports-page .performance-table tbody,

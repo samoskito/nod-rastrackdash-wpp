@@ -29,6 +29,7 @@ import type {
   ReportDailyComparisonPointDto,
   ReportOverviewDto,
   ReportPaginationDto,
+  ReportSortDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { isSupportedConversionEventName } from "../conversion-events/conversion-event-registry";
@@ -64,6 +65,7 @@ import {
   type ReportingMetricLead,
   type ReportingMetricScope,
 } from "./reporting-metrics.engine";
+import { sortReportRows, type SortableReportRow } from "./report-row-sort";
 
 export type MetaStructureSyncInput = {
   workspaceId: string;
@@ -107,6 +109,7 @@ type ReportFilterInput = {
   whatsappClassification?: WhatsappClassificationFilter;
   page?: number;
   pageSize?: number;
+  sort?: ReportSortDto;
 };
 
 type ReportMetricScopeFilter = {
@@ -1570,7 +1573,6 @@ export class MetaReportingService {
       whatsappAds,
       deliveredIds,
     );
-    const paginated = this.paginateRecords(filteredCampaigns, input);
     const campaignIds = filteredCampaigns.map(
       (campaign) => campaign.campaignId,
     );
@@ -1641,15 +1643,19 @@ export class MetaReportingService {
     const metricByCampaign = dailyComparisonAvailable
       ? dailyMetricByCampaign
       : childMetricByCampaign;
-    const rows = paginated.items.map((campaign) =>
-      this.toReportRow(
-        campaign,
-        conversionLogsByCampaign.get(campaign.campaignId) ?? [],
-        leadsByCampaign.get(campaign.campaignId) ?? [],
-        funnelStages,
-        metricByCampaign.get(campaign.campaignId),
-      ),
+    const paginated = this.paginateReportRows(
+      filteredCampaigns,
+      input,
+      (campaign) =>
+        this.toReportRow(
+          campaign,
+          conversionLogsByCampaign.get(campaign.campaignId) ?? [],
+          leadsByCampaign.get(campaign.campaignId) ?? [],
+          funnelStages,
+          metricByCampaign.get(campaign.campaignId),
+        ),
     );
+    const rows = paginated.items;
     const workspaceMeta = filteredCampaigns.reduce(
       (totals, campaign) => {
         const metricOverride = metricByCampaign.get(campaign.campaignId);
@@ -2530,7 +2536,6 @@ export class MetaReportingService {
       adsForNameFilter,
       deliveredIds,
     );
-    const paginated = this.paginateRecords(filteredAdSets, input);
     const adSetIds = filteredAdSets.map((adSet) => adSet.adSetId);
     const [conversionLogs, leads, dailyInsights] = await Promise.all([
       this.getMetricConversionEvents(input, { adSetIds }),
@@ -2563,7 +2568,7 @@ export class MetaReportingService {
       since: input.since,
       until: input.until,
     });
-    const rows = paginated.items.map((adSet) =>
+    const paginated = this.paginateReportRows(filteredAdSets, input, (adSet) =>
       this.toAdSetReportRow({
         adSet,
         campaignName:
@@ -2575,6 +2580,7 @@ export class MetaReportingService {
         metricOverride: dailyMetricByAdSet?.get(adSet.adSetId),
       }),
     );
+    const rows = paginated.items;
     const totalsMeta = filteredAdSets.reduce(
       (totals, adSet) => ({
         spendCents:
@@ -2665,7 +2671,6 @@ export class MetaReportingService {
       adSetNames,
       deliveredIds,
     );
-    const paginated = this.paginateRecords(filteredAds, input);
     const adIds = filteredAds.map((ad) => ad.adId);
     const [conversionLogs, leads, dailyInsights] = await Promise.all([
       this.getMetricConversionEvents(input, { adIds }),
@@ -2695,7 +2700,7 @@ export class MetaReportingService {
       since: input.since,
       until: input.until,
     });
-    const rows = paginated.items.map((ad) =>
+    const paginated = this.paginateReportRows(filteredAds, input, (ad) =>
       this.toAdReportRow({
         ad,
         campaignName:
@@ -2707,6 +2712,7 @@ export class MetaReportingService {
         metricOverride: dailyMetricByAd?.get(ad.adId),
       }),
     );
+    const rows = paginated.items;
     const totalsMeta = filteredAds.reduce(
       (totals, ad) => ({
         spendCents:
@@ -2998,6 +3004,26 @@ export class MetaReportingService {
       items: records.slice(offset, offset + pageSize),
       pagination: { page, pageSize, totalItems, totalPages },
     };
+  }
+
+  private paginateReportRows<TRecord, TRow extends SortableReportRow>(
+    records: TRecord[],
+    input: Pick<ReportFilterInput, "page" | "pageSize" | "sort">,
+    toRow: (record: TRecord) => TRow,
+  ): PaginatedRecords<TRow> {
+    if (!input.sort) {
+      const paginated = this.paginateRecords(records, input);
+
+      return { ...paginated, items: paginated.items.map(toRow) };
+    }
+
+    // A metric sort needs every filtered row before slicing the page. The
+    // entities, events and leads behind those rows are already loaded for
+    // the totals, so this adds row construction but no queries.
+    return this.paginateRecords(
+      sortReportRows(records.map(toRow), input.sort),
+      input,
+    );
   }
 
   private groupByOptionalKey<

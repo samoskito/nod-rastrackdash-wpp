@@ -22,6 +22,7 @@ type MetaReportFiltersProps = {
   pageSize?: number;
   since?: string;
   selectedIds?: string;
+  sort?: { key: string; direction: string };
   status?: string;
   until?: string;
   view?: "campaigns" | "adsets" | "ads";
@@ -104,6 +105,7 @@ export function MetaReportFilters({
   pageSize = 10,
   since,
   selectedIds,
+  sort,
   status = "all",
   until,
   view = "campaigns",
@@ -174,6 +176,12 @@ export function MetaReportFilters({
     clearParams.set("adId", adId);
   }
 
+  // Ordering is a table preference, not a filter, so clearing keeps it.
+  if (sort) {
+    clearParams.set("sort", sort.key);
+    clearParams.set("dir", sort.direction);
+  }
+
   const advancedFilterCount = [
     nameScope !== "campaign",
     status !== "all",
@@ -208,6 +216,12 @@ export function MetaReportFilters({
       <input type="hidden" name="adSetId" value={adSetId ?? ""} />
       <input type="hidden" name="adId" value={adId ?? ""} />
       <input type="hidden" name="selectedIds" value={selectedIds ?? ""} />
+      {sort ? (
+        <>
+          <input type="hidden" name="sort" value={sort.key} />
+          <input type="hidden" name="dir" value={sort.direction} />
+        </>
+      ) : null}
       {presentationMode ? (
         <>
           <input type="hidden" name="businessId" value={selectedBusinessId} />
