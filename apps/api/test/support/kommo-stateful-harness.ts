@@ -22,6 +22,8 @@ export function matches(row: any, where: any): boolean {
       if ("gt" in value) return row[key] != null && row[key] > value.gt;
       if ("lte" in value) return row[key] != null && row[key] <= value.lte;
       if (key.includes("_")) return matches(row, value);
+      if (row[key] && typeof row[key] === "object")
+        return matches(row[key], value);
     }
     return row[key] instanceof Date && value instanceof Date
       ? row[key].getTime() === value.getTime()
@@ -63,6 +65,9 @@ export function kommoHarness() {
     "kommoConversionDedupe",
     "conversionEventLog",
     "lead",
+    "metaAd",
+    "metaReportingAccount",
+    "inboundWebhookEvent",
     "metaAdDestinationAssignment",
     "inboundWebhookChannelRoute",
     "auditLog",

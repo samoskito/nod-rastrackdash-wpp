@@ -47,6 +47,19 @@ import { LicenseClientService } from "../licensing-client/license-client.service
 
 type Connection = any;
 type AuditActorType = "user" | "platform_admin";
+type ProvenKommoLead = {
+  id: string;
+  phoneHash: string;
+  whatsappInstanceId: string;
+  campaignId: string | null;
+  adSetId: string | null;
+  adId: string;
+  ctwaClid: string;
+};
+type LeadDestination = {
+  reportingAccountId: string;
+  conversionDestinationId: string;
+};
 
 @Injectable()
 export class KommoService implements OnModuleInit, OnModuleDestroy {
@@ -1091,6 +1104,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
                 rule,
                 resolved.lead,
                 resolved.route,
+                resolved.destination,
                 value,
                 tx,
               );
@@ -1213,6 +1227,10 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     rule: any,
     lead: any,
     route: any,
+    destination: {
+      reportingAccountId: string;
+      conversionDestinationId: string;
+    },
     value: { cents: number | null; currency: string | null },
     transaction?: any,
   ) {
@@ -1278,20 +1296,21 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
             whatsappInstanceId: intent.whatsappInstanceId,
           },
         });
-        const assignment = await tx.metaAdDestinationAssignment.findUnique({
-          where: {
-            workspaceId_adId: {
-              workspaceId: event.workspaceId,
-              adId: lead.adId,
-            },
-          },
-        });
+        const currentDestination = await this.resolveLeadDestination(
+          tx,
+          event.workspaceId,
+          lead,
+        );
         if (
           !captured ||
           captured.adId !== lead.adId ||
           captured.ctwaClid !== lead.ctwaClid ||
-          assignment?.reportingAccountId !== intent.reportingAccountId ||
-          assignment?.conversionDestinationId !== intent.destinationId
+          currentDestination?.reportingAccountId !==
+            destination.reportingAccountId ||
+          currentDestination?.conversionDestinationId !==
+            destination.conversionDestinationId ||
+          destination.reportingAccountId !== intent.reportingAccountId ||
+          destination.conversionDestinationId !== intent.destinationId
         )
           throw new Error("lead_authorization_changed");
         if (!(await kommoPublicationAuthorized(tx, event.workspaceId, intent)))
@@ -1596,7 +1615,10 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     connection: Connection,
     dealId: string,
     workspaceId: string,
-  ): Promise<{ lead: any; route: any } | { error: string }> {
+  ): Promise<
+    | { lead: ProvenKommoLead; route: any; destination: LeadDestination }
+    | { error: string }
+  > {
     let token: string;
     try {
       token = this.decrypt(connection);
@@ -1664,13 +1686,18 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     if (!lead) return { error: "workspace_lead_not_found" };
     if (!lead.whatsappInstanceId || !lead.adId || !lead.ctwaClid)
       return { error: "lead_channel_or_attribution_unproven" };
-    const assignment = await this.prisma.metaAdDestinationAssignment.findUnique(
-      {
-        where: { workspaceId_adId: { workspaceId, adId: lead.adId } },
-        select: { conversionDestinationId: true, reportingAccountId: true },
-      },
+    const provenLead: ProvenKommoLead = {
+      ...lead,
+      whatsappInstanceId: lead.whatsappInstanceId,
+      adId: lead.adId,
+      ctwaClid: lead.ctwaClid,
+    };
+    const destination = await this.resolveLeadDestination(
+      this.prisma,
+      workspaceId,
+      provenLead,
     );
-    if (!assignment) return { error: "lead_destination_unproven" };
+    if (!destination) return { error: "lead_destination_unproven" };
     const routes = [];
     for (const routeId of connection.allowedChannelRouteIds ?? []) {
       const route = await authorizedKommoRoute(
@@ -1680,9 +1707,10 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       );
       if (
         route &&
-        route.channel.whatsappInstanceId === lead.whatsappInstanceId &&
-        route.metaReportingAccountId === assignment.reportingAccountId &&
-        route.metaConversionDestinationId === assignment.conversionDestinationId
+        route.channel.whatsappInstanceId === provenLead.whatsappInstanceId &&
+        route.metaReportingAccountId === destination.reportingAccountId &&
+        route.metaConversionDestinationId ===
+          destination.conversionDestinationId
       )
         routes.push(route);
     }
@@ -1692,7 +1720,113 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
           ? "lead_channel_route_ambiguous"
           : "lead_channel_route_unauthorized",
       };
-    return { lead, route: routes[0] };
+    return { lead: provenLead, route: routes[0], destination };
+  }
+
+  private async resolveLeadDestination(
+    client: any,
+    workspaceId: string,
+    lead: {
+      phoneHash: string;
+      whatsappInstanceId: string;
+      adId: string;
+    },
+  ): Promise<LeadDestination | null> {
+    const assignment = await client.metaAdDestinationAssignment.findUnique({
+      where: { workspaceId_adId: { workspaceId, adId: lead.adId } },
+      select: { conversionDestinationId: true, reportingAccountId: true },
+    });
+    if (assignment) return assignment;
+
+    const inboundEvents = await client.inboundWebhookEvent.findMany({
+      where: {
+        workspaceId,
+        contactIdentityHash: lead.phoneHash,
+        adId: lead.adId,
+        hasCtwa: true,
+        classification: "eligible_route_resolved",
+        channel: { whatsappInstanceId: lead.whatsappInstanceId },
+      },
+      select: {
+        resolvedReportingAccountId: true,
+        resolvedConversionDestinationId: true,
+      },
+    });
+    const inboundDestinations = new Map<
+      string,
+      {
+        reportingAccountId: string;
+        conversionDestinationId: string;
+      }
+    >();
+    for (const event of inboundEvents) {
+      if (
+        !event.resolvedReportingAccountId ||
+        !event.resolvedConversionDestinationId
+      )
+        continue;
+      const destination = {
+        reportingAccountId: event.resolvedReportingAccountId,
+        conversionDestinationId: event.resolvedConversionDestinationId,
+      };
+      inboundDestinations.set(
+        `${destination.reportingAccountId}:${destination.conversionDestinationId}`,
+        destination,
+      );
+    }
+    if (inboundDestinations.size === 1)
+      return inboundDestinations.values().next().value!;
+
+    const ad = await client.metaAd.findFirst({
+      where: { workspaceId, adId: lead.adId },
+      select: { adAccountId: true },
+    });
+    if (!ad?.adAccountId) return null;
+
+    const account = await client.metaReportingAccount.findFirst({
+      where: { workspaceId, adAccountId: ad.adAccountId, active: true },
+      select: {
+        id: true,
+        conversionDestinationId: true,
+        businessConnection: {
+          select: { defaultConversionDestinationId: true },
+        },
+        allowedDestinations: {
+          where: { active: true },
+          select: {
+            destination: {
+              select: { id: true, status: true },
+            },
+          },
+        },
+      },
+    });
+    if (!account) return null;
+
+    let destinations = account.allowedDestinations
+      .map((record: any) => record.destination)
+      .filter((destination: any) => destination.status === "configured");
+    if (destinations.length === 0) {
+      const legacyDestinationId =
+        account.conversionDestinationId ??
+        account.businessConnection?.defaultConversionDestinationId ??
+        null;
+      destinations = legacyDestinationId
+        ? await client.metaConversionDestination.findMany({
+            where: {
+              id: legacyDestinationId,
+              workspaceId,
+              status: "configured",
+            },
+            select: { id: true, status: true },
+          })
+        : [];
+    }
+    if (destinations.length !== 1) return null;
+    return {
+      reportingAccountId: account.id,
+      conversionDestinationId: destinations[0].id,
+    };
   }
 
   private valueFor(

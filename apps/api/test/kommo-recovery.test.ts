@@ -903,6 +903,159 @@ describe("Kommo durable processing, generation and publication", () => {
 });
 
 describe("Kommo identity/channel isolation", () => {
+  function configureSingleDestinationFallback(h: any) {
+    h.state.metaAd.push({
+      id: "meta-ad-a",
+      workspaceId: "workspace-a",
+      adId: "ad-a",
+      adAccountId: "act_synthetic",
+    });
+    h.state.metaReportingAccount.push({
+      id: "reporting-a",
+      workspaceId: "workspace-a",
+      adAccountId: "act_synthetic",
+      active: true,
+      allowedDestinations: [
+        {
+          active: true,
+          destination: {
+            id: "destination-a",
+            pixelId: "synthetic-pixel",
+            pageId: "synthetic-page",
+            status: "configured",
+          },
+        },
+      ],
+    });
+  }
+
+  it("proves a lead destination from its reporting account's sole configured destination", async () => {
+    const h = kommoHarness();
+    h.state.metaAdDestinationAssignment = [];
+    configureSingleDestinationFallback(h);
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "queued",
+    });
+    expect(h.state.conversionEventLog).toHaveLength(1);
+  });
+
+  it("reuses the uniquely resolved inbound route for the same attributed lead", async () => {
+    const h = kommoHarness();
+    h.state.metaAdDestinationAssignment = [];
+    h.state.inboundWebhookEvent.push({
+      id: "inbound-event-a",
+      workspaceId: "workspace-a",
+      channelId: "channel-a",
+      contactIdentityHash: h.state.lead[0].phoneHash,
+      adId: "ad-a",
+      hasCtwa: true,
+      classification: "eligible_route_resolved",
+      resolvedReportingAccountId: "reporting-a",
+      resolvedConversionDestinationId: "destination-a",
+      channel: { whatsappInstanceId: "instance-a" },
+    });
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "queued",
+    });
+  });
+
+  it("keeps zero configured destinations unproven", async () => {
+    const h = kommoHarness();
+    h.state.metaAdDestinationAssignment = [];
+    h.state.metaAd.push({
+      id: "meta-ad-a",
+      workspaceId: "workspace-a",
+      adId: "ad-a",
+      adAccountId: "act_synthetic",
+    });
+    h.state.metaReportingAccount.push({
+      id: "reporting-a",
+      workspaceId: "workspace-a",
+      adAccountId: "act_synthetic",
+      active: true,
+      allowedDestinations: [],
+    });
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "blocked",
+      errorCode: "lead_destination_unproven",
+    });
+  });
+
+  it("keeps multiple destinations without a unique page or pixel match unproven", async () => {
+    const h = kommoHarness();
+    h.state.metaAdDestinationAssignment = [];
+    h.state.metaAd.push({
+      id: "meta-ad-a",
+      workspaceId: "workspace-a",
+      adId: "ad-a",
+      adAccountId: "act_synthetic",
+    });
+    h.state.metaReportingAccount.push({
+      id: "reporting-a",
+      workspaceId: "workspace-a",
+      adAccountId: "act_synthetic",
+      active: true,
+      allowedDestinations: [
+        {
+          active: true,
+          destination: { id: "destination-a", status: "configured" },
+        },
+        {
+          active: true,
+          destination: { id: "destination-b", status: "configured" },
+        },
+      ],
+    });
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "blocked",
+      errorCode: "lead_destination_unproven",
+    });
+  });
+
+  it("still rejects an unbound channel after proving the sole destination", async () => {
+    const h = kommoHarness();
+    h.state.metaAdDestinationAssignment = [];
+    configureSingleDestinationFallback(h);
+    h.connection.allowedChannelRouteIds = [];
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "blocked",
+      errorCode: "lead_channel_route_unauthorized",
+    });
+  });
+
+  it("still rejects ambiguous allowed routes after proving the sole destination", async () => {
+    const h = kommoHarness();
+    h.state.metaAdDestinationAssignment = [];
+    configureSingleDestinationFallback(h);
+    h.connection.allowedChannelRouteIds.push("route-b");
+    h.state.inboundWebhookChannelRoute.push({
+      ...structuredClone(h.state.inboundWebhookChannelRoute[0]),
+      id: "route-b",
+    });
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "blocked",
+      errorCode: "lead_channel_route_ambiguous",
+    });
+  });
+
   it.each([
     [
       "remote deal id",
