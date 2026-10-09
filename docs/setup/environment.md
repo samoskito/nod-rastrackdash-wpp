@@ -248,9 +248,24 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `META_CONNECTION_MODES` | Sim para o MVP do aluno | Defina exatamente `manual` | `.env` da API / env do serviço | Não |
 | `META_GRAPH_API_VERSION` | Não (tem padrão) | Documentação Graph API | `.env` da API | Não |
 | `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
+| `KOMMO_CRM_ENCRYPTION_KEY` | Sim, antes de criar uma conexão Kommo | Base64 canônico de 32 bytes, gerado pelo aluno | env efetiva do container da API | **Sim** |
 | `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`) | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
+
+### Kommo CRM (opcional)
+
+Se você habilitar a integração Kommo, gere uma chave Base64 de **32 bytes** e
+preencha `KOMMO_CRM_ENCRYPTION_KEY` somente no ambiente efetivo da API. A API
+rejeita formatos inválidos e nunca devolve tokens Kommo pelas rotas de gestão
+ou auditoria. Não use uma chave no frontend nem a versione no `.env`.
+
+Exemplo de geração local (cole o resultado diretamente no seu gerenciador de
+variáveis, não no chat):
+
+```bash
+node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))"
+```
 
 Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há login social Facebook nem OAuth como caminho alternativo: o token do usuário do sistema é informado por workspace na UI de **Integrações**, nunca em variável pública — veja [`meta-manual.md`](meta-manual.md).
 

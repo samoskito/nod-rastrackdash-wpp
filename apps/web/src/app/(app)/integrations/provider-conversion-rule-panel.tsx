@@ -147,6 +147,8 @@ export type ProviderConversionRulePanelProps = {
   reprocessAutomationCallbacksAction: ProviderRuleAction;
   removeAction: ProviderRuleAction;
   testMessageAction: ProviderRuleAction;
+  /** Quando presente, oferece Kommo como origem opt-in apontando para o gerenciador único. */
+  kommoManagerAnchorId?: string;
 };
 
 export function ProviderConversionRulePanel({
@@ -166,9 +168,11 @@ export function ProviderConversionRulePanel({
   reprocessAutomationCallbacksAction,
   removeAction,
   testMessageAction,
+  kommoManagerAnchorId,
 }: ProviderConversionRulePanelProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
+  const [kommoSelected, setKommoSelected] = useState(false);
   const [origin, setOrigin] = useState<ConversionRuleOrigin>("message");
   const [eventName, setEventName] =
     useState<ConversionEventNameDto>("QualifiedLead");
@@ -321,6 +325,7 @@ export function ProviderConversionRulePanel({
    * autor padrao "team", que e o unico que faz sentido fora do catalogo.
    */
   function selectOrigin(next: ConversionRuleOrigin) {
+    setKommoSelected(false);
     setOrigin(next);
     setMessageAuthorScope(next === "catalog" ? "both" : "team");
     if (next === "catalog") selectEvent(catalogOriginEventName);
@@ -492,13 +497,49 @@ export function ProviderConversionRulePanel({
         </div>
       ) : null}
 
-      {createOpen ? (
+      {createOpen && kommoManagerAnchorId && kommoSelected ? (
+        <div className="provider-conversion-builder" data-testid="kommo-origin-pointer">
+          <ConversionRuleOriginEventSelector
+            origin={origin}
+            eventName={eventName}
+            onOriginChange={selectOrigin}
+            onEventChange={selectEvent}
+            kommoOption
+            kommoSelected
+            onKommoSelect={() => setKommoSelected(true)}
+          />
+          <p className="action-note">
+            As regras do Kommo CRM (estágio, evento, valor, canais e modo observação ou
+            produção) ficam no gerenciador próprio, no mesmo painel de gatilhos. Nada é
+            criado aqui e nenhuma outra origem é alterada.
+          </p>
+          <div className="provider-conversion-builder-footer">
+            <button
+              className="button primary"
+              type="button"
+              onClick={() => {
+                const target = document.getElementById(kommoManagerAnchorId);
+                if (target instanceof HTMLDetailsElement) target.open = true;
+                target?.scrollIntoView({ block: "start" });
+                target?.querySelector<HTMLElement>("summary")?.focus();
+              }}
+            >
+              Abrir gerenciador Kommo
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {createOpen && !(kommoManagerAnchorId && kommoSelected) ? (
         <form className="provider-conversion-builder" onSubmit={handleCreate}>
           <ConversionRuleOriginEventSelector
             origin={origin}
             eventName={eventName}
             onOriginChange={selectOrigin}
             onEventChange={selectEvent}
+            kommoOption={Boolean(kommoManagerAnchorId)}
+            kommoSelected={false}
+            onKommoSelect={() => setKommoSelected(true)}
           />
 
           <div className="provider-conversion-base-fields">
@@ -2305,11 +2346,18 @@ export function ConversionRuleOriginEventSelector({
   eventName,
   onOriginChange,
   onEventChange,
+  kommoOption = false,
+  kommoSelected = false,
+  onKommoSelect,
 }: {
   origin: ConversionRuleOrigin;
   eventName: ConversionEventNameDto;
   onOriginChange: (origin: ConversionRuleOrigin) => void;
   onEventChange: (eventName: ConversionEventNameDto) => void;
+  /** Kommo é opt-in: a opção só aparece quando o gerenciador está montado. */
+  kommoOption?: boolean;
+  kommoSelected?: boolean;
+  onKommoSelect?: () => void;
 }) {
   const catalogOnly = origin === "catalog";
   const events = catalogOnly
@@ -2325,10 +2373,14 @@ export function ConversionRuleOriginEventSelector({
         <label>
           <span className="field-label">Origem do gatilho</span>
           <select
-            value={origin}
-            onChange={(event) =>
-              onOriginChange(event.target.value as ConversionRuleOrigin)
-            }
+            value={kommoOption && kommoSelected ? "kommo" : origin}
+            onChange={(event) => {
+              if (event.target.value === "kommo") {
+                onKommoSelect?.();
+                return;
+              }
+              onOriginChange(event.target.value as ConversionRuleOrigin);
+            }}
           >
             {(
               Object.keys(conversionRuleOriginLabels) as ConversionRuleOrigin[]
@@ -2337,13 +2389,16 @@ export function ConversionRuleOriginEventSelector({
                 {conversionRuleOriginLabels[value]}
               </option>
             ))}
+            {kommoOption ? (
+              <option value="kommo">Mudança de estágio no Kommo CRM</option>
+            ) : null}
           </select>
         </label>
         <label>
           <span className="field-label">Evento enviado a Meta</span>
           <select
             value={eventName}
-            disabled={catalogOnly}
+            disabled={catalogOnly || (kommoOption && kommoSelected)}
             onChange={(event) =>
               onEventChange(event.target.value as ConversionEventNameDto)
             }

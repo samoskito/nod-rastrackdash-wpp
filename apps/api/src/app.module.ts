@@ -24,6 +24,7 @@ import { TemplateVersionModule } from "./template-version/template-version.modul
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
+import { KommoModule } from "./kommo/kommo.module";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
     LicenseClientModule,
     OnboardingModule,
     TemplateVersionModule,
+    KommoModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -31,6 +31,7 @@ import {
   withWorkspaceUniqueRetry,
 } from "../common/prisma/workspace-write-concurrency";
 import { acquirePlatformRoleLock } from "../common/prisma/platform-role-concurrency";
+import { lockKommoDispatch } from "../conversion-events/kommo-dispatch-coordination";
 import { EmailQueueService } from "../email/email-queue.service";
 import type { PlatformAdminUser } from "../auth/platform-admin.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
@@ -380,6 +381,14 @@ export class PlatformWorkspaceAccessService {
     }
 
     const deleted = await this.prisma.$transaction(async (tx) => {
+      // Share the Kommo sender's transaction lock and ordering. This prevents a
+      // queued sender from entering its provider-start critical section while
+      // this transaction removes its connection and durable publication fence.
+      await lockKommoDispatch(tx, workspaceId);
+      // Sender takes the same advisory lock before its connection row lock.
+      // Lock every workspace connection here before any delete mutation so the
+      // two consumers keep one lock ordering even for a multi-account tenant.
+      await tx.$queryRaw`SELECT "id" FROM "KommoConnection" WHERE "workspaceId" = ${workspaceId} FOR UPDATE`;
       const workspace = await tx.workspace.findUnique({
         where: { id: workspaceId },
         select: { id: true, slug: true },
@@ -483,6 +492,17 @@ export class PlatformWorkspaceAccessService {
     await tx.conversionCatalog.deleteMany({ where });
     await tx.providerConversionRuleConfig.deleteMany({ where });
     await tx.conversionRule.deleteMany({ where });
+
+    // Every Kommo relation is Restrict. The connection's direct children must
+    // precede it, and the semantic fence must be removed only as part of this
+    // confirmed full-workspace destruction. Although publicationIntent stores
+    // its route/destination/log references as JSON/scalars (not DB FKs), keep
+    // it ahead of those parents too so no partial Kommo intent survives.
+    await tx.kommoConversionDedupe.deleteMany({ where });
+    await tx.kommoWebhookEvent.deleteMany({ where });
+    await tx.kommoConversionRule.deleteMany({ where });
+    await tx.kommoPipelineCatalog.deleteMany({ where });
+    await tx.kommoConnection.deleteMany({ where });
 
     await tx.inboundWebhookReplayItem.deleteMany({ where });
     await tx.inboundWebhookReplayBatch.deleteMany({ where });

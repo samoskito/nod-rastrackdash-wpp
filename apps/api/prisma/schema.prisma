@@ -46,6 +46,7 @@ enum WhatsappInstanceStatus {
 }
 
 enum DiagnosticSource {
+  kommo
   meta
   uazapi
   umbler
@@ -453,6 +454,11 @@ model Workspace {
   purchaseReviews                  PurchaseReview[]
   purchaseReviewItems              PurchaseReviewItem[]
   purchaseValueAdjustments         PurchaseValueAdjustment[]
+  kommoConnections                 KommoConnection[]
+  kommoPipelineCatalog             KommoPipelineCatalog[]
+  kommoConversionRules             KommoConversionRule[]
+  kommoWebhookEvents               KommoWebhookEvent[]
+  kommoConversionDedupes           KommoConversionDedupe[]
   opsAlertSettings                 WorkspaceOpsAlertSettings?
   opsAlertDeliveries               WorkspaceOpsAlertDelivery[]
 
@@ -2183,4 +2189,149 @@ model LicenseState {
   bound            Boolean   @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+}
+
+/// Kommo credentials are AEAD-encrypted server-side. Account identity is
+/// verified from the remote API, never accepted from a management request.
+model KommoConnection {
+  id                    String   @id
+  workspaceId           String
+  displayName           String
+  status                String   @default("blocked")
+  accountOrigin         String
+  verifiedAccountId     String?
+  accountSubdomain      String?
+  accessTokenEncrypted  String
+  accessTokenIv         String
+  accessTokenTag        String
+  credentialHealthy     Boolean  @default(false)
+  credentialGeneration  Int      @default(1)
+  allowedChannelRouteIds String[] @default([])
+  catalogState          String   @default("empty")
+  catalogRefreshedAt    DateTime?
+  lastErrorCode         String?
+  webhookSecretHash     String   @unique
+  webhookSecretVersion  Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  workspace Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  pipelines KommoPipelineCatalog[]
+  rules     KommoConversionRule[]
+  events    KommoWebhookEvent[]
+
+  @@unique([workspaceId, verifiedAccountId])
+  @@index([workspaceId, status])
+}
+
+model KommoPipelineCatalog {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  connectionId String
+  pipelineId   String
+  pipelineName String
+  pipelineSort Int?
+  statusId     String
+  statusName   String
+  statusType   String?
+  available    Boolean  @default(true)
+  refreshedAt  DateTime @default(now())
+
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  connection KommoConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([connectionId, pipelineId, statusId])
+  @@index([connectionId, available])
+  @@index([workspaceId, connectionId])
+}
+
+model KommoConversionRule {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  connectionId    String
+  name            String
+  pipelineId      String
+  statusId        String
+  eventName       String
+  mode            String   @default("observation")
+  valueMode       String   @default("lead_price")
+  fixedValueCents Int?
+  currency        String?
+  contentName     String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  connection KommoConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([connectionId, pipelineId, statusId, eventName])
+  @@index([workspaceId, connectionId, active])
+}
+
+/// Durable ingress record. The delivery key is transport-level only; semantic
+/// conversion idempotency lives in KommoConversionDedupe below.
+model KommoWebhookEvent {
+  id                   String   @id @default(cuid())
+  workspaceId          String
+  connectionId         String
+  verifiedAccountId    String
+  credentialGeneration Int      @default(1)
+  deliveryKey          String   @unique
+  dealId               String
+  pipelineId           String
+  statusId             String
+  oldStatusId          String?
+  eventOccurredAt      DateTime
+  eventPriceCents      Int?
+  eventPricePresent    Boolean  @default(false)
+  status               String   @default("accepted")
+  errorCode            String?
+  attempts             Int      @default(0)
+  jobId                String?
+  matchedLeadId        String?
+  conversionEventLogId String?
+  processedAt          DateTime?
+  revision             Int      @default(0)
+  leaseToken           String?
+  leaseExpiresAt       DateTime?
+  nextAttemptAt        DateTime?
+  results              Json     @default("[]")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  connection KommoConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([connectionId, dealId])
+}
+
+/// Semantic conversion fence: a rule edit, duplicate delivery, or reconnect
+/// cannot create a second conversion for the same verified deal and event.
+model KommoConversionDedupe {
+  id                        String   @id @default(cuid())
+  workspaceId               String
+  verifiedAccountId         String
+  dealId                    String
+  eventName                 String
+  sourceEventId             String
+  conversionEventLogId      String?
+  publicationIntent         Json?
+  publicationStatus         String   @default("materialized")
+  publicationAttempts       Int      @default(0)
+  publicationNextAttemptAt  DateTime?
+  publicationLeaseToken     String?
+  publicationLeaseExpiresAt DateTime?
+  publicationErrorCode      String?
+  senderAttempts            Int      @default(0)
+  senderRetryable           Boolean  @default(false)
+  senderLeaseToken          String?
+  createdAt                 DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, verifiedAccountId, dealId, eventName])
+  @@index([workspaceId, sourceEventId])
+  @@index([publicationStatus, publicationNextAttemptAt])
 }

@@ -6,6 +6,7 @@ import {
 } from "./integrations";
 
 export const diagnosticSources = [
+  "kommo",
   "meta",
   "uazapi",
   "umbler",
