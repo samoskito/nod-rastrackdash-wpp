@@ -15240,3 +15240,97 @@ button.meta-manual-entry[aria-expanded="true"] {
 .template-version-current {
   margin: 0;
 }
+
+.kommo-audit-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kommo-audit-list,
+.kommo-audit-stages,
+.kommo-audit-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kommo-audit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.kommo-audit-event {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.kommo-audit-event p {
+  margin: 0;
+}
+
+.kommo-audit-event-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.kommo-audit-stages,
+.kommo-audit-results {
+  display: grid;
+  gap: 4px;
+}
+
+.kommo-audit-stages li[data-state="unknown"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.kommo-conversion-panel .provider-conversion-rule-title,
+.kommo-conversion-panel .provider-conversion-heading,
+.kommo-conversion-panel .provider-conversion-heading-actions {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.kommo-conversion-panel .provider-conversion-rule-title > strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.kommo-conversion-panel .event-chip,
+.kommo-audit-event .event-chip {
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 14px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.kommo-conversion-panel .event-chip::before,
+.kommo-audit-event .event-chip::before {
+  flex: none;
+}
+
+@media (max-width: 700px) {
+  .kommo-audit-event {
+    padding: 10px;
+  }
+
+  .kommo-conversion-panel .provider-conversion-heading-actions {
+    width: 100%;
+  }
+
+  .kommo-conversion-panel .provider-conversion-rule-actions {
+    flex-wrap: wrap;
+  }
+}

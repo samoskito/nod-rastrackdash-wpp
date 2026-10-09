@@ -10,6 +10,21 @@ import {
 type MetaCapiEnv = Record<string, string | undefined>;
 type Fetcher = typeof fetch;
 
+type DispatchOptions = {
+  beforeDispatch?: () => void;
+  signal?: AbortSignal;
+};
+
+function bounded<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new Error("meta_dispatch_deadline"));
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    if (signal.aborted) abort();
+  });
+}
+
 export type MetaCapiSendEventErrorCode =
   | "MissingMetaDestination"
   | "MissingAccessToken"
@@ -18,6 +33,7 @@ export type MetaCapiSendEventErrorCode =
   | "MissingAdId"
   | "MetaCapiRejected"
   | "MetaCapiNetworkError"
+  | "MetaCapiDeliveryUnknown"
   | null;
 
 export type MetaCapiSendEventInput = {
@@ -43,6 +59,7 @@ export type MetaCapiSendEventResult = {
   responseSummary: Record<string, unknown> | null;
   errorMessage: string | null;
   errorCode: MetaCapiSendEventErrorCode;
+  deliveryOutcome?: "unknown";
 };
 
 export class MetaCapiAdapter {
@@ -52,7 +69,8 @@ export class MetaCapiAdapter {
   ) {}
 
   async sendEvent(
-    input: MetaCapiSendEventInput
+    input: MetaCapiSendEventInput,
+    dispatch: DispatchOptions = {},
   ): Promise<MetaCapiSendEventResult> {
     const accessToken =
       input.accessToken?.trim() || this.env.META_CAPI_ACCESS_TOKEN?.trim();
@@ -115,28 +133,30 @@ export class MetaCapiAdapter {
     });
 
     let response: Response;
+    let payload: Record<string, unknown>;
     try {
-      response = await this.fetcher(url.toString(), {
+      const request: RequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(requestPayload)
-      });
-    } catch (error) {
+        body: JSON.stringify(requestPayload),
+        ...(dispatch.signal ? { signal: dispatch.signal } : {})
+      };
+      dispatch.signal?.throwIfAborted();
+      dispatch.beforeDispatch?.();
+      response = await bounded(this.fetcher(url.toString(), request), dispatch.signal);
+      payload = await bounded(response.json().catch(() => ({})), dispatch.signal);
+    } catch {
       return {
         status: "error",
         requestPayload,
         responseSummary: null,
         errorMessage: "Meta CAPI network request failed",
-        errorCode: "MetaCapiNetworkError"
+        errorCode: "MetaCapiNetworkError",
+        deliveryOutcome: "unknown"
       };
     }
-
-    const payload = (await response.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
 
     if (!response.ok) {
       return {
@@ -160,7 +180,7 @@ export class MetaCapiAdapter {
   private notConfigured(
     errorCode: Exclude<
       MetaCapiSendEventErrorCode,
-      "MetaCapiRejected" | "MetaCapiNetworkError" | null
+      "MetaCapiRejected" | "MetaCapiNetworkError" | "MetaCapiDeliveryUnknown" | null
     >,
     errorMessage: string
   ): MetaCapiSendEventResult {

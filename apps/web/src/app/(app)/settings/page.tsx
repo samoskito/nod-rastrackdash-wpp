@@ -36,7 +36,11 @@ import { TeamActionButton } from "../../../components/team-action-button";
 import { displayTimeZone } from "../../../lib/date-time";
 import { serverApiFetch } from "../../../lib/server-api";
 import { getCurrentWorkspace } from "../../../lib/current-workspace";
+import { fetchLicenseStatus, licenseLockReason } from "../../../lib/license-status";
+import { listKommoConnectionsAction } from "../integrations/kommo-actions";
+import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import { ProviderConversionRulePanel } from "../integrations/provider-conversion-rule-panel";
+import { KommoCrmManager } from "./kommo-crm-manager";
 import { saveOpsAlertSettingsAction } from "./ops-alert-settings-actions";
 import {
   createProviderConversionRuleAction,
@@ -665,6 +669,38 @@ async function requestEmailVerification() {
   }
 }
 
+type KommoSettingsResult = {
+  connections: KommoConnectionDetailDto[];
+  state: "real" | "empty" | "error" | "forbidden";
+};
+
+async function getKommoSettings(
+  workspaceId: string | null,
+  enabled: boolean,
+): Promise<KommoSettingsResult> {
+  if (!workspaceId || !enabled) {
+    return { connections: [], state: "empty" };
+  }
+
+  try {
+    const result = await listKommoConnectionsAction(workspaceId);
+
+    if (result.ok) {
+      return {
+        connections: result.connections,
+        state: result.connections.length > 0 ? "real" : "empty",
+      };
+    }
+
+    return {
+      connections: [],
+      state: result.reason === "unauthorized" ? "forbidden" : "error",
+    };
+  } catch {
+    return { connections: [], state: "error" };
+  }
+}
+
 export default async function SettingsPage() {
   const [
     workspaceSettings,
@@ -694,6 +730,24 @@ export default async function SettingsPage() {
   const isPlatformOwnerSupport = Boolean(
     isPlatformSupport && workspace?.platformRole === "platform_owner",
   );
+  // The Kommo routes are owner-only on the API (members get 403), so the UI
+  // only offers the manager to owners with integration permission.
+  const canManageKommo = Boolean(
+    workspace &&
+      workspace.role === "owner" &&
+      workspace.permissions.canManageIntegrations &&
+      (!isPlatformSupport || isPlatformOwnerSupport),
+  );
+  const kommoViewerId = accountUser?.id ?? null;
+  const kommoManagerAvailable = Boolean(workspace && kommoViewerId);
+  const [kommoSettings, licenseStatus] = await Promise.all([
+    getKommoSettings(workspace?.id ?? null, canManageKommo && Boolean(kommoViewerId)),
+    fetchLicenseStatus(),
+  ]);
+  const kommoLicenseLocked = Boolean(
+    licenseStatus && licenseLockReason(licenseStatus) !== null,
+  );
+  const kommoChannels = inboundConnections.flatMap(({ channels }) => channels);
   const canManageTeam = Boolean(
     workspace?.permissions.canManageMembers &&
     (!isPlatformSupport || isPlatformOwnerSupport),
@@ -1517,6 +1571,11 @@ export default async function SettingsPage() {
                               testMessageAction={
                                 testProviderCatalogMessageAction
                               }
+                              kommoManagerAnchorId={
+                                canManageKommo && kommoManagerAvailable
+                                  ? "crm-configurado"
+                                  : undefined
+                              }
                             />
                           </div>
                         </details>
@@ -1537,6 +1596,20 @@ export default async function SettingsPage() {
                   </div>
                 )}
               </section>
+
+              {workspace && kommoViewerId ? (
+                <section className="trigger-source-section" aria-label="Kommo CRM">
+                  <KommoCrmManager
+                    workspaceId={workspace.id}
+                    viewerId={kommoViewerId}
+                    connections={kommoSettings.connections}
+                    loadState={kommoSettings.state}
+                    allChannels={kommoChannels}
+                    canManage={canManageKommo}
+                    licenseLocked={kommoLicenseLocked}
+                  />
+                </section>
+              ) : null}
             </div>
           </details>
         </div>
