@@ -2403,6 +2403,291 @@ body {
   }
 }
 
+/* Reports Insights: server-ordered rankings with explicit heuristic signals. */
+.reports-page-header .report-mode-tabs {
+  margin-top: 14px;
+}
+
+.report-insights {
+  gap: 0;
+}
+
+.report-insight-objectives {
+  grid-template-columns: repeat(3, minmax(0, auto));
+}
+
+.report-insight-basis {
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.report-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-bottom: 16px;
+}
+
+.report-insight-ranking {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.report-insight-ranking > header {
+  display: grid;
+  gap: 4px;
+}
+
+.report-insight-ranking h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.report-insight-ranking > header p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.report-insight-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-insight-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: rgba(5, 8, 7, 0.48);
+}
+
+.report-insight-position {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--mint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.report-insight-entity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.report-insight-name,
+.report-insight-name a {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-insight-name a:hover {
+  color: var(--mint);
+}
+
+.report-insight-entity small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.report-insight-metrics {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.report-insight-metrics div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.report-insight-metrics dt {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.report-insight-metrics dd {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.report-insight-signals {
+  display: grid;
+  grid-column: 2;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-insight-signals li {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.report-insight-signals .event-chip {
+  white-space: normal;
+}
+
+.report-insight-signals small {
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.report-insight-state {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+}
+
+.report-insight-state.warn {
+  border-color: rgba(242, 193, 78, 0.42);
+  background: rgba(242, 193, 78, 0.05);
+}
+
+.report-insight-state strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.report-insight-state span {
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.report-insights > .report-insight-state {
+  margin-bottom: 16px;
+}
+
+.report-insight-table-link {
+  justify-self: start;
+  gap: 7px;
+}
+
+.report-insight-method {
+  padding: 12px 0 16px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.report-insight-method > summary {
+  width: fit-content;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.report-insight-method > summary:focus-visible,
+.report-insight-table-link:focus-visible,
+.report-insight-name a:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.report-insight-method ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding-left: 18px;
+}
+
+.report-insight-method strong {
+  color: var(--ink-soft);
+}
+
+.report-insight-method p {
+  margin: 0;
+}
+
+@media (max-width: 1080px) {
+  .report-insight-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .reports-page-header .report-mode-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reports-page-header .report-mode-tabs a {
+    justify-content: center;
+  }
+
+  .report-insight-objectives {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-insight-ranking {
+    padding: 12px;
+  }
+
+  .report-insight-metrics,
+  .report-insight-signals {
+    grid-column: 1 / -1;
+  }
+
+  .report-insight-table-link {
+    justify-self: stretch;
+    justify-content: center;
+  }
+}
+
 /* Wave 4: Meta Events becomes a layered delivery audit. */
 .audit-page {
   max-width: var(--page-width-wide);
