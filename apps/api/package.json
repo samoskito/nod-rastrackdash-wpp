@@ -26,6 +26,7 @@
     "@prisma/client": "^6.19.3",
     "@wpptrack/shared": "workspace:*",
     "bcryptjs": "^3.0.3",
+    "body-parser": "1.20.4",
     "bullmq": "^5.79.2",
     "ioredis": "^5.11.1",
     "mysql2": "^3.14.5",
