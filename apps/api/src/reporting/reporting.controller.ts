@@ -17,8 +17,10 @@ import {
   metaBudgetUpdateInputSchema,
   metaEntityStatusUpdateInputSchema,
   metaWhatsappOverrideInputSchema,
+  reportSortSchema,
   type ConversionAuditDeliveryStateDto,
   type ConversionAuditSourceDto,
+  type ReportSortDto,
 } from "@wpptrack/shared";
 import { AuthToken } from "../auth/auth-user.decorator";
 import { AuthService } from "../auth/auth.service";
@@ -100,6 +102,8 @@ export class ReportingController {
     @Query("includeDaily") includeDaily?: string | string[],
     @Query("page") page?: string | string[],
     @Query("pageSize") pageSize?: string | string[],
+    @Query("sort") sort?: unknown,
+    @Query("dir") dir?: unknown,
   ) {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
@@ -123,6 +127,7 @@ export class ReportingController {
       whatsappClassification,
     });
     const pagination = this.parseReportPagination(page, pageSize);
+    const reportSort = this.parseReportSort(sort, dir);
     const includeWorkspaceSummary = this.parseBooleanFlag(includeSummary);
     const includeDailyComparison = this.parseBooleanFlag(includeDaily);
 
@@ -133,6 +138,7 @@ export class ReportingController {
       ...(includeWorkspaceSummary ? { includeSummary: true } : {}),
       ...(includeDailyComparison ? { includeDaily: true } : {}),
       ...pagination,
+      ...reportSort,
     });
   }
 
@@ -202,6 +208,8 @@ export class ReportingController {
     @Query("whatsappClassification") whatsappClassification?: string | string[],
     @Query("page") page?: string | string[],
     @Query("pageSize") pageSize?: string | string[],
+    @Query("sort") sort?: unknown,
+    @Query("dir") dir?: unknown,
   ) {
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
     const period = this.parseReportPeriod(since, until);
@@ -219,12 +227,14 @@ export class ReportingController {
       whatsappClassification,
     });
     const pagination = this.parseReportPagination(page, pageSize);
+    const reportSort = this.parseReportSort(sort, dir);
 
     return this.metaReportingService.getAdSetReportOverview({
       workspaceId,
       ...period,
       ...filters,
       ...pagination,
+      ...reportSort,
     });
   }
 
@@ -246,6 +256,8 @@ export class ReportingController {
     @Query("whatsappClassification") whatsappClassification?: string | string[],
     @Query("page") page?: string | string[],
     @Query("pageSize") pageSize?: string | string[],
+    @Query("sort") sort?: unknown,
+    @Query("dir") dir?: unknown,
   ) {
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
     const period = this.parseReportPeriod(since, until);
@@ -263,12 +275,14 @@ export class ReportingController {
       whatsappClassification,
     });
     const pagination = this.parseReportPagination(page, pageSize);
+    const reportSort = this.parseReportSort(sort, dir);
 
     return this.metaReportingService.getAdReportOverview({
       workspaceId,
       ...period,
       ...filters,
       ...pagination,
+      ...reportSort,
     });
   }
 
@@ -580,6 +594,39 @@ export class ReportingController {
         100,
       ),
     };
+  }
+
+  private parseReportSort(
+    sort?: unknown,
+    dir?: unknown,
+  ): { sort?: ReportSortDto } {
+    if (
+      (sort !== undefined && typeof sort !== "string") ||
+      (dir !== undefined && typeof dir !== "string")
+    ) {
+      throw new BadRequestException("Ordenacao de relatorio invalida");
+    }
+
+    if (!sort) {
+      if (dir) {
+        throw new BadRequestException(
+          "Direcao de ordenacao exige campo de ordenacao",
+        );
+      }
+
+      return {};
+    }
+
+    const parsed = reportSortSchema.safeParse({
+      key: sort,
+      ...(dir ? { direction: dir } : {}),
+    });
+
+    if (!parsed.success) {
+      throw new BadRequestException("Ordenacao de relatorio invalida");
+    }
+
+    return { sort: parsed.data };
   }
 
   private parsePositiveInteger(

@@ -10,6 +10,8 @@ import type {
   ReportOverviewDto,
   ReportFunnelStepDto,
   ReportPaginationDto,
+  ReportSortDto,
+  ReportSortKeyDto,
 } from "@wpptrack/shared";
 import { BarChart3, CalendarRange, Download, RefreshCcw } from "lucide-react";
 import Link from "next/link";
@@ -23,6 +25,17 @@ import { getCurrentWorkspace } from "../../../lib/current-workspace";
 import { MetaEntityControls } from "./meta-entity-controls";
 import { MetaReportFilters } from "./meta-report-filters";
 import { ReportAdPreview } from "./report-ad-preview";
+import {
+  ReportSortHeader,
+  ReportSortToolbar,
+  type ReportSortAction,
+} from "./report-sort-controls";
+import {
+  nextReportSort,
+  parseReportSort,
+  reportSortColumnKeys,
+  reportSortVisibleInMetricGroup,
+} from "./report-sort";
 import {
   ReportPageSelectionCheckbox,
   ReportSelectionCheckbox,
@@ -137,9 +150,14 @@ type ReportFilters = {
   pageSize?: number;
   since?: string;
   selectedIds?: string;
+  sort?: ReportSortDto;
   status?: string;
   until?: string;
   whatsappClassification?: string;
+};
+type ReportSortColumn = {
+  cost: ReportSortAction;
+  count: ReportSortAction;
 };
 
 function money(cents: number | null) {
@@ -375,6 +393,11 @@ function reportQuery(
     params.set("pageSize", String(filters.pageSize));
   }
 
+  if (includePagination && filters.sort) {
+    params.set("sort", filters.sort.key);
+    params.set("dir", filters.sort.direction);
+  }
+
   return params.toString();
 }
 
@@ -404,6 +427,8 @@ async function syncMetaReports(formData: FormData) {
     "view",
     "metrics",
     "pageSize",
+    "sort",
+    "dir",
   ]) {
     const value = formText(formData, key);
 
@@ -795,8 +820,12 @@ function reportMetricGroupHref(
   view: ReportView,
   filters: ReportFilters,
 ): string {
+  const sort =
+    filters.sort && reportSortVisibleInMetricGroup(filters.sort.key, metrics)
+      ? filters.sort
+      : undefined;
   const params = new URLSearchParams(
-    reportQuery({ ...filters, page: 1 }, true),
+    reportQuery({ ...filters, page: 1, sort }, true),
   );
 
   params.set("view", view);
@@ -806,6 +835,56 @@ function reportMetricGroupHref(
   }
 
   return `/reports?${params.toString()}`;
+}
+
+function reportSortAction(
+  view: ReportView,
+  filters: ReportFilters,
+  key: ReportSortKeyDto,
+  label: string,
+): ReportSortAction {
+  const active = filters.sort?.key === key;
+
+  return {
+    active,
+    direction: active && filters.sort ? filters.sort.direction : "desc",
+    href: reportPageHref(
+      view,
+      { ...filters, sort: nextReportSort(filters.sort, key) },
+      1,
+    ),
+    label,
+  };
+}
+
+function reportSortColumn(
+  view: ReportView,
+  filters: ReportFilters,
+  step: ReportFunnelStepDto,
+): ReportSortColumn | null {
+  const keys = reportSortColumnKeys(step.key);
+
+  if (!keys) {
+    return null;
+  }
+
+  return {
+    count: reportSortAction(view, filters, keys.count, step.label),
+    cost: reportSortAction(view, filters, keys.cost, `Custo por ${step.label}`),
+  };
+}
+
+function ReportSortHiddenInputs({ sort }: { sort?: ReportSortDto }) {
+  if (!sort) {
+    return null;
+  }
+
+  return (
+    <>
+      <input type="hidden" name="sort" value={sort.key} />
+      <input type="hidden" name="dir" value={sort.direction} />
+    </>
+  );
 }
 
 const campaignSummaryCopy: ReportEntityCopy = {
@@ -1431,12 +1510,27 @@ function SummaryMetricsCells({
   );
 }
 
+function visibleReportFunnelSteps(
+  funnelSteps: ReportFunnelStepDto[],
+  metricGroup: ReportMetricGroup,
+): ReportFunnelStepDto[] {
+  if (metricGroup === "traffic") {
+    return funnelSteps.filter((step) => step.key === "real_conversations");
+  }
+
+  return metricGroup === "overview" || metricGroup === "funnel"
+    ? funnelSteps
+    : [];
+}
+
 function PerformanceMetricHeaders({
   funnelSteps,
   metricGroup,
+  sortColumn,
 }: {
   funnelSteps: ReportFunnelStepDto[];
   metricGroup: ReportMetricGroup;
+  sortColumn: (step: ReportFunnelStepDto) => ReportSortColumn | null;
 }) {
   const showOverview = metricGroup === "overview";
   const showTraffic = metricGroup === "traffic";
@@ -1452,9 +1546,20 @@ function PerformanceMetricHeaders({
     <>
       <th>Investimento</th>
       {showOverview || showTraffic ? <th>Conversas Meta</th> : null}
-      {visibleFunnelSteps.map((step) => (
-        <th key={step.key}>{step.label}</th>
-      ))}
+      {visibleFunnelSteps.map((step) => {
+        const column = sortColumn(step);
+
+        return column ? (
+          <ReportSortHeader
+            cost={column.cost}
+            count={column.count}
+            key={step.key}
+            label={step.label}
+          />
+        ) : (
+          <th key={step.key}>{step.label}</th>
+        );
+      })}
       {showTraffic ? <th>Total recebido</th> : null}
       {showOverview || showRevenue ? <th>Receita trafego</th> : null}
       {showRevenue ? (
@@ -1890,6 +1995,11 @@ export default async function ReportsPage({
     asStringParam(resolvedSearchParams.page),
     1,
   );
+  const sort = parseReportSort(
+    asStringParam(resolvedSearchParams.sort),
+    asStringParam(resolvedSearchParams.dir),
+    activeMetricGroup,
+  );
   const pageSize = Math.min(
     positiveIntegerParam(asStringParam(resolvedSearchParams.pageSize), 10),
     100,
@@ -1927,6 +2037,7 @@ export default async function ReportsPage({
     status,
     delivery,
     selectedIds,
+    sort,
     whatsappClassification,
     metrics: activeMetricGroup,
   };
@@ -1969,6 +2080,7 @@ export default async function ReportsPage({
           until: compareUntil,
           page: undefined,
           pageSize: undefined,
+          sort: undefined,
         })
       : Promise.resolve(null),
     getMetaAssets(),
@@ -2115,6 +2227,16 @@ export default async function ReportsPage({
     adsets: adSetSummaryCopy,
     campaigns: campaignSummaryCopy,
   }[activeView];
+  const sortColumn = (step: ReportFunnelStepDto) =>
+    reportSortColumn(activeView, reportFilters, step);
+  const mobileSortActions = visibleReportFunnelSteps(
+    currentTotals.funnelSteps,
+    activeMetricGroup,
+  ).flatMap((step) => {
+    const column = sortColumn(step);
+
+    return column ? [column.count, column.cost] : [];
+  });
   const activeMetricLabel = {
     funnel: "Funil",
     overview: "Visao geral",
@@ -2191,6 +2313,7 @@ export default async function ReportsPage({
               name="compareUntil"
               value={compareUntil ?? ""}
             />
+            <ReportSortHiddenInputs sort={sort} />
             <div className="report-period-context">
               <CalendarRange aria-hidden="true" size={17} />
               <span>
@@ -2291,6 +2414,7 @@ export default async function ReportsPage({
                     name="whatsappClassification"
                     value={whatsappClassification ?? ""}
                   />
+                  <ReportSortHiddenInputs sort={sort} />
                   <SubmitButton
                     className="button ghost"
                     pendingLabel="Sincronizando..."
@@ -2371,6 +2495,7 @@ export default async function ReportsPage({
             compareUntil={compareUntil}
             view={activeView}
             pageSize={pageSize}
+            sort={sort}
           />
         </div>
       </section>
@@ -2492,6 +2617,10 @@ export default async function ReportsPage({
         </details>
       ) : null}
 
+      {activeRows.length > 0 ? (
+        <ReportSortToolbar actions={mobileSortActions} />
+      ) : null}
+
       {activeView === "campaigns" ? (
         <div className="table-wrap report-table-scroll">
           <table
@@ -2516,6 +2645,7 @@ export default async function ReportsPage({
                 <PerformanceMetricHeaders
                   funnelSteps={currentTotals.funnelSteps}
                   metricGroup={activeMetricGroup}
+                  sortColumn={sortColumn}
                 />
                 <th className="performance-review-column">Revisao WhatsApp</th>
               </tr>
@@ -2661,6 +2791,7 @@ export default async function ReportsPage({
                 <PerformanceMetricHeaders
                   funnelSteps={currentTotals.funnelSteps}
                   metricGroup={activeMetricGroup}
+                  sortColumn={sortColumn}
                 />
                 <th className="performance-review-column">Revisao WhatsApp</th>
               </tr>
@@ -2810,6 +2941,7 @@ export default async function ReportsPage({
                 <PerformanceMetricHeaders
                   funnelSteps={currentTotals.funnelSteps}
                   metricGroup={activeMetricGroup}
+                  sortColumn={sortColumn}
                 />
                 <th className="performance-review-column">Revisao WhatsApp</th>
               </tr>
@@ -3054,6 +3186,7 @@ export default async function ReportsPage({
               name="whatsappClassification"
               value={whatsappClassification ?? ""}
             />
+            <ReportSortHiddenInputs sort={sort} />
             <select
               className="filter-control"
               name="structureNameScope"
