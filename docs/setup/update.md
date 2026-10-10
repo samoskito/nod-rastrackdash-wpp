@@ -91,7 +91,8 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 3. `/backoffice/license` → licença **utilizável**.
 4. `/integrations` → as conexões que já existiam continuam lá, com o status de antes.
 5. Se você usa gatilhos: `/settings#whatsapp-triggers` continua mostrando suas origens e **Nova regra**.
-6. Versão instalada conferida como em [Conferir depois do deploy](#conferir-depois-do-deploy).
+6. Se você envia conversões para a Meta: faça o passo de [Conversões Meta depois desta atualização](#conversões-meta-depois-desta-atualização-trocar-token) **antes** de conferir os eventos.
+7. Versão instalada conferida como em [Conferir depois do deploy](#conferir-depois-do-deploy).
 
 ### Exemplo: depois da atualização com Data Crazy
 
@@ -101,6 +102,42 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 - Passo a passo completo da conexão: [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy--conexão-de-webhook-de-entrada-ctwa) e passo 10.2 do [Guia do Aluno](../GUIA-ALUNO.md#102-painel-webhooks-de-entrada--umbler-gupshup-data-crazy-e-meta-whatsapp-cloud-api).
 
 Se **Webhooks de entrada** nem aparece, ou Data Crazy não está na lista, veja [Não apareceu Data Crazy / feature nova depois do merge](troubleshooting.md#não-apareceu-data-crazy--feature-nova-depois-do-merge).
+
+## Conversões Meta depois desta atualização (Trocar token)
+
+Nesta versão, **todo** envio de conversão para a Meta (inclusive o **LeadSubmitted** automático e o que vem do Kommo) passa a usar a mesma estrutura: **Integrações → Tokens, BMs e destinos**. Foi uma mudança do produto feita pela PalmUP — **você não quebrou nada na Meta**.
+
+O que você pode ver se pular este passo: em **Auditoria de conversoes** (`/events`), o LeadSubmitted aparece como **Bloqueado**, com "Destino Meta ainda nao configurado" e "A conexao Meta precisa ser refeita". Isso acontece **mesmo com o painel parecendo perfeito** (estrutura **Ativa**, pixel e página escolhidos, rotas automáticas ligadas). O painel está certo; só falta regravar o token uma vez.
+
+### Se você já tem uma estrutura em Tokens, BMs e destinos
+
+Uma ação só: **regravar o mesmo token no card que já existe**.
+
+1. Abra `/integrations` → **Tokens, BMs e destinos**.
+2. **Não** clique em **+ Nova conexao**.
+3. **Não** apague a estrutura (ícone de lixeira, **Remover estrutura**).
+4. No card do BM que já está lá, clique no ícone de **chave** (**Trocar token**).
+5. Cole o **mesmo** token permanente que você já usa e clique em **Validar troca**.
+
+Pronto. Continuam os mesmos: BM, conta de anúncios, pixel, página e destinos. Colar o mesmo token **não** cria um segundo BM — ele só atualiza a credencial guardada naquele card.
+
+Só gere um token **novo** na Meta se ela recusar o atual ao validar. Mesmo nesse caso, cole o token novo pelo **Trocar token** do mesmo card — nunca por **+ Nova conexao**.
+
+### Se você ainda usava o caminho antigo (versão Alpha / só login social)
+
+A partir desta versão, o envio de conversões **não** usa mais o caminho antigo da Alpha. Ele usa **Tokens, BMs e destinos**.
+
+1. Abra `/integrations` → **Tokens, BMs e destinos**.
+2. **Já aparece um card do seu BM?** Faça o [Trocar token](#se-você-já-tem-uma-estrutura-em-tokens-bms-e-destinos) acima, com o mesmo token.
+3. **A lista está vazia?** Aí sim, crie a estrutura pela primeira vez seguindo o [guia de Meta Ads](meta-manual.md): token do usuário do sistema, BM, conta de anúncios, pixel e página.
+
+### Eventos que já ficaram "Bloqueado"
+
+Os LeadSubmitted que ficaram **Bloqueado** antes do Trocar token **não voltam sozinhos**, e não têm botão **Tentar novamente** (esse botão só aparece para falha de comunicação com a Meta). Não recrie leads nem conexões para forçar o reenvio: avise a PalmUP com o nome do workspace e desde quando os eventos ficaram bloqueados — a recuperação desses eventos é feita pela PalmUP.
+
+**Validação:** depois do Trocar token, os **próximos** LeadSubmitted aparecem em **Auditoria de conversoes** como **Na fila**/**Enviado**, e não mais como Bloqueado.
+
+> **Para a IA que conduz o aluno:** o **Trocar token** regrava a credencial na mesma linha da estrutura (rotação de credencial), e o BM é único por workspace — o mesmo token nunca gera um segundo BM. Nunca oriente **+ Nova conexao** nem **Remover estrutura** para quem já tem card, nunca culpe o aluno pela mudança, nunca peça o token no chat e nunca prometa que o painel reenvia os eventos já bloqueados.
 
 ## Versão instalada
 

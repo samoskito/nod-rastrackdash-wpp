@@ -27,7 +27,7 @@ A arquitetura recomendada para produção é **Vercel para o web** + **Dokploy e
 
 Você pode seguir o caminho local primeiro e migrar para Dokploy depois — os passos de produto (3 em diante) são os mesmos nos dois caminhos.
 
-> **Já está no ar?** Se a sua instância já roda com clientes e você só quer as novidades do template (ex.: Data Crazy), **não reinstale**: siga [`setup/update.md`](setup/update.md) — redeploy da API (as migrations rodam sozinhas) e novo deploy do web, mantendo banco, administrador, licença e chaves.
+> **Já está no ar?** Se a sua instância já roda com clientes e você só quer as novidades do template (ex.: Data Crazy), **não reinstale**: siga [`setup/update.md`](setup/update.md) — redeploy da API (as migrations rodam sozinhas) e novo deploy do web, mantendo banco, administrador, licença e chaves. Se você envia conversões para a Meta, não pule o passo [Conversões Meta depois desta atualização](setup/update.md#conversões-meta-depois-desta-atualização-trocar-token).
 
 ## 3. Clonar, instalar e configurar o ambiente
 
@@ -96,6 +96,8 @@ Logue com o administrador criado, crie seu primeiro workspace para um cliente fi
 Siga o [guia manual de Meta Ads](setup/meta-manual.md): criar/usar um usuário do sistema no Gerenciador de Negócios do cliente, gerar um token e colá-lo na UI de **Integrações** do workspace — nunca em `.env` público nem em chat.
 
 ⚠️ Isso é a conexão de **anúncios** (Pixel, conta de anúncios, destino de conversão). Ela **não** recebe mensagem nenhuma. Quem traz mensagem é o passo 10.
+
+**Atualizou a instância e o LeadSubmitted ficou "Bloqueado"?** Isso veio de uma mudança do produto, não de um erro seu: agora todo envio para a Meta usa **Integrações → Tokens, BMs e destinos**. Se você já tem um card ali, **não** clique em **+ Nova conexao** e **não** apague o BM — clique no ícone de **chave** (**Trocar token**) do card que já existe, cole o **mesmo** token e clique em **Validar troca**. BM, conta, pixel e página continuam os mesmos. Se a lista estiver vazia (você usava o caminho antigo da Alpha), crie a estrutura pelo [guia de Meta Ads](setup/meta-manual.md). Detalhes, inclusive o que fazer com eventos já bloqueados, em [`setup/update.md`](setup/update.md#conversões-meta-depois-desta-atualização-trocar-token).
 
 ## 10. Conectar WhatsApp
 
