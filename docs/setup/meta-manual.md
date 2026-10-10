@@ -46,9 +46,20 @@ O handshake do webhook de **Meta Ads** usa `META_WEBHOOK_VERIFY_TOKEN` e o rotea
 - `GET /onboarding/status` → `metaConnected: true` (com workspace ativo)
 - Relatórios/leads deixam de falhar por “meta not configured”
 
+## Trocar token sem refazer a estrutura
+
+Depois que a estrutura existe em **Integrações → Tokens, BMs e destinos**, o token é sempre trocado **no mesmo card**:
+
+1. No card do BM, clique no ícone de **chave** (**Trocar token**).
+2. Cole o token permanente e clique em **Validar troca**.
+
+BM, conta de anúncios, pixel, página e destinos continuam os mesmos. Para trocar token, **não** use **+ Nova conexao** e **não** apague a estrutura (lixeira) — isso só faz você refazer a configuração toda.
+
+**Acabou de atualizar a instância?** Faça o **Trocar token** uma vez, colando o **mesmo** token que você já usa. Nesta versão, todo envio de conversão (inclusive LeadSubmitted e Kommo) passou a usar esta estrutura; sem essa regravação, o LeadSubmitted fica **Bloqueado** mesmo com o card aparecendo como **Ativa**. É uma mudança do produto, não um erro seu. Detalhes em [`update.md`](update.md#conversões-meta-depois-desta-atualização-trocar-token).
+
 ## Segurança
 
-- Rotacione o token se vazar
+- Rotacione o token se vazar, pelo **Trocar token** do mesmo card
 - Não commite `.env` nem captures de tela com token
 - Prefira um usuário do sistema limitado ao Gerenciador de Negócios do cliente, e não um token pessoal de longa duração sem necessidade
 - Não envie App ID/token por chat e nunca use `***` como valor de token; `***` só redige valores em logs compartilhados

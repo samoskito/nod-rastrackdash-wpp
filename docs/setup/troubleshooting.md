@@ -189,6 +189,17 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** siga [`meta-manual.md`](meta-manual.md) para gerar e colar um novo token no workspace certo.
 - **Verificação:** `/integrations` mostra Meta conectado e os relatórios voltam a popular.
 
+## LeadSubmitted "Bloqueado" depois de atualizar ("Destino Meta ainda nao configurado" / "A conexao Meta precisa ser refeita")
+
+- **Sintoma:** depois de atualizar a instância, a **Auditoria de conversoes** (`/events`) mostra o LeadSubmitted como **Bloqueado**, com "Destino Meta ainda nao configurado" e "A conexao Meta precisa ser refeita". Ao mesmo tempo, **Integrações → Tokens, BMs e destinos** parece tudo certo: estrutura **Ativa**, pixel e página escolhidos, rotas automáticas ligadas.
+- **Diagnóstico seguro:** só olhe. Abra `/integrations` → **Tokens, BMs e destinos** e veja se já existe um card do seu BM. Não apague nada e não crie nada ainda.
+- **Causa:** mudança do produto, não erro seu. Nesta versão, todo envio para a Meta (LeadSubmitted automático e Kommo) passou a usar a estrutura de **Tokens, BMs e destinos**, e o token guardado antes da atualização precisa ser regravado uma vez nesse card.
+- **Correção — uma ação só:**
+  - **Já tem card:** no card do BM, clique no ícone de **chave** (**Trocar token**), cole o **mesmo** token permanente e clique em **Validar troca**. **Não** use **+ Nova conexao** e **não** apague a estrutura (lixeira). BM, conta, pixel e página continuam os mesmos, e o mesmo token não cria um segundo BM. Só gere token novo na Meta se ela recusar o atual — e cole pelo mesmo **Trocar token**.
+  - **Lista vazia** (você usava o caminho antigo da Alpha / login social): crie a estrutura pela primeira vez seguindo [`meta-manual.md`](meta-manual.md).
+  - **Eventos que já ficaram Bloqueado:** não voltam sozinhos e não têm **Tentar novamente** (esse botão é só para falha de comunicação com a Meta). Não recrie leads nem conexões; avise a PalmUP com o nome do workspace e desde quando — a recuperação é feita pela PalmUP.
+- **Verificação:** os **próximos** LeadSubmitted aparecem em **Auditoria de conversoes** como **Na fila**/**Enviado**. Passo a passo completo em [`update.md`](update.md#conversões-meta-depois-desta-atualização-trocar-token).
+
 ## Não apareceu Data Crazy / feature nova depois do merge
 
 - **Sintoma:** a novidade já está na `main` do template (ex.: **Data Crazy** em `/integrations` → **Webhooks de entrada** → **Adicionar conexão**), mas a sua instância publicada não mostra.
