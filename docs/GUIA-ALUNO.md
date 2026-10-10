@@ -97,7 +97,9 @@ Siga o [guia manual de Meta Ads](setup/meta-manual.md): criar/usar um usuário d
 
 ⚠️ Isso é a conexão de **anúncios** (Pixel, conta de anúncios, destino de conversão). Ela **não** recebe mensagem nenhuma. Quem traz mensagem é o passo 10.
 
-**Atualizou a instância e o LeadSubmitted ficou "Bloqueado"?** Isso veio de uma mudança do produto, não de um erro seu: agora todo envio para a Meta usa **Integrações → Tokens, BMs e destinos**. Se você já tem um card ali, **não** clique em **+ Nova conexao** e **não** apague o BM — clique no ícone de **chave** (**Trocar token**) do card que já existe, cole o **mesmo** token e clique em **Validar troca**. BM, conta, pixel e página continuam os mesmos. Se a lista estiver vazia (você usava o caminho antigo da Alpha), crie a estrutura pelo [guia de Meta Ads](setup/meta-manual.md). Detalhes, inclusive o que fazer com eventos já bloqueados, em [`setup/update.md`](setup/update.md#conversões-meta-depois-desta-atualização-trocar-token).
+**Atualizou a instância e o LeadSubmitted ficou "Bloqueado"?** Isso veio de uma mudança do produto, não de um erro seu: agora todo envio para a Meta usa **Integrações → Tokens, BMs e destinos**. Se você já tem um card ali, **não** clique em **+ Nova conexao** e **não** apague o BM — clique no ícone de **chave** (**Trocar token**) do card que já existe, cole o **mesmo** token e clique em **Validar troca**. BM, conta, pixel e página continuam os mesmos. Se a lista estiver vazia (você usava o caminho antigo da Alpha), crie a estrutura pelo [guia de Meta Ads](setup/meta-manual.md).
+
+Os eventos que **já** ficaram bloqueados não voltam sozinhos. Depois do Trocar token, **atualize a instância** (API e web) e, como **owner**, abra **Auditoria de conversoes** (`/events`), escolha um período que cubra os dias bloqueados, clique em **Aplicar** e em **Reenviar bloqueados**. Não crie BM novo. Sem essa atualização, os bloqueados não são reenviados. Detalhes em [`setup/update.md`](setup/update.md#eventos-que-já-ficaram-bloqueado).
 
 ## 10. Conectar WhatsApp
 

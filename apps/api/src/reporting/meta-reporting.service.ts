@@ -33,6 +33,11 @@ import type {
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { isSupportedConversionEventName } from "../conversion-events/conversion-event-registry";
+import {
+  BLOCKED_CONVERSION_RETRY_LIMIT,
+  canRetryConversionEvent,
+  configurationBlockedConversionEventWhere,
+} from "../conversion-events/conversion-event-retry";
 import { buildMetaCapiPayload } from "../conversion-events/meta-capi-payload.builder";
 import { FunnelConfigurationService } from "../conversion-rules/funnel-configuration.service";
 import { InboundWebhookChannelRoutesService } from "../inbound-webhooks/inbound-webhook-channel-routes.service";
@@ -239,6 +244,15 @@ type MetaAdRecord = {
 };
 
 type ConversionEventRecord = ReportingMetricEvent;
+
+type ConversionAuditFilters = {
+  workspaceId: string;
+  since?: string;
+  until?: string;
+  eventName?: string;
+  deliveryState?: ConversionAuditDeliveryStateDto;
+  source?: ConversionAuditSourceDto;
+};
 
 type ConversionAuditEventRecord = {
   id: string;
@@ -1737,23 +1751,7 @@ export class MetaReportingService {
     page: number;
     pageSize: number;
   }): Promise<ConversionAuditOverviewDto> {
-    const where: Prisma.ConversionEventLogWhereInput = {
-      workspaceId: input.workspaceId,
-      ...this.conversionAuditPeriodWhere(input),
-      ...(input.eventName ? { eventName: input.eventName } : {}),
-      ...(input.deliveryState
-        ? { status: { in: this.conversionAuditStatuses(input.deliveryState) } }
-        : {}),
-      AND: [
-        this.conversionAuditSourceWhere(input.source),
-        {
-          NOT: {
-            sourceTrigger: "auto_lead",
-            ctwaClid: null,
-          },
-        },
-      ],
-    };
+    const where = this.conversionAuditWhere(input);
     const [events, statusGroups, funnelStages] = await Promise.all([
       this.prisma.conversionEventLog.findMany({
         where,
@@ -1829,6 +1827,24 @@ export class MetaReportingService {
         this.conversionAuditEventDto(event, eventLabels, context),
       ),
     };
+  }
+
+  async getBlockedConversionEventRetryIds(
+    input: ConversionAuditFilters,
+  ): Promise<string[]> {
+    const events = await this.prisma.conversionEventLog.findMany({
+      where: {
+        AND: [
+          this.conversionAuditWhere(input),
+          configurationBlockedConversionEventWhere,
+        ],
+      },
+      orderBy: [{ eventOccurredAt: "desc" }, { id: "desc" }],
+      take: BLOCKED_CONVERSION_RETRY_LIMIT,
+      select: { id: true },
+    });
+
+    return events.map((event) => event.id);
   }
 
   async getConversionEventAuditDetail(input: {
@@ -4072,8 +4088,7 @@ export class MetaReportingService {
       occurredAt: event.eventOccurredAt.toISOString(),
       sentAt: event.sentAt?.toISOString() ?? null,
       status: event.status,
-      canRetry:
-        event.status === "error" && event.errorCode === "MetaCapiNetworkError",
+      canRetry: canRetryConversionEvent(event),
       providerResponseSummary:
         event.status === "sent" && event.providerResponseSummary != null
           ? "Meta confirmou o recebimento"
@@ -4399,6 +4414,23 @@ export class MetaReportingService {
     return [
       ...new Set(values.filter((value): value is string => Boolean(value))),
     ];
+  }
+
+  private conversionAuditWhere(
+    input: ConversionAuditFilters,
+  ): Prisma.ConversionEventLogWhereInput {
+    return {
+      workspaceId: input.workspaceId,
+      ...this.conversionAuditPeriodWhere(input),
+      ...(input.eventName ? { eventName: input.eventName } : {}),
+      ...(input.deliveryState
+        ? { status: { in: this.conversionAuditStatuses(input.deliveryState) } }
+        : {}),
+      AND: [
+        this.conversionAuditSourceWhere(input.source),
+        { NOT: { sourceTrigger: "auto_lead", ctwaClid: null } },
+      ],
+    };
   }
 
   private conversionAuditSourceWhere(
