@@ -128,7 +128,17 @@ export class MetaConnectionResolverService {
   }
 
   async hasNormalizedConnections(workspaceId: string): Promise<boolean> {
-    return this.isNormalizedRoutingEnabled(workspaceId);
+    const activeConnections = await this.prisma.metaBusinessConnection.count({
+      where: {
+        workspaceId,
+        status: "active",
+        credential: { is: { status: "active" } },
+      },
+    });
+
+    return (
+      activeConnections > 0 || this.isNormalizedRoutingEnabled(workspaceId)
+    );
   }
 
   async resolveReportingRoute(input: {
