@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ConversionEventsService } from "../src/conversion-events/conversion-events.service";
 import { MetaConnectionResolverService } from "../src/integrations/meta/meta-connection-resolver.service";
 import { MetaTokenEncryptionService } from "../src/integrations/meta/meta-token-encryption.service";
 
@@ -112,12 +113,108 @@ function harness(
     },
   };
   return {
+    encryption,
     prisma,
     service: new MetaConnectionResolverService(prisma as never, encryption),
   };
 }
 
 describe("Meta CAPI connection routing", () => {
+  it.each(["manual", "oauth"] as const)(
+    "opens the sender gate for an active %s BM with legacy routing disabled",
+    async (source) => {
+      const { service } = harness({ source, advancedRoutingEnabled: false });
+      await expect(
+        service.hasNormalizedConnections("workspace-a"),
+      ).resolves.toBe(true);
+    },
+  );
+
+  it.each([
+    { noConnections: true },
+    { connectionStatus: "paused" },
+    { credentialStatus: "paused" },
+    { connectionWorkspaceId: "workspace-b" },
+  ])(
+    "keeps the sender gate closed without an active workspace BM: %s",
+    async (input) => {
+      const { service } = harness({ ...input, advancedRoutingEnabled: false });
+      await expect(
+        service.hasNormalizedConnections("workspace-a"),
+      ).resolves.toBe(false);
+    },
+  );
+
+  it("delivers with the real BM resolver token instead of the empty legacy token", async () => {
+    const { service, prisma, encryption } = harness({
+      advancedRoutingEnabled: false,
+      legacyToken: "",
+    });
+    const resolveCapiRoute = vi.spyOn(service, "resolveCapiRoute");
+    const sender = new ConversionEventsService(
+      prisma as never,
+      {} as never,
+      encryption,
+      service,
+      {} as never,
+    );
+
+    await expect(
+      (sender as any).resolveDeliveryRoute({
+        workspaceId: "workspace-a",
+        metaAccountId: "act-a",
+        pixelId: "pixel-a",
+        pageId: "page-a",
+      }),
+    ).resolves.toMatchObject({
+      source: "manual",
+      accessToken: "connection-token",
+      businessConnectionId: "connection-a",
+      pixelId: "pixel-a",
+      pageId: "page-a",
+      routeError: null,
+    });
+    expect(resolveCapiRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-a",
+        metaAccountId: "act-a",
+      }),
+    );
+  });
+
+  it.each([false, true])(
+    "keeps sender delivery on legacy CAPI without BM connections (flag %s)",
+    async (advancedRoutingEnabled) => {
+      const { service, prisma, encryption } = harness({
+        noConnections: true,
+        advancedRoutingEnabled,
+        legacyToken: "legacy-capi-token",
+      });
+      const resolveCapiRoute = vi.spyOn(service, "resolveCapiRoute");
+      const sender = new ConversionEventsService(
+        prisma as never,
+        {} as never,
+        encryption,
+        service,
+        {} as never,
+      );
+
+      await expect(
+        (sender as any).resolveDeliveryRoute({
+          workspaceId: "workspace-a",
+          metaAccountId: "act-legacy",
+          pixelId: "pixel-legacy",
+        }),
+      ).resolves.toMatchObject({
+        source: "legacy_oauth",
+        accessToken: "legacy-capi-token",
+        businessConnectionId: null,
+        routeError: null,
+      });
+      expect(resolveCapiRoute).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["act-a", undefined])(
     "uses the active manual BM token and destination with legacy routing disabled (account %s)",
     async (metaAccountId) => {
