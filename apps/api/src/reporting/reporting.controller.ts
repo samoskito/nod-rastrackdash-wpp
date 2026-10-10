@@ -372,7 +372,7 @@ export class ReportingController {
 
     return this.diagnosticsService.retryConversionEvent(
       eventId,
-      { reason: "Reenvio manual de falha transitoria Meta" },
+      { reason: "Reenvio manual de evento Meta" },
       {
         workspaceId: workspace.id,
         actorUserId: authenticated.user.id,
@@ -381,6 +381,53 @@ export class ReportingController {
             ? "platform_owner"
             : "workspace_owner",
         transientOnly: true,
+        allowConfigurationBlocked: true,
+        requesterLabel: "pelo owner do workspace",
+      },
+    );
+  }
+
+  @Post("conversions/audit/retry-blocked")
+  async retryBlockedConversionEventAudit(
+    @AuthToken() refreshToken: string,
+    @Query("since") since?: string,
+    @Query("until") until?: string,
+    @Query("eventName") eventName?: string | string[],
+    @Query("status") status?: string | string[],
+    @Query("source") source?: string | string[],
+  ) {
+    const { authenticated, workspace } =
+      await this.getCurrentWorkspaceContext(refreshToken);
+
+    if (!this.canRetryMetaEvent(workspace)) {
+      throw new ForbiddenException(
+        "Somente o owner pode reenviar eventos Meta",
+      );
+    }
+
+    const period = this.parseReportPeriod(since, until);
+    const eventNameFilter = this.trimOptional(eventName);
+    const deliveryState = this.parseConversionAuditStatus(status);
+    const sourceFilter = this.parseConversionAuditSource(source);
+    const eventIds =
+      await this.metaReportingService.getBlockedConversionEventRetryIds({
+        workspaceId: workspace.id,
+        ...period,
+        ...(eventNameFilter ? { eventName: eventNameFilter } : {}),
+        ...(deliveryState ? { deliveryState } : {}),
+        ...(sourceFilter ? { source: sourceFilter } : {}),
+      });
+
+    return this.diagnosticsService.retryBlockedConversionEvents(
+      eventIds,
+      { reason: "Reenvio manual de eventos Meta bloqueados por configuracao" },
+      {
+        workspaceId: workspace.id,
+        actorUserId: authenticated.user.id,
+        actorType:
+          workspace.accessMode === "platform_support"
+            ? "platform_owner"
+            : "workspace_owner",
         requesterLabel: "pelo owner do workspace",
       },
     );

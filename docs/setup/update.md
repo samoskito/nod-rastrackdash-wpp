@@ -133,11 +133,26 @@ A partir desta versão, o envio de conversões **não** usa mais o caminho antig
 
 ### Eventos que já ficaram "Bloqueado"
 
-Os LeadSubmitted que ficaram **Bloqueado** antes do Trocar token **não voltam sozinhos**, e não têm botão **Tentar novamente** (esse botão só aparece para falha de comunicação com a Meta). Não recrie leads nem conexões para forçar o reenvio: avise a PalmUP com o nome do workspace e desde quando os eventos ficaram bloqueados — a recuperação desses eventos é feita pela PalmUP.
+Os LeadSubmitted que ficaram **Bloqueado** antes do Trocar token **não voltam sozinhos**. Você mesmo reenvia, pelo painel, em três passos e nesta ordem:
 
-**Validação:** depois do Trocar token, os **próximos** LeadSubmitted aparecem em **Auditoria de conversoes** como **Na fila**/**Enviado**, e não mais como Bloqueado.
+1. Faça o **Trocar token** acima (se ainda não fez). Reenviar antes disso só bloqueia de novo.
+2. **Atualize a instância** para a versão mais recente do template — API **e** web ([Passo 1](#passo-1--trazer-o-código-novo) ao [Passo 5](#passo-5--verificação-pós-atualização) deste guia). O botão de reenvio só existe a partir desta atualização: numa instância antiga, os eventos bloqueados continuam sem reenvio.
+3. Abra **Auditoria de conversoes** (`/events`), escolha em **Inicio**/**Fim** um período que cubra **desde quando** os eventos ficaram bloqueados, clique em **Aplicar** e depois em **Reenviar bloqueados** (ao lado de "Eventos do periodo").
 
-> **Para a IA que conduz o aluno:** o **Trocar token** regrava a credencial na mesma linha da estrutura (rotação de credencial), e o BM é único por workspace — o mesmo token nunca gera um segundo BM. Nunca oriente **+ Nova conexao** nem **Remover estrutura** para quem já tem card, nunca culpe o aluno pela mudança, nunca peça o token no chat e nunca prometa que o painel reenvia os eventos já bloqueados.
+O que esperar:
+
+- Só o **owner** do workspace vê o botão. Membro vê a lista, mas não reenvia.
+- O reenvio respeita o período e os filtros que estão na tela, e vai até **500 eventos por clique**. Tem mais que isso? Clique de novo.
+- O painel mostra a contagem real: quantos foram para a fila, quantos **já não estavam bloqueados** (ficaram de fora) e quantos não puderam entrar na fila agora (tente de novo em instantes).
+- Evento já **Enviado** nunca é reenviado — não há risco de duplicar conversão na Meta.
+- Quer reenviar um evento só? Na linha dele, use o botão **Reenviar**.
+- Se o botão aparece apagado, não há evento bloqueado no período escolhido.
+
+**Não** crie um BM novo, **não** use **+ Nova conexao** e **não** recrie leads para forçar o reenvio.
+
+**Validação:** os eventos reenviados passam para **Na fila** e, em seguida, **Enviado**. Os **próximos** LeadSubmitted já chegam como **Na fila**/**Enviado**, e não mais como Bloqueado. Se algum voltar para **Bloqueado** depois do reenvio, o Trocar token não pegou: refaça-o no mesmo card e clique em **Reenviar bloqueados** de novo.
+
+> **Para a IA que conduz o aluno:** o **Trocar token** regrava a credencial na mesma linha da estrutura (rotação de credencial), e o BM é único por workspace — o mesmo token nunca gera um segundo BM. A ordem é sempre: Trocar token → atualizar a instância (API e web) → `/events` com período cobrindo os bloqueados → **Reenviar bloqueados** (só o owner vê). Nunca oriente **+ Nova conexao**, **Remover estrutura** nem criar BM novo para quem já tem card, nunca culpe o aluno pela mudança, nunca peça o token no chat e nunca prometa reenvio numa instância que ainda não foi atualizada.
 
 ## Versão instalada
 

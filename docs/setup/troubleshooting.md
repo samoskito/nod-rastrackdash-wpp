@@ -197,8 +197,16 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção — uma ação só:**
   - **Já tem card:** no card do BM, clique no ícone de **chave** (**Trocar token**), cole o **mesmo** token permanente e clique em **Validar troca**. **Não** use **+ Nova conexao** e **não** apague a estrutura (lixeira). BM, conta, pixel e página continuam os mesmos, e o mesmo token não cria um segundo BM. Só gere token novo na Meta se ela recusar o atual — e cole pelo mesmo **Trocar token**.
   - **Lista vazia** (você usava o caminho antigo da Alpha / login social): crie a estrutura pela primeira vez seguindo [`meta-manual.md`](meta-manual.md).
-  - **Eventos que já ficaram Bloqueado:** não voltam sozinhos e não têm **Tentar novamente** (esse botão é só para falha de comunicação com a Meta). Não recrie leads nem conexões; avise a PalmUP com o nome do workspace e desde quando — a recuperação é feita pela PalmUP.
-- **Verificação:** os **próximos** LeadSubmitted aparecem em **Auditoria de conversoes** como **Na fila**/**Enviado**. Passo a passo completo em [`update.md`](update.md#conversões-meta-depois-desta-atualização-trocar-token).
+  - **Eventos que já ficaram Bloqueado:** não voltam sozinhos. Depois do Trocar token, **atualize a instância** (API e web) e, como owner, abra `/events`, escolha um período que cubra desde quando os eventos ficaram bloqueados, clique em **Aplicar** e em **Reenviar bloqueados**. Até 500 por clique; evento já enviado nunca é reenviado. Numa instância ainda não atualizada o botão não existe e os bloqueados não são reenviados. Não crie BM novo, não use **+ Nova conexao** e não recrie leads.
+- **Verificação:** os eventos reenviados passam para **Na fila** e depois **Enviado**, e os **próximos** LeadSubmitted já chegam assim. Se algum voltar para **Bloqueado**, refaça o Trocar token no mesmo card e clique em **Reenviar bloqueados** de novo. Passo a passo completo em [`update.md`](update.md#eventos-que-já-ficaram-bloqueado).
+
+## Não aparece "Reenviar bloqueados" em `/events`
+
+- **Sintoma:** você tem eventos **Bloqueado** na **Auditoria de conversoes**, mas não vê o botão **Reenviar bloqueados**, ou ele está apagado.
+- **Diagnóstico seguro:** confira (1) se você entrou como **owner** do workspace; (2) se a API **e** o web estão na versão mais recente (veja [`update.md`](update.md#passo-5--verificação-pós-atualização)); (3) se o período em **Inicio**/**Fim** e os filtros cobrem os dias em que os eventos ficaram bloqueados.
+- **Causa provável:** usuário que não é owner (membros não reenviam), instância ainda não atualizada (o botão não existe nas versões antigas), ou período/filtro sem evento bloqueado (o botão fica apagado).
+- **Correção:** entre com o owner, atualize API e web, ajuste o período e clique em **Aplicar** antes de **Reenviar bloqueados**.
+- **Verificação:** o painel mostra quantos eventos foram para a fila; eles passam para **Na fila** e depois **Enviado**.
 
 ## Não apareceu Data Crazy / feature nova depois do merge
 
