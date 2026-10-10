@@ -226,9 +226,18 @@ export class MetaConnectionResolverService {
     const adAccountId =
       input.metaAccountId?.trim() ||
       (await this.resolveAttributedAdAccountId(input.workspaceId, input));
-    const normalizedRoutingEnabled = await this.isNormalizedRoutingEnabled(
-      input.workspaceId,
-    );
+    // Live BM credentials take precedence over the legacy OAuth routing flag
+    // for CAPI, including workspaces that recreated their connection manually.
+    const activeConnections = await this.prisma.metaBusinessConnection.count({
+      where: {
+        workspaceId: input.workspaceId,
+        status: "active",
+        credential: { is: { status: "active" } },
+      },
+    });
+    const normalizedRoutingEnabled =
+      activeConnections > 0 ||
+      (await this.isNormalizedRoutingEnabled(input.workspaceId));
 
     if (!normalizedRoutingEnabled) {
       return this.resolveLegacyCapiRoute(input.workspaceId);
@@ -321,10 +330,7 @@ export class MetaConnectionResolverService {
         source:
           connection.credential.source === "oauth" ? "legacy_oauth" : "manual",
         workspaceId: input.workspaceId,
-        accessToken:
-          connection.credential.source === "oauth"
-            ? await this.getLegacyCapiAccessToken(input.workspaceId)
-            : this.decrypt(connection.credential),
+        accessToken: this.decrypt(connection.credential),
         reportingAccountId: account.id,
         adAccountId: account.adAccountId,
         businessConnectionId: connection.id,
@@ -475,17 +481,6 @@ export class MetaConnectionResolverService {
         workspaceId,
         id: primaryConversionDestinationId,
       },
-    });
-  }
-
-  private async getLegacyCapiAccessToken(workspaceId: string): Promise<string> {
-    const legacy = await this.getLegacyIntegration(workspaceId);
-
-    return this.decrypt({
-      encryptedAccessToken:
-        legacy.capiAccessTokenEncrypted ?? legacy.encryptedAccessToken,
-      tokenIv: legacy.capiTokenIv ?? legacy.tokenIv,
-      tokenTag: legacy.capiTokenTag ?? legacy.tokenTag,
     });
   }
 
