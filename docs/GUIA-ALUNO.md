@@ -93,13 +93,20 @@ Logue com o administrador criado, crie seu primeiro workspace para um cliente fi
 
 ## 9. Conectar Meta Ads
 
-Siga o [guia manual de Meta Ads](setup/meta-manual.md): criar/usar um usuário do sistema no Gerenciador de Negócios do cliente, gerar um token e colá-lo na UI de **Integrações** do workspace — nunca em `.env` público nem em chat.
+Você tem dois caminhos, ambos em **Integrações → Tokens, BMs e destinos**:
+
+- **Conectar Meta (PalmUP)** — o mais simples. Como **owner** do workspace, clique em **Conectar Meta (PalmUP)**, depois em **Abrir login da Meta**, autorize com o Facebook que acessa a BM do cliente, volte ao painel e clique em **Ja autorizei, concluir**. Você **não** precisa criar um app Meta próprio. Exige `PALMUP_META_BROKER_URL` na API (já vem no `.env.example`): é uma **URL pública**, não é segredo nem App Secret. O App Secret do app Meta da PalmUP **nunca** vai para a sua VPS. Detalhes em [`setup/environment.md`](setup/environment.md#palmup_meta_broker_url--login-social-meta-pela-palmup).
+- **Token permanente** — siga o [guia manual de Meta Ads](setup/meta-manual.md): criar/usar um usuário do sistema no Gerenciador de Negócios do cliente, gerar um token e colá-lo na UI de **Integrações** do workspace — nunca em `.env` público nem em chat. Esse token não expira; o do login social é um token de usuário, que a Meta pode expirar.
+
+Nos dois casos, o próximo passo é o mesmo: escolher BM, contas de anúncio, Pixel e Página.
 
 ⚠️ Isso é a conexão de **anúncios** (Pixel, conta de anúncios, destino de conversão). Ela **não** recebe mensagem nenhuma. Quem traz mensagem é o passo 10.
 
 **Atualizou a instância e o LeadSubmitted ficou "Bloqueado"?** Isso veio de uma mudança do produto, não de um erro seu: agora todo envio para a Meta usa **Integrações → Tokens, BMs e destinos**. Se você já tem um card ali, **não** clique em **+ Nova conexao** e **não** apague o BM — clique no ícone de **chave** (**Trocar token**) do card que já existe, cole o **mesmo** token e clique em **Validar troca**. BM, conta, pixel e página continuam os mesmos. Se a lista estiver vazia (você usava o caminho antigo da Alpha), crie a estrutura pelo [guia de Meta Ads](setup/meta-manual.md).
 
 Os eventos que **já** ficaram bloqueados não voltam sozinhos. Depois do Trocar token, **atualize a instância** (API e web) e, como **owner**, abra **Auditoria de conversoes** (`/events`), escolha um período que cubra os dias bloqueados, clique em **Aplicar** e em **Reenviar bloqueados**. Não crie BM novo. Sem essa atualização, os bloqueados não são reenviados. Detalhes em [`setup/update.md`](setup/update.md#eventos-que-já-ficaram-bloqueado).
+
+Essas duas orientações (**Trocar token** e **Reenviar bloqueados**) continuam valendo com o **Conectar Meta (PalmUP)**: se você já tem card, o conserto é o **Trocar token** no mesmo card, não um login social novo.
 
 ## 10. Conectar WhatsApp
 

@@ -31,7 +31,7 @@ Tudo isto já existe e continua valendo depois da atualização. Recriar qualque
 
 ## Antes de começar (5 minutos)
 
-1. **Confira o que mudou.** Leia a seção `[Unreleased]` (ou a versão mais recente) do [`CHANGELOG.md`](../../CHANGELOG.md). Se a novidade pedir uma **variável de ambiente nova**, anote — ela entra no passo 2. Data Crazy, por exemplo, **não** pede env nova.
+1. **Confira o que mudou.** Leia a seção `[Unreleased]` (ou a versão mais recente) do [`CHANGELOG.md`](../../CHANGELOG.md). Se a novidade pedir uma **variável de ambiente nova**, anote — ela entra no passo 2. Data Crazy, por exemplo, **não** pede env nova; o **Conectar Meta (PalmUP)** pede `PALMUP_META_BROKER_URL` (pública, veja [a seção dele](#conectar-meta-palmup--login-social-sem-app-meta-próprio)).
 2. **Garanta um backup recente do PostgreSQL.** O Dokploy oferece backup para serviços de banco (o nome da tela varia por versão). Se você nunca configurou, faça um agora, antes do redeploy. Não é burocracia: é o seu "desfazer".
 3. **Escolha um horário calmo.** O redeploy da API leva alguns minutos de build; durante a troca do container, webhooks podem receber erro e os provedores costumam reenviar.
 
@@ -153,6 +153,28 @@ O que esperar:
 **Validação:** os eventos reenviados passam para **Na fila** e, em seguida, **Enviado**. Os **próximos** LeadSubmitted já chegam como **Na fila**/**Enviado**, e não mais como Bloqueado. Se algum voltar para **Bloqueado** depois do reenvio, o Trocar token não pegou: refaça-o no mesmo card e clique em **Reenviar bloqueados** de novo.
 
 > **Para a IA que conduz o aluno:** o **Trocar token** regrava a credencial na mesma linha da estrutura (rotação de credencial), e o BM é único por workspace — o mesmo token nunca gera um segundo BM. A ordem é sempre: Trocar token → atualizar a instância (API e web) → `/events` com período cobrindo os bloqueados → **Reenviar bloqueados** (só o owner vê). Nunca oriente **+ Nova conexao**, **Remover estrutura** nem criar BM novo para quem já tem card, nunca culpe o aluno pela mudança, nunca peça o token no chat e nunca prometa reenvio numa instância que ainda não foi atualizada.
+
+## Conectar Meta (PalmUP) — login social sem app Meta próprio
+
+Esta versão traz o botão **Conectar Meta (PalmUP)** em **Integrações → Tokens, BMs e destinos**. Com ele, o **owner** do workspace entra com o Facebook pelo app Meta da PalmUP. Você **não** precisa criar um app Meta seu nem gerar token de usuário do sistema para começar.
+
+**Env nova (só na API):** `PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app`. Preencha no painel de env do serviço da API no Dokploy ([Passo 2](#passo-2--variáveis-novas-só-se-o-changelog-pedir)) e faça o redeploy da API ([Passo 3](#passo-3--redeploy-da-api-dokploy)). O web na Vercel **não** precisa dela.
+
+- É uma **URL pública**, não é segredo e **não** é App Secret. Não coloque nela, nem em `META_APP_SECRET`, nenhum segredo do app Meta da PalmUP: esse segredo **nunca** vai para a sua VPS.
+- Sem a env, nada quebra: ao clicar no botão, o painel avisa "Login social PalmUP nao configurado", o botão fica apagado e o token permanente funciona como antes.
+
+**Como usar (primeira conexão Meta do workspace):**
+
+1. Abra `/integrations` → **Usar token permanente** (ou **Tokens, BMs e destinos**).
+2. Clique em **Conectar Meta (PalmUP)** e depois em **Abrir login da Meta**. Uma aba nova abre na PalmUP e segue para o Facebook.
+3. Autorize com o perfil que acessa a BM do cliente. Volte para a aba do painel.
+4. Clique em **Ja autorizei, concluir**. O painel segue para o mesmo passo de BM, contas, Pixel e Página de quando você clica em **Validar e proteger** com um token colado.
+
+O pedido vale por cerca de 10 minutos e só pode ser concluído uma vez. Se aparecer "Conexao PalmUP expirada, invalida ou ja utilizada", clique em **Conectar Meta (PalmUP)** de novo.
+
+**O que continua igual:** as orientações de [Conversões Meta depois desta atualização (Trocar token)](#conversões-meta-depois-desta-atualização-trocar-token) e de [Eventos que já ficaram "Bloqueado"](#eventos-que-já-ficaram-bloqueado) continuam valendo, inclusive o passo 4 (**Trocar token** no card que já existe) e o **Reenviar bloqueados** em `/events`. Se você **já tem** um card do seu BM, **não** use **Conectar Meta (PalmUP)** para "consertar" um LeadSubmitted bloqueado: o caminho continua sendo **Trocar token** no mesmo card.
+
+> **Para a IA que conduz o aluno:** `PALMUP_META_BROKER_URL` é pública; nunca a trate como segredo e nunca peça, nem aceite, o App Secret do app Meta da PalmUP. Só o owner vê o botão. O token do login social é resgatado e guardado pela API do aluno e nunca chega ao navegador nem ao chat.
 
 ## Versão instalada
 

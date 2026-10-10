@@ -11299,6 +11299,28 @@ button.meta-manual-entry[aria-expanded="true"] {
   border-top: 1px dashed var(--border);
 }
 
+.meta-palmup-connect {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.meta-palmup-connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-palmup-connect .button {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
 .meta-direct-asset-entry > div {
   display: grid;
   min-width: 0;

@@ -252,6 +252,28 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`) | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
+| `PALMUP_META_BROKER_URL` | Só para o botão **Conectar Meta (PalmUP)** — sem ela, fica só o token permanente | Fornecido pela PalmUP (já vem preenchido no `.env.example`: `https://wpptrack-api.rastrack.app`) | `.env` da API / env do serviço da API. O web **não** precisa dela | **Não** — é uma URL pública, não é App Secret |
+
+### `PALMUP_META_BROKER_URL` — login social Meta pela PalmUP
+
+Com esta variável preenchida, o **owner** do workspace vê o botão
+**Conectar Meta (PalmUP)** em **Integrações → Tokens, BMs e destinos** e entra
+com o Facebook pelo **app Meta da PalmUP**. Você **não** precisa criar um app
+Meta próprio nem preencher `META_APP_ID`/`META_APP_SECRET` para isso.
+
+- É só a **origem HTTPS pública** da API da PalmUP, sem caminho no final
+  (`https://wpptrack-api.rastrack.app`). Não é segredo, não é token e **não**
+  é App Secret.
+- O App Secret do app Meta da PalmUP **nunca** vai para a sua VPS, para o
+  Dokploy, para a Vercel nem para `META_APP_SECRET`. Se alguém pedir esse
+  segredo para "ativar o login social", está errado — pare e fale com o
+  suporte PalmUP.
+- O token que a Meta devolve é resgatado pela **sua API** e guardado
+  criptografado com `META_TOKEN_ENCRYPTION_KEY`, como o token colado à mão. Ele
+  nunca aparece no navegador.
+- Vazia ou ausente: ao clicar no botão, a API responde "Login social PalmUP nao
+  configurado", o botão fica apagado e o caminho do token permanente continua
+  igual. Depois de alterar, faça redeploy da API.
 
 ### Kommo CRM (opcional)
 
@@ -267,7 +289,7 @@ variáveis, não no chat):
 node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há login social Facebook nem OAuth como caminho alternativo: o token do usuário do sistema é informado por workspace na UI de **Integrações**, nunca em variável pública — veja [`meta-manual.md`](meta-manual.md).
+Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há o OAuth antigo (app Meta próprio) como caminho alternativo. A credencial Meta entra por workspace na UI de **Integrações**, nunca em variável pública: pelo botão **Conectar Meta (PalmUP)** (exige `PALMUP_META_BROKER_URL`, veja acima) ou colando o token do usuário do sistema — veja [`meta-manual.md`](meta-manual.md).
 
 ### `META_APP_SECRET` e o webhook do Meta WhatsApp (Cloud API)
 
@@ -435,6 +457,8 @@ INBOUND_WEBHOOK_PRODUCTION_ENABLED=true
 
 # ---- Meta ----
 META_CONNECTION_MODES=manual
+# Botão "Conectar Meta (PalmUP)". URL pública, NÃO é segredo nem App Secret.
+PALMUP_META_BROKER_URL=[já vem preenchido no .env.example — https://wpptrack-api.rastrack.app]
 META_APP_ID=[PREENCHER — só se usar App próprio]
 # App Secret do app Meta. Obrigatório antes de ativar o envio automático
 # em uma conexão Meta WhatsApp (Cloud API).
