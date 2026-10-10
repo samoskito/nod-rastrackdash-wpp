@@ -54,6 +54,7 @@ import {
 } from "./whatsapp-provider-actions";
 import { WhatsappProviderPanel } from "./whatsapp-provider-panel";
 import {
+  completeMetaPalmupConnectAction,
   createMetaManualConnectionAction,
   createMetaManualCredentialAction,
   createMetaOAuthAdvancedConnectionAction,
@@ -73,6 +74,7 @@ import {
   setMetaOAuthAdvancedAdDestinationAction,
   setMetaOAuthAdvancedConnectionStatusAction,
   setMetaOAuthAdvancedRoutingAction,
+  startMetaPalmupConnectAction,
   testMetaManualConnectionAction,
   testMetaOAuthAdvancedConnectionAction,
   syncMetaManualHistoryAction,
@@ -1329,6 +1331,11 @@ export default async function IntegrationsPage({
                 : setMetaManualAdDestinationAction
             }
             setOAuthRoutingAction={setMetaOAuthAdvancedRoutingAction}
+            canConnectPalmup={
+              canManageIntegrations && workspace?.role === "owner"
+            }
+            startPalmupConnectAction={startMetaPalmupConnectAction}
+            completePalmupConnectAction={completeMetaPalmupConnectAction}
           />
           <div className="metric-grid compact integration-meta-metrics">
             <div className="metric-card">

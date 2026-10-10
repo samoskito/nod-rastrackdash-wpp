@@ -1,8 +1,11 @@
 # Meta Ads manual — usuário do sistema (edição aluno)
 
 Este guia é sobre a conexão de **Meta Ads**: anúncios, Pixel, conta de
-anúncios e destino de conversão. Este é o único caminho do MVP do aluno:
-**sem login social Facebook e sem OAuth como alternativa**. Antes de abrir
+anúncios e destino de conversão, pelo **token permanente** do usuário do
+sistema. Não há o OAuth antigo (app Meta próprio) como alternativa. A outra
+forma suportada é o botão **Conectar Meta (PalmUP)**, que dispensa criar app
+Meta próprio — veja [`environment.md`](environment.md#palmup_meta_broker_url--login-social-meta-pela-palmup).
+Antes de abrir
 a Meta, defina `META_CONNECTION_MODES=manual` no ambiente da API e faça
 redeploy. Se as capabilities não carregarem, a tela deve permanecer
 fechada; não tente contornar isso com OAuth.

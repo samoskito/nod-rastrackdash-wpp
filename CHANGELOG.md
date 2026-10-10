@@ -12,6 +12,13 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 - **Data Crazy inbound webhook** support for CTWA messages, including
   student setup guidance for connection, observation, certification and
   production activation.
+- **Conectar Meta (PalmUP)** in Integrations → Tokens, BMs e destinos: the
+  workspace owner logs in with Facebook through the PalmUP Meta app, without
+  creating a Meta app of their own. The access token is redeemed and stored
+  by the API only. Needs the new public env `PALMUP_META_BROKER_URL` on the
+  API (example `https://wpptrack-api.rastrack.app`; it is a URL, not a
+  secret). The permanent-token path, **Trocar token** and **Reenviar
+  bloqueados** are unchanged.
 
 ## [1.0.0] - 2026-08-24
 

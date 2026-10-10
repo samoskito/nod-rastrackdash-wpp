@@ -110,10 +110,27 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 ## Aparece UI OAuth/social do Facebook
 
+- **Não é este problema:** o botão **Conectar Meta (PalmUP)** dentro de **Tokens, BMs e destinos** é esperado — é o login social pela PalmUP, sem app Meta próprio (veja a seção abaixo). Este item trata do OAuth **antigo**, com card próprio de conexão OAuth e **Desconectar OAuth**.
 - **Diagnóstico:** confira `META_CONNECTION_MODES` no ambiente da API e o resultado de `/integrations` após redeploy.
 - **Causa provável:** a variável está ausente/não é `manual`, a API não foi redeployada, ou as capabilities Meta não estão disponíveis.
 - **Correção:** defina exatamente `META_CONNECTION_MODES=manual`, redeploy a API e atualize a página. Se as capabilities estiverem indisponíveis, a UI deve permanecer fechada e mostrar configuração Meta indisponível; não use OAuth como contorno.
-- **Verificação:** `/integrations` exibe apenas a conexão manual Meta, sem login social/OAuth.
+- **Verificação:** `/integrations` exibe apenas a conexão manual Meta (token permanente e, se configurado, **Conectar Meta (PalmUP)**), sem o OAuth antigo.
+
+## "Conectar Meta (PalmUP)" apagado ou "Login social PalmUP nao configurado"
+
+- **Sintoma:** em **Tokens, BMs e destinos**, ao clicar em **Conectar Meta (PalmUP)** o painel avisa "Login social PalmUP nao configurado" e o botão fica apagado — ou o botão nem aparece.
+- **Diagnóstico seguro:** confira (1) se você entrou como **owner** do workspace — membros, mesmo com permissão de integrações, não veem o botão; (2) se `PALMUP_META_BROKER_URL` está preenchida no env do serviço da **API**; (3) se o workspace ainda usa o OAuth antigo (nesse caso o botão não aparece).
+- **Causa provável:** env vazia/ausente na API, valor com caminho ou `http://` (precisa ser só a origem HTTPS: `https://wpptrack-api.rastrack.app`), API sem redeploy depois de alterar a env, ou usuário que não é owner.
+- **Correção:** preencha `PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app` no env da API e faça redeploy. É uma URL pública: **não** coloque ali, nem em `META_APP_SECRET`, segredo nenhum — o App Secret do app Meta da PalmUP **nunca** vai para a sua VPS. O web não precisa dessa env. Enquanto isso, o token permanente continua funcionando.
+- **Verificação:** recarregue `/integrations` como owner; **Conectar Meta (PalmUP)** fica clicável e abre **Abrir login da Meta**.
+
+## "Conexao PalmUP expirada, invalida ou ja utilizada"
+
+- **Sintoma:** ao clicar em **Ja autorizei, concluir**, o painel mostra "Conexao PalmUP expirada, invalida ou ja utilizada. Inicie novamente" ou "Nao foi possivel concluir o login social PalmUP".
+- **Causa provável:** passou o prazo do pedido (cerca de 10 minutos), você clicou em concluir **antes** de terminar a autorização na aba da PalmUP, o pedido já tinha sido usado, ou a API não alcançou a PalmUP naquele momento. Cada pedido só pode ser concluído uma vez, com ou sem sucesso.
+- **Correção:** clique em **Conectar Meta (PalmUP)** de novo, termine a autorização na aba nova e só depois clique em **Ja autorizei, concluir**. Se a Meta recusar as permissões, use o caminho do token permanente ([`meta-manual.md`](meta-manual.md)).
+- **Verificação:** o painel avisa "Meta conectada pela PalmUP e token protegido" e segue para a escolha de BM. O token nunca aparece na tela.
+- **Já tem card e o LeadSubmitted está Bloqueado?** Não é este fluxo: siga [LeadSubmitted "Bloqueado" depois de atualizar](#leadsubmitted-bloqueado-depois-de-atualizar-destino-meta-ainda-nao-configurado--a-conexao-meta-precisa-ser-refeita) (**Trocar token** + **Reenviar bloqueados**), que continua valendo.
 
 ## Preview da Vercel com origem divergente
 
