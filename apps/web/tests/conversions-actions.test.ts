@@ -133,6 +133,84 @@ describe("conversions actions: create", () => {
     });
   });
 
+  it("creates a Payt sale rule bound to the connection of its numbers and returns the URL once", async () => {
+    const payload = {
+      name: "Venda Payt",
+      connectionId: "conn_1",
+      scope: "all_numbers",
+      channelIds: [],
+      mode: "observation",
+      triggerType: "provider_automation",
+      eventName: "Purchase",
+      automationSource: "payt",
+    };
+    const rule = providerRule({
+      id: "rule_payt",
+      triggerType: "provider_automation",
+      origin: "automation_payt",
+      connectionId: "conn_1",
+      scope: "all_numbers",
+      automationSource: "payt",
+    });
+    serverApiFetch.mockResolvedValueOnce({
+      outcome: "created",
+      receipt: { ruleId: "rule_payt", connectionId: "conn_1", createdAt: rule.createdAt },
+      rule,
+      webhookUrl: "https://api.wpptrack.test/webhooks/inbound/conversions/p1?token=t",
+    });
+
+    const result = await createConversionRuleAction(createForm(payload));
+
+    const [, init] = serverApiFetch.mock.calls[0]!;
+    expect(JSON.parse(init.body)).toMatchObject({ automationSource: "payt", eventName: "Purchase" });
+    expect(result).toMatchObject({
+      ok: true,
+      webhookUrl: "https://api.wpptrack.test/webhooks/inbound/conversions/p1?token=t",
+    });
+  });
+
+  it("shows the license message on a 423 when creating a Payt rule", async () => {
+    serverApiFetch.mockRejectedValueOnce(licenseLocked());
+
+    const result = await createConversionRuleAction(
+      createForm({
+        name: "Venda Payt",
+        connectionId: "conn_1",
+        scope: "all_numbers",
+        channelIds: [],
+        mode: "observation",
+        triggerType: "provider_automation",
+        eventName: "InitiateCheckout",
+        automationSource: "payt",
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: false, licenseLocked: true, message: lockedMessage });
+  });
+
+  it("explains the Payt refusals of the API in plain Portuguese", async () => {
+    serverApiFetch.mockRejectedValueOnce(
+      apiError(400, "Escolha a conexao de WhatsApp dos numeros desta regra"),
+    );
+    const result = await createConversionRuleAction(
+      createForm({
+        name: "Venda Payt",
+        connectionId: "conn_1",
+        scope: "all_numbers",
+        channelIds: [],
+        mode: "observation",
+        triggerType: "provider_automation",
+        eventName: "Purchase",
+        automationSource: "payt",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      message: "Escolha números de uma conexão de WhatsApp para esta regra.",
+    });
+  });
+
   it("treats a receipt for another connection as uncertain", async () => {
     const rule = providerRule({ id: "rule_1" });
     serverApiFetch.mockResolvedValueOnce({

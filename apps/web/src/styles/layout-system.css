@@ -6443,6 +6443,18 @@ body {
   margin: 0;
 }
 
+/* Selo “beta” ao lado de um evento ainda em teste (ex.: carrinho abandonado da Payt). */
+.conversion-beta-chip {
+  display: inline-flex;
+  min-height: 0;
+  padding: 1px 7px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .conversion-inline-link {
   display: inline-flex;
   align-items: center;
@@ -6628,8 +6640,11 @@ body {
   gap: 10px;
 }
 
-.conversion-webhook-url .conversion-field {
+.conversion-webhook-url .conversion-field,
+.conversion-webhook-url .provider-conversion-payload-helper {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .conversion-crm-pointer .button {
@@ -6828,7 +6843,7 @@ body {
   .conversion-rule-actions {
     display: grid;
     order: 2;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
     gap: 6px;
   }
 

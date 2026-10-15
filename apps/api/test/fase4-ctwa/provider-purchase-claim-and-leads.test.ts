@@ -229,7 +229,7 @@ describe("Provider conversion production (purchase claim and CTWA guards)", () =
   });
   const execution = { id: "exec1", workspaceId: "ws1", channelId: "ch1" };
 
-  it("fails closed on a sale identity no shipped provider can verify", async () => {
+  it("fails closed when a non-Payt provider claims a sale identity (only Payt can verify sales)", async () => {
     const service = productionService({});
     await expect(
       (service as any).materializeFrozenDecision(

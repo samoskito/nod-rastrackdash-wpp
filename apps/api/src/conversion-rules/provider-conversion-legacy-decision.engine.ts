@@ -117,6 +117,24 @@ export class ProviderConversionLegacyDecisionEngine {
         "automation_matched",
       );
     }
+    // A Payt sale carries its own value; the rule average is only a fallback.
+    if (
+      input.occurrence.provider === "payt" &&
+      input.occurrence.observedValueCents &&
+      input.occurrence.observedCurrency
+    ) {
+      return this.eligible(
+        input,
+        {
+          ...this.averageValueMatch(input, null),
+          parsedValueCents: input.occurrence.observedValueCents,
+          calculatedValueCents: input.occurrence.observedValueCents,
+          observedPaymentValueCents: input.occurrence.observedValueCents,
+          currency: input.occurrence.observedCurrency,
+        },
+        "automation_matched",
+      );
+    }
     if (!input.rule.defaultValueCents || !input.rule.defaultCurrency) {
       return null;
     }

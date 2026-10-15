@@ -18,6 +18,12 @@ import {
 import { resolveCtwaLeadProof } from "../conversion-rules/ctwa-lead-proof";
 import { CTWA_SEND_SKIPPED_ERROR_CODE } from "../conversion-events/conversion-event-retry";
 import { createHash } from "node:crypto";
+import { resolvePurchaseChannels } from "../conversion-rules/provider-purchase-routing";
+import { buildProviderPurchaseIdentity } from "../conversion-rules/provider-purchase-identity";
+import {
+  parsePaytSaleEventV1,
+  PAYT_SALE_EVENT_NAMES,
+} from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
 import { Prisma } from "@prisma/client";
 import {
   conversionEventCarriesValue,
@@ -73,7 +79,10 @@ import {
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
-import { providerRuleCoversChannel } from "../conversion-rules/provider-rule-scope";
+import {
+  providerRuleCoversChannel,
+  resolveProviderRuleScopeChannelIds,
+} from "../conversion-rules/provider-rule-scope";
 import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
@@ -656,9 +665,12 @@ export class ProviderConversionProductionService
     const lead = decision.leadResolution.lead;
     const occurrence = decision.occurrence;
     // Sale identity (seller + order + event). Only a provider that re-derives
-    // it from the preserved callback may use it (Payt, Fase 4a); otherwise the
+    // it from the preserved callback may use it (Payt); otherwise the
     // decision fails closed instead of trusting a frozen key.
-    const purchaseContext = this.verifiedPurchaseContext(execution, decision);
+    const purchaseContext = await this.verifiedPurchaseContext(
+      execution,
+      decision,
+    );
     const purchaseKey = purchaseContext?.purchaseKey ?? null;
     const eventName = this.supportedEventName(occurrence.eventName);
     // The catalog decides whether the event may travel with a value at all;
@@ -681,7 +693,7 @@ export class ProviderConversionProductionService
     // exactly as in the SaaS: sale callbacks (Payt) may use the proof as the
     // fallback of an ad lead; Unnichat automations only for a no-ad lead.
     // Every other provider keeps requiring a known ad.
-    const ctwaProof =
+    let ctwaProof =
       occurrence.provider === "payt"
         ? (lead.ctwaDestination ?? purchaseContext?.ctwaProof)
         : occurrence.provider === CTWA_DESTINATION_PROVIDER && !lead.adId
@@ -717,18 +729,42 @@ export class ProviderConversionProductionService
       // Ad lead: the saved per-ad Meta route wins. Only when it does not
       // resolve and the lead carries a verified CTWA entry proof, fall back to
       // that authorized pixel+page destination (same checks as no-ad below).
-      const adRoute = purchaseKey
-        ? await this.previewPurchaseRoute(execution, lead.adId!)
-        : await this.routes.previewRoute({
-            workspaceId: execution.workspaceId,
-            adId: lead.adId!,
-          });
+      let adRoute: typeof route;
+      try {
+        adRoute = purchaseKey
+          ? await this.previewPurchaseRoute(execution, lead.adId!)
+          : await this.routes.previewRoute({
+              workspaceId: execution.workspaceId,
+              adId: lead.adId!,
+            });
+      } catch (error) {
+        if (
+          !(error instanceof ProviderConversionProductionFailure) ||
+          !error.code.startsWith("provider_conversion_route_")
+        )
+          throw error;
+        // Decisions frozen before the CTWA fallback carry no proof: verify it
+        // live for Payt (same rules as the paid-lead resolver).
+        if (!ctwaProof && occurrence.provider === "payt")
+          ctwaProof = await this.livePaytCtwaProof(execution, lead);
+        if (!ctwaProof) throw error;
+        adRoute = {
+          status: "unresolved",
+          reason: error.code.slice("provider_conversion_route_".length),
+          reportingAccountId: null,
+          adAccountId: null,
+          businessConnectionId: null,
+          conversionDestinationId: null,
+        };
+      }
       const adRouteResolved =
         adRoute.status === "resolved" &&
         Boolean(adRoute.reportingAccountId) &&
         Boolean(adRoute.adAccountId) &&
         Boolean(adRoute.businessConnectionId) &&
         Boolean(adRoute.conversionDestinationId);
+      if (!adRouteResolved && !ctwaProof && occurrence.provider === "payt")
+        ctwaProof = await this.livePaytCtwaProof(execution, lead);
       if (!adRouteResolved && ctwaProof) {
         ctwaDestination = ctwaProof;
         route = ctwaRoute(ctwaProof);
@@ -1688,25 +1724,175 @@ export class ProviderConversionProductionService
 
   /**
    * Sale identity of a frozen decision, re-derived from the preserved callback
-   * by the provider that owns it. No sale provider ships in this edition yet
-   * (Payt arrives in Fase 4a with its own verifier): a decision that claims a
-   * sale identity fails closed and nothing is sent.
+   * by the provider that owns it (Payt). Any other provider claiming a sale
+   * identity fails closed and nothing is sent.
    */
-  private verifiedPurchaseContext(
-    _execution: ExecutionRecord,
+  private async verifiedPurchaseContext(
+    execution: ExecutionRecord,
     decision: EligibleProviderConversionDecision,
-  ): {
+  ): Promise<{
     purchaseKey: string;
     ctwaOriginOnly: boolean;
     ctwaProof: AuthorizedCtwaDestination | undefined;
-  } | null {
-    if (
-      !decision.occurrence.purchaseKey &&
-      decision.occurrence.provider !== "payt"
-    )
-      return null;
+  } | null> {
+    if (decision.occurrence.provider === "payt")
+      return this.assertPaytPurchaseContext(execution, decision);
+    if (!decision.occurrence.purchaseKey) return null;
     throw new ProviderConversionProductionFailure(
       "provider_purchase_identity_missing",
+    );
+  }
+
+  /**
+   * Re-derives a Payt sale from the preserved postback: event of the rule,
+   * buyer phone of the lead, seller+order identity and value. The origin is
+   * the single scoped channel of the paid lead's verified CTWA entry.
+   */
+  private async assertPaytPurchaseContext(
+    execution: ExecutionRecord,
+    decision: EligibleProviderConversionDecision,
+  ): Promise<{
+    purchaseKey: string;
+    ctwaOriginOnly: boolean;
+    ctwaProof: AuthorizedCtwaDestination | undefined;
+  }> {
+    this.assertAutomationProductionContext(execution);
+    if (
+      execution.channel?.conversionEngineMode !== "canonical" ||
+      !(PAYT_SALE_EVENT_NAMES as readonly string[]).includes(
+        decision.occurrence.eventName,
+      ) ||
+      decision.occurrence.eventName !==
+        execution.providerRule.conversionRule.eventName ||
+      execution.providerRule.parserRelease?.provider !== "payt"
+    ) {
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_production_context_invalid",
+      );
+    }
+    const captureChannel = await this.prisma.inboundWebhookChannel.findFirst({
+      where: {
+        id: execution.channelId!,
+        workspaceId: execution.workspaceId,
+        status: "active",
+        connection: {
+          is: {
+            workspaceId: execution.workspaceId,
+            removedAt: null,
+            status: "production",
+          },
+        },
+      },
+      select: {
+        id: true,
+        connection: {
+          select: {
+            parserRelease: {
+              select: { provider: true, version: true, status: true },
+            },
+          },
+        },
+      },
+    });
+    if (
+      !captureChannel ||
+      !inboundParserProductionEligible(captureChannel.connection.parserRelease)
+    )
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_production_context_invalid",
+      );
+    const lead = decision.leadResolution.lead;
+    const originChannels = await resolvePurchaseChannels(this.prisma, {
+      workspaceId: execution.workspaceId,
+      // Same candidate set as the observation: the chosen channels, or every
+      // live workspace channel for an "all numbers" Payt rule.
+      channelIds: await resolveProviderRuleScopeChannelIds(
+        this.prisma,
+        execution.workspaceId,
+        execution.providerRule,
+      ),
+      phoneHashes: [lead.phoneHash],
+      leadId: lead.id,
+      adId: lead.adId,
+      ctwaClid: lead.ctwaClid,
+      receivedAt: execution.sourceDelivery.firstReceivedAt,
+    });
+    const ctwaOrigin = lead.adId ? undefined : lead.ctwaDestination;
+    // Ad lead with no materialized ad entry on any scoped channel: its
+    // verified CTWA entry proof is the origin (same as a no-ad lead) and the
+    // purchase may only travel to that authorized page/pixel destination.
+    // A decision frozen before this fallback has no proof: verify it live.
+    const ctwaProof =
+      lead.ctwaDestination ??
+      (lead.adId && originChannels.length === 0
+        ? await this.livePaytCtwaProof(execution, lead)
+        : undefined);
+    const ctwaOriginOnly = Boolean(
+      lead.adId &&
+      originChannels.length === 0 &&
+      ctwaProof?.channelId === execution.channelId,
+    );
+    if (
+      !ctwaOriginOnly &&
+      (originChannels.length !== 1 ||
+        originChannels[0]!.id !== execution.channelId ||
+        (!lead.adId && ctwaOrigin?.channelId !== execution.channelId))
+    )
+      throw new ProviderConversionProductionFailure(
+        "provider_purchase_channel_missing_or_ambiguous",
+      );
+    const parsed = parsePaytSaleEventV1(this.decryptedPayload(execution));
+    if (!parsed.ok)
+      throw new ProviderConversionProductionFailure(
+        "provider_purchase_identity_missing",
+      );
+    const purchaseKey = buildProviderPurchaseIdentity({
+      workspaceId: execution.workspaceId,
+      provider: "payt",
+      accountRef: parsed.value.accountRef,
+      orderRef: parsed.value.orderRef,
+      eventName: parsed.value.eventName,
+    });
+    if (
+      // The preserved postback must still be the event of this rule.
+      parsed.value.eventName !== decision.occurrence.eventName ||
+      // The buyer phone may be an equivalent BR form of the lead identity
+      // (with/without 55 or the mobile 9th digit).
+      !hashPhoneIdentityVariants(parsed.value.phoneCandidates).includes(
+        lead.phoneHash,
+      ) ||
+      decision.occurrence.purchaseKey !== purchaseKey ||
+      purchaseKey !== execution.externalExecutionKey ||
+      // A valueless abandoned cart may travel with the rule's average value.
+      (parsed.value.valueCents !== null &&
+        (decision.conversion.valueCents !== parsed.value.valueCents ||
+          decision.conversion.currency !== parsed.value.currency))
+    )
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_source_event_mismatch",
+      );
+    return { purchaseKey, ctwaOriginOnly, ctwaProof };
+  }
+
+  /**
+   * Live CTWA entry proof of a Payt ad lead whose frozen decision predates the
+   * authorized-destination fallback. Same parameters as the paid-lead
+   * resolver for Payt (any verified channel); the caller still binds the
+   * proof to the execution channel/connection and re-verifies it in the
+   * materialization transaction.
+   */
+  private async livePaytCtwaProof(
+    execution: ExecutionRecord,
+    lead: EligibleProviderConversionDecision["leadResolution"]["lead"],
+  ): Promise<AuthorizedCtwaDestination | undefined> {
+    if (!lead.adId || !lead.ctwaClid?.trim()) return undefined;
+    return (
+      (await resolveCtwaLeadProof(this.prisma, {
+        workspaceId: execution.workspaceId,
+        leadId: lead.id,
+        phoneHash: lead.phoneHash,
+        ctwaClid: lead.ctwaClid,
+      })) ?? undefined
     );
   }
 
@@ -2013,7 +2199,11 @@ export class ProviderConversionProductionService
   private decisionValueSource(
     decision: ProviderConversionDecisionDto,
   ): "actual" | "configured_average" {
-    if (decision.rule.triggerType === "structured_catalog") return "actual";
+    if (
+      decision.rule.triggerType === "structured_catalog" ||
+      decision.occurrence.provider === "payt"
+    )
+      return "actual";
 
     return decision.rule.triggerType === "message_phrase" &&
       decision.conversion.observedPaymentValueCents !== null

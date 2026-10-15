@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // Text only: the script is read as a file and never imported or executed, and
 // no PrismaClient or database is involved. Ported from the SaaS (static check
 // of scripts/delete-workspace.js against schema.prisma).
-// Normalized line endings: Windows checkouts (core.autocrlf) use CRLF.
+// CRLF checkouts (Windows, core.autocrlf) are normalized so the regexes match.
 const schema = readFileSync(
   resolve(__dirname, "../prisma/schema.prisma"),
   "utf8",
@@ -13,7 +13,7 @@ const schema = readFileSync(
 const script = readFileSync(
   resolve(__dirname, "../scripts/delete-workspace.js"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 type Edge = { child: string; parent: string; onDelete: string };
 

@@ -114,6 +114,12 @@ function createWorld() {
     },
     { id: "release_uazapi", provider: "uazapi", version: "v1", status: "certified" },
     { id: "release_gupshup", provider: "gupshup", version: "v1", status: "certified" },
+    {
+      id: "release_payt_automation",
+      provider: "payt",
+      version: "automation-v1",
+      status: "certified",
+    },
   ];
   const connections: Row[] = [
     { id: "connection_umbler", provider: "umbler", parserReleaseId: "release_umbler" },
@@ -578,6 +584,47 @@ describe("provider rules API: workspace scope", () => {
       scope: "all_numbers",
       origin: "automation_umbler",
       effectiveChannelIds: ["channel_umbler"],
+    });
+    expect(created.webhookUrl).toMatch(
+      /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
+    );
+  });
+
+  it("creates a Payt sale rule on its numbers' connection and reports origin automation_payt", async () => {
+    const world = createWorld();
+    const sale = {
+      name: "Venda Payt",
+      triggerType: "provider_automation",
+      automationSource: "payt",
+      eventName: "Purchase",
+      scope: "specific_numbers",
+      channelIds: ["channel_umbler", "channel_gupshup"],
+    };
+
+    // Same as the SaaS: the rule needs a WhatsApp connection (URL anchor).
+    await expect(
+      world.service.createRule(
+        workspaceId,
+        providerConversionRuleCreateInputSchema.parse(sale),
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        ...sale,
+        connectionId: "connection_umbler",
+      }),
+      "user_1",
+    );
+    // Numbers of other connections are accepted (scope is not connection-bound).
+    expect(created.rule).toMatchObject({
+      connectionId: "connection_umbler",
+      parserReleaseId: "release_payt_automation",
+      origin: "automation_payt",
+      automationSource: "payt",
+      channelIds: ["channel_umbler", "channel_gupshup"],
     });
     expect(created.webhookUrl).toMatch(
       /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
@@ -1214,11 +1261,38 @@ describe("provider rules API: Conversoes screen support", () => {
       structured_catalog: ["umbler", "uazapi"],
       whatsapp_label: ["uazapi"],
       automation_umbler: ["umbler"],
+      // Fase 4a: a Payt sale may belong to any WhatsApp number.
+      automation_payt: ["umbler", "gupshup", "uazapi", "meta_cloud", "data_crazy"],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
         ?.authorChannelProviders,
     ).toEqual({ team: ["umbler", "uazapi"], contact: ["umbler"] });
+    expect(
+      capabilities.origins.find((origin) => origin.origin === "automation_payt"),
+    ).toMatchObject({
+      eventNames: ["Purchase", "InitiateCheckout", "CartAbandoned"],
+      betaEventNames: ["CartAbandoned"],
+      unifiable: false,
+      // Scope may use any WhatsApp number, but creation needs the connection
+      // of its numbers (anchor of the signed URL), as the service enforces.
+      connectionBound: false,
+      requiresConnection: true,
+    });
+    expect(
+      Object.fromEntries(
+        capabilities.origins.map((origin) => [
+          origin.origin,
+          [origin.connectionBound, origin.requiresConnection],
+        ]),
+      ),
+    ).toEqual({
+      message_phrase: [false, false],
+      structured_catalog: [false, false],
+      whatsapp_label: [false, false],
+      automation_umbler: [true, true],
+      automation_payt: [false, true],
+    });
     expect(capabilities.unsupportedWhatsappProviders).toEqual([
       "waha",
       "zapi",

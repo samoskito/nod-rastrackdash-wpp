@@ -116,6 +116,10 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "Um dos números escolhidos não pertence a esta conexão.",
   "Um ou mais canais nao pertencem a este workspace":
     "Um dos números escolhidos não pertence a esta conta.",
+  "Um ou mais canais não pertencem a esta conexão e workspace":
+    "Um dos números escolhidos não pertence a esta conexão.",
+  "Um ou mais canais não pertencem a este workspace":
+    "Um dos números escolhidos não pertence a esta conta.",
   "Etiquetas so estao disponiveis em numeros com etiquetas do WhatsApp":
     "Etiquetas só funcionam em números Uazapi, que têm etiquetas do WhatsApp.",
   "Um ou mais numeros nao suportam esta origem de regra":
@@ -161,6 +165,10 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "Esta regra ainda não tem catálogo configurado.",
   "O teste de mensagem exige uma regra de catalogo estruturado":
     "O teste de pedido só existe para regras de catálogo.",
+  "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado":
+    "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado.",
+  "Escolha a conexao de WhatsApp dos numeros desta regra":
+    "Escolha números de uma conexão de WhatsApp para esta regra.",
   "Sem permissao para gerenciar integracoes": noPermissionMessage,
   "Este workspace tem canais demais para unificar regras com segurança; mantenha as regras por número":
     "Este workspace tem canais demais para unificar regras com segurança. Mantenha as regras por número.",

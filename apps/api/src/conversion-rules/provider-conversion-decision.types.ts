@@ -43,6 +43,9 @@ export type ProviderConversionAutomationOccurrenceInput = OccurrenceIdentity & {
   eventName: ProviderConversionDecisionRuleSnapshotDto["eventName"];
   authorType: null;
   automation: string;
+  /** Sale value read from the callback (Payt); never invented. */
+  observedValueCents?: number;
+  observedCurrency?: "BRL";
   labels?: string[];
   matchedLabel?: string;
 };

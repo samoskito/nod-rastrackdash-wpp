@@ -1,6 +1,8 @@
 import { Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
+  paytBetaSaleEventNames,
+  paytSaleEventNames,
   providerConversionRuleGlobalPrecedence,
   type ProviderConversionRuleCapabilitiesDto,
   type ProviderConversionRuleOriginDto,
@@ -39,7 +41,9 @@ import { phoneIdentityKey } from "../common/phone/phone-identity";
  *    avaliam regras de mensagem (a observacao so aceita eventos umbler);
  *  - catalogo estruturado: umbler e uazapi (mensagem da equipe, como no SaaS);
  *  - etiqueta: uazapi (por nome entre instancias);
- *  - automacao Umbler: presa a conexao que recebe o callback.
+ *  - automacao Umbler: presa a conexao que recebe o callback;
+ *  - venda Payt (Fase 4a): qualquer numero de WhatsApp do workspace; a regra
+ *    guarda a conexao dos numeros escolhidos so como ancora da URL.
  *  WAHA, Z-API e NOD API nao entram em regras de provedor (nao possuem canal
  *  de entrada); ficam "Em breve".
  */
@@ -95,6 +99,20 @@ export const MESSAGE_CONTACT_CHANNEL_PROVIDERS = ["umbler"] as const;
 export const CATALOG_RULE_CHANNEL_PROVIDERS = ["umbler", "uazapi"] as const;
 /** Providers whose chats expose WhatsApp labels (tags). */
 export const LABEL_RULE_CHANNEL_PROVIDERS = ["uazapi"] as const;
+/**
+ * Every inbound provider whose channel is a WhatsApp number (Payt is a sales
+ * platform and has no channel): a Payt sale may belong to any of them.
+ */
+export const WHATSAPP_CHANNEL_PROVIDERS = [
+  "umbler",
+  "gupshup",
+  "uazapi",
+  "meta_cloud",
+  "data_crazy",
+] as const;
+/** Payt events (Fase 4a); "Carrinho abandonado" is still beta. */
+export const PAYT_RULE_EVENT_NAMES = [...paytSaleEventNames];
+export const PAYT_RULE_BETA_EVENT_NAMES = [...paytBetaSaleEventNames];
 /** WhatsApp providers of this edition that do not run provider rules yet. */
 export const UNSUPPORTED_RULE_WHATSAPP_PROVIDERS = [
   "waha",
@@ -128,6 +146,7 @@ export function providerRuleOrigin(
       const provider =
         rule.parserRelease?.provider ?? rule.connection?.provider ?? null;
       if (provider === null || provider === "uazapi") return "whatsapp_label";
+      if (provider === "payt") return "automation_payt";
       if (provider === "umbler") return "automation_umbler";
       return null;
     }
@@ -149,6 +168,8 @@ export function providerRuleOriginChannelProviders(
       return LABEL_RULE_CHANNEL_PROVIDERS;
     case "automation_umbler":
       return ["umbler"];
+    case "automation_payt":
+      return WHATSAPP_CHANNEL_PROVIDERS;
   }
 }
 
@@ -173,6 +194,7 @@ export function providerRuleChannelProviders(
 /**
  * The Umbler automation resolves the contact on the connection that received
  * the callback, so even "all numbers" means all numbers of that connection.
+ * Payt callbacks carry no channel and may own any WhatsApp number.
  */
 export function providerRuleOriginIsConnectionBound(
   origin: ProviderRuleOrigin,
@@ -184,7 +206,7 @@ export function providerRuleOriginIsConnectionBound(
 export function providerRuleOriginRequiresConnection(
   origin: ProviderRuleOrigin,
 ): boolean {
-  return origin === "automation_umbler";
+  return origin === "automation_umbler" || origin === "automation_payt";
 }
 
 /** Origins that "Unificar" may merge (never endpoint automations). */
@@ -208,6 +230,7 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
         contact: [...MESSAGE_CONTACT_CHANNEL_PROVIDERS],
       },
       connectionBound: false,
+      requiresConnection: false,
       labelMatch: null,
       unifiable: true,
     },
@@ -217,6 +240,7 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       channelProviders: [...CATALOG_RULE_CHANNEL_PROVIDERS],
       authorChannelProviders: null,
       connectionBound: false,
+      requiresConnection: false,
       labelMatch: null,
       unifiable: true,
     },
@@ -226,6 +250,7 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       channelProviders: [...LABEL_RULE_CHANNEL_PROVIDERS],
       authorChannelProviders: null,
       connectionBound: false,
+      requiresConnection: false,
       labelMatch: "name_across_instances",
       unifiable: true,
     },
@@ -235,8 +260,30 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       channelProviders: ["umbler"],
       authorChannelProviders: null,
       connectionBound: true,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_umbler",
+      ),
       labelMatch: null,
       unifiable: false,
+      eventNames: ["QualifiedLead", "Purchase"],
+    },
+    {
+      // Fase 4a: the sale event comes from each Payt postback status. The
+      // scope is not connection-bound (its numbers may be any WhatsApp
+      // number), but creating the rule requires a WhatsApp connection (its
+      // numbers' connection) as the anchor of the signed URL, as in the SaaS.
+      origin: "automation_payt",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: [...WHATSAPP_CHANNEL_PROVIDERS],
+      authorChannelProviders: null,
+      connectionBound: false,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_payt",
+      ),
+      labelMatch: null,
+      unifiable: false,
+      eventNames: PAYT_RULE_EVENT_NAMES,
+      betaEventNames: PAYT_RULE_BETA_EVENT_NAMES,
     },
   ];
   return {

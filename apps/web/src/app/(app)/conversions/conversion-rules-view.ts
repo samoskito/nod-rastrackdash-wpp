@@ -8,11 +8,12 @@ import type {
 } from "@wpptrack/shared";
 import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import type { PipedriveConnectionDetailDto } from "../integrations/pipedrive-actions";
-import { ruleEventLabel } from "./event-copy";
+import { ruleEventLabel, ruleEventLabelForOrigin } from "./event-copy";
 import {
   crmManageHref,
   contactMessageProviders,
   hubProviderForInbound,
+  originBetaEvents,
   originChannelProviders,
   providerLogo,
   ruleOriginDefinition,
@@ -100,6 +101,8 @@ export type ConversionRuleRow = {
   logo: RuleLogo | null;
   eventName: ConversionEventNameDto;
   eventLabel: string;
+  /** Evento ainda em beta na origem (selo “beta” ao lado do evento). */
+  eventBeta?: boolean;
   /** What triggers it, in one short line (phrase, tag, stage...). */
   triggerDetail: string | null;
   scope: RuleScopeKind;
@@ -131,6 +134,7 @@ export function providerRuleOrigin(
   connectionsById: ReadonlyMap<string, ConversionConnection>,
 ): ProviderConversionRuleOriginDto {
   if (rule.origin) return rule.origin;
+  if (rule.automationSource === "payt") return "automation_payt";
 
   switch (rule.conversionRule.triggerType) {
     case "message_phrase":
@@ -255,6 +259,8 @@ function triggerDetailForProviderRule(
         : firstWithMore("Frase ");
     case "automation_umbler":
       return rule.endpoint ? "Endereço da automação criado" : null;
+    case "automation_payt":
+      return rule.endpoint ? "URL de postback criada" : null;
   }
 }
 
@@ -414,7 +420,8 @@ export function buildProviderRuleRows(
           : platform.label,
       logo: platform.logo,
       eventName,
-      eventLabel: ruleEventLabel(eventName),
+      eventLabel: ruleEventLabelForOrigin(origin, eventName),
+      eventBeta: originBetaEvents(origin, capabilities).includes(eventName),
       triggerDetail: triggerDetailForProviderRule(rule, origin),
       scope,
       scopeLabel,
@@ -777,10 +784,20 @@ export function connectionsForOrigin(
 export function ineligibleNumbers(
   numbers: readonly ConversionNumber[],
   capabilities: ProviderConversionRuleCapabilitiesDto | null,
+  /**
+   * A venda da Payt roda em qualquer número de WhatsApp, então ela não conta
+   * como "origem que avalia o número" na nota geral; na própria regra da
+   * Payt vale a lista dela.
+   */
+  origin: RuleOriginId | null = null,
 ): ConversionNumber[] {
   if (!capabilities) return [];
   const supported = new Set(
-    capabilities.origins.flatMap((origin) => origin.channelProviders),
+    origin === "automation_payt"
+      ? originChannelProviders(origin, capabilities)
+      : capabilities.origins
+          .filter((item) => item.origin !== "automation_payt")
+          .flatMap((item) => item.channelProviders),
   );
 
   return numbers.filter((number) => !supported.has(number.provider));

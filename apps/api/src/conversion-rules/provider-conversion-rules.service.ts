@@ -14,6 +14,7 @@ import {
   conversionEventCarriesValue,
   conversionEventNameSchema,
   messagePhraseConfigKind,
+  paytSaleEventNames,
   providerConversionRuleIdempotentCreateInputSchema,
   providerConversionTechnicalDeliveryStateSchema,
   providerRuleCreateRequestKeySchema,
@@ -394,8 +395,28 @@ export class ProviderConversionRulesService {
             }
           }
 
+          // Fase 4a: a Payt rule sits on a WhatsApp connection (the one of its
+          // numbers) only as the anchor of its signed URL; the parser release
+          // stored with the rule identifies the Payt contract.
+          const isPaytAutomation =
+            input.triggerType === "provider_automation" &&
+            input.automationSource === "payt";
+          if (
+            isPaytAutomation &&
+            !(paytSaleEventNames as readonly string[]).includes(
+              input.eventName,
+            )
+          ) {
+            // The HTTP schema enforces this too. Keep the invariant at the
+            // service boundary for internal callers and future entry points.
+            throw new BadRequestException(
+              "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado",
+            );
+          }
+
           if (
             input.triggerType === "provider_automation" &&
+            !isPaytAutomation &&
             connection &&
             !["umbler", "uazapi"].includes(connection.provider)
           ) {
@@ -403,10 +424,17 @@ export class ProviderConversionRulesService {
               "Automacao por tag ainda so esta disponivel para este provedor",
             );
           }
+          if (isPaytAutomation && connection?.provider === "payt") {
+            // A Payt connection has no WhatsApp number to activate: the rule
+            // is bound to the connection of its numbers (as in the SaaS).
+            throw new BadRequestException(
+              "Escolha a conexão de WhatsApp dos números desta regra",
+            );
+          }
 
           const scope: ProviderConversionRuleScopeDto =
             input.scope ?? "specific_numbers";
-          const origin = this.createOrigin(input, connection);
+          const origin = this.createOrigin(input, connection, isPaytAutomation);
           if (!connection && providerRuleOriginRequiresConnection(origin)) {
             throw new BadRequestException(
               "Informe a conexao que recebe o webhook desta automacao",
@@ -429,16 +457,17 @@ export class ProviderConversionRulesService {
 
           if (
             input.triggerType === "provider_automation" &&
-            connection?.provider === "umbler"
+            (isPaytAutomation || connection?.provider === "umbler")
           ) {
             secret = this.generateSecret();
           }
 
           if (bound && connection) {
-            await this.assertChannelsBelongToConnection(
+            await this.assertChannelsForProvider(
               transaction,
               workspaceId,
               connection.id,
+              isPaytAutomation ? "payt" : connection.provider,
               input.channelIds,
             );
           } else {
@@ -459,10 +488,10 @@ export class ProviderConversionRulesService {
           const parserRelease = !bound
             ? null
             : input.triggerType === "provider_automation" &&
-                connection?.provider === "umbler"
+                (isPaytAutomation || connection?.provider === "umbler")
               ? await transaction.inboundWebhookParserRelease.findFirst({
                   where: {
-                    provider: "umbler",
+                    provider: isPaytAutomation ? "payt" : "umbler",
                     version: "automation-v1",
                     status: { not: "retired" },
                   },
@@ -1014,10 +1043,13 @@ export class ProviderConversionRulesService {
 
       if (nextChannelIds && nextChannelIds.length > 0) {
         if (nextConnectionId !== null) {
-          await this.assertChannelsBelongToConnection(
+          await this.assertChannelsForProvider(
             transaction,
             workspaceId,
             nextConnectionId,
+            this.isPaytAutomationRule(current)
+              ? "payt"
+              : (current.connection?.provider ?? ""),
             nextChannelIds,
           );
         } else {
@@ -1889,9 +1921,11 @@ export class ProviderConversionRulesService {
   private createOrigin(
     input: ProviderConversionRuleCreateInputDto,
     connection: { provider: string } | null,
+    isPaytAutomation: boolean,
   ): ProviderRuleOrigin {
     if (input.triggerType === "message_phrase") return "message_phrase";
     if (input.triggerType === "structured_catalog") return "structured_catalog";
+    if (isPaytAutomation) return "automation_payt";
     // Without a connection, a provider automation can only be a WhatsApp
     // label rule (the Umbler automation always names its connection).
     const origin = providerRuleOrigin({
@@ -1936,7 +1970,7 @@ export class ProviderConversionRulesService {
     const uniqueIds = [...new Set(channelIds)];
     if (uniqueIds.length !== channelIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a este workspace",
+        "Um ou mais canais não pertencem a este workspace",
       );
     }
     if (uniqueIds.length === 0) return;
@@ -1950,19 +1984,25 @@ export class ProviderConversionRulesService {
     });
     if (channels.length !== uniqueIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a este workspace",
+        "Um ou mais canais não pertencem a este workspace",
       );
     }
     const providers = providerRuleChannelProviders({
       conversionRule: {
         triggerType:
-          rule.origin === "whatsapp_label" || rule.origin === "automation_umbler"
+          rule.origin === "whatsapp_label" ||
+          rule.origin === "automation_umbler" ||
+          rule.origin === "automation_payt"
             ? "provider_automation"
             : rule.origin,
         eventName: "",
       },
       parserRelease:
-        rule.origin === "automation_umbler" ? { provider: "umbler" } : null,
+        rule.origin === "automation_umbler"
+          ? { provider: "umbler" }
+          : rule.origin === "automation_payt"
+            ? { provider: "payt" }
+            : null,
       connection: null,
       messageAuthorScope: rule.messageAuthorScope,
     });
@@ -2195,7 +2235,7 @@ export class ProviderConversionRulesService {
 
       if (channel.connectionId !== connectionId) {
         throw new BadRequestException(
-          "Um ou mais canais nao pertencem a esta conexao e workspace",
+          "Um ou mais canais não pertencem a esta conexão e workspace",
         );
       }
 
@@ -2288,9 +2328,49 @@ export class ProviderConversionRulesService {
 
     if (count !== uniqueIds.length || uniqueIds.length !== channelIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a esta conexao e workspace",
+        "Um ou mais canais não pertencem a esta conexão e workspace",
       );
     }
+  }
+
+  /**
+   * A Payt callback is not itself a WhatsApp channel. Its automation rule may
+   * scope any channel of the workspace; the selected channels still scope
+   * lookup and observation. Other providers keep the stricter connection
+   * ownership check.
+   */
+  private async assertChannelsForProvider(
+    transaction: Prisma.TransactionClient,
+    workspaceId: string,
+    connectionId: string,
+    provider: string,
+    channelIds: string[],
+  ): Promise<void> {
+    if (provider !== "payt") {
+      return this.assertChannelsBelongToConnection(
+        transaction,
+        workspaceId,
+        connectionId,
+        channelIds,
+      );
+    }
+
+    const uniqueIds = [...new Set(channelIds)];
+    const count = await transaction.inboundWebhookChannel.count({
+      where: { workspaceId, id: { in: uniqueIds } },
+    });
+    if (count !== uniqueIds.length || uniqueIds.length !== channelIds.length) {
+      throw new BadRequestException(
+        "Um ou mais canais não pertencem a este workspace",
+      );
+    }
+  }
+
+  private isPaytAutomationRule(rule: PersistedProviderRule): boolean {
+    return (
+      rule.conversionRule.triggerType === "provider_automation" &&
+      rule.parserRelease?.provider === "payt"
+    );
   }
 
   private messagePhraseConfig(input: {
@@ -2690,6 +2770,9 @@ export class ProviderConversionRulesService {
       messageAuthorScope: rule.messageAuthorScope,
       valueMode: messagePhrase.valueMode,
       exampleMessage: messagePhrase.exampleMessage,
+      // The parser release is stored with the rule, so this remains available
+      // after a connection changes and does not require a new database column.
+      automationSource: this.isPaytAutomationRule(rule) ? "payt" : null,
       endpoint: rule.endpoint ? this.endpointToDto(rule.endpoint) : null,
       catalog: rule.catalog ? this.catalogToDto(rule.catalog) : null,
       lastExecution: rule.executions[0]

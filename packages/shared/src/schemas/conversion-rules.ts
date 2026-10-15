@@ -59,6 +59,30 @@ export const providerConversionRuleModeSchema = z.enum(
 );
 
 /**
+ * Plataforma externa que chama a URL da automacao. Ausente (null) mantem o
+ * comportamento original, em que o proprio provedor WhatsApp (Umbler) envia o
+ * callback. "payt" marca uma regra de venda vinda da Payt (Fase 4a): o valor
+ * de cada venda chega em centavos no payload.
+ */
+export const providerConversionAutomationSources = ["payt"] as const;
+export const providerConversionAutomationSourceSchema = z.enum(
+  providerConversionAutomationSources,
+);
+
+/**
+ * Fase 4a: eventos padrao que um postback da Payt pode virar. O evento vem do
+ * status do payload: pago -> Purchase, aguardando pagamento (Pix/boleto
+ * gerado) -> InitiateCheckout, carrinho abandonado -> CartAbandoned.
+ */
+export const paytSaleEventNames = [
+  "Purchase",
+  "InitiateCheckout",
+  "CartAbandoned",
+] as const;
+/** Eventos ainda em beta na Payt (a tela mostra o selo "beta"). */
+export const paytBetaSaleEventNames = ["CartAbandoned"] as const;
+
+/**
  * Alcance da regra. "specific_numbers" (padrao historico) usa os numeros
  * escolhidos; "all_numbers" vale para todo numero do workspace que suporte a
  * origem da regra, inclusive numeros conectados depois. Uma regra especifica
@@ -75,13 +99,15 @@ export const providerConversionRuleScopeSchema = z.enum(
 /**
  * Origem normalizada de uma regra (usada na precedencia e no "Unificar").
  * whatsapp_label = etiqueta do WhatsApp (Uazapi); automation_umbler = callback
- * assinado da automacao Umbler, sempre ligado a uma conexao.
+ * assinado da automacao Umbler; automation_payt = postback de venda da Payt.
+ * As automacoes por URL ficam sempre ligadas a uma conexao.
  */
 export const providerConversionRuleOrigins = [
   "message_phrase",
   "structured_catalog",
   "whatsapp_label",
   "automation_umbler",
+  "automation_payt",
 ] as const;
 export const providerConversionRuleOriginSchema = z.enum(
   providerConversionRuleOrigins,
@@ -445,10 +471,31 @@ const providerAutomationCreateSchema = z
     ...eventValueShape,
     triggerType: z.literal("provider_automation"),
     eventName: conversionEventNameSchema,
+    // Fase 4a: "payt" = regra de venda da Payt (URL propria da regra).
+    automationSource: providerConversionAutomationSourceSchema.optional(),
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
-    refineEventValueFields(input, context);
+    if (input.automationSource !== "payt") {
+      refineEventValueFields(input, context);
+      return;
+    }
+    // A Payt traz o valor real de cada venda; o evento vem do status.
+    if (!(paytSaleEventNames as readonly string[]).includes(input.eventName)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado",
+        path: ["eventName"],
+      });
+    }
+    if (input.triggerPhrases || input.triggerLabels) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A automação da Payt não usa etiquetas",
+        path: ["triggerPhrases"],
+      });
+    }
   })
   .transform(normalizeEventValueFields);
 
@@ -788,6 +835,11 @@ export const providerConversionRuleSchema = z.object({
   // message_phrase value pipeline; "fixed" for every other trigger type.
   valueMode: messagePhraseValueModeSchema.default("fixed"),
   exampleMessage: z.string().max(2_000).nullable().default(null),
+  // Fase 4a: plataforma que chama a URL da regra (opcional para respostas
+  // anteriores ao campo).
+  automationSource: providerConversionAutomationSourceSchema
+    .nullable()
+    .optional(),
   endpoint: providerConversionEndpointSchema.nullable(),
   catalog: providerConversionCatalogSchema.nullable(),
   lastExecution: providerConversionExecutionSchema.nullable(),
@@ -913,13 +965,22 @@ export const providerConversionRuleOriginCapabilitySchema = z.object({
       contact: z.array(z.string().min(1)),
     })
     .nullable(),
-  // true: a regra fica presa a conexao que recebe o callback (Umbler).
+  // Alcance: true = os números da regra ficam limitados à conexão que recebe
+  // o callback (Umbler). A Payt é false: os números podem ser de qualquer
+  // conexão de WhatsApp do workspace.
   connectionBound: z.boolean(),
+  // true: a regra precisa de uma conexão de WhatsApp ao ser criada (âncora do
+  // endereço assinado): Umbler e Payt. Ausente em respostas antigas = false.
+  requiresConnection: z.boolean().optional(),
   // whatsapp_label: "Todos os numeros" e numeros de conexoes diferentes casam
   // a etiqueta pelo nome (ids de etiqueta valem so dentro de uma instancia).
   labelMatch: z.enum(["id_or_name", "name_across_instances"]).nullable(),
   // Origens que podem ser unificadas.
   unifiable: z.boolean(),
+  // Eventos que a origem reconhece (ausente = todo o catalogo).
+  eventNames: z.array(conversionEventNameSchema).optional(),
+  // Eventos ainda em beta nessa origem (selo "beta" na tela).
+  betaEventNames: z.array(conversionEventNameSchema).optional(),
 });
 
 export const providerConversionRuleCapabilitiesSchema = z.object({
@@ -1099,7 +1160,15 @@ export const providerConversionAutomationReprocessBatchInputSchema = z.object({
 export const providerConversionAutomationReprocessBatchItemSchema = z.object({
   deliveryId: idSchema,
   executionId: idSchema.nullable(),
-  status: z.enum(["queued", "existing", "eligible", "blocked", "skipped"]),
+  // "observed": reavaliado com a regra em observacao (nunca enviado).
+  status: z.enum([
+    "queued",
+    "existing",
+    "eligible",
+    "blocked",
+    "skipped",
+    "observed",
+  ]),
   reasonCode: z.string().trim().min(1).max(160).nullable(),
   message: z.string().trim().min(1).max(500),
 });
@@ -1110,6 +1179,7 @@ export const providerConversionAutomationReprocessBatchResultSchema = z.object({
   queued: z.number().int().nonnegative(),
   blocked: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
+  observed: z.number().int().nonnegative().optional(),
   items: z.array(providerConversionAutomationReprocessBatchItemSchema).max(50),
 });
 
@@ -1239,6 +1309,9 @@ export type ProviderConversionTriggerTypeDto = z.infer<
 >;
 export type ProviderConversionRuleModeDto = z.infer<
   typeof providerConversionRuleModeSchema
+>;
+export type ProviderConversionAutomationSourceDto = z.infer<
+  typeof providerConversionAutomationSourceSchema
 >;
 export type ProviderConversionMessageAuthorScopeDto = z.infer<
   typeof providerConversionMessageAuthorScopeSchema

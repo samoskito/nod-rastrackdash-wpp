@@ -1,18 +1,22 @@
 "use client";
 
 import type {
+  ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
   ProviderConversionRuleOriginDto,
 } from "@wpptrack/shared";
 import { Check, Copy, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import type { ProviderConversionRuleActionResult } from "./actions";
+import { originBetaEvents } from "./conversion-origins";
+import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 
 type RuleAction = (formData: FormData) => Promise<ProviderConversionRuleActionResult>;
 
 const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = {
   automation_umbler: "Umbler Talk",
+  automation_payt: "Payt",
 };
 
 function formatDateTime(value: string | null): string {
@@ -56,10 +60,23 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 function SetupSteps({
   origin,
   rule,
+  capabilities,
 }: {
   origin: ProviderConversionRuleOriginDto;
   rule: ProviderConversionRuleDto;
+  capabilities?: ProviderConversionRuleCapabilitiesDto | null;
 }) {
+  if (origin === "automation_payt") {
+    // The Payt panel already carries the setup steps: list them only once.
+    return (
+      <PaytSetupPanel
+        eventName={rule.conversionRule.eventName}
+        beta={originBetaEvents(origin, capabilities ?? null).includes(
+          rule.conversionRule.eventName,
+        )}
+      />
+    );
+  }
   if (origin === "automation_umbler") {
     return (
       <>
@@ -88,9 +105,11 @@ export function RuleEndpoint({
   canManage,
   rotateAction,
   freshUrl = null,
+  capabilities = null,
   onRotated,
   onDismiss,
 }: {
+  capabilities?: ProviderConversionRuleCapabilitiesDto | null;
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
   canManage: boolean;
@@ -215,7 +234,7 @@ export function RuleEndpoint({
 
       <section className="conversion-endpoint-setup" aria-label={`Como configurar na ${platform}`}>
         <h3>Como configurar na {platform}</h3>
-        <SetupSteps origin={origin} rule={rule} />
+        <SetupSteps origin={origin} rule={rule} capabilities={capabilities} />
       </section>
     </div>
   );

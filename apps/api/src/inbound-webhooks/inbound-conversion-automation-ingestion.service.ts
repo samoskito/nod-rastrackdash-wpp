@@ -1,5 +1,9 @@
 import { inboundParserProductionEligible } from "./inbound-webhook-parser-eligibility";
 import { createHash, randomUUID } from "node:crypto";
+import { buildProviderPurchaseIdentity } from "../conversion-rules/provider-purchase-identity";
+import { PAYT_LEAD_OTHER_CHANNEL_REASON } from "../conversion-rules/provider-purchase-routing";
+import { PROVIDER_RULE_OVERRIDDEN_REASON } from "../conversion-rules/provider-rule-scope";
+import type { ProviderConversionManualReplayApproval } from "../conversion-rules/provider-conversion-orchestrator.service";
 import {
   BadRequestException,
   ConflictException,
@@ -44,12 +48,47 @@ import {
   type ParsedUmblerAutomationV1,
   UMBLER_AUTOMATION_V1_PARSER_VERSION,
 } from "./providers/umbler/umbler-automation-v1.parser";
+import {
+  parsePaytAutomationV1,
+  parsePaytSaleEventV1,
+  paytSaleEventNameOf,
+  type ParsedPaytAutomationV1,
+  PAYT_AUTOMATION_V1_PARSER_VERSION,
+} from "./providers/payt/payt-automation-v1.parser";
 
 const publicEndpointNotFoundMessage = "Webhook nao encontrado";
 const publicPersistenceFailureMessage = "Webhook temporariamente indisponivel";
 const fallbackDedupeWindowMs = 5 * 60 * 1_000;
 const ignoredUntrackedLeadReason = "ignored_untracked_lead";
+/** Parsed-but-not-for-this-rule callbacks: recorded as ignored, never invalid. */
+const ignoredParseErrors = new Set<string>([
+  "payt_automation_v1_not_purchase",
+  "payt_automation_v1_event_not_in_rule",
+]);
 const ignoredEmptyTemplateReason = "ignored_empty_template";
+const paytLeadOtherChannelMessage =
+  "Venda de um lead que chegou por outro número; a regra desse número envia o evento";
+const overriddenBySpecificRuleMessage =
+  "Este número tem uma regra específica para o mesmo evento; ela substitui a regra de todos os números";
+/** Callbacks owned by another rule: never an error, never sent by this rule. */
+const ownedByAnotherRuleReasons = new Set<string>([
+  PAYT_LEAD_OTHER_CHANNEL_REASON,
+  PROVIDER_RULE_OVERRIDDEN_REASON,
+]);
+function ownedByAnotherRuleMessage(reasonCode: string | null | undefined) {
+  return reasonCode === PROVIDER_RULE_OVERRIDDEN_REASON
+    ? overriddenBySpecificRuleMessage
+    : paytLeadOtherChannelMessage;
+}
+/**
+ * Parsed callbacks that stopped before any decision because the buyer could
+ * not be matched to exactly one tracked lead/channel. They carry no frozen
+ * decision, so a manual reprocess re-evaluates them from scratch with the
+ * current phone matching while every other validation still applies.
+ */
+const leadMatchingRecoverableReasons = new Set<string>([
+  "payt_channel_missing_or_ambiguous",
+]);
 const visibleAutomationDeliveryWhere = {
   OR: [
     { classification: null },
@@ -96,8 +135,8 @@ type LoadedConversionEndpoint =
   }>;
 
 /**
- * The Umbler automation always keeps its connection binding: the callback is
- * stored on that connection. Only workspace-scoped message/catalog/label rules
+ * An endpoint automation (Umbler/Payt) always keeps its connection binding:
+ * the callback is stored on that connection. Only workspace-scoped message/catalog/label rules
  * may be unbound, and those never own an endpoint; one that somehow does is
  * treated as missing (fail closed).
  */
@@ -168,6 +207,11 @@ type AutomationObservationStatus =
 type AutomationReprocessOutcome =
   ProviderConversionAutomationReprocessBatchItemDto;
 
+type ParsedAutomation = ParsedUmblerAutomationV1 | ParsedPaytAutomationV1;
+type AutomationParseResult =
+  | { ok: true; value: ParsedAutomation }
+  | { ok: false; errorCode: string };
+
 export type InboundConversionAutomationIngestionInput = {
   endpointId: string;
   token: unknown;
@@ -210,14 +254,14 @@ export class InboundConversionAutomationIngestionService {
     );
     const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
-    const parsed = parseUmblerAutomationV1(payload);
+    const parsed = this.parseAutomation(endpoint, payload);
     const providerAttempt = parseInboundWebhookProviderAttempt(
       input.providerAttempt,
     );
     const receivedAt = new Date();
     const ingressKey = parsed.ok
-      ? this.parsedIngressKey(endpoint.id, parsed.value.externalExecutionKey)
-      : this.fallbackIngressKey(endpoint.id, rawBody, receivedAt);
+      ? this.parsedIngressKey(endpoint, parsed.value.externalExecutionKey)
+      : this.fallbackIngressKey(endpoint, rawBody, receivedAt);
     const existing = await this.findExistingDelivery(
       endpoint.providerRule.connectionId,
       ingressKey,
@@ -295,7 +339,9 @@ export class InboundConversionAutomationIngestionService {
         status: "accepted",
         deliveryId,
         duplicate: false,
-        observationStatus: "invalid_payload",
+        observationStatus: ignoredParseErrors.has(parsed.errorCode)
+          ? "ignored"
+          : "invalid_payload",
       };
     }
 
@@ -310,7 +356,7 @@ export class InboundConversionAutomationIngestionService {
     return {
       status: "accepted",
       deliveryId,
-      duplicate: false,
+      duplicate: observed.reasonCode === "purchase_duplicate",
       observationStatus: this.automationObservationStatus(observed),
     };
   }
@@ -398,7 +444,7 @@ export class InboundConversionAutomationIngestionService {
       throw new ConflictException(outcome.message);
     }
     if (!outcome.executionId) {
-      throw new ConflictException("O callback ainda nao pode ser reprocessado");
+      throw new ConflictException("O callback ainda não pode ser reprocessado");
     }
 
     return {
@@ -425,20 +471,20 @@ export class InboundConversionAutomationIngestionService {
     );
     if (delivery.status !== "processed") {
       throw new ConflictException(
-        "O callback ainda nao pode ser reavaliado",
+        "O callback ainda não pode ser reavaliado",
       );
     }
 
     const payload = this.decryptAutomationPayload(delivery);
-    const parsed = parseUmblerAutomationV1(payload);
+    const parsed = this.parseAutomation(endpoint, payload);
     if (!parsed.ok) {
       throw new ConflictException(
-        "O payload nao corresponde ao contrato Umbler atual",
+        "O payload não corresponde ao contrato de automação atual",
       );
     }
     if (parsed.value.externalExecutionKey !== input.occurrenceKey) {
       throw new ConflictException(
-        "A ocorrencia nao pertence ao callback informado",
+        "A ocorrência não pertence ao callback informado",
       );
     }
 
@@ -565,6 +611,35 @@ export class InboundConversionAutomationIngestionService {
       0,
     );
 
+    const items = deliveries.map((delivery) =>
+      this.automationAuditItem(delivery, now),
+    );
+    // Lead-matching blocks have no execution/decision row; they are counted
+    // from the listed callbacks instead of as invalid payloads.
+    const leadMatchingBlocked = items.filter(
+      (item) =>
+        !item.executionId &&
+        item.status === "blocked" &&
+        leadMatchingRecoverableReasons.has(item.reasonCode ?? ""),
+    );
+    const leadMatchingRecoverable = leadMatchingBlocked.filter(
+      (item) => item.reprocessable,
+    ).length;
+    // A sale owned by the rule of another number is not an invalid payload.
+    const otherChannelIgnored = items.filter(
+      (item) =>
+        !item.executionId &&
+        item.status === "ignored" &&
+        ownedByAnotherRuleReasons.has(item.reasonCode ?? ""),
+    ).length;
+    // Postbacks of another status/event this rule does not take are ignored.
+    const ignoredParseCount = items.filter(
+      (item) =>
+        !item.executionId &&
+        item.status === "ignored" &&
+        ignoredParseErrors.has(item.reasonCode ?? ""),
+    ).length;
+
     return {
       providerRuleId,
       summary: {
@@ -574,16 +649,26 @@ export class InboundConversionAutomationIngestionService {
           (decisionCounts.get("eligible") ?? 0),
         blocked:
           (executionCounts.get("blocked") ?? 0) +
-          (decisionCounts.get("review_required") ?? 0),
+          (decisionCounts.get("review_required") ?? 0) +
+          leadMatchingBlocked.length,
         queued: executionCounts.get("eligible") ?? 0,
         materialized: executionCounts.get("materialized") ?? 0,
         failed: executionCounts.get("failed") ?? 0,
-        invalid: Math.max(total - executionCount - decisionCount, 0),
-        recoverable: recoverableExecutions + recoverableDecisions,
+        invalid: Math.max(
+          total -
+            executionCount -
+            decisionCount -
+            leadMatchingBlocked.length -
+            otherChannelIgnored -
+            ignoredParseCount,
+          0,
+        ),
+        recoverable:
+          recoverableExecutions +
+          recoverableDecisions +
+          leadMatchingRecoverable,
       },
-      items: deliveries.map((delivery) =>
-        this.automationAuditItem(delivery, now),
-      ),
+      items,
     };
   }
 
@@ -600,7 +685,7 @@ export class InboundConversionAutomationIngestionService {
     const delivery = await this.findAutomationDelivery(endpoint, deliveryId);
     const payload = this.decryptAutomationPayload(delivery);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      throw new ConflictException("O payload preservado nao e um objeto JSON");
+      throw new ConflictException("O payload preservado não é um objeto JSON");
     }
 
     await this.prisma.auditLog.create({
@@ -633,17 +718,20 @@ export class InboundConversionAutomationIngestionService {
     deliveryIds: string[],
     actorUserId: string,
   ): Promise<ProviderConversionAutomationReprocessBatchResultDto> {
-    const endpoint = await this.requireProductionAutomationEndpoint(
-      workspaceId,
-      providerRuleId,
-    );
+    const { endpoint, observationOnly } =
+      await this.requireReprocessableAutomationEndpoint(
+        workspaceId,
+        providerRuleId,
+      );
     const selected = [...new Set(deliveryIds)].slice(0, 50);
     const items: ProviderConversionAutomationReprocessBatchItemDto[] = [];
 
     for (const deliveryId of selected) {
       try {
         items.push(
-          await this.reprocessDelivery(endpoint, deliveryId, actorUserId),
+          await this.reprocessDelivery(endpoint, deliveryId, actorUserId, {
+            observationOnly,
+          }),
         );
       } catch (error) {
         items.push({
@@ -654,7 +742,7 @@ export class InboundConversionAutomationIngestionService {
           message:
             error instanceof Error
               ? error.message
-              : "Nao foi possivel reprocessar este callback",
+              : "Não foi possível reprocessar este callback",
         });
       }
     }
@@ -667,7 +755,40 @@ export class InboundConversionAutomationIngestionService {
       ).length,
       blocked: items.filter((item) => item.status === "blocked").length,
       skipped: items.filter((item) => item.status === "skipped").length,
+      observed: items.filter((item) => item.status === "observed").length,
       items,
+    };
+  }
+
+  /**
+   * Production rules keep the strict production gate. A rule still in
+   * observation may be reprocessed too, but only to RE-EVALUATE and record the
+   * decision (observed): nothing is ever queued for Meta from this mode.
+   */
+  private async requireReprocessableAutomationEndpoint(
+    workspaceId: string,
+    providerRuleId: string,
+  ): Promise<{ endpoint: PublicConversionEndpoint; observationOnly: boolean }> {
+    const endpoint = await this.requireAutomationEndpoint(
+      workspaceId,
+      providerRuleId,
+    );
+    const rule = endpoint.providerRule;
+    if (rule.mode === "observation") {
+      if (rule.parserRelease.version !== UMBLER_AUTOMATION_V1_PARSER_VERSION) {
+        throw new ConflictException(
+          "Ative o envio automático da regra antes de reprocessar callbacks",
+        );
+      }
+      return { endpoint, observationOnly: true };
+    }
+
+    return {
+      endpoint: await this.requireProductionAutomationEndpoint(
+        workspaceId,
+        providerRuleId,
+      ),
+      observationOnly: false,
     };
   }
 
@@ -730,7 +851,7 @@ export class InboundConversionAutomationIngestionService {
       !inboundParserProductionEligible(rule.connection.parserRelease)
     ) {
       throw new ConflictException(
-        "Ative o envio automatico da regra antes de reprocessar callbacks",
+        "Ative o envio automático da regra antes de reprocessar callbacks",
       );
     }
 
@@ -767,7 +888,7 @@ export class InboundConversionAutomationIngestionService {
       !delivery.encryptionKeyVersion
     ) {
       throw new ConflictException(
-        "O payload deste callback nao esta mais disponivel",
+        "O payload deste callback não está mais disponível",
       );
     }
 
@@ -788,7 +909,7 @@ export class InboundConversionAutomationIngestionService {
       return JSON.parse(rawBody.toString("utf8")) as unknown;
     } catch {
       throw new ConflictException(
-        "O payload preservado nao pode ser descriptografado",
+        "O payload preservado não pode ser descriptografado",
       );
     }
   }
@@ -808,9 +929,33 @@ export class InboundConversionAutomationIngestionService {
       delivery.payloadTag &&
       delivery.encryptionKeyVersion,
     );
-    const status =
-      execution?.status ??
-      this.automationDecisionAuditStatus(decision?.decisionCode ?? null);
+    const leadMatchingBlock =
+      !execution &&
+      !decision &&
+      deliveryNormalized?.parserStatus === "parsed" &&
+      deliveryNormalized?.executionStatus === "blocked" &&
+      typeof deliveryNormalized.reasonCode === "string" &&
+      leadMatchingRecoverableReasons.has(deliveryNormalized.reasonCode);
+    const otherChannel =
+      !execution &&
+      !decision &&
+      deliveryNormalized?.parserStatus === "parsed" &&
+      typeof deliveryNormalized?.reasonCode === "string" &&
+      ownedByAnotherRuleReasons.has(deliveryNormalized.reasonCode);
+    // A postback of another status/event (canceled, refunded, an event this
+    // rule does not take) was parsed and deliberately ignored: audit-only
+    // classification, never an invalid payload.
+    const ignoredParse =
+      !execution &&
+      !decision &&
+      (ignoredParseErrors.has(delivery.parseErrorCode ?? "") ||
+        deliveryNormalized?.parserStatus === "not_purchase");
+    const status = leadMatchingBlock
+      ? "blocked"
+      : otherChannel || ignoredParse
+        ? "ignored"
+        : (execution?.status ??
+          this.automationDecisionAuditStatus(decision?.decisionCode ?? null));
     const channel = execution?.channel ?? decision?.channel ?? null;
 
     return {
@@ -859,7 +1004,7 @@ export class InboundConversionAutomationIngestionService {
           ? ["observed", "eligible", "blocked"].includes(execution.status) ||
             (execution.status === "failed" &&
               this.retryableTechnicalFailure(execution.normalizedResult))
-          : decision?.decisionCode === "eligible"),
+          : decision?.decisionCode === "eligible" || leadMatchingBlock),
     };
   }
 
@@ -875,10 +1020,19 @@ export class InboundConversionAutomationIngestionService {
     endpoint: PublicConversionEndpoint,
     deliveryId: string,
     actorUserId: string,
+    options: { observationOnly?: boolean } = {},
   ): Promise<AutomationReprocessOutcome> {
     const workspaceId = endpoint.workspaceId;
     const delivery = await this.findAutomationDelivery(endpoint, deliveryId);
     const currentExecution = delivery.providerConversionExecutions[0] ?? null;
+    if (options.observationOnly) {
+      return this.reevaluateDeliveryInObservation({
+        endpoint,
+        delivery,
+        currentExecution,
+        actorUserId,
+      });
+    }
 
     if (currentExecution?.status === "materialized") {
       return {
@@ -887,7 +1041,7 @@ export class InboundConversionAutomationIngestionService {
         status: "skipped",
         reasonCode: "already_materialized",
         message:
-          "Este callback ja criou um evento; acompanhe a entrega em Eventos Meta",
+          "Este callback já criou um evento; acompanhe a entrega em Eventos Meta",
       };
     }
     if (currentExecution?.status === "duplicate") {
@@ -919,7 +1073,7 @@ export class InboundConversionAutomationIngestionService {
           status: "skipped",
           reasonCode: currentExecution.reasonCode ?? "failed_permanent",
           message:
-            "A falha e permanente; use uma reavaliacao explicita depois de corrigir os dados",
+            "A falha é permanente; use uma reavaliação explícita depois de corrigir os dados",
         };
       }
 
@@ -933,14 +1087,14 @@ export class InboundConversionAutomationIngestionService {
     }
 
     const payload = this.decryptAutomationPayload(delivery);
-    const parsed = parseUmblerAutomationV1(payload);
+    const parsed = this.parseAutomation(endpoint, payload);
     if (!parsed.ok) {
       return {
         deliveryId,
         executionId: currentExecution?.id ?? null,
         status: "skipped",
         reasonCode: parsed.errorCode,
-        message: "O payload nao corresponde ao contrato Umbler atual",
+        message: "O payload não corresponde ao contrato de automação atual",
       };
     }
     const observed = await this.observeAutomation({
@@ -949,6 +1103,15 @@ export class InboundConversionAutomationIngestionService {
       deliveryReceivedAt: delivery.firstReceivedAt,
       parsed: parsed.value,
       manualRecovery: true,
+      // Production-mode explicit replay by an authorized manager: the
+      // resulting eligible execution carries the approval (audited in the
+      // same transaction) that lets the worker accept a callback received
+      // before the rule/channel production activation. Every other gate
+      // (connection, parser, certification, scope, canonical, dedupe) stays.
+      manualReplayApproval: {
+        actorUserId,
+        reason: "operator_reprocess",
+      },
     });
     await this.recordManualReprocessAudit({
       endpoint,
@@ -972,7 +1135,7 @@ export class InboundConversionAutomationIngestionService {
         executionId: observed.executionId,
         status: "blocked",
         reasonCode: observed.reasonCode,
-        message: "O callback exige revisao operacional antes do envio",
+        message: "O callback exige revisão operacional antes do envio",
       };
     }
     if (observed.disposition === "blocked") {
@@ -990,7 +1153,7 @@ export class InboundConversionAutomationIngestionService {
         executionId: observed.executionId,
         status: "skipped",
         reasonCode: observed.reasonCode,
-        message: "A regra ainda permanece em observacao",
+        message: "A regra ainda permanece em observação",
       };
     }
 
@@ -1001,8 +1164,127 @@ export class InboundConversionAutomationIngestionService {
       reasonCode: observed.reasonCode,
       message:
         observed.reasonCode === ignoredUntrackedLeadReason
-          ? "Callback ignorado porque o contato nao pertence aos leads pagos rastreados"
-          : "O callback nao exige envio para a Meta",
+          ? "Callback ignorado porque o contato não pertence aos leads pagos rastreados"
+          : ownedByAnotherRuleReasons.has(observed.reasonCode)
+            ? ownedByAnotherRuleMessage(observed.reasonCode)
+            : observed.reasonCode === "purchase_duplicate"
+              ? "Venda já reconhecida em outro callback; nada novo será enviado"
+              : "O callback não exige envio para a Meta",
+    };
+  }
+
+  /**
+   * Observation-mode reprocess: re-evaluate the preserved payload with the
+   * current matching and record the decision as observed. Never enqueues a
+   * production job, so nothing reaches Meta.
+   */
+  private async reevaluateDeliveryInObservation(input: {
+    endpoint: PublicConversionEndpoint;
+    delivery: AutomationAuditDelivery;
+    currentExecution:
+      | AutomationAuditDelivery["providerConversionExecutions"][number]
+      | null;
+    actorUserId: string;
+  }): Promise<AutomationReprocessOutcome> {
+    const { endpoint, delivery, currentExecution } = input;
+    const deliveryId = delivery.id;
+    if (
+      currentExecution &&
+      ["materialized", "duplicate", "eligible", "failed"].includes(
+        currentExecution.status,
+      )
+    ) {
+      return {
+        deliveryId,
+        executionId: currentExecution.id,
+        status: "skipped",
+        reasonCode: "rule_in_observation",
+        message:
+          currentExecution.status === "materialized"
+            ? "Este callback já criou um evento; acompanhe a entrega em Eventos Meta"
+            : "A regra está em observação; ative o envio automático para encaminhar este callback",
+      };
+    }
+    const payload = this.decryptAutomationPayload(delivery);
+    const parsed = this.parseAutomation(endpoint, payload);
+    if (!parsed.ok) {
+      return {
+        deliveryId,
+        executionId: currentExecution?.id ?? null,
+        status: "skipped",
+        reasonCode: parsed.errorCode,
+        message: "O payload não corresponde ao contrato de automação atual",
+      };
+    }
+    const observed = await this.observeAutomation({
+      endpoint,
+      deliveryId,
+      deliveryReceivedAt: delivery.firstReceivedAt,
+      parsed: parsed.value,
+      manualRecovery: true,
+      evaluationMode: {
+        type: "reevaluate",
+        requestKey: `observation-reprocess:${deliveryId}:${randomUUID()}`,
+        recordInitialWhenMissing: true,
+      },
+    });
+    await this.recordManualReprocessAudit({
+      endpoint,
+      deliveryId,
+      actorUserId: input.actorUserId,
+      observed,
+    });
+
+    if (observed.reasonCode === "purchase_duplicate") {
+      return {
+        deliveryId,
+        executionId: observed.executionId,
+        status: "skipped",
+        reasonCode: observed.reasonCode,
+        message:
+          "Venda já reconhecida em outro callback; nada novo será enviado",
+      };
+    }
+    if (
+      observed.decisionCode === "eligible" &&
+      observed.executionId &&
+      observed.disposition === "observed"
+    ) {
+      return {
+        deliveryId,
+        executionId: observed.executionId,
+        status: "observed",
+        reasonCode: observed.reasonCode,
+        message:
+          "Reavaliado em observação: conversão reconhecida, nada enviado à Meta",
+      };
+    }
+    if (
+      observed.decisionCode === "review_required" ||
+      observed.disposition === "blocked"
+    ) {
+      return {
+        deliveryId,
+        executionId: observed.executionId,
+        status: "blocked",
+        reasonCode: observed.reasonCode,
+        message:
+          observed.decisionCode === "review_required"
+            ? "O callback exige revisão operacional antes do envio"
+            : this.manualReprocessBlockMessage(observed.reasonCode),
+      };
+    }
+
+    return {
+      deliveryId,
+      executionId: observed.executionId,
+      status: "skipped",
+      reasonCode: observed.reasonCode,
+      message: ownedByAnotherRuleReasons.has(observed.reasonCode)
+        ? ownedByAnotherRuleMessage(observed.reasonCode)
+        : observed.reasonCode === ignoredUntrackedLeadReason
+          ? "Callback ignorado porque o contato não pertence aos leads pagos rastreados"
+          : "O callback não exige envio para a Meta",
     };
   }
 
@@ -1032,9 +1314,9 @@ export class InboundConversionAutomationIngestionService {
       message:
         queued.status === "queued"
           ? input.retryingFailure
-            ? "Falha transitoria encaminhada para uma nova tentativa"
+            ? "Falha transitória encaminhada para uma nova tentativa"
             : "Callback encaminhado para a fila da Meta"
-          : "Callback ja estava na fila da Meta",
+          : "Callback já estava na fila da Meta",
     };
   }
 
@@ -1136,6 +1418,12 @@ export class InboundConversionAutomationIngestionService {
       token,
     );
     const rule = endpoint?.providerRule;
+    // Payt rules intentionally sit on the WhatsApp connection of their
+    // numbers. The persisted parser release, not that connection's provider,
+    // identifies the callback contract.
+    const isPaytAutomation =
+      rule?.parserRelease.provider === "payt" &&
+      rule?.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION;
 
     if (
       !endpoint ||
@@ -1145,7 +1433,7 @@ export class InboundConversionAutomationIngestionService {
       rule.removedAt !== null ||
       !rule.conversionRule.active ||
       rule.conversionRule.triggerType !== "provider_automation" ||
-      rule.connection.provider !== "umbler" ||
+      (!isPaytAutomation && rule.connection.provider !== "umbler") ||
       rule.connection.removedAt !== null ||
       !["observation", "production"].includes(rule.connection.status) ||
       rule.parserRelease.status === "retired"
@@ -1180,27 +1468,100 @@ export class InboundConversionAutomationIngestionService {
     return rawBody;
   }
 
+  private parseAutomation(
+    endpoint: PublicConversionEndpoint,
+    payload: unknown,
+  ): AutomationParseResult {
+    const rule = endpoint.providerRule;
+    if (
+      rule.parserRelease.provider === "payt" &&
+      rule.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      // A Payt postback may be Purchase, InitiateCheckout or CartAbandoned. A
+      // rule only takes its own event; any other one is ignored (never an
+      // error), exactly like a non-purchase on a Purchase rule.
+      const notThisRule =
+        rule.conversionRule.eventName === "Purchase"
+          ? "payt_automation_v1_not_purchase"
+          : "payt_automation_v1_event_not_in_rule";
+      // Classify the event FIRST: a postback of another event (or of an
+      // unsupported status) is ignored before identity/phone/value are
+      // judged.
+      if (paytSaleEventNameOf(payload) !== rule.conversionRule.eventName) {
+        return { ok: false, errorCode: notThisRule };
+      }
+      // Purchase rules keep the validated Purchase-only contract.
+      const parsed =
+        rule.conversionRule.eventName === "Purchase"
+          ? parsePaytAutomationV1(payload)
+          : parsePaytSaleEventV1(payload);
+      if (!parsed.ok) {
+        return parsed.errorCode === "payt_sale_v1_status_not_supported"
+          ? { ok: false, errorCode: notThisRule }
+          : { ok: false, errorCode: parsed.errorCode };
+      }
+      if (parsed.value.eventName !== rule.conversionRule.eventName) {
+        return { ok: false, errorCode: notThisRule };
+      }
+      return {
+        ok: true,
+        value: {
+          ...parsed.value,
+          externalExecutionKey: buildProviderPurchaseIdentity({
+            workspaceId: endpoint.workspaceId,
+            provider: "payt",
+            accountRef: parsed.value.accountRef,
+            orderRef: parsed.value.orderRef,
+            eventName: parsed.value.eventName,
+          }),
+        },
+      };
+    }
+    if (
+      rule.parserRelease.provider === "umbler" &&
+      rule.parserRelease.version === UMBLER_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      return parseUmblerAutomationV1(payload);
+    }
+    return { ok: false, errorCode: "automation_parser_unavailable" };
+  }
+
+  private automationParserVersion(endpoint: PublicConversionEndpoint): string {
+    return endpoint.providerRule.parserRelease.version;
+  }
+
+  private automationIngressNamespace(
+    endpoint: PublicConversionEndpoint,
+  ): string {
+    return endpoint.providerRule.parserRelease.provider === "payt"
+      ? "payt-automation-v1"
+      : "umbler-automation-v1";
+  }
+
   private parsedIngressKey(
-    endpointId: string,
+    endpoint: PublicConversionEndpoint,
     externalExecutionKey: string,
   ): string {
     return createHash("sha256")
-      .update("umbler-automation-v1\0", "utf8")
-      .update(endpointId, "utf8")
+      .update(`${this.automationIngressNamespace(endpoint)}\0`, "utf8")
+      .update(endpoint.id, "utf8")
       .update("\0", "utf8")
       .update(externalExecutionKey, "utf8")
       .digest("hex");
   }
 
   private fallbackIngressKey(
-    endpointId: string,
+    endpoint: PublicConversionEndpoint,
     rawBody: Buffer,
     receivedAt: Date,
   ): string {
     const bucket = Math.floor(receivedAt.getTime() / fallbackDedupeWindowMs);
     return createHash("sha256")
-      .update("umbler-automation-fallback-v1\0", "utf8")
-      .update(endpointId, "utf8")
+      .update(
+        `${this.automationIngressNamespace(endpoint)}-fallback-v1\0`,
+        "utf8",
+      )
+      .update(endpoint.id, "utf8")
       .update("\0", "utf8")
       .update(String(bucket), "utf8")
       .update("\0", "utf8")
@@ -1212,9 +1573,10 @@ export class InboundConversionAutomationIngestionService {
     endpoint: PublicConversionEndpoint;
     deliveryId: string;
     deliveryReceivedAt: Date;
-    parsed: ParsedUmblerAutomationV1;
+    parsed: ParsedAutomation;
     manualRecovery?: boolean;
     evaluationMode?: ProviderConversionEvaluationMode;
+    manualReplayApproval?: ProviderConversionManualReplayApproval;
   }): Promise<ProviderConversionAutomationObservationResult> {
     const observed = await this.conversionObservation.observeAutomation({
       workspaceId: input.endpoint.workspaceId,
@@ -1226,6 +1588,9 @@ export class InboundConversionAutomationIngestionService {
       automation: input.parsed,
       manualRecovery: input.manualRecovery,
       evaluationMode: input.evaluationMode,
+      ...(input.manualRecovery === true && input.manualReplayApproval
+        ? { manualReplayApproval: input.manualReplayApproval }
+        : {}),
     });
     const processedAt = new Date();
 
@@ -1238,15 +1603,20 @@ export class InboundConversionAutomationIngestionService {
         purpose: "conversion_automation",
       },
       data: {
-        parserVersion: UMBLER_AUTOMATION_V1_PARSER_VERSION,
+        parserVersion: this.automationParserVersion(input.endpoint),
         status: "processed",
         classification: this.automationDeliveryClassification(observed),
         normalizedSummary: this.toJson({
           purpose: "conversion_automation",
           parserStatus: "parsed",
-          parserVersion: UMBLER_AUTOMATION_V1_PARSER_VERSION,
+          parserVersion: this.automationParserVersion(input.endpoint),
           automation: input.parsed.automation,
           eventName: input.parsed.eventName,
+          valueCents:
+            "valueCents" in input.parsed ? input.parsed.valueCents : undefined,
+          currency:
+            "currency" in input.parsed ? input.parsed.currency : undefined,
+          testCallback: "test" in input.parsed ? input.parsed.test : undefined,
           decisionId: observed.decisionId,
           decisionCode: observed.decisionCode,
           executionStatus: this.automationObservationStatus(observed),
@@ -1287,6 +1657,7 @@ export class InboundConversionAutomationIngestionService {
   private automationObservationStatus(
     observed: ProviderConversionAutomationObservationResult,
   ): AutomationObservationStatus {
+    if (observed.reasonCode === "purchase_duplicate") return "duplicate";
     if (
       observed.decisionCode === "ignored_empty_template" ||
       observed.decisionCode === "ignored_untracked_lead" ||
@@ -1357,7 +1728,7 @@ export class InboundConversionAutomationIngestionService {
       payloadTag: string;
       encryptionKeyVersion: number;
     };
-    parsed: ParsedUmblerAutomationV1 | null;
+    parsed: ParsedAutomation | null;
     parseErrorCode: string | null;
   }): Promise<void> {
     await this.prisma.$transaction(async (transaction) => {
@@ -1368,18 +1739,23 @@ export class InboundConversionAutomationIngestionService {
           id: input.deliveryId,
           workspaceId: input.endpoint.workspaceId,
           connectionId: input.endpoint.providerRule.connectionId,
-          provider: "umbler",
+          provider: input.endpoint.providerRule.connection.provider,
           ingressKey: input.ingressKey,
           externalDeliveryId: parsed?.externalExecutionKey ?? null,
           providerEventType: parsed?.automation ?? "automation_callback",
-          parserVersion: UMBLER_AUTOMATION_V1_PARSER_VERSION,
+          parserVersion: this.automationParserVersion(input.endpoint),
           purpose: "conversion_automation",
           providerRuleEndpointWorkspaceId: input.endpoint.workspaceId,
           providerRuleEndpointId: input.endpoint.id,
-          status: parsed ? "processed" : "failed",
+          status:
+            parsed || ignoredParseErrors.has(input.parseErrorCode ?? "")
+              ? "processed"
+              : "failed",
           classification: parsed
             ? "eligible_route_unresolved"
-            : "invalid_payload",
+            : ignoredParseErrors.has(input.parseErrorCode ?? "")
+              ? "unsupported_event"
+              : "invalid_payload",
           firstReceivedAt: input.receivedAt,
           lastReceivedAt: input.receivedAt,
           providerAttempt: input.providerAttempt,
@@ -1403,7 +1779,11 @@ export class InboundConversionAutomationIngestionService {
                 }
               : {
                   purpose: "conversion_automation",
-                  parserStatus: "invalid_payload",
+                  parserStatus: ignoredParseErrors.has(
+                    input.parseErrorCode ?? "",
+                  )
+                    ? "not_purchase"
+                    : "invalid_payload",
                   rawBodyLength: input.rawBodyLength,
                 },
           ),
@@ -1530,18 +1910,20 @@ export class InboundConversionAutomationIngestionService {
   private manualReprocessBlockMessage(reasonCode: string): string {
     const messages: Record<string, string> = {
       automation_event_mismatch:
-        "O callback nao corresponde ao evento configurado nesta regra",
+        "O callback não corresponde ao evento configurado nesta regra",
       automation_channel_unresolved:
-        "O canal do callback ainda nao foi localizado",
+        "O canal do callback ainda não foi localizado",
       automation_paid_lead_missing:
-        "O callback ainda nao possui um lead pago com CTWA",
+        "O callback ainda não possui um lead pago com CTWA",
       automation_value_missing:
-        "Configure o valor medio antes de reprocessar a compra",
+        "Configure o valor médio antes de reprocessar a compra",
+      payt_channel_missing_or_ambiguous:
+        "O comprador ainda não corresponde a um único lead pago com CTWA nos números desta regra",
       production_context_invalid:
-        "A conexao ou o canal ainda nao esta pronto para producao",
+        "A conexão ou o canal ainda não está pronto para produção",
     };
 
-    return messages[reasonCode] ?? "O callback ainda nao pode ser reprocessado";
+    return messages[reasonCode] ?? "O callback ainda não pode ser reprocessado";
   }
 
   private toJson(value: object): Prisma.InputJsonValue {

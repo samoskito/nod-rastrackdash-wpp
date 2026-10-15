@@ -61,6 +61,57 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 4a — Payt sales as Meta conversions (API, web and shared)**, ported from
+  the SaaS with the same behavior and no new env var, dependency or Meta
+  permission:
+  - Payt is a sales platform, not a WhatsApp number: it has no connection of
+    its own (creating a `payt` inbound connection is refused). A Payt sale
+    rule (`triggerType: provider_automation`, `automationSource: "payt"`,
+    origin `automation_payt`) is created in Conversões, bound to the WhatsApp
+    connection of its numbers (only the anchor of its signed URL), and may
+    scope any WhatsApp number of the workspace (`all_numbers` or
+    `specific_numbers`).
+  - Rule capabilities gain the optional `requiresConnection` flag (true for
+    `automation_umbler` and `automation_payt`); `automation_payt` keeps
+    `connectionBound: false` (its numbers may come from any connection). Rule
+    responses carry `origin: "automation_payt"` and `automationSource: "payt"`.
+  - Events come from each postback status, one rule per event and one URL
+    per rule (`POST /webhooks/inbound/conversions/:endpointId?token=`):
+    approved purchase (paid, or cash on delivery confirmed) → `Purchase`;
+    Pix/boleto generated (waiting payment) → `InitiateCheckout`; abandoned
+    cart → `CartAbandoned` (**beta**). Other statuses, and other events on a
+    rule, are recorded as ignored, never as errors. The value comes from the
+    sale (cents).
+  - No `ctwa_clid` → nothing is sent. The buyer must match exactly one tracked
+    CTWA lead of the rule's numbers (Brazilian phone forms); a lead that came
+    through another number with its own Payt rule is left to that rule. A
+    duplicated postback (or two postbacks of the same sale) is one conversion
+    (`ProviderPurchaseClaim`). Sales of leads without an ad id are not sent
+    yet: that path is used by Unnichat (Fase 4b).
+  - Rules start in observation. "Reprocessar selecionados" re-evaluates
+    callbacks in observation (new item status `observed`, never sent) and, in
+    production, only with the operator's explicit action; the send re-checks
+    the sale before materializing.
+  - Migrations (additive, in order): `20261016100000_payt_inbound_provider`
+    (enum value `payt` in `InboundWebhookProvider` and `DiagnosticSource`)
+    and `20261016100100_payt_parser_releases` (Payt `v1` and `automation-v1`
+    parser releases seeded as certified; no rule, connection or channel is
+    activated). Back up the database before updating. Student action: create
+    the rule in Conversões and paste its URL in the Payt postback; check
+    "Eventos recebidos". Guide: `docs/setup/payt.md`. **Roll back:** disable
+    or delete the Payt rules and remove the postback; reverting the image is
+    safe when no Payt rule was created (see the guide otherwise).
+  - Web: Payt card in the Integrations hub (Atendimento e vendas tab), which
+    explains that Payt has no connection of its own and points to Conversões;
+    Payt origin in Conversões > Nova regra with the three events (Carrinho
+    abandonado with the beta badge), bound to the connection of the chosen
+    numbers; the postback URL is shown only once (on create or "Gerar novo
+    endereço") next to the Payt setup steps; Eventos recebidos shows sale
+    names, lists postbacks of another status or event as "Ignorado" (neutral
+    tone, no longer counted as invalid payloads) and reprocesses in
+    observation; license-locked (423) notice.
+  - Update: rebuild shared, restart the API and publish the web of the same
+    release. No new env var or dependency on the web.
 - **Fase 4c — Pipedrive CRM (API + shared + web)**, ported from the SaaS without
   its pilot flags (`PIPEDRIVE_PANEL_*`, `PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED`):
   owner-managed connections (API token sealed with the new optional

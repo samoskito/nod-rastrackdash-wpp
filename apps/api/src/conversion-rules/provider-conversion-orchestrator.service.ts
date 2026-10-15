@@ -33,6 +33,19 @@ export type ProviderConversionTechnicalDisposition =
       reasonCode: string;
     };
 
+/**
+ * Explicit operator approval to replay one callback in production. Only the
+ * manager action "Reprocessar selecionados" (production mode) passes it; the
+ * webhook ingestion, queue sweeps and automatic retries never do. The
+ * production worker reads it back from `normalizedResult.manualReplayApproval`
+ * (provider-manual-replay-approval) to accept callbacks received before the
+ * rule/channel production activation.
+ */
+export type ProviderConversionManualReplayApproval = {
+  actorUserId: string;
+  reason: "operator_reprocess";
+};
+
 export type ProviderConversionOrchestrationResult = {
   executionId: string | null;
   eligibleExecutionId: string | null;
@@ -61,6 +74,7 @@ export class ProviderConversionOrchestrator {
      * the operator, but never make it eligible for production processing.
      */
     recordIgnoredObservation?: boolean;
+    manualReplayApproval?: ProviderConversionManualReplayApproval;
   }): Promise<ProviderConversionOrchestrationResult> {
     const { persistedDecision } = input;
     const outcome = providerConversionDecisionOutcome(
@@ -112,10 +126,22 @@ export class ProviderConversionOrchestrator {
       return this.persistObservedPurchase(input, purchaseKey);
     }
 
-    const execution = await this.persistExecution({
-      persistedDecision,
-      disposition: input.disposition,
-    });
+    const approval =
+      input.manualReplayApproval && input.disposition.state === "eligible"
+        ? input.manualReplayApproval
+        : null;
+    const execution = approval
+      ? await this.prisma.$transaction((transaction) =>
+          this.persistApprovedExecution(
+            transaction,
+            { persistedDecision, disposition: input.disposition },
+            approval,
+          ),
+        )
+      : await this.persistExecution({
+          persistedDecision,
+          disposition: input.disposition,
+        });
     this.logResult(input, `execution_${execution.status}`, execution.id);
 
     return {
@@ -206,6 +232,58 @@ export class ProviderConversionOrchestrator {
     });
   }
 
+  /**
+   * Writes the eligible execution and the operator approval atomically, with
+   * the audit entry in the same transaction: the approval never exists without
+   * its audit trail, and never on an execution that is not eligible.
+   */
+  private async persistApprovedExecution(
+    transaction: Prisma.TransactionClient,
+    input: {
+      persistedDecision: PersistedProviderConversionDecision;
+      disposition: ProviderConversionTechnicalDisposition;
+    },
+    approval: ProviderConversionManualReplayApproval,
+  ): Promise<{ id: string; status: string }> {
+    const persisted = input.persistedDecision;
+    const manualReplayApproval = {
+      approved: true,
+      actorUserId: approval.actorUserId,
+      approvedAt: new Date().toISOString(),
+      reason: approval.reason,
+      decisionId: persisted.id,
+    };
+    const execution = await this.persistExecution(
+      input,
+      transaction,
+      manualReplayApproval,
+    );
+    if (execution.status !== "eligible") return execution;
+
+    await transaction.auditLog.create({
+      data: {
+        workspaceId: persisted.workspaceId,
+        actorUserId: approval.actorUserId,
+        actorType: "user",
+        action: "provider_conversion_automation.manual_replay_approved",
+        targetType: "ProviderConversionRuleExecution",
+        targetId: execution.id,
+        reason: "Operator explicitly reprocessed this callback in production",
+        sourceIp: null,
+        resultStatus: "approved",
+        afterSummary: {
+          providerRuleId: persisted.providerRuleId,
+          sourceDeliveryId: persisted.sourceDeliveryId,
+          decisionId: persisted.id,
+          occurrenceKey: persisted.occurrenceKey,
+          manualReplayApproval,
+        },
+      },
+    });
+
+    return execution;
+  }
+
   private async persistExecution(
     input: {
       persistedDecision: PersistedProviderConversionDecision;
@@ -215,6 +293,7 @@ export class ProviderConversionOrchestrator {
       Prisma.TransactionClient,
       "providerConversionRuleExecution"
     > = this.prisma,
+    manualReplayApproval: Prisma.InputJsonObject | null = null,
   ): Promise<{ id: string; status: string }> {
     const persisted = input.persistedDecision;
     const decision = persisted.decision;
@@ -234,21 +313,43 @@ export class ProviderConversionOrchestrator {
           id: true,
           status: true,
           providerDecisionId: true,
+          normalizedResult: true,
         },
       });
 
     if (existing && terminalExecutionStatuses.has(existing.status)) {
-      return existing;
+      return { id: existing.id, status: existing.status };
     }
     if (
       existing?.providerDecisionId === persisted.id &&
       existing.status === status
     ) {
-      return existing;
+      // Already eligible for this decision (queued but not yet processed):
+      // attach the explicit approval without resetting anything else.
+      if (manualReplayApproval) {
+        const current =
+          existing.normalizedResult &&
+          typeof existing.normalizedResult === "object" &&
+          !Array.isArray(existing.normalizedResult)
+            ? (existing.normalizedResult as Prisma.InputJsonObject)
+            : {};
+        await client.providerConversionRuleExecution.update({
+          where: { id: existing.id },
+          data: {
+            normalizedResult: { ...current, manualReplayApproval },
+          },
+        });
+      }
+      return { id: existing.id, status: existing.status };
     }
 
     const catalogVariantId = this.singleCatalogVariantId(decision);
-    const normalizedResult = this.normalizedResult(persisted);
+    const normalizedResult: Prisma.InputJsonValue = manualReplayApproval
+      ? {
+          ...(this.normalizedResult(persisted) as Prisma.InputJsonObject),
+          manualReplayApproval,
+        }
+      : this.normalizedResult(persisted);
 
     return client.providerConversionRuleExecution.upsert({
       where: {

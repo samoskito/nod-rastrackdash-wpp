@@ -27,7 +27,7 @@ import type {
   ConversionScreenActionResult,
   ProviderConversionRuleActionResult,
 } from "./actions";
-import { ruleEventLabel } from "./event-copy";
+import { ruleEventFilterLabel } from "./event-copy";
 import {
   ruleOriginDefinition,
   type RuleOriginId,
@@ -210,16 +210,21 @@ export function ConversionsScreen({
     () => [...new Set(rows.map((row) => row.origin))],
     [rows],
   );
-  const events = useMemo(
-    () =>
-      [...new Set(rows.map((row) => row.eventName))].sort((left, right) =>
-        ruleEventLabel(left).localeCompare(
-          ruleEventLabel(right),
-          "pt-BR",
-        ),
-      ) as ConversionEventNameDto[],
-    [rows],
-  );
+  const eventFilterOptions = useMemo(() => {
+    const originsByEvent = new Map<string, string[]>();
+    for (const row of rows) {
+      originsByEvent.set(row.eventName, [
+        ...(originsByEvent.get(row.eventName) ?? []),
+        row.origin,
+      ]);
+    }
+    return [...originsByEvent.entries()]
+      .map(([eventName, eventOrigins]) => ({
+        eventName: eventName as ConversionEventNameDto,
+        label: ruleEventFilterLabel(eventName, eventOrigins),
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label, "pt-BR"));
+  }, [rows]);
   const liveCount = rows.filter((row) => row.status === "production").length;
   const observationCount = rows.filter((row) => row.status === "observation").length;
 
@@ -383,9 +388,9 @@ export function ConversionsScreen({
             onChange={(event) => setFilters({ ...filters, eventName: event.target.value })}
           >
             <option value="all">Todos</option>
-            {events.map((eventName) => (
-              <option key={eventName} value={eventName}>
-                {ruleEventLabel(eventName)}
+            {eventFilterOptions.map((option) => (
+              <option key={option.eventName} value={option.eventName}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -736,7 +741,15 @@ function RuleRow({
 
       <div className="conversion-rule-cell" data-label="Evento">
         <span className="conversion-rule-cell-label">Evento</span>
-        <span>{row.eventLabel}</span>
+        <span>
+          {row.eventLabel}
+          {row.eventBeta ? (
+            <>
+              {" "}
+              <span className="status-chip neutral conversion-beta-chip">beta</span>
+            </>
+          ) : null}
+        </span>
       </div>
 
       <div className="conversion-rule-cell" data-label="Alcance">
