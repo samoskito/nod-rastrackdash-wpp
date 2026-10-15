@@ -99,6 +99,14 @@ describe("lead export formatting", () => {
     }
 
     expect(neutralizeFormula("\t=1+1")).toBe("'\t=1+1");
+    // Leading spaces do not stop a spreadsheet from evaluating the formula.
+    for (const value of [" =1+1", "   +cmd", "  -2+3", " @SUM(A1)"]) {
+      expect(neutralizeFormula(value)).toBe(`'${value}`);
+    }
+    expect(neutralizeFormula("  Mariana")).toBe("  Mariana");
+    expect(
+      neutralizeFormula(" +55 11 99999-1020", { allowPlainPhone: true }),
+    ).toBe(" +55 11 99999-1020");
     expect(neutralizeFormula("Mariana")).toBe("Mariana");
     expect(
       neutralizeFormula("+55 11 99999-1020", { allowPlainPhone: true }),
@@ -135,6 +143,25 @@ describe("lead export formatting", () => {
         until: "2026-09-24",
       }),
     ).toBe("leads_evil_ate_2026-09-24.csv");
+  });
+
+  it("leaves the workspace out of the name when data is hidden", () => {
+    expect(
+      leadExportFilename({
+        workspaceSlug: "Cliente Sigiloso",
+        format: "xlsx",
+        since: "2026-09-01",
+        until: "2026-09-24",
+        masked: true,
+      }),
+    ).toBe("leads_2026-09-01_a_2026-09-24.xlsx");
+    expect(
+      leadExportFilename({
+        workspaceSlug: "acme",
+        format: "csv",
+        masked: true,
+      }),
+    ).toBe("leads_todos.csv");
   });
 });
 
@@ -530,6 +557,19 @@ describe("leads service export", () => {
     expect(rows[0]?.enteredAt?.toISOString()).toBe("2026-07-02T03:00:05.000Z");
   });
 
+  it("uses the creation date as entry for leads without a message time", async () => {
+    const leads = createLeads(1);
+    leads[0]!.firstMessageAt = null;
+    const prisma = createPrisma(leads);
+    const service = new LeadsService(prisma as never);
+    const { batches } = await service.prepareLeadExport("workspace_1", {});
+    const [row] = (await drain(batches)).flat();
+
+    // Same first-contact rule as the cohort (firstMessageAt ?? createdAt).
+    expect(row?.enteredAt).toEqual(leads[0]!.createdAt);
+    expect(row?.enteredAt).not.toBeNull();
+  });
+
   it("hides names, phones and campaign data when the privacy toggle is on", async () => {
     const prisma = createPrisma(createLeads(1));
     const service = new LeadsService(prisma as never);
@@ -640,8 +680,9 @@ describe("GET /leads/export", () => {
       .expect(200);
 
     expect(response.headers["content-type"]).toBe("text/csv; charset=utf-8");
+    // maskSensitive=1: the workspace slug stays out of the file name.
     expect(response.headers["content-disposition"]).toBe(
-      'attachment; filename="leads_comunidade-nod_2026-09-01_a_2026-09-24.csv"',
+      'attachment; filename="leads_2026-09-01_a_2026-09-24.csv"',
     );
     expect(response.headers["cache-control"]).toBe("no-store");
     expect((response.body as Buffer).toString("utf8")).toContain(

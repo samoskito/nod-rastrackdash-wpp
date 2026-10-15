@@ -384,12 +384,12 @@ export default async function LeadsPage({
             className="filter-control"
             name="base"
             aria-label="Base de leads"
-            title="Novos: primeiro contato no período. Voltaram: já falaram antes e iniciaram uma nova conversa por anúncio no período. Mais de uma conversa: iniciaram 2 ou mais conversas por anúncio no período, novos ou não."
+            title="Leads novos: primeiro contato no período. Voltaram: já falaram antes e iniciaram uma nova conversa por anúncio no período. 2+ conversas: iniciaram 2 ou mais conversas por anúncio no período, novos ou não."
             defaultValue={base ?? ""}
           >
-            <option value="">Novos no período</option>
-            <option value="returning">Voltaram no período</option>
-            <option value="repeat">Mais de uma conversa</option>
+            <option value="">Leads novos</option>
+            <option value="returning">Voltaram</option>
+            <option value="repeat">2+ conversas</option>
           </select>
           <select
             className="filter-control"

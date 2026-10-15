@@ -27,7 +27,7 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   (with CPL), voltaram por anúncio, conversaram mais de uma vez and conversas
   por anúncio, each linking to the matching Leads list when it can be
   reproduced. The daily comparison adds a returns series.
-- **Leads base filter** (Novos / Voltaram / Mais de uma conversa, `base`
+- **Leads base filter** (Leads novos / Voltaram / 2+ conversas, `base`
   query param) and a paid/organic split count on the Leads page.
 - **Export leads to CSV or Excel** (`GET /leads/export?format=csv|xlsx`, web
   proxy `/leads/export`, "Exportar" menu on Leads): every lead of the applied

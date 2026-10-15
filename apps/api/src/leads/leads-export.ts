@@ -146,11 +146,13 @@ export function neutralizeFormula(
   value: string,
   options: { allowPlainPhone?: boolean } = {},
 ): string {
-  if (!/^[=+\-@\t\r]/u.test(value)) {
+  // Spreadsheet programs skip leading spaces before evaluating, so " =1+1"
+  // is as dangerous as "=1+1".
+  if (!/^[=+\-@\t\r]/u.test(value.trimStart())) {
     return value;
   }
 
-  if (options.allowPlainPhone && plainPhonePattern.test(value)) {
+  if (options.allowPlainPhone && plainPhonePattern.test(value.trim())) {
     return value;
   }
 
@@ -294,12 +296,16 @@ function filenameSlug(value: string): string {
   return slug || "workspace";
 }
 
-/** leads_<workspace-slug>_<periodo>.csv|xlsx */
+/**
+ * leads_<workspace-slug>_<periodo>.csv|xlsx; with "Ocultar dados" on the
+ * workspace is left out (leads_<periodo>.csv|xlsx), like the rest of the file.
+ */
 export function leadExportFilename(input: {
   workspaceSlug: string;
   format: LeadExportFormat;
   since?: string;
   until?: string;
+  masked?: boolean;
 }): string {
   const period =
     input.since && input.until
@@ -310,5 +316,7 @@ export function leadExportFilename(input: {
           ? `ate_${input.until}`
           : "todos";
 
-  return `leads_${filenameSlug(input.workspaceSlug)}_${period}.${input.format}`;
+  return input.masked
+    ? `leads_${period}.${input.format}`
+    : `leads_${filenameSlug(input.workspaceSlug)}_${period}.${input.format}`;
 }

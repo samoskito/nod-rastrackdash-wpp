@@ -2584,13 +2584,15 @@ export default async function ReportsPage({
               ) : null}
             </div>
             <div className="report-command-actions">
-              <Link
+              {/* Plain <a>: the target is a route handler (a CSV download),
+                  so a Next <Link> would prefetch it as a page and 404. */}
+              <a
                 className="button ghost"
                 href={reportExportHref(reportFilters, activeView)}
               >
                 <Download aria-hidden="true" size={16} />
                 Exportar CSV
-              </Link>
+              </a>
               {canSyncMetaReports ? (
                 <form action={syncMetaReports}>
                   <input type="hidden" name="view" value={activeView} />

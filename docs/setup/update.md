@@ -231,11 +231,12 @@ e em Relatórios, e traz a exportação da lista de leads em planilha.
   novos, Voltaram por anúncio, Conversaram mais de uma vez e Conversas por
   anúncio. Os números abrem a lista correspondente em Leads (sem filtro de BM
   ou conta, porque Leads não tem esse filtro).
-- **Leads** ganhou o seletor **Novos no período / Voltaram no período / Mais de
-  uma conversa** e o botão **Exportar** (Excel `.xlsx` ou CSV). O arquivo traz
-  **todos** os leads dos filtros aplicados (não só a página), com data/hora de
-  entrada no horário de São Paulo. Com **Ocultar dados** ligado, nomes,
-  telefones, campanhas e os IDs de campanha/conjunto/anúncio saem ocultos.
+- **Leads** ganhou o seletor **Leads novos / Voltaram / 2+ conversas** e o
+  botão **Exportar** (Excel `.xlsx` ou CSV). O arquivo traz **todos** os leads
+  dos filtros aplicados (não só a página), com data/hora de entrada no horário
+  de São Paulo. Com **Ocultar dados** ligado, nomes, telefones, campanhas e os
+  IDs de campanha/conjunto/anúncio saem ocultos, e o nome do arquivo não leva
+  o nome do workspace.
   Limite de 50.000 leads por arquivo: acima disso a tela pede um período menor.
 
 **Dependência nova:** `exceljs` (só na API). No Dokploy nada muda: o build da

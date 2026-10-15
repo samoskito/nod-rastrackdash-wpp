@@ -94,6 +94,7 @@ export class LeadsController {
         format,
         since: filters.since,
         until: filters.until,
+        masked: filters.maskSensitive === true,
       })}"`,
     );
     response.setHeader("Cache-Control", "no-store");

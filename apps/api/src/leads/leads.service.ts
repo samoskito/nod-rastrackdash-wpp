@@ -687,7 +687,9 @@ export class LeadsService {
       return {
         name: maskSensitive ? maskedLeadName : (lead.name ?? "Lead sem nome"),
         phone: maskSensitive ? maskedLeadPhone : (lead.phoneDisplay ?? ""),
-        enteredAt: lead.firstMessageAt,
+        // Same first-contact rule as the cohort: legacy leads without a
+        // message time entered when the row was created.
+        enteredAt: lead.firstMessageAt ?? lead.createdAt,
         lastActivityAt: lead.lastMessageAt,
         campaign: maskSensitive
           ? maskedLeadCampaign
