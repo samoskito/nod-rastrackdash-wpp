@@ -109,18 +109,35 @@ type Result<T> = { ok: true; value: T } | { ok: false; message: string };
  */
 export function resolveRuleConnectionId(
   draft: Pick<RuleDraft, "origin" | "scope" | "channelIds" | "connectionId">,
-  context: Pick<DraftContext, "numbers" | "connections">,
+  context: Pick<DraftContext, "numbers" | "connections"> &
+    Partial<Pick<DraftContext, "capabilities">>,
 ): string | null {
   const definition = ruleOriginDefinition(draft.origin);
+  // Na ordem em que a pessoa escolheu.
+  const chosen = draft.channelIds
+    .map((id) => context.numbers.find((number) => number.id === id))
+    .filter((number): number is ConversionNumber => Boolean(number));
 
   if (definition.connection === "same_provider") {
     return draft.connectionId;
   }
-  if (draft.scope === "all_numbers") return null;
 
-  const chosen = draft.channelIds
-    .map((id) => context.numbers.find((number) => number.id === id))
-    .filter((number): number is ConversionNumber => Boolean(number));
+  if (definition.connection === "any") {
+    // Venda da Payt: presa à conexão dos números escolhidos (ou, em "todos os
+    // números", à do primeiro número compatível). Nunca uma conexão da Payt.
+    const providers = originChannelProviders(
+      draft.origin,
+      context.capabilities ?? null,
+    );
+    return (
+      chosen[0]?.connectionId ??
+      context.numbers.find((number) => providers.includes(number.provider))
+        ?.connectionId ??
+      null
+    );
+  }
+
+  if (draft.scope === "all_numbers") return null;
   if (chosen.length === 0) return null;
 
   const connectionIds = new Set(chosen.map((number) => number.connectionId));
@@ -136,6 +153,9 @@ export function draftChannelProviders(
     ? contactMessageProviders(capabilities)
     : originChannelProviders(draft.origin, capabilities);
 }
+
+export const paytSingleConnectionNote =
+  "As vendas da Payt ficam ligadas à conexão dos números escolhidos: escolha números de uma mesma conexão.";
 
 /** Why the chosen reach cannot be sent, or null when it is fine. */
 export function scopeIssue(
@@ -176,6 +196,12 @@ export function scopeIssue(
     chosen.some((number) => number.connectionId !== draft.connectionId)
   ) {
     return "Escolha só números da conexão selecionada.";
+  }
+  if (
+    definition.connection === "any" &&
+    new Set(chosen.map((number) => number.connectionId)).size > 1
+  ) {
+    return paytSingleConnectionNote;
   }
   return null;
 }
@@ -357,6 +383,18 @@ export function buildRulePayload(
   };
 
   switch (draft.origin) {
+    case "automation_payt":
+      // O valor de cada venda e o evento vêm do postback da Payt: nada de
+      // valor médio, frases ou etiquetas.
+      return {
+        ok: true,
+        value: {
+          ...base,
+          triggerType: "provider_automation",
+          eventName,
+          automationSource: "payt",
+        },
+      };
     case "automation_umbler": {
       const values = valueFields({ ...draft, eventName }, false);
       if (!values.ok) return values;

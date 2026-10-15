@@ -736,7 +736,15 @@ function RuleRow({
 
       <div className="conversion-rule-cell" data-label="Evento">
         <span className="conversion-rule-cell-label">Evento</span>
-        <span>{row.eventLabel}</span>
+        <span>
+          {row.eventLabel}
+          {row.eventBeta ? (
+            <>
+              {" "}
+              <span className="status-chip neutral conversion-beta-chip">beta</span>
+            </>
+          ) : null}
+        </span>
       </div>
 
       <div className="conversion-rule-cell" data-label="Alcance">

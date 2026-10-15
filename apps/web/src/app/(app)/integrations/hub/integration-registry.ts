@@ -2,7 +2,7 @@
  * Catalog of the integrations shown in the Integrations hub.
  *
  * Only providers the student backend implements end to end appear here.
- * Adding a provider later (Payt, Unnichat, Pipedrive, ...) is one entry:
+ * Adding a provider later (Unnichat, Pipedrive, ...) is one entry:
  *   1. add its id to `integrationProviderIds`;
  *   2. add a logo file in `public/integrations/` and a row in `logoAssets`
  *      (and in SOURCES.md);
@@ -111,6 +111,7 @@ export const integrationProviderIds = [
   "umbler",
   "gupshup",
   "data_crazy",
+  "payt",
   "kommo",
   "meta",
 ] as const;
@@ -137,6 +138,12 @@ export type IntegrationGate =
   /** Shown when the API offers creation for it or a connection exists. */
   | { kind: "inbound_provider"; provider: InboundIntegrationProvider }
   | { kind: "crm"; provider: CrmIntegrationProvider }
+  /**
+   * Payt has no connection of its own: it is a conversion-rule origin in
+   * Conversões (the Payt postback calls the rule's URL). Always offered; the
+   * state comes from the Payt rules the workspace already has.
+   */
+  | { kind: "payt_rules" }
   | { kind: "always" };
 
 export type IntegrationProviderDefinition = {
@@ -175,6 +182,7 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   umbler: { file: "umbler.svg", surface: "light" },
   gupshup: { file: "gupshup.svg", surface: "light" },
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
+  payt: { file: "payt.svg", surface: "dark" },
   kommo: { file: "kommo.png", surface: "light" },
   meta: { file: "meta.svg", surface: "dark" },
 };
@@ -284,6 +292,17 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Receba as conversas de anúncio que chegam na Data Crazy.",
     gate: { kind: "inbound_provider", provider: "data_crazy" },
+  },
+  {
+    id: "payt",
+    name: "Payt",
+    category: "attendance",
+    logo: integrationLogoPath("payt"),
+    initials: "Pt",
+    logoSurface: logoSurface("payt"),
+    description:
+      "Envie compra aprovada, Pix/boleto gerado e carrinho abandonado como conversão do lead que veio do anúncio. Funciona por regra em Conversões.",
+    gate: { kind: "payt_rules" },
   },
   {
     id: "meta",

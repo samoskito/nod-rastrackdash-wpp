@@ -16,10 +16,17 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Plus, X } from "lucide-reac
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
-import { accentEventCopy, ruleEventLabel } from "./event-copy";
+import {
+  accentEventCopy,
+  paytBetaBadge,
+  paytEventExplanations,
+  paytEventLabel,
+  ruleEventLabelForOrigin,
+} from "./event-copy";
 import { conversionsLicenseLockedNote } from "./license-lock";
 import { NumbersWithoutRules } from "./numbers-without-rules";
 import { MessagePhraseFields } from "./message-phrase-fields";
+import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
 import type { ConversionScreenActionResult } from "./actions";
@@ -27,6 +34,8 @@ import {
   contactMessageProviders,
   crmManageHref,
   hubProviderForInbound,
+  originBetaEvents,
+  originEventNames,
   providerLogo,
   ruleOriginDefinition,
   type CrmRuleOrigin,
@@ -44,6 +53,7 @@ import {
   buildRulePayload,
   emptyRuleDraft,
   mintRequestKey,
+  paytSingleConnectionNote,
   resolveRuleConnectionId,
   scopeIssue,
   type RuleDraft,
@@ -194,7 +204,7 @@ export function NewRuleFlow({
       }
       if (!draft.name.trim()) {
         patch({
-          name: `${ruleOriginDefinition(draft.origin).label} - ${ruleEventLabel(draft.eventName)}`.slice(
+          name: `${ruleOriginDefinition(draft.origin).label} - ${ruleEventLabelForOrigin(draft.origin, draft.eventName)}`.slice(
             0,
             120,
           ),
@@ -321,7 +331,9 @@ export function NewRuleFlow({
           <div className="conversion-webhook-url">
             <label className="conversion-field">
               <span className="field-label">
-                Endereço da automação (exibido uma única vez)
+                {draft?.origin === "automation_payt"
+                  ? "URL de postback da Payt (exibida uma única vez)"
+                  : "Endereço da automação (exibido uma única vez)"}
               </span>
               <input
                 readOnly
@@ -331,7 +343,14 @@ export function NewRuleFlow({
               />
             </label>
             <CopyUrlButton url={result.webhookUrl} />
-            {draft ? (
+            {draft?.origin === "automation_payt" ? (
+              <PaytSetupPanel
+                eventName={draft.eventName}
+                beta={originBetaEvents(draft.origin, capabilities).includes(
+                  draft.eventName,
+                )}
+              />
+            ) : draft ? (
               <UmblerAutomationPayloadPanel eventName={draft.eventName} />
             ) : null}
             <button
@@ -393,7 +412,11 @@ export function NewRuleFlow({
       ) : null}
 
       {draft && step === "event" ? (
-        <EventStep draft={draft} onChange={(eventName) => patch({ eventName })} />
+        <EventStep
+          draft={draft}
+          capabilities={capabilities}
+          onChange={(eventName) => patch({ eventName })}
+        />
       ) : null}
 
       {draft && step === "scope" ? (
@@ -560,14 +583,80 @@ function CrmPointer({ origin }: { origin: CrmRuleOrigin }) {
   );
 }
 
-function EventStep({
+function PaytEventStep({
   draft,
+  capabilities,
   onChange,
 }: {
   draft: RuleDraft;
+  capabilities: ProviderConversionRuleCapabilitiesDto | null;
   onChange: (eventName: ConversionEventNameDto) => void;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
+  const eventNames =
+    originEventNames(draft.origin, capabilities) ?? definition.allowedEvents ?? [];
+  const beta = originBetaEvents(draft.origin, capabilities);
+
+  return (
+    <fieldset className="conversion-flow-fieldset">
+      <legend>Qual venda da Payt vai para a Meta?</legend>
+      <p className="muted">
+        O evento vem do status de cada venda e o valor vem da própria venda da
+        Payt. Crie uma regra para cada evento que quiser enviar.
+      </p>
+      <div className="conversion-origin-grid">
+        {eventNames.map((eventName) => (
+          <label
+            key={eventName}
+            className={`conversion-origin-option${draft.eventName === eventName ? " is-selected" : ""}`}
+          >
+            <input
+              type="radio"
+              name="payt-event"
+              value={eventName}
+              checked={draft.eventName === eventName}
+              onChange={() => onChange(eventName)}
+            />
+            <span>
+              <strong>
+                {paytEventLabel(eventName)}
+                {beta.includes(eventName) ? (
+                  <>
+                    {" "}
+                    <span className="status-chip neutral conversion-beta-chip">
+                      {paytBetaBadge}
+                    </span>
+                  </>
+                ) : null}
+              </strong>
+              <small>{paytEventExplanations[eventName] ?? ""}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function EventStep({
+  draft,
+  capabilities,
+  onChange,
+}: {
+  draft: RuleDraft;
+  capabilities: ProviderConversionRuleCapabilitiesDto | null;
+  onChange: (eventName: ConversionEventNameDto) => void;
+}) {
+  const definition = ruleOriginDefinition(draft.origin);
+  if (draft.origin === "automation_payt") {
+    return (
+      <PaytEventStep
+        draft={draft}
+        capabilities={capabilities}
+        onChange={onChange}
+      />
+    );
+  }
   const events = conversionEventCatalogOrdered.filter((event) =>
     definition.lockedEvent
       ? event.eventName === definition.lockedEvent
@@ -665,7 +754,7 @@ export function ScopeStep({
     draft.messageAuthorScope,
   );
   const availableIds = new Set(available.map((number) => number.id));
-  const notYet = ineligibleNumbers(numbers, capabilities);
+  const notYet = ineligibleNumbers(numbers, capabilities, draft.origin);
   // Números de provedores que leem a origem, mas não este autor (contato).
   const wrongAuthor = numbersForOrigin(
     draft.origin,
@@ -758,11 +847,19 @@ export function ScopeStep({
             <small>
               {connectionBound
                 ? "Escolha um ou mais números desta conexão."
-                : "Escolha um ou mais números, de qualquer conexão."}
+                : draft.origin === "automation_payt"
+                  ? "Escolha um ou mais números de uma mesma conexão."
+                  : "Escolha um ou mais números, de qualquer conexão."}
             </small>
           </span>
         </label>
       </div>
+
+      {draft.origin === "automation_payt" ? (
+        <p className="action-note conversion-scope-note">
+          {paytSingleConnectionNote}
+        </p>
+      ) : null}
 
       {draft.origin === "whatsapp_label" && draft.scope === "all_numbers" ? (
         <p className="action-note conversion-scope-note">
@@ -1159,6 +1256,13 @@ function DetailsStep({
         </>
       ) : null}
 
+      {draft.origin === "automation_payt" ? (
+        <p className="action-note">
+          Depois de criar, você recebe a URL de postback para colar na Payt, em
+          Postback. O valor de cada venda vem da própria Payt.
+        </p>
+      ) : null}
+
       <dl className="conversion-flow-summary">
         <div>
           <dt>Origem</dt>
@@ -1166,7 +1270,12 @@ function DetailsStep({
         </div>
         <div>
           <dt>Evento</dt>
-          <dd>{ruleEventLabel(definition.lockedEvent ?? draft.eventName)}</dd>
+          <dd>
+            {ruleEventLabelForOrigin(
+              draft.origin,
+              definition.lockedEvent ?? draft.eventName,
+            )}
+          </dd>
         </div>
         <div>
           <dt>Alcance</dt>

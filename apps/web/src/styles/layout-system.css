@@ -6443,6 +6443,18 @@ body {
   margin: 0;
 }
 
+/* Selo “beta” ao lado de um evento ainda em teste (ex.: carrinho abandonado da Payt). */
+.conversion-beta-chip {
+  display: inline-flex;
+  min-height: 0;
+  padding: 1px 7px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .conversion-inline-link {
   display: inline-flex;
   align-items: center;
