@@ -19,3 +19,4 @@ export * from "./schemas/inbound-webhooks";
 export * from "./schemas/student-inbound-replay";
 export * from "./schemas/provider-conversion-decisions";
 export * from "./schemas/ops-alerts";
+export * from "./lead-labels";

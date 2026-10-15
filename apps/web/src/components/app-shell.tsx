@@ -509,7 +509,7 @@ export function AppShell({
           <PresentationModeToggle />
           <LogoutButton />
         </section>
-        <BrandFooter brand={brand} />
+        <BrandFooter brand={brand} className="sidebar-footer" />
       </aside>
       <button
         className="mobile-sidebar-backdrop"
@@ -538,6 +538,7 @@ export function AppShell({
         ) : null}
         {workspace ? <DataAutoRefresh source={dataSource ?? null} /> : null}
         {children}
+        <BrandFooter brand={brand} className="content-footer" />
       </main>
     </div>
   );

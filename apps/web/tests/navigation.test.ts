@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { clientNavigation, backofficeNavigation } from "@wpptrack/shared";
 import { AppShell } from "../src/components/app-shell";
+import { defaultBrandConfig } from "../src/lib/brand";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/overview",
@@ -200,6 +201,35 @@ describe("navigation", () => {
     expect(html).toContain('id="app-sidebar"');
     expect(html).toContain("Abrir menu");
     expect(html).not.toContain("Telemetry OS");
+  });
+
+  it("renders the residual footer in the sidebar and at the end of the main content so it stays visible on mobile", () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {
+        workspace: {
+          id: "workspace_owner",
+          name: "Workspace do Owner",
+          slug: "workspace-owner",
+          role: "owner",
+          operationalStatus: "active",
+          permissions: ownerPermissions,
+        },
+        brand: { ...defaultBrandConfig, name: "Minha Agencia" },
+        children: createElement("p", null, "Panel content"),
+      }),
+    );
+    const mainHtml = html.slice(html.indexOf('<main class="content">'));
+    const residual = "Minha Agencia · RastrackDash · powered by PalmUP";
+
+    expect(html.split(residual)).toHaveLength(3);
+    expect(html.slice(0, html.indexOf("</aside>"))).toContain(
+      "brand-footer sidebar-footer",
+    );
+    expect(mainHtml).toContain("brand-footer content-footer");
+    expect(mainHtml.indexOf("Panel content")).toBeLessThan(
+      mainHtml.indexOf("content-footer"),
+    );
+    expect(mainHtml).toContain(residual);
   });
 
   it("uses an icon and a full label for the logout action", () => {

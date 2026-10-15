@@ -212,6 +212,45 @@ fence novo: não execute reenvios de eventos com tentativa consumida, nem
 apague auditoria/tentativas. PENDENTE: atualização e rollback reais não
 foram executados; a entrega foi validada com fixtures locais.
 
+## Leads novos × leads que voltaram e exportar leads
+
+Esta atualização muda **como os leads são contados** na Visão Geral, em Leads
+e em Relatórios, e traz a exportação da lista de leads em planilha.
+
+- **Leads novos** = pessoas cujo **primeiro contato** (`firstMessageAt`, no
+  fuso de São Paulo) caiu no período. Cada pessoa conta uma vez, no dia do
+  primeiro contato. O **custo por lead (CPL)** passa a dividir o investimento
+  só pelos leads novos, e o lead fica no anúncio que o trouxe pela primeira vez.
+- **Voltaram por anúncio** = quem já era lead antes do período e iniciou uma
+  conversa nova por anúncio nele. Aparece separado e **não** entra no CPL.
+- O rótulo "Conversas reais" virou **Leads novos** nas telas e no CSV de
+  Relatórios (que ganhou a coluna **Leads que voltaram**). Por isso o número e
+  o CPL de um período podem ficar diferentes dos de antes: quem voltou não é
+  mais contado como novo.
+- **Visão Geral** ganhou o bloco **Leads no período** (sempre visível): Leads
+  novos, Voltaram por anúncio, Conversaram mais de uma vez e Conversas por
+  anúncio. Os números abrem a lista correspondente em Leads (sem filtro de BM
+  ou conta, porque Leads não tem esse filtro).
+- **Leads** ganhou o seletor **Leads novos / Voltaram / 2+ conversas** e o
+  botão **Exportar** (Excel `.xlsx` ou CSV). O arquivo traz **todos** os leads
+  dos filtros aplicados (não só a página), com data/hora de entrada no horário
+  de São Paulo. Com **Ocultar dados** ligado, nomes, telefones, campanhas e os
+  IDs de campanha/conjunto/anúncio saem ocultos, e o nome do arquivo não leva
+  o nome do workspace.
+  Limite de 50.000 leads por arquivo: acima disso a tela pede um período menor.
+
+**Dependência nova:** `exceljs` (só na API). No Dokploy nada muda: o build da
+imagem já roda `pnpm install --frozen-lockfile`. Em instalação local, rode
+`pnpm install` (veja [Instalação local](#instalação-local-docker-compose)).
+**Sem migration e sem variável nova.** Atualize API e web (passos 3 e 4).
+
+**Verificação:** em `/overview`, com um período escolhido, o bloco **Leads no
+período** aparece com os quatro números (um traço "-" indica API ainda
+antiga). Em `/leads`, aplique um período e clique em **Exportar** → **Excel
+(.xlsx)** e depois **CSV (.csv)**: os dois arquivos baixam com a coluna
+**Data/hora de entrada**. A exportação é uma leitura e funciona mesmo com a
+licença bloqueada.
+
 ## Versão instalada
 
 O `/backoffice` mostra ao **dono da plataforma** se esta instância está na versão mais recente da `main` do template. Para isso, a API precisa saber **qual commit foi instalado** — e o build descobre isso sozinho.
