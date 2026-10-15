@@ -15,9 +15,9 @@ qualquer provedor.
 
 | Modelo | Onde se cria | Escopo | Providers |
 |---|---|---|---|
-| **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi, NOD API, WAHA, Z-API) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
-| **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → aba **Conversões e vendas** → card Umbler Talk / Gupshup / Data Crazy; aba **WhatsApp** → card **WhatsApp Cloud API** (Meta) | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
-| **Meta Ads (conta de anúncios)** | `/integrations` → aba **Conversões e vendas** → card **Meta Ads** | Por workspace | `meta` — token de usuário do sistema, veja [`meta-manual.md`](meta-manual.md) |
+| **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi, WAHA; Z-API e NOD API aparecem como "Em breve" — conexões já existentes continuam gerenciáveis) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
+| **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → aba **Atendimento e vendas** → card Umbler Talk / Gupshup / Data Crazy; aba **WhatsApp** → card **WhatsApp Cloud API** (Meta) | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
+| **Meta Ads (conta de anúncios)** | `/integrations` → aba **Anúncios** → card **Meta Ads** (login social ou token; não recebe conversas) | Por workspace | `meta` — token de usuário do sistema, veja [`meta-manual.md`](meta-manual.md) |
 
 Os dois primeiros modelos entregam **mensagens**. O terceiro entrega
 **anúncios, Pixel e destino de conversão** — ele não recebe mensagem
@@ -51,7 +51,7 @@ Na prática:
 
 ## Aba WhatsApp — Uazapi, NOD API, WAHA e Z-API: o que o aluno faz
 
-Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi, NOD API, WAHA ou Z-API). A janela que abre já vem fixa nesse provedor:
+Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA; Z-API e NOD API estão como "Em breve" para novas conexões). A janela que abre já vem fixa nesse provedor:
 
 1. **Criar a conexão.** Dê um **Nome** (é esse
    nome que a exclusão vai pedir de volta) e um **Nome exibido**
@@ -270,7 +270,7 @@ use o segredo PalmUP nem envie o valor por chat.
 Use Data Crazy como uma conexão inbound por workspace; ele não exige
 credencial ou variável de ambiente própria neste template.
 
-1. Em `/integrations` → aba **Conversões e vendas** → card **Data Crazy**,
+1. Em `/integrations` → aba **Atendimento e vendas** → card **Data Crazy**,
    dê um nome e clique em **Gerar webhook**.
 2. Copie a **URL de callback** completa, incluindo `?token=`. Ela aparece
    uma única vez; se perder, use **Gerar nova URL**, que invalida a URL
@@ -292,7 +292,7 @@ credencial ou variável de ambiente própria neste template.
 
 ## Umbler Talk e Gupshup — conexão de webhook de entrada
 
-1. Em `/integrations` → aba **Conversões e vendas** → card **Umbler Talk**
+1. Em `/integrations` → aba **Atendimento e vendas** → card **Umbler Talk**
    ou **Gupshup**, dê um nome e clique em **Gerar webhook**.
 2. Copie a **URL de callback** (aqui ela já vem com o `?token=`) e cole
    no campo de webhook do painel da Umbler/Gupshup. Ela aparece **uma

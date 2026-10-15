@@ -185,7 +185,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 - **Diagnóstico:** `/settings#whatsapp-triggers` abre, mas a lista "Origens conectadas" está vazia (ou não lista a conexão que você criou).
 - **Causa provável, por origem:**
-  - **Umbler, Gupshup, Meta WhatsApp (Cloud API):** a origem aparece assim que a conexão existe em `/integrations` (card Umbler/Gupshup na aba **Conversões e vendas**, ou card **WhatsApp Cloud API** na aba **WhatsApp**). Se você criou a conexão no card de um provedor Uazapi/NOD API/WAHA/Z-API, criou outra coisa — são cards diferentes.
+  - **Umbler, Gupshup, Meta WhatsApp (Cloud API):** a origem aparece assim que a conexão existe em `/integrations` (card Umbler/Gupshup na aba **Atendimento e vendas**, ou card **WhatsApp Cloud API** na aba **WhatsApp**). Se você criou a conexão no card de um provedor Uazapi/NOD API/WAHA/Z-API, criou outra coisa — são cards diferentes.
   - **Uazapi:** a origem é criada automaticamente pelo produto, mas só quando chega pelo receiver uma mensagem **enviada pelo número conectado** (atendente) ou uma mudança de etiqueta. Uma mensagem apenas recebida do cliente não cria a origem. Responda uma conversa pelo número conectado e recarregue.
   - **WAHA e Z-API:** recebem leads normalmente, mas **ainda não têm** criação automática de origem na central de Gatilhos. É lacuna conhecida do produto, não configuração.
   - **NOD API:** sem receiver inbound (`501`), não há origem.
@@ -227,11 +227,11 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 ## Não apareceu Data Crazy / feature nova depois do merge
 
-- **Sintoma:** a novidade já está na `main` do template (ex.: **Data Crazy** em `/integrations` → aba **Conversões e vendas** → card **Data Crazy**), mas a sua instância publicada não mostra.
+- **Sintoma:** a novidade já está na `main` do template (ex.: **Data Crazy** em `/integrations` → aba **Atendimento e vendas** → card **Data Crazy**), mas a sua instância publicada não mostra.
 - **Diagnóstico seguro:** confira (1) se o seu deploy usa o repositório público na `main` ou um fork seu — e, se for fork, se ele foi sincronizado; (2) a data/commit do último deploy da **API** no Dokploy e do último deploy do **web** na Vercel; (3) se o log de boot da API mostrou as migrations aplicadas.
 - **Causa provável:** só um dos lados foi atualizado (API nova com web antigo, ou o contrário), o fork não foi sincronizado, ou o web foi "reiniciado" em vez de ganhar um build novo — telas novas e `NEXT_PUBLIC_*` só entram em build novo.
 - **Correção:** siga [`update.md`](update.md): sincronize o fork (se houver) → redeploy da API no Dokploy (as migrations rodam sozinhas no boot) → novo deploy de produção do web a partir da `main`. **Não reinstale**: banco, administrador, `LICENSE_*` e chaves de criptografia continuam os mesmos. Se o painel **Webhooks de entrada** aparece como indisponível, a causa é outra — confira as envs `INBOUND_*` em [Recebo leads/webhooks mas não aparece Nova regra](#recebo-leadswebhooks-mas-não-aparece-nova-regra).
-- **Verificação:** `/health/ready` retorna `200`, o login segue com o mesmo administrador, e o card **Data Crazy** aparece em `/integrations` (aba **Conversões e vendas**; a conexão nasce em observação — é esperado).
+- **Verificação:** `/health/ready` retorna `200`, o login segue com o mesmo administrador, e o card **Data Crazy** aparece em `/integrations` (aba **Atendimento e vendas**; a conexão nasce em observação — é esperado).
 
 ## `/backoffice` diz "Não foi possível verificar atualizações"
 

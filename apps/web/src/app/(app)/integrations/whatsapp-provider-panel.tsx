@@ -88,6 +88,7 @@ export function WhatsappProviderPanel({
   loadEditAction,
   deleteAction,
   licenseLocked = false,
+  allowCreate = true,
 }: {
   connections: WhatsappConnectionDto[];
   /**
@@ -107,6 +108,8 @@ export function WhatsappProviderPanel({
    * the license is locked every write control is disabled.
    */
   licenseLocked?: boolean;
+  /** False for "Em breve" providers: existing connections stay manageable. */
+  allowCreate?: boolean;
 }) {
   const titleId = useId();
   const router = useRouter();
@@ -357,7 +360,14 @@ export function WhatsappProviderPanel({
         ))}
       </div>
 
-      {canManage ? (
+      {!allowCreate ? (
+        <p className="action-note" role="status">
+          Novas conexões deste provedor estão em breve. As conexões que você já
+          tem continuam disponíveis para testar, editar e excluir.
+        </p>
+      ) : null}
+
+      {canManage && allowCreate ? (
         <form
           className="inbound-webhook-create"
           onSubmit={submitCreate}

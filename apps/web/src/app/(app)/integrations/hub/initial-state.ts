@@ -29,11 +29,11 @@ export function integrationsHubInitialState(
   const notice = searchParams.notice ?? "";
 
   if (searchParams.meta === "connected" || searchParams.meta === "error") {
-    return { tab: "conversions", provider: "meta" };
+    return { tab: "ads", provider: "meta" };
   }
 
   if (notice.startsWith("meta-")) {
-    return { tab: "conversions", provider: "meta" };
+    return { tab: "ads", provider: "meta" };
   }
 
   const open = (searchParams.abrir ?? "").trim().toLowerCase();

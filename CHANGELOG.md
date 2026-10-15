@@ -10,14 +10,18 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 ### Changed
 
 - **Integrations hub** (`/integrations`, web only): the page is now a catalog
-  with tabs — **WhatsApp** (Uazapi, NOD API, WAHA, Z-API, WhatsApp Cloud API),
-  **Conversões e vendas** (Umbler Talk, Gupshup, Data Crazy, Meta Ads) and
-  **CRM** (Kommo) — with logo cards (**Ativo** / **Disponível**) and one
-  connection modal per platform. The modals reuse the existing panels, scoped
-  to the platform, so create/test/receiver/edit/delete behave as before. New
-  files: `apps/web/src/app/(app)/integrations/hub/*`,
+  with four tabs — **WhatsApp** (Uazapi, WAHA, WhatsApp Cloud API; Z-API and
+  NOD API show "Em breve"), **Atendimento e vendas** (Umbler Talk, Gupshup,
+  Data Crazy), **Anúncios** (Meta Ads: social login or token, traffic data and
+  CAPI conversions — it receives no conversations) and **CRM** (Kommo) — with
+  logo cards (**Ativo** / **Disponível**) and one connection modal per
+  platform. Z-API / NOD API: no new connections, but an existing one stays
+  active and manageable. The modals reuse the existing panels, scoped
+  to the platform. New files: `apps/web/src/app/(app)/integrations/hub/*`,
   `apps/web/src/components/modal.tsx`, logos in `apps/web/public/integrations/`
-  (see `SOURCES.md`; a missing logo falls back to the platform initials).
+  (see `SOURCES.md`; a missing logo falls back to the platform initials). Old
+  `?aba=conversoes|vendas` links open Atendimento e vendas; `?aba=anuncios`
+  opens Anúncios.
 - **Kommo moved from Settings to Integrations → CRM.** Same manager and
   safeguards; Settings keeps a shortcut card and the rule builder's Kommo
   option now links to the hub card (`kommoManagerAnchorId` →
@@ -38,7 +42,7 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   block (each hub modal is an entry of `panels` in `integrations/page.tsx`).
   Branding (`BRAND_*`), the residual footer, the fixed sidebar and the license
   guard are not touched.
-- **Verify:** open `/integrations` (three tabs, logo cards, your existing
+- **Verify:** open `/integrations` (four tabs, logo cards, your existing
   connections under **Ativos**); open a card and check its connections; as the
   owner open **CRM → Kommo**; as a member confirm there are no write buttons.
   **Roll back:** revert this change in the web and redeploy — no data changes.

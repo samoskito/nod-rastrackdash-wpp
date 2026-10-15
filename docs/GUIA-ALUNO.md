@@ -93,7 +93,7 @@ Logue com o administrador criado, crie seu primeiro workspace para um cliente fi
 
 ## 9. Conectar Meta Ads
 
-Você tem dois caminhos, ambos em **Integrações → Tokens, BMs e destinos**:
+Em `/integrations`, aba **Anúncios** → card **Meta Ads** (é a conexão de **anúncios**: traz os dados de tráfego, cruza com os leads e envia as conversões para a Meta/CAPI; ela **não** recebe conversas — isso é o **WhatsApp Cloud API**, na aba WhatsApp). Você tem dois caminhos, ambos em **Tokens, BMs e destinos**:
 
 - **Conectar Meta (PalmUP)** — o mais simples. Como **owner** do workspace, clique em **Conectar Meta (PalmUP)**, depois em **Abrir login da Meta**, autorize com o Facebook que acessa a BM do cliente, volte ao painel e clique em **Ja autorizei, concluir**. Você **não** precisa criar um app Meta próprio. Exige `PALMUP_META_BROKER_URL` na API (já vem no `.env.example`): é uma **URL pública**, não é segredo nem App Secret. O App Secret do app Meta da PalmUP **nunca** vai para a sua VPS. Detalhes em [`setup/environment.md`](setup/environment.md#palmup_meta_broker_url--login-social-meta-pela-palmup).
 - **Token permanente** — siga o [guia manual de Meta Ads](setup/meta-manual.md): criar/usar um usuário do sistema no Gerenciador de Negócios do cliente, gerar um token e colá-lo na UI de **Integrações** do workspace — nunca em `.env` público nem em chat. Esse token não expira; o do login social é um token de usuário, que a Meta pode expirar.
@@ -112,7 +112,9 @@ Essas duas orientações (**Trocar token** e **Reenviar bloqueados**) continuam 
 
 Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escolher — lá está o contrato completo, a matriz do que já funciona e o que ainda não. Em `/integrations` (o **Hub de Integrações**) cada plataforma é um **card** com a logo e o estado **Ativo** ou **Disponível**; clique no card para abrir a janela de conexão. Existem **dois tipos de conexão** e escolher o errado é o erro mais comum — eles ficam em abas diferentes:
 
-### 10.1 Aba WhatsApp — cards Uazapi, NOD API, WAHA, Z-API
+### 10.1 Aba WhatsApp — cards Uazapi, WAHA (e Z-API / NOD API como "Em breve")
+
+> **Z-API e NOD API aparecem como "Em breve"** para novas conexões. Se você já tinha uma conexão de um deles, ela continua aparecendo como **Ativo** e você segue podendo testar, editar e excluir; só não é possível criar novas por enquanto.
 
 São conexões **por workspace**, criadas na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
 
@@ -125,7 +127,7 @@ Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, 
 
 As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
 
-### 10.2 Aba Conversões e vendas — cards Umbler, Gupshup e Data Crazy (e WhatsApp Cloud API na aba WhatsApp)
+### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup e Data Crazy (e WhatsApp Cloud API na aba WhatsApp)
 
 Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
 

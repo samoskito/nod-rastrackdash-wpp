@@ -123,22 +123,41 @@ describe("integration registry", () => {
     }
   });
 
-  it("groups categories into the three hub tabs", () => {
+  it("groups categories into the four hub tabs (Meta concepts never mixed)", () => {
     expect(integrationTabs.map((tab) => tab.label)).toEqual([
       "WhatsApp",
-      "Conversões e vendas",
+      "Atendimento e vendas",
+      "Anúncios",
       "CRM",
     ]);
     expect(integrationTabForCategory("whatsapp_number")).toBe("whatsapp");
     expect(integrationTabForCategory("whatsapp_official")).toBe("whatsapp");
-    expect(integrationTabForCategory("attendance")).toBe("conversions");
-    expect(integrationTabForCategory("ads")).toBe("conversions");
+    expect(integrationTabForCategory("attendance")).toBe("attendance");
+    expect(integrationTabForCategory("ads")).toBe("ads");
+    // Cloud API (WhatsApp) and Meta Ads (traffic + CAPI) live in different tabs.
+    expect(integrationProviders.find((p) => p.id === "meta_cloud")?.logo).toBe(
+      "/integrations/meta.svg",
+    );
+    const inTab = (tab: string) =>
+      integrationProviders
+        .filter((p) => integrationTabForCategory(p.category) === tab)
+        .map((p) => p.id);
+    expect(inTab("whatsapp")).toEqual([
+      "uazapi_byo",
+      "waha",
+      "meta_cloud",
+      "zapi",
+      "nod_api",
+    ]);
+    expect(inTab("attendance")).toEqual(["umbler", "gupshup", "data_crazy"]);
+    expect(inTab("ads")).toEqual(["meta"]);
+    expect(inTab("crm")).toEqual(["kommo"]);
     expect(integrationTabForCategory("crm")).toBe("crm");
   });
 
   it("maps old and new deep links to a tab and modal", () => {
     expect(integrationDeepLinkFromHash("#integracao-meta")).toEqual({
-      tab: "conversions",
+      tab: "ads",
       provider: "meta",
     });
     expect(integrationDeepLinkFromHash("#integracao-whatsapp")).toEqual({
@@ -167,30 +186,39 @@ describe("integration registry", () => {
       provider: null,
     });
     expect(integrationTabFromQuery("crm")).toBe("crm");
-    expect(integrationTabFromQuery("conversoes")).toBe("conversions");
-    expect(integrationTabFromQuery("vendas")).toBe("conversions");
-    expect(integrationTabFromQuery("anuncios")).toBe("conversions");
+    expect(integrationTabFromQuery("atendimento")).toBe("attendance");
+    expect(integrationTabFromQuery("conversoes")).toBe("attendance");
+    expect(integrationTabFromQuery("vendas")).toBe("attendance");
+    expect(integrationTabFromQuery("anuncios")).toBe("ads");
+    expect(integrationDeepLinkFromHash("#integracao-conversoes")).toEqual({
+      tab: "attendance",
+      provider: null,
+    });
+    expect(integrationDeepLinkFromHash("#integracao-anuncios")).toEqual({
+      tab: "ads",
+      provider: null,
+    });
     expect(integrationTabFromQuery("nada")).toBeNull();
   });
 
   it("reopens the modal where a redirected action happened", () => {
     expect(integrationsHubInitialState({ meta: "connected" })).toEqual({
-      tab: "conversions",
+      tab: "ads",
       provider: "meta",
     });
     expect(
       integrationsHubInitialState({ notice: "meta-destination-saved" }),
-    ).toEqual({ tab: "conversions", provider: "meta" });
+    ).toEqual({ tab: "ads", provider: "meta" });
     expect(
       integrationsHubInitialState({ notice: "meta-license-locked" }),
-    ).toEqual({ tab: "conversions", provider: "meta" });
+    ).toEqual({ tab: "ads", provider: "meta" });
     // Server-side deep link used by Settings (no dependency on the URL hash).
     expect(integrationsHubInitialState({ abrir: "kommo" })).toEqual({
       tab: "crm",
       provider: "kommo",
     });
     expect(integrationsHubInitialState({ abrir: "umbler" })).toEqual({
-      tab: "conversions",
+      tab: "attendance",
       provider: "umbler",
     });
     expect(integrationsHubInitialState({ abrir: "nao-existe" })).toEqual({
@@ -244,15 +272,23 @@ describe("buildIntegrationCards", () => {
     const whatsapp = cardsForTab(cards, "whatsapp");
     expect(ids(whatsapp.active).sort()).toEqual(["uazapi_byo", "waha", "zapi"]);
     expect(ids(whatsapp.available).sort()).toEqual(["meta_cloud", "nod_api"]);
+    // "Em breve": never connectable; an existing connection stays manageable.
+    const nod = cards.find((card) => card.id === "nod_api");
+    expect(nod?.comingSoon).toBe(true);
+    expect(nod?.status).toEqual({ label: "Em breve", tone: "neutral" });
+    const existingZapi = cards.find((card) => card.id === "zapi");
+    expect(existingZapi?.state).toBe("active");
+    expect(existingZapi?.comingSoon).toBe(false);
 
     const uazapi = cards.find((card) => card.id === "uazapi_byo");
     expect(uazapi?.detail).toBe("1 conexão");
     const zapi = cards.find((card) => card.id === "zapi");
     expect(zapi?.status).toEqual({ label: "Aguardando ativação", tone: "warn" });
 
-    const conversions = cardsForTab(cards, "conversions");
-    expect(ids(conversions.active).sort()).toEqual(["meta", "umbler"]);
+    const conversions = cardsForTab(cards, "attendance");
+    expect(ids(conversions.active)).toEqual(["umbler"]);
     expect(ids(conversions.available)).toEqual(["gupshup"]);
+    expect(ids(cardsForTab(cards, "ads").active)).toEqual(["meta"]);
     expect(
       conversions.active.find((card) => card.id === "umbler")?.status.label,
     ).toBe("Enviando conversões");

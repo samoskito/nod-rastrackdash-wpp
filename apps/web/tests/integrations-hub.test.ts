@@ -78,13 +78,14 @@ function panel(name: RegExp) {
 }
 
 describe("integrations hub", () => {
-  it("renders the three tabs and separates active from available cards", () => {
+  it("renders the four tabs and separates active from available cards", () => {
     renderHub();
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "WhatsApp",
-      "Conversões e vendas2 2 ativas",
+      "Atendimento e vendas1 1 ativa",
+      "Anúncios1 1 ativa",
       "CRM1 1 ativa",
     ]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
@@ -100,15 +101,35 @@ describe("integrations hub", () => {
       within(availableGroup).getAllByText("Disponível").length,
     ).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("tab", { name: /Conversões e vendas/u }));
-    const conversions = panel(/Conversões e vendas/u);
+    fireEvent.click(screen.getByRole("tab", { name: /Atendimento e vendas/u }));
+    const conversions = panel(/Atendimento e vendas/u);
     const [convActive, convAvailable] =
       within(conversions).getAllByRole("region");
     expect(within(convActive).getByText("Umbler Talk")).toBeTruthy();
     expect(within(convActive).getByText("Em teste")).toBeTruthy();
-    expect(within(convActive).getByText("Meta Ads")).toBeTruthy();
+    expect(within(convActive).queryByText("Meta Ads")).toBeNull();
     expect(within(convAvailable).getByText("Gupshup")).toBeTruthy();
     expect(within(convAvailable).queryByText("Umbler Talk")).toBeNull();
+
+    // Meta Ads (traffic + CAPI) has its own tab, apart from Cloud API.
+    fireEvent.click(screen.getByRole("tab", { name: /Anúncios/u }));
+    expect(
+      within(panel(/Anúncios/u)).getByText("Meta Ads"),
+    ).toBeTruthy();
+  });
+
+  it("shows 'Em breve' cards as a badge, not connectable, outside Ativos", () => {
+    renderHub();
+
+    const nod = document.querySelector('[data-integration="nod_api"]')!;
+    expect(nod.getAttribute("data-coming-soon")).toBe("true");
+    expect(within(nod as HTMLElement).getByText("Em breve")).toBeTruthy();
+    const button = within(nod as HTMLElement).getByRole("button", {
+      name: "NOD API: em breve",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(nod.textContent).not.toContain("Conectar");
+    expect(nod.closest("[aria-labelledby$='-ativos']")).toBeNull();
   });
 
   it("switches tabs with click and arrow keys, keeping other tabs mounted", () => {
@@ -135,7 +156,7 @@ describe("integrations hub", () => {
   it("opens the provider modal from its card and closes it with Escape", async () => {
     renderHub();
 
-    fireEvent.click(screen.getByRole("tab", { name: /Conversões e vendas/u }));
+    fireEvent.click(screen.getByRole("tab", { name: /Atendimento e vendas/u }));
     const card = screen.getByRole("button", { name: "Conectar Gupshup" });
     fireEvent.click(card);
 
@@ -148,7 +169,7 @@ describe("integrations hub", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Gupshup" })).toBeNull();
     expect(document.body.style.overflow).toBe("");
-    expect(window.location.hash).toBe("#integracao-conversoes");
+    expect(window.location.hash).toBe("#integracao-atendimento");
   });
 
   it("closes from the close button and keeps the panel mounted while closed", () => {
@@ -181,7 +202,7 @@ describe("integrations hub", () => {
     );
     expect(
       screen
-        .getByRole("tab", { name: /Conversões e vendas/u })
+        .getByRole("tab", { name: /Anúncios/u })
         .getAttribute("aria-selected"),
     ).toBe("true");
     view.unmount();
@@ -226,7 +247,7 @@ describe("integrations hub", () => {
 
   it("shows the action notice inside the reopened modal, then above the tabs", () => {
     renderHub({
-      initialTab: "conversions",
+      initialTab: "ads",
       initialProvider: "meta",
       noticeProvider: "meta",
       notice: createElement("div", { role: "status" }, "Destino salvo"),
@@ -271,7 +292,7 @@ describe("integrations hub", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Conversões e vendas/u }));
+    fireEvent.click(screen.getByRole("tab", { name: /Atendimento e vendas/u }));
     const links = screen.getAllByRole("link", { name: /Regras de conversão/u });
     expect(links).toHaveLength(1);
     expect(

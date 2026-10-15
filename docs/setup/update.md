@@ -96,12 +96,12 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 
 ### Exemplo: depois da atualização com Data Crazy
 
-- Em `/integrations` → aba **Conversões e vendas**, o card **Data Crazy** aparece (em **Disponíveis** ou **Ativos**).
+- Em `/integrations` → aba **Atendimento e vendas**, o card **Data Crazy** aparece (em **Disponíveis** ou **Ativos**).
 - Ao gerar o webhook, a conexão nasce **em observação** — é esperado. Ela só vai para produção depois de uma entrega **CTWA real** ser processada e o parser **Data Crazy v1** ser certificado no backoffice.
 - Não existe canal/número provisório: o canal aparece sozinho após o primeiro webhook. E só mensagens inbound com **CTWA** viram lead.
 - Passo a passo completo da conexão: [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy--conexão-de-webhook-de-entrada-ctwa) e passo 10.2 do [Guia do Aluno](../GUIA-ALUNO.md#102-painel-webhooks-de-entrada--umbler-gupshup-data-crazy-e-meta-whatsapp-cloud-api).
 
-Se a aba **Conversões e vendas** nem aparece, ou o card Data Crazy não está lá, veja [Não apareceu Data Crazy / feature nova depois do merge](troubleshooting.md#não-apareceu-data-crazy--feature-nova-depois-do-merge).
+Se a aba **Atendimento e vendas** nem aparece, ou o card Data Crazy não está lá, veja [Não apareceu Data Crazy / feature nova depois do merge](troubleshooting.md#não-apareceu-data-crazy--feature-nova-depois-do-merge).
 
 ## Conversões Meta depois desta atualização (Trocar token)
 

@@ -23,7 +23,12 @@ export const integrationCategories = [
 
 export type IntegrationCategory = (typeof integrationCategories)[number];
 
-export const integrationTabIds = ["whatsapp", "conversions", "crm"] as const;
+export const integrationTabIds = [
+  "whatsapp",
+  "attendance",
+  "ads",
+  "crm",
+] as const;
 
 export type IntegrationTabId = (typeof integrationTabIds)[number];
 
@@ -36,6 +41,8 @@ export type IntegrationTabDefinition = {
   aliases: readonly string[];
   /** Hash that selects the tab (`#integracao-whatsapp`, ...). */
   hash: string;
+  /** Older hashes that still select this tab. */
+  hashAliases: readonly string[];
   description: string;
   categories: readonly IntegrationCategory[];
 };
@@ -47,19 +54,32 @@ export const integrationTabs: readonly IntegrationTabDefinition[] = [
     query: "whatsapp",
     aliases: [],
     hash: "integracao-whatsapp",
+    hashAliases: [],
     description:
-      "Os números que recebem as conversas dos anúncios: pela sua instância (Uazapi, NOD API, WAHA, Z-API) ou pela API oficial da Meta.",
+      "Por onde as conversas dos anúncios chegam: a sua instância (Uazapi, WAHA) ou a API oficial do WhatsApp (Cloud API), conectada direto à Meta.",
     categories: ["whatsapp_number", "whatsapp_official"],
   },
   {
-    id: "conversions",
-    label: "Conversões e vendas",
-    query: "conversoes",
-    aliases: ["vendas", "anuncios"],
-    hash: "integracao-conversoes",
+    id: "attendance",
+    label: "Atendimento e vendas",
+    query: "atendimento",
+    aliases: ["conversoes", "vendas"],
+    hash: "integracao-atendimento",
+    hashAliases: ["integracao-conversoes"],
     description:
-      "As plataformas de atendimento que entregam as mensagens dos anúncios e a conta Meta que recebe as conversões.",
-    categories: ["attendance", "ads"],
+      "As plataformas de atendimento e vendas que entregam as mensagens dos anúncios para o RastrackDash.",
+    categories: ["attendance"],
+  },
+  {
+    id: "ads",
+    label: "Anúncios",
+    query: "anuncios",
+    aliases: [],
+    hash: "integracao-anuncios",
+    hashAliases: [],
+    description:
+      "A conta de anúncios da Meta: traz os dados de tráfego, cruza com os seus leads e envia as conversões para a Meta (CAPI). Não recebe conversas.",
+    categories: ["ads"],
   },
   {
     id: "crm",
@@ -67,6 +87,7 @@ export const integrationTabs: readonly IntegrationTabDefinition[] = [
     query: "crm",
     aliases: [],
     hash: "integracao-crm",
+    hashAliases: [],
     description:
       "Quando o lead avança no funil do CRM, a conversão chega à Meta. Conectado uma vez para a conta inteira.",
     categories: ["crm"],
@@ -75,9 +96,9 @@ export const integrationTabs: readonly IntegrationTabDefinition[] = [
 
 export const integrationCategoryLabels: Record<IntegrationCategory, string> = {
   whatsapp_number: "Instância WhatsApp",
-  whatsapp_official: "API oficial",
-  attendance: "Plataforma de atendimento",
-  ads: "Anúncios",
+  whatsapp_official: "API oficial da Meta",
+  attendance: "Atendimento e vendas",
+  ads: "Anúncios (Meta Ads)",
   crm: "CRM",
 };
 
@@ -124,6 +145,11 @@ export type IntegrationProviderDefinition = {
   category: IntegrationCategory;
   /** Public path of the logo (swap the file to change the artwork). */
   logo: string;
+  /**
+   * "Em breve": new connections are not offered yet. A provider that already
+   * has connections stays manageable (existing data is never hidden).
+   */
+  comingSoon?: boolean;
   /** Short initials shown if the logo file is missing or fails to load. */
   initials: string;
   /**
@@ -141,9 +167,9 @@ type LogoAsset = { file: string; surface: "dark" | "light" };
 const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   uazapi_byo: { file: "uazapi.svg", surface: "dark" },
   nod_api: { file: "nod-api.svg", surface: "dark" },
-  waha: { file: "waha.svg", surface: "dark" },
+  waha: { file: "waha.png", surface: "light" },
   zapi: { file: "zapi.svg", surface: "dark" },
-  meta_cloud: { file: "meta-cloud.svg", surface: "dark" },
+  meta_cloud: { file: "meta.svg", surface: "dark" },
   umbler: { file: "umbler.svg", surface: "light" },
   gupshup: { file: "gupshup.svg", surface: "light" },
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
@@ -172,34 +198,15 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     gate: { kind: "whatsapp_provider", provider: "uazapi_byo" },
   },
   {
-    id: "nod_api",
-    name: "NOD API",
-    category: "whatsapp_number",
-    logo: integrationLogoPath("nod_api"),
-    initials: "NOD",
-    logoSurface: logoSurface("nod_api"),
-    description: "Conecte a instância NOD API (PalmUP) do seu WhatsApp.",
-    gate: { kind: "whatsapp_provider", provider: "nod_api" },
-  },
-  {
     id: "waha",
     name: "WAHA",
     category: "whatsapp_number",
     logo: integrationLogoPath("waha"),
     initials: "WA",
     logoSurface: logoSurface("waha"),
-    description: "Conecte a sua instalação WAHA (WhatsApp HTTP API).",
+    description:
+      "Conecte a sua instalação WAHA (WhatsApp HTTP API).",
     gate: { kind: "whatsapp_provider", provider: "waha" },
-  },
-  {
-    id: "zapi",
-    name: "Z-API",
-    category: "whatsapp_number",
-    logo: integrationLogoPath("zapi"),
-    initials: "Z",
-    logoSurface: logoSurface("zapi"),
-    description: "Conecte a sua instância Z-API.",
-    gate: { kind: "whatsapp_provider", provider: "zapi" },
   },
   {
     id: "meta_cloud",
@@ -209,8 +216,32 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     initials: "WA",
     logoSurface: logoSurface("meta_cloud"),
     description:
-      "Receba as conversas dos anúncios direto pelo app da Meta, sem instância intermediária.",
+      "Gera o webhook que conecta direto à Meta (API oficial do WhatsApp) para receber as conversas dos anúncios, sem instância intermediária.",
     gate: { kind: "inbound_provider", provider: "meta_cloud" },
+  },
+  {
+    id: "zapi",
+    name: "Z-API",
+    category: "whatsapp_number",
+    logo: integrationLogoPath("zapi"),
+    initials: "Z",
+    logoSurface: logoSurface("zapi"),
+    comingSoon: true,
+    description:
+      "Em breve: a conexão com a Z-API ainda não está disponível para novas contas.",
+    gate: { kind: "whatsapp_provider", provider: "zapi" },
+  },
+  {
+    id: "nod_api",
+    name: "NOD API",
+    category: "whatsapp_number",
+    logo: integrationLogoPath("nod_api"),
+    initials: "NOD",
+    logoSurface: logoSurface("nod_api"),
+    comingSoon: true,
+    description:
+      "Em breve: a conexão com a NOD API ainda não está disponível para novas contas.",
+    gate: { kind: "whatsapp_provider", provider: "nod_api" },
   },
   {
     id: "umbler",
@@ -219,7 +250,8 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     logo: integrationLogoPath("umbler"),
     initials: "Um",
     logoSurface: logoSurface("umbler"),
-    description: "Receba as conversas de anúncio que chegam no Umbler Talk.",
+    description:
+      "Receba as conversas de anúncio que chegam no Umbler Talk.",
     gate: { kind: "inbound_provider", provider: "umbler" },
   },
   {
@@ -229,7 +261,8 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     logo: integrationLogoPath("gupshup"),
     initials: "Gs",
     logoSurface: logoSurface("gupshup"),
-    description: "Receba as conversas de anúncio que chegam na Gupshup.",
+    description:
+      "Receba as conversas de anúncio que chegam na Gupshup.",
     gate: { kind: "inbound_provider", provider: "gupshup" },
   },
   {
@@ -239,7 +272,8 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     logo: integrationLogoPath("data_crazy"),
     initials: "DC",
     logoSurface: logoSurface("data_crazy"),
-    description: "Receba as conversas de anúncio que chegam na Data Crazy.",
+    description:
+      "Receba as conversas de anúncio que chegam na Data Crazy.",
     gate: { kind: "inbound_provider", provider: "data_crazy" },
   },
   {
@@ -250,7 +284,7 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     initials: "Mt",
     logoSurface: logoSurface("meta"),
     description:
-      "Conecte a conta de anúncios, o Pixel e a página que recebem as conversões.",
+      "Conecte a conta de anúncios por login social ou token: traz os dados de tráfego, cruza com os leads e envia as conversões para a Meta (CAPI). Não recebe conversas.",
     gate: { kind: "always" },
   },
   {
@@ -260,7 +294,8 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     logo: integrationLogoPath("kommo"),
     initials: "Ko",
     logoSurface: logoSurface("kommo"),
-    description: "Envie conversões quando o lead muda de etapa no Kommo.",
+    description:
+      "Envie conversões quando o lead muda de etapa no Kommo.",
     gate: { kind: "crm", provider: "kommo" },
   },
 ];
@@ -335,7 +370,9 @@ export function integrationDeepLinkFromHash(
     return { tab: null, provider: null };
   }
 
-  const tab = integrationTabs.find((item) => item.hash === value);
+  const tab = integrationTabs.find(
+    (item) => item.hash === value || item.hashAliases.includes(value),
+  );
   if (tab) {
     return { tab: tab.id, provider: null };
   }

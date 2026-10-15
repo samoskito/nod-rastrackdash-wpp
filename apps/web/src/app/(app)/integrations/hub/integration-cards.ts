@@ -27,6 +27,8 @@ export type IntegrationCardView = {
   category: IntegrationCategory;
   tab: IntegrationTabId;
   state: "active" | "available";
+  /** "Em breve": no new connections yet; the card is not connectable. */
+  comingSoon: boolean;
   status: IntegrationCardStatus;
   /** Short fact under the name, e.g. "2 conexões". */
   detail: string | null;
@@ -77,6 +79,12 @@ function plural(count: number, singular: string, pluralWord: string): string {
 }
 
 type CardDecision = Pick<IntegrationCardView, "state" | "status" | "detail">;
+
+const comingSoonDecision: CardDecision = {
+  state: "available",
+  status: { label: "Em breve", tone: "neutral" },
+  detail: null,
+};
 
 const available: CardDecision = {
   state: "available",
@@ -137,6 +145,7 @@ function inboundDecision(
 function whatsappDecision(
   snapshot: IntegrationHubSnapshot,
   provider: WhatsappIntegrationProvider,
+  comingSoon: boolean,
 ): CardDecision {
   const { loaded, connections, legacyUazapiInstances } = snapshot.whatsapp;
   const own = connections.filter(
@@ -145,6 +154,11 @@ function whatsappDecision(
   const legacy = provider === "uazapi_byo" ? legacyUazapiInstances : 0;
 
   if (own.length === 0 && legacy === 0) {
+    // Not connectable yet, and nothing existing to manage.
+    if (comingSoon) {
+      return comingSoonDecision;
+    }
+
     return loaded
       ? available
       : {
@@ -267,7 +281,7 @@ function decide(
 
   switch (gate.kind) {
     case "whatsapp_provider":
-      return whatsappDecision(snapshot, gate.provider);
+      return whatsappDecision(snapshot, gate.provider, Boolean(definition.comingSoon));
     case "inbound_provider":
       return inboundDecision(snapshot, gate.provider);
     case "crm":
@@ -301,6 +315,9 @@ export function buildIntegrationCards(
         description: definition.description,
         category: definition.category,
         tab: integrationTabForCategory(definition.category),
+        // Existing connections keep a coming-soon provider manageable, so the
+        // card is only "coming soon" while it is not active.
+        comingSoon: Boolean(definition.comingSoon) && decision.state !== "active",
         ...decision,
       },
     ];

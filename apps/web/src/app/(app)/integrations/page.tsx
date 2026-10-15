@@ -1122,10 +1122,14 @@ export default async function IntegrationsPage({
     href: "/settings#configuracao-conversoes",
   };
 
-  function whatsappProviderPanel(provider: WhatsappProviderId) {
+  function whatsappProviderPanel(
+    provider: WhatsappProviderId,
+    allowCreate = true,
+  ) {
     return (
       <WhatsappProviderPanel
         provider={provider}
+        allowCreate={allowCreate}
         connections={whatsappConnectionsResult.data}
         canManage={canManageIntegrations}
         createAction={createWhatsappConnectionAction}
@@ -1534,11 +1538,24 @@ export default async function IntegrationsPage({
     </div>
   );
 
+  // Z-API and NOD API are "Em breve": no new connections, but a workspace
+  // that already has one keeps managing it (existing data is never hidden).
+  const comingSoonPanels: Partial<Record<IntegrationProviderId, ReactNode>> =
+    {};
+  for (const provider of ["zapi", "nod_api"] as const) {
+    if (
+      whatsappConnectionsResult.data.some(
+        (connection) => connection.provider === provider,
+      )
+    ) {
+      comingSoonPanels[provider] = whatsappProviderPanel(provider, false);
+    }
+  }
+
   const panels: Partial<Record<IntegrationProviderId, ReactNode>> = {
     uazapi_byo: uazapiPanel,
-    nod_api: whatsappProviderPanel("nod_api"),
+    ...comingSoonPanels,
     waha: whatsappProviderPanel("waha"),
-    zapi: whatsappProviderPanel("zapi"),
     meta_cloud: inboundPanel("meta_cloud"),
     umbler: inboundPanel("umbler"),
     gupshup: inboundPanel("gupshup"),
@@ -1723,7 +1740,7 @@ export default async function IntegrationsPage({
         }}
         tabIntro={{
           whatsapp: whatsappIntro,
-          conversions: inboundErrorBanner,
+          attendance: inboundErrorBanner,
           crm: !workspace || canManageKommo ? undefined : crmOwnerOnlyNote,
         }}
         initialTab={initialHubState.tab}

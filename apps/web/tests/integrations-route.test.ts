@@ -57,12 +57,13 @@ describe("integrations route", () => {
     expect(html).not.toContain("Mapa das conexoes");
     expect(html).not.toContain('aria-label="Atalhos das integracoes"');
     expect(html).toContain('role="tablist"');
-    for (const tab of ["WhatsApp", "Conversões e vendas", "CRM"]) {
+    for (const tab of ["WhatsApp", "Atendimento e vendas", "Anúncios", "CRM"]) {
       expect(html).toContain(`<span>${tab}</span>`);
     }
     for (const id of [
       "integracao-whatsapp",
-      "integracao-conversoes",
+      "integracao-atendimento",
+      "integracao-anuncios",
       "integracao-crm",
       "integracao-fluxo",
     ]) {
@@ -958,7 +959,7 @@ describe("integrations route", () => {
     expect(html).not.toContain("Remover QR");
     // Scoped modals: the provider is fixed per card, no provider picker.
     expect(html).toContain('name="provider" value="waha"');
-    expect(html).toContain('name="provider" value="nod_api"');
+    expect(html).toContain('name="provider" value="uazapi_byo"');
     expect(html).not.toContain("<span class=\"field-label\">Provedor</span>");
   });
 
@@ -1063,7 +1064,7 @@ describe("integrations route", () => {
       "Licença bloqueada: criar, alterar e remover conexões está",
     );
     expect(locked.match(/<fieldset class="license-lock-scope" disabled=""/g)?.length)
-      .toBeGreaterThanOrEqual(5);
+      .toBeGreaterThanOrEqual(3);
     expect(locked).toContain("Excluir");
 
     vi.restoreAllMocks();
@@ -1073,6 +1074,55 @@ describe("integrations route", () => {
     );
     expect(unlocked).not.toContain('class="license-lock-scope" disabled=""');
     expect(unlocked).not.toContain("Licença bloqueada: criar, testar");
+  });
+
+  it("shows Z-API and NOD API as 'Em breve' without a modal, but keeps existing connections manageable", async () => {
+    mockWave7IntegrationsFetch({ canManage: true });
+    const none = renderToStaticMarkup(
+      createElement("div", null, await IntegrationsPage({})),
+    );
+
+    for (const id of ["zapi", "nod_api"]) {
+      expect(none).toContain(
+        `data-integration="${id}" data-state="available" data-coming-soon="true"`,
+      );
+      expect(none).not.toContain(`id="integration-modal-${id}"`);
+    }
+    expect(none).toContain("Z-API: em breve");
+    // Cloud API is the only Meta WhatsApp card; Meta Ads is its own tab.
+    expect((none.match(/data-integration="meta_cloud"/g) ?? []).length).toBeLessThanOrEqual(1);
+    expect(none).toContain('src="/integrations/meta.svg"');
+    expect(none).not.toContain("meta-cloud.svg");
+
+    vi.restoreAllMocks();
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/integrations/whatsapp-connections": [
+          {
+            id: "connection_zapi",
+            name: "Z-API Antiga",
+            displayName: null,
+            provider: "zapi",
+            status: "active",
+            lastHealthStatus: null,
+            lastHealthCheckedAt: null,
+            createdAt: "2026-07-02T03:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const existing = renderToStaticMarkup(
+      createElement("div", null, await IntegrationsPage({})),
+    );
+
+    expect(existing).toContain('data-integration="zapi" data-state="active"');
+    expect(existing).not.toContain('data-integration="zapi" data-state="active" data-coming-soon');
+    expect(existing).toContain('id="integration-modal-zapi"');
+    expect(existing).toContain("Z-API Antiga");
+    expect(existing).toContain("Novas conexões deste provedor estão em breve");
+    expect(existing).toContain("Excluir");
+    expect(existing).not.toContain('name="provider" value="zapi"');
   });
 
   it("shows a generic inbound detail error without payload or secret data", async () => {

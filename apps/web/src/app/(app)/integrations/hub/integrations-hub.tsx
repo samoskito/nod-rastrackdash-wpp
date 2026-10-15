@@ -353,15 +353,20 @@ function IntegrationCard({
       className={`integration-hub-card${isActive ? " is-active" : ""}`}
       data-integration={card.id}
       data-state={card.state}
+      data-coming-soon={card.comingSoon ? "true" : undefined}
     >
       <button
         className="integration-hub-card-main"
         type="button"
         onClick={onOpen}
-        disabled={!hasPanel}
+        disabled={!hasPanel || card.comingSoon}
         aria-haspopup="dialog"
         aria-controls={modalIdFor(card.id)}
-        aria-label={`${isActive ? "Gerenciar" : "Conectar"} ${card.name}`}
+        aria-label={
+          card.comingSoon
+            ? `${card.name}: em breve`
+            : `${isActive ? "Gerenciar" : "Conectar"} ${card.name}`
+        }
       >
         <span className={`integration-logo on-${card.logoSurface}`}>
           <IntegrationLogoImage src={card.logo} initials={card.initials} />
@@ -384,13 +389,15 @@ function IntegrationCard({
           ) : null}
         </div>
         {/* Visual cue only: the whole card is the button above. */}
-        <span
-          className={`integration-hub-card-cta${isActive ? "" : " primary"}`}
-          aria-hidden="true"
-        >
-          {isActive ? <Settings2 size={15} /> : <Plug size={15} />}
-          {isActive ? "Gerenciar" : "Conectar"}
-        </span>
+        {card.comingSoon ? null : (
+          <span
+            className={`integration-hub-card-cta${isActive ? "" : " primary"}`}
+            aria-hidden="true"
+          >
+            {isActive ? <Settings2 size={15} /> : <Plug size={15} />}
+            {isActive ? "Gerenciar" : "Conectar"}
+          </span>
+        )}
         {quickLinks.length > 0 ? (
           <div className="integration-hub-card-links">
             {quickLinks.map((link) => (
