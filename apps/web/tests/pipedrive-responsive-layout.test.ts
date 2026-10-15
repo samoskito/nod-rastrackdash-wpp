@@ -25,6 +25,21 @@ describe("Pipedrive panel layout", () => {
     );
   });
 
+  it("gives the edit rule form the same inner spacing as Nova regra on desktop only", () => {
+    const match = css.match(
+      /@media \(min-width: 701px\) \{\s*\.pipedrive-conversion-panel \.provider-conversion-rule-scope > form\.provider-conversion-builder \{([^}]*)\}/,
+    );
+    expect(match).not.toBeNull();
+    const body = match?.[1] ?? "";
+    const builder = block(".provider-conversion-builder");
+    expect(builder).toMatch(/padding:\s*18px 16px/);
+    expect(builder).toMatch(/gap:\s*18px/);
+    expect(body).toMatch(/padding:\s*18px 16px/);
+    expect(body).toMatch(/gap:\s*18px/);
+    // No unscoped override: phones keep the current layout.
+    expect(css).not.toMatch(/^\.pipedrive-conversion-panel \.provider-conversion-rule-scope > form/m);
+  });
+
   it("aligns readiness badges in a fixed column with shrinkable text", () => {
     expect(block(".pipedrive-readiness li")).toMatch(/display:\s*grid/);
     expect(block(".pipedrive-readiness li")).toMatch(/grid-template-columns:\s*[\d.]+rem minmax\(0, 1fr\)/);

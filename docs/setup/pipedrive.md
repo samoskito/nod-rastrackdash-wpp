@@ -123,3 +123,4 @@ backoffice ou pelo script de remoção apaga essas linhas antes.
 | Gravações respondem 423 | Licença bloqueada — veja `/backoffice/license`. |
 | Registro "lead não encontrado" ou "ambíguo" | Telefone da pessoa no Pipedrive não bate com exatamente um lead do workspace. |
 | Lead sem anúncio não envia | Número não autorizado, destino página/pixel não verificado, ou `INBOUND_WEBHOOKS_ENABLED`/`INBOUND_WEBHOOK_PRODUCTION_ENABLED` desligadas. |
+| Painel mostra "Envio automático disponível", mas lead sem anúncio não chega na Meta | O painel não confere `INBOUND_WEBHOOKS_ENABLED`/`INBOUND_WEBHOOK_PRODUCTION_ENABLED`: com qualquer uma delas desligada, a conversão de lead sem ID do anúncio é pulada (`inbound_production_disabled`, "produção de webhooks desativada"). Confira as duas no `.env` (ou nas envs do serviço) da API, ponha `true` e reinicie a API. |
