@@ -136,10 +136,16 @@ describe("CRM page/pixel destination for numbers of any provider", () => {
   });
 
   it("keeps Unnichat resolution identical with or without CRM mode", async () => {
-    for (const make of [() => pagePixelHarness(), () => ctwaHarness()]) {
+    // The student edition resolves only the verified page/pixel pair; a
+    // destination verified solely through a WABA binding stays blocked, the
+    // same with or without CRM mode.
+    for (const [make, kind] of [
+      [() => pagePixelHarness(), "authorized_ctwa_destination"],
+      [() => ctwaHarness(), "blocked_ctwa_destination"],
+    ] as const) {
       const h = make();
       const canonical = await resolveCtwaDestination(h.prisma, h.channel);
-      expect(canonical.kind).toBe("authorized_ctwa_destination");
+      expect(canonical.kind).toBe(kind);
       expect(await crmChannelDestination(h.prisma, h.channel)).toEqual(
         canonical,
       );

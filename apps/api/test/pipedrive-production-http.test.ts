@@ -1,3 +1,5 @@
+import { LicenseClientModule } from "../src/licensing-client/license-client.module";
+import { OfflinePipedriveLicenseModule } from "./support/pipedrive-http-harness";
 import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -42,6 +44,8 @@ it("offline real Nest DI: owner activation -> durable HTTP202 -> worker -> canon
     supportContext: null,
   };
   const mod = await Test.createTestingModule({ imports: [PipedriveModule] })
+    .overrideModule(LicenseClientModule)
+    .useModule(OfflinePipedriveLicenseModule)
     .overrideModule(IntegrationsModule)
     .useModule(OfflinePipedriveIntegrationsModule)
     .overrideModule(QueueModule)

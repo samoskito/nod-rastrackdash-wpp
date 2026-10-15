@@ -1,4 +1,3 @@
-import { PipedriveWorkspaceEnabledGuard } from "../src/pipedrive/pipedrive-feature-gate";
 import "reflect-metadata";
 import { UnauthorizedException, type ExecutionContext } from "@nestjs/common";
 import {
@@ -88,7 +87,7 @@ describe("Pipedrive authenticated controller and module", () => {
         "workspaces/:workspaceId/pipedrive/connections",
       );
       expect(Reflect.getMetadata(GUARDS_METADATA, PipedriveController)).toEqual(
-        [WorkspaceOwnerGuard, PipedriveWorkspaceEnabledGuard],
+        [WorkspaceOwnerGuard],
       );
       for (const method of [
         "list",
@@ -271,7 +270,7 @@ describe("Pipedrive authenticated controller and module", () => {
                 body,
                 h.req,
               ),
-        ).toThrow("Payload invalido");
+        ).toThrow("Payload inválido");
         expect(h.adapter.verify).not.toHaveBeenCalled();
         expect(h.state.pipedriveConnection).toHaveLength(0);
       } finally {

@@ -110,7 +110,7 @@ describe("Pipedrive additive read model and authored SQL contract", () => {
     const sql = readFileSync(
       resolve(
         __dirname,
-        "../prisma/migrations/20261013180000_pipedrive_integration/migration.sql",
+        "../prisma/migrations/20261016120000_pipedrive_integration/migration.sql",
       ),
       "utf8",
     );

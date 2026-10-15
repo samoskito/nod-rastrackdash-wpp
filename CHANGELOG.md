@@ -61,6 +61,27 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 4c — Pipedrive CRM (API + shared)**, ported from the SaaS without
+  its pilot flags (`PIPEDRIVE_PANEL_*`, `PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED`):
+  owner-managed connections (API token sealed with the new optional
+  `PIPEDRIVE_CRM_ENCRYPTION_KEY`, Base64 32 bytes, must differ from
+  `KOMMO_CRM_ENCRYPTION_KEY`; an invalid or reused value fails boot, an unset
+  value keeps boot unchanged), pipeline/stage catalog, stage and "deal won"
+  rules (observation → production per rule, owner-activated, only for
+  notices after activation), Webhooks v2 `deal`/`change` ingress at
+  `POST /webhooks/pipedrive/v1/:connectionId?token=…` (durable `202`, person
+  lookup and lead match in the worker). Every write needs the license: HTTP
+  writes (including the webhook) get the global `423`, and the worker and the
+  sender stop while the license is locked. Additive migration
+  `20261016120000_pipedrive_integration` (six `Pipedrive*` tables). Guide:
+  `docs/setup/pipedrive.md`.
+- **Kommo leads without an ad id (API)**: a lead with `ctwa_clid` and no ad
+  id is now sent through the verified workspace page + pixel when it entered
+  through a number authorized on the Kommo connection that inherits the
+  workspace destination (same as the SaaS). Ad leads keep the route path; an
+  ad lead with a known destination but no authorized route is refused as
+  `lead_channel_route_unauthorized` for any provider (SaaS code). No
+  `ctwa_clid` → nothing is sent (Kommo and Pipedrive).
 - **Fase 4.0 — CTWA purchase foundation (API)**, ported from the SaaS with
   the same behavior and no new env var, dependency or Meta permission:
   - **Data Crazy, Gupshup and Umbler (messages) can go to production by

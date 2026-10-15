@@ -2025,12 +2025,11 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
         if (routes.length === 1)
           return { lead: provenLead, route: routes[0], destination };
       }
-      // Same refusal codes as before for a lead without a matching route: a
-      // lead with no WhatsApp instance keeps "attribution unproven".
-      if (lead.whatsappInstanceId)
-        adError = destination
-          ? "lead_channel_route_unauthorized"
-          : "lead_destination_unproven";
+      // Same refusal codes as the SaaS for an ad lead without a matching
+      // route (any provider: UAZAPI by instance, official API by receipt).
+      adError = destination
+        ? "lead_channel_route_unauthorized"
+        : "lead_destination_unproven";
     }
     // CTWA path (as the SaaS): Meta CAPI needs only pixel + page + ctwa_clid.
     // Without ctwa_clid there is no proof and nothing is sent. A number bound

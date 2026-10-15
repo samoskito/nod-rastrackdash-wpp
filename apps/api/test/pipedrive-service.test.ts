@@ -100,7 +100,7 @@ describe("Pipedrive connections and catalog", () => {
       ])
         await expect(operation()).rejects.toMatchObject({
           status: 404,
-          message: "Conexao Pipedrive nao encontrada",
+          message: "Conexão Pipedrive não encontrada",
         });
     }
     expect(h.state.pipedriveConnection).toHaveLength(1);
@@ -332,11 +332,13 @@ describe("Pipedrive connections and catalog", () => {
           Buffer.alloc(32, 8).toString("base64"),
         );
       if (kind === "kommo") {
-        vi.stubEnv("KOMMO_CRM_ENCRYPTION_KEY", key);
+        // The Kommo key must differ from the Pipedrive key (boot validation).
+        const kommoKey = Buffer.alloc(32, 9).toString("base64");
+        vi.stubEnv("KOMMO_CRM_ENCRYPTION_KEY", kommoKey);
         const iv = Buffer.alloc(12, 3);
         const cipher = createCipheriv(
           "aes-256-gcm",
-          Buffer.from(key, "base64"),
+          Buffer.from(kommoKey, "base64"),
           iv,
         );
         cipher.setAAD(Buffer.from(`wpptrack:kommo-token:v1:${row.id}`));
@@ -366,7 +368,7 @@ describe("Pipedrive connections and catalog", () => {
       h.service.create("workspace-a", actor, createInput),
     ).rejects.toMatchObject({
       status: 409,
-      message: "Conta Pipedrive ja conectada neste workspace",
+      message: "Conta Pipedrive já conectada neste workspace",
     });
     expect(h.state.pipedriveConnection).toHaveLength(1);
     expect(h.state.auditLog).toHaveLength(1);

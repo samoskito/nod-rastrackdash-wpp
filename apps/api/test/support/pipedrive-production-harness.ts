@@ -77,7 +77,7 @@ export async function productionHarness() {
   }
   const fetcher = vi.fn(
     async (_url: string, _request: RequestInit) =>
-      new Response('{"events_received":1}', { status: 200 }),
+      new Response('{"events_received":1,"messages":[],"fbtrace_id":"synthetic-trace"}', { status: 200 }),
   );
   const resolver = {
     hasNormalizedConnections: vi.fn(async () => true),

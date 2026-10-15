@@ -1,3 +1,8 @@
+import { LicenseClientModule } from "../src/licensing-client/license-client.module";
+import {
+  OfflinePipedriveLicenseModule,
+  offlineLicense,
+} from "./support/pipedrive-http-harness";
 import { IntegrationsModule } from "../src/integrations/integrations.module";
 import { OfflinePipedriveIntegrationsModule } from "./support/pipedrive-http-harness";
 import "reflect-metadata";
@@ -15,7 +20,10 @@ import { PipedriveAdapter } from "../src/pipedrive/pipedrive.adapter";
 import { PipedriveModule } from "../src/pipedrive/pipedrive.module";
 import { createInput, pipedriveHarness } from "./support/pipedrive-harness";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 it("runs authenticated connection/catalog flow through real Nest/Express streams with synthetic dependencies", async () => {
   vi.stubEnv(
     "PIPEDRIVE_CRM_ENCRYPTION_KEY",
@@ -23,6 +31,8 @@ it("runs authenticated connection/catalog flow through real Nest/Express streams
   );
   const h = pipedriveHarness();
   const module = await Test.createTestingModule({ imports: [PipedriveModule] })
+    .overrideModule(LicenseClientModule)
+    .useModule(OfflinePipedriveLicenseModule)
     .overrideModule(IntegrationsModule)
     .useModule(OfflinePipedriveIntegrationsModule)
     .overrideModule(QueueModule)
@@ -80,6 +90,39 @@ it("runs authenticated connection/catalog flow through real Nest/Express streams
       (await call("PATCH", `${path}/status`, { status: "blocked" })).status,
     ).toBe(400);
     expect((await call("POST", `${path}/refresh-catalog`)).status).toBe(201);
+    // Student edition: a locked license keeps reads and blocks every write
+    // (management and the public webhook) with the global HTTP 423.
+    // The guard caches a decision for 60s: move the clock past it.
+    const realNow = Date.now.bind(Date);
+    const clock = vi.spyOn(Date, "now").mockImplementation(
+      () => realNow() + 61_000,
+    );
+    offlineLicense.locked = true;
+    try {
+      expect((await call("GET", path)).status).toBe(200);
+      const locked = await call("POST", base, createInput);
+      expect(locked).toMatchObject({
+        status: 423,
+        body: { statusCode: 423, error: "License Locked", reason: "revoked" },
+      });
+      expect(
+        (await call("PATCH", `${path}/status`, { status: "paused" })).status,
+      ).toBe(423);
+      expect(
+        (
+          await call(
+            "POST",
+            `/webhooks/pipedrive/v1/${result.body.id}?token=synthetic`,
+            {},
+            false,
+          )
+        ).status,
+      ).toBe(423);
+      expect(h.state.pipedriveConnection).toHaveLength(1);
+    } finally {
+      offlineLicense.locked = false;
+      clock.mockImplementation(() => realNow() + 122_000);
+    }
     expect((await call("DELETE", path)).status).toBe(200);
     expect(await call("GET", path)).toMatchObject({
       status: 404,

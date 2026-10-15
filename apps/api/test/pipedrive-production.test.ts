@@ -11,7 +11,11 @@ import {
 import { ruleInput } from "./support/pipedrive-observation-harness";
 import { ConversionEventProcessor } from "../src/common/queue/conversion-event.processor";
 import { deferred } from "./support/pipedrive-harness";
-import { actor } from "./support/pipedrive-harness";
+import {
+  actor,
+  allowedLicense,
+  lockedLicense,
+} from "./support/pipedrive-harness";
 
 beforeEach(productionEnv);
 afterEach(() => {
@@ -100,23 +104,52 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
       });
     },
   );
+  // Student edition: no SaaS environment opt-in (the SaaS
+  // PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED flag does not exist). Like the
+  // student Kommo, production is decided per rule and requires the license.
   it.each([
     "PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED",
     "INBOUND_WEBHOOKS_ENABLED",
     "INBOUND_WEBHOOK_PRODUCTION_ENABLED",
     "INBOUND_CONVERSION_RULES_ENABLED",
     "INBOUND_CONVERSION_PRODUCTION_ENABLED",
-  ])("requires explicit gate %s", async (key) => {
+  ])("production is per rule and does not depend on %s", async (key) => {
     const h = await productionHarness();
     vi.stubEnv(key, "false");
-    await expect(
-      h.webhooks.createRule("workspace-a", h.c.id, actor, {
-        ...ruleInput,
-        mode: "production",
-      }),
-    ).rejects.toThrow("pipedrive_production_disabled");
-    expect(h.state.pipedriveConversionRule).toHaveLength(0);
+    const rule = await h.webhooks.createRule("workspace-a", h.c.id, actor, {
+      ...ruleInput,
+      mode: "production",
+    });
+    expect(rule).toMatchObject({ mode: "production" });
+    expect(h.state.pipedriveConversionRule).toHaveLength(1);
     expect(h.fetcher).not.toHaveBeenCalled();
+  });
+  it("a locked license stops processing, materialization and publication", async () => {
+    const h = await selected();
+    const event = await h.receive();
+    (h.webhooks as any).licenseClient = lockedLicense;
+    expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
+      status: "license_locked",
+    });
+    expect(await h.webhooks.sweep()).toMatchObject({ scanned: 0 });
+    expect(h.state.conversionEventLog).toHaveLength(0);
+    expect(h.state.pipedriveConversionDedupe).toHaveLength(0);
+    expect(h.jobs.size).toBe(0);
+    // Unlocked again: the durable inbox is processed normally.
+    (h.webhooks as any).licenseClient = allowedLicense;
+    expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
+      status: "materialized",
+    });
+    expect(h.state.conversionEventLog).toHaveLength(1);
+  });
+  it("a missing license client is treated as locked (fail-closed)", async () => {
+    const h = await selected();
+    const event = await h.receive();
+    (h.webhooks as any).licenseClient = undefined;
+    expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
+      status: "license_locked",
+    });
+    expect(h.state.conversionEventLog).toHaveLength(0);
   });
   it("observation does not consume production dedupe or authorize historical receipts", async () => {
     const h = await productionHarness();
@@ -282,7 +315,7 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     });
   });
   it.each([
-    "gate_off",
+    "license_locked",
     "connection_pause",
     "unbound",
     "channel_pause",
@@ -293,8 +326,8 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     await h.webhooks.process(event.id, "workspace-a");
     const log = h.state.conversionEventLog![0]!;
     switch (kind) {
-      case "gate_off":
-        vi.stubEnv("PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED", "false");
+      case "license_locked":
+        (h.conversions as any).licenseClient = lockedLicense;
         break;
       case "connection_pause":
         h.state.pipedriveConnection![0]!.status = "paused";
@@ -330,7 +363,7 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     ).toMatchObject({ status: "sent" });
     expect(h.fetcher).toHaveBeenCalledOnce();
   });
-  it.each(["missing_token", "resolver_error", "missing_resolver"])(
+  it.each(["missing_token", "resolver_error", "no_resolver"])(
     "blocks sender without authorized Meta credentials: %s",
     async (kind) => {
       const h = await selected();
@@ -345,8 +378,10 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
         h.resolver.resolveCapiRoute.mockRejectedValue(
           new Error("synthetic-private-token-provider-text"),
         );
-      if (kind === "missing_resolver")
-        h.resolver.hasNormalizedConnections.mockResolvedValue(false);
+      // Student edition: no normalized-connection probe; without a bound
+      // resolver the sender has no authorized Meta credentials.
+      if (kind === "no_resolver")
+        (h.conversions as any).connectionResolver = undefined;
       const log = h.state.conversionEventLog![0]!;
       expect(
         await h.conversions.sendReadyEvent(log.id, {

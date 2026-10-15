@@ -20,6 +20,11 @@ import { INTEGRATION_ENV } from "../../src/integrations/integration.types";
 import { MetaCapiAdapter } from "../../src/conversion-events/meta-capi.adapter";
 import { configureInboundWebhookBodyParser } from "../../src/inbound-webhooks/inbound-webhook-body-parser";
 import { hashPhoneIdentity } from "../../src/common/phone/phone-identity";
+import { LicenseClientService } from "../../src/licensing-client/license-client.service";
+import { RUNTIME_ENV } from "../../src/common/runtime/runtime.module";
+
+/** Active license (student edition): background Pipedrive work requires it. */
+export const activeLicense = { getLockState: async () => ({ inert: false, locked: false, reason: null, state: { status: "active" } }) };
 
 /** Explicit invocation only. No in-memory Prisma delegates, no AppModule, timers or Redis. */
 export function independentClient(url: string) {
@@ -52,7 +57,7 @@ export async function http(app: NestExpressApplication, method: string, url: str
 }
 export async function narrowApplication(client: PrismaClient, boundaries: {adapter:any;queue:ConversionEventsQueueService;resolver:any;session:any;fetcher:any}) {
   const {adapter,queue,resolver,session,fetcher}=boundaries;
-  const mod=await Test.createTestingModule({controllers:[PipedriveController,PipedriveWebhookController],providers:[PipedriveService,PipedriveWebhookService,ConversionEventsService,{provide:PrismaService,useValue:client},{provide:AuthService,useValue:{getSession:async()=>session}},{provide:PipedriveAdapter,useValue:adapter},{provide:ConversionEventsQueueService,useValue:queue},{provide:MetaConnectionResolverService,useValue:resolver},{provide:MetaTokenEncryptionService,useValue:{}},{provide:INTEGRATION_ENV,useValue:process.env},{provide:MetaCapiAdapter,useValue:new MetaCapiAdapter({},fetcher as any)}]}).compile();
+  const mod=await Test.createTestingModule({controllers:[PipedriveController,PipedriveWebhookController],providers:[PipedriveService,PipedriveWebhookService,ConversionEventsService,{provide:PrismaService,useValue:client},{provide:AuthService,useValue:{getSession:async()=>session}},{provide:PipedriveAdapter,useValue:adapter},{provide:ConversionEventsQueueService,useValue:queue},{provide:MetaConnectionResolverService,useValue:resolver},{provide:MetaTokenEncryptionService,useValue:{}},{provide:INTEGRATION_ENV,useValue:process.env},{provide:RUNTIME_ENV,useValue:process.env},{provide:LicenseClientService,useValue:activeLicense},{provide:MetaCapiAdapter,useValue:new MetaCapiAdapter({},fetcher as any)}]}).compile();
   const app=mod.createNestApplication<NestExpressApplication>({bodyParser:false,logger:false});configureInboundWebhookBodyParser(app);await app.init();
   return {mod,app};
 }
@@ -80,7 +85,7 @@ export async function seed(client: PrismaClient, suffix = randomUUID()) {
   let metaHook: (()=>Promise<void>)|undefined; let queueFailure=false;
   const adapter = { verify:async()=>({id:"1",subdomain:"synthetic"}),listPipelines:async()=>[{id:"1",name:"Synthetic",stages:[{id:"11",name:"Won"},{id:"12",name:"Before"}]}],getPerson:async(_origin:string,_token:string,id:string)=>{personCalls++;if(personHook)await personHook();return{id,phones:["5500000000000"]};} };
   const resolver={hasNormalizedConnections:async()=>true,resolveCapiRoute:async()=>({source:"manual",accessToken:"synthetic-only",pixelId:destination.pixelId,pageId:destination.pageId,reportingAccountId:reporting.id,adAccountId:reporting.adAccountId,businessConnectionId:business.id,conversionDestinationId:destination.id})};
-  const fetcher=async()=>{metaCalls++;if(metaHook)await metaHook();return new Response('{"events_received":1}',{status:200});};
+  const fetcher=async()=>{metaCalls++;if(metaHook)await metaHook();return new Response('{"events_received":1,"messages":[],"fbtrace_id":"synthetic-trace"}',{status:200});};
   const jobs=new Map<string,unknown>();
   const queue=new ConversionEventsQueueService({getJob:async()=>null,add:async(_name:string,data:any,options:any)=>{if(queueFailure)throw Error("SYNTHETIC_QUEUE_FAILURE");jobs.set(options.jobId,data);return{id:options.jobId};}} as any);
   const session:any={user:{id:owner.id,platformRole:"user"},workspaces:[{id:workspaceId,role:"owner"}],supportContext:null};

@@ -748,9 +748,11 @@ describe("Inbound -> persisted lead -> LeadSubmitted -> same lead Kommo -> real 
       await h.materialize(mode);
       expect(h.state.lead[0].whatsappInstanceId).toBeNull();
       const webhook = await h.receive();
+      // Same refusal code as the SaaS (Fase 4c): an ad lead whose destination
+      // is known but with no bound route of its number is "route unauthorized".
       expect(await h.kommo.process(webhook.id, "workspace-a")).toMatchObject({
         status: "blocked",
-        errorCode: "lead_channel_or_attribution_unproven",
+        errorCode: "lead_channel_route_unauthorized",
       });
       expect(h.state.conversionEventLog).toHaveLength(1);
       expect(h.fetcher).not.toHaveBeenCalled();

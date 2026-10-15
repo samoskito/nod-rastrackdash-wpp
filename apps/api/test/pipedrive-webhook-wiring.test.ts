@@ -1,3 +1,5 @@
+import { LicenseClientModule } from "../src/licensing-client/license-client.module";
+import { OfflinePipedriveLicenseModule } from "./support/pipedrive-http-harness";
 import { IntegrationsModule } from "../src/integrations/integrations.module";
 import { OfflinePipedriveIntegrationsModule } from "./support/pipedrive-http-harness";
 import {
@@ -53,6 +55,8 @@ describe("Pipedrive real Nest/Express wiring with in-memory HTTP streams", () =>
       supportContext: null,
     };
     const mod = await Test.createTestingModule({ imports: [PipedriveModule] })
+    .overrideModule(LicenseClientModule)
+    .useModule(OfflinePipedriveLicenseModule)
       .overrideModule(IntegrationsModule)
       .useModule(OfflinePipedriveIntegrationsModule)
       .overrideModule(QueueModule)

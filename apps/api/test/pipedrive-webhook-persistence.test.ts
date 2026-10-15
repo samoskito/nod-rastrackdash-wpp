@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { conversionEventNameSchema } from "@wpptrack/shared";
@@ -11,7 +11,7 @@ const schema = readFileSync(
 const sql = readFileSync(
   resolve(
     __dirname,
-    "../prisma/migrations/20261013180000_pipedrive_integration/migration.sql",
+    "../prisma/migrations/20261016120000_pipedrive_integration/migration.sql",
   ),
   "utf8",
 );
@@ -24,6 +24,29 @@ const names = [
   "PipedriveConversionDedupe",
 ];
 const tuple = (v: string) => [...v.matchAll(/"(\w+)"/g)].map((m) => m[1]);
+describe("Pipedrive migration ordering (student edition)", () => {
+  it("is the latest migration and runs after the ConversionEventLog (workspaceId, id) key it references", () => {
+    const dir = resolve(__dirname, "../prisma/migrations");
+    const names = readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    const own = "20261016120000_pipedrive_integration";
+    const key = "20261016090000_conversion_event_log_workspace_id_key";
+    expect(names.at(-1)).toBe(own);
+    expect(names.indexOf(key)).toBeGreaterThan(-1);
+    expect(names.indexOf(key)).toBeLessThan(names.indexOf(own));
+    expect(
+      readFileSync(resolve(dir, key, "migration.sql"), "utf8"),
+    ).toContain('ON "ConversionEventLog"("workspaceId", "id")');
+    expect(sql).toContain(
+      'REFERENCES "ConversionEventLog"("workspaceId", "id") ON DELETE RESTRICT',
+    );
+    // Additive only: no statement touches an existing table.
+    for (const match of sql.matchAll(/ALTER TABLE "(\w+)"/g))
+      expect(match[1]).toMatch(/^Pipedrive/);
+  });
+});
 describe("Pipedrive webhook SQL/schema structural invariants (no PostgreSQL)", () => {
   it("creates only the six dedicated tables and never alters existing ones", () => {
     expect(

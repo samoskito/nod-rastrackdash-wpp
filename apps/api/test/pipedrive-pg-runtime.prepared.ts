@@ -2,14 +2,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { PrismaClient, Prisma } from "@prisma/client";
-import { seed, independentClient, deferred, http } from "./support/pipedrive-pg-harness";
+import { seed, independentClient, deferred, http, activeLicense } from "./support/pipedrive-pg-harness";
 import { PipedriveWebhookService } from "../src/pipedrive/pipedrive-webhook.service";
 import { ConversionEventsService } from "../src/conversion-events/conversion-events.service";
 import { PipedriveService } from "../src/pipedrive/pipedrive.service";
 import { ConversionEventProcessor } from "../src/common/queue/conversion-event.processor";
-import { ClientSwapService } from "../src/workspaces/client-swap/client-swap.service";
-import { ClientSwapRateLimitService } from "../src/workspaces/client-swap/client-swap-rate-limit.service";
-import { lockKommoDispatch } from "../src/conversion-events/kommo-dispatch-coordination";
 
 type H = Awaited<ReturnType<typeof seed>>;
 type Result = { name:string; status:"PASS"|"FAIL"; code?:string; assertions?:number };
@@ -157,11 +154,11 @@ export async function runMatrix(url:string,run:string,expectedMigrations:Array<{
     });
     await test("publication_failure_restart_reuses_canonical",async h=>{
       h.setQueueFailure(true);const d=await materialize(h);assert.equal(h.jobs.size,0);h.setQueueFailure(false);h.setNow(new Date(+h.now+120000));
-      const restarted=new PipedriveWebhookService(h.client as any,(h.service as any).adapter,h.service,h.conversions,h.queue);restarted.now=()=>h.now;await restarted.sweep();
+      const restarted=new PipedriveWebhookService(h.client as any,(h.service as any).adapter,h.service,h.conversions,h.queue,activeLicense as any);restarted.now=()=>h.now;await restarted.sweep();
       const after=await h.client.pipedriveConversionDedupe.findUniqueOrThrow({where:{id:d.id}});assert.equal(after.conversionEventLogId,d.conversionEventLogId);assert.equal(after.publicationStatus,"queued");assert.equal(h.jobs.size,1);assert.deepEqual(await count(h),{canonical:1,dedupe:1});
     });
     await test("concurrent_sender_and_persistent_unknown_no_resend",async h=>{
-      const d=await materialize(h);const b=independentClient(url);const other=new ConversionEventsService(b as any,(h.conversions as any).metaCapiAdapter,(h.conversions as any).metaTokenEncryption,(h.conversions as any).connectionResolver);const started=deferred(),release=deferred();h.setMetaHook(async()=>{started.resolve();await release.promise;throw Error("SYNTHETIC_RESPONSE_LOST");});
+      const d=await materialize(h);const b=independentClient(url);const other=new ConversionEventsService(b as any,(h.conversions as any).metaCapiAdapter,(h.conversions as any).metaTokenEncryption,(h.conversions as any).connectionResolver,activeLicense as any);const started=deferred(),release=deferred();h.setMetaHook(async()=>{started.resolve();await release.promise;throw Error("SYNTHETIC_RESPONSE_LOST");});
       const first=h.conversions.sendReadyEvent(d.conversionEventLogId!,{workspaceId:h.workspaceId});
       try{await started.promise;await other.sendReadyEvent(d.conversionEventLogId!,{workspaceId:h.workspaceId});release.resolve();await first;assert.equal(h.metaCalls,1);h.setMetaHook(undefined);await h.conversions.sendReadyEvent(d.conversionEventLogId!,{workspaceId:h.workspaceId});assert.equal(h.metaCalls,1);const after=await h.client.pipedriveConversionDedupe.findUniqueOrThrow({where:{id:d.id}});assert.equal(after.publicationStatus,"delivery_unknown");assert.equal(after.senderAttempts,1);assert.equal(after.senderRetryable,false);}finally{release.resolve();await first.catch(()=>{});await b.$disconnect();}
     });
@@ -193,21 +190,7 @@ export async function runMatrix(url:string,run:string,expectedMigrations:Array<{
       const extended=real.$extends({query:{pipedriveConnection:{async findFirst({args,query}){if(fault)throw Error("SYNTHETIC_STORAGE_FAULT");return query(args);}}}});
       let h:H|undefined;try{h=await seed(extended as any);assert.equal((await http(h.app,"GET",h.base.replace(h.c.id,"missing")+"/capabilities")).status,404);fault=true;assert.equal((await http(h.app,"GET",h.base+"/capabilities")).status,503);assert.equal(h.personCalls,0);assert.equal(h.metaCalls,0);}finally{fault=false;try{if(h)await retire(h);}finally{if(h)await h.app.close();await real.$disconnect();}}
     });
-    // Reset runs last in an isolated workspace. Production reset helpers/triggers stay installed.
-    await test("client_swap_advisory_barrier_real_reset_preserves_foreign_workspace",async h=>{
-      await materialize(h);const foreignBefore=await h.client.lead.findUniqueOrThrow({where:{id:h.foreignLead.id}});
-      const plan=await h.client.subscriptionPlan.create({data:{name:"Synthetic QA",slug:randomUUID(),kind:"standard",visibility:"private",pricePerWhatsappInstanceCents:1}} as any);
-      await h.client.workspaceSubscription.create({data:{workspaceId:h.workspaceId,planId:plan.id,status:"active",contractStatus:"active",isCurrent:true}} as any);
-      const blocker=independentClient(url);const acquired=deferred(),release=deferred();
-      const held=blocker.$transaction(async tx=>{await lockKommoDispatch(tx,h.workspaceId);acquired.resolve();await release.promise;},{timeout:12000});
-      try{await acquired.promise;const swap=new ClientSwapService(h.client as any,new ClientSwapRateLimitService());
-        await assert.rejects(swap.swap(h.workspaceId,h.owner.id,{confirm:true},randomUUID()),(e:any)=>e.getStatus?.()===409);
-        assert.deepEqual(await count(h),{canonical:1,dedupe:1});release.resolve();await held;
-        await swap.swap(h.workspaceId,h.owner.id,{confirm:true},randomUUID());
-        assert.deepEqual(await count(h),{canonical:0,dedupe:0});assert.equal(await h.client.pipedriveConnection.count({where:{workspaceId:h.workspaceId}}),0);
-        assert.deepEqual(await h.client.lead.findUniqueOrThrow({where:{id:h.foreignLead.id}}),foreignBefore);assert.equal(await h.client.auditLog.count({where:{workspaceId:h.workspaceId,action:"workspace.client_swapped"}}),1);
-      }finally{release.resolve();await held.catch(()=>{});await blocker.$disconnect();}
-    });
+    // The SaaS client-swap reset case is not ported: the student edition has no client swap.
   }finally{await control.$disconnect();}
   return{phase:"postgresql_nest",mocks:["auth session","Pipedrive adapter","BullMQ handoff","Meta resolver","Meta fetch response"],results,passed:results.filter(r=>r.status==="PASS").length,failed:results.filter(r=>r.status==="FAIL").length,skipped:0};
 }

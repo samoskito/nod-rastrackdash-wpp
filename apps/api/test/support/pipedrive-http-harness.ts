@@ -5,6 +5,39 @@ import { MetaConnectionResolverService } from "../../src/integrations/meta/meta-
 import { Module } from "@nestjs/common";
 import { vi } from "vitest";
 import { ConversionEventsQueueService } from "../../src/common/queue/conversion-events-queue.service";
+import { Global } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { RUNTIME_ENV, RUNTIME_FETCH } from "../../src/common/runtime/runtime.module";
+import { LicenseClientService } from "../../src/licensing-client/license-client.service";
+import { LicenseSoftlockGuard } from "../../src/licensing-client/license-softlock.guard";
+
+/** Mutable license decision of the offline license module (default: active). */
+export const offlineLicense = {
+  locked: false,
+  getLockState: vi.fn(async () => ({
+    inert: false,
+    locked: offlineLicense.locked,
+    reason: offlineLicense.locked ? ("revoked" as const) : null,
+    state: { status: offlineLicense.locked ? "revoked" : "active" },
+  })),
+};
+
+/**
+ * Student edition license boundary without the heartbeat queue/worker: the
+ * real global soft-lock guard (HTTP 423 on writes) reading a synthetic
+ * decision, plus the runtime env the conversion sender reads.
+ */
+@Global()
+@Module({
+  providers: [
+    { provide: LicenseClientService, useValue: offlineLicense },
+    { provide: APP_GUARD, useClass: LicenseSoftlockGuard },
+    { provide: RUNTIME_ENV, useValue: process.env },
+    { provide: RUNTIME_FETCH, useValue: fetch },
+  ],
+  exports: [LicenseClientService, RUNTIME_ENV, RUNTIME_FETCH],
+})
+export class OfflinePipedriveLicenseModule {}
 
 /** Replaces only Redis handoff; production module/controllers/services stay real. */
 @Module({

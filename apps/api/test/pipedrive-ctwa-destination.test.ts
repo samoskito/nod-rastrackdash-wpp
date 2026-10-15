@@ -142,7 +142,7 @@ describe("Pipedrive conversion for a CTWA lead uses the CTWA destination path", 
     });
   });
 
-  it("the CTWA sender authorization requires the opt-in, this exact ledger row and the binding", async () => {
+  it("the CTWA sender authorization requires this exact ledger row, an active connection and the binding", async () => {
     const h = await ctwaLead();
     const event = await h.receive();
     await h.webhooks.process(event.id, "workspace-a");
@@ -161,9 +161,38 @@ describe("Pipedrive conversion for a CTWA lead uses the CTWA destination path", 
       false,
     );
     h.state.pipedriveConnection![0]!.status = "active";
-    vi.stubEnv("PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED", "false");
+    // Student edition: no SaaS environment opt-in; production follows the
+    // rule. Unbinding the number revokes the committed CTWA conversion.
+    expect(await pipedriveCtwaConversionAuthorized(h.client, log, proof)).toBe(
+      true,
+    );
+    h.state.pipedriveConnection![0]!.allowedChannelRouteIds = [];
     expect(await pipedriveCtwaConversionAuthorized(h.client, log, proof)).toBe(
       false,
     );
+  });
+
+  // Rule of the student edition: ctwa_clid is mandatory. Without it nothing
+  // is materialized, published or sent to Meta, with or without an ad id.
+  it.each([
+    ["without an ad id", null],
+    ["with an ad id", "ad-a"],
+  ])("without ctwa_clid nothing is sent (lead %s)", async (_label, adId) => {
+    const h = await ctwaLead("none");
+    Object.assign(h.state.lead![0]!, { adId, ctwaClid: null });
+    const event = await h.receive();
+    await h.webhooks.process(event.id, "workspace-a");
+    await h.webhooks.sweep();
+    expect(resolveCtwaLeadProof).not.toHaveBeenCalled();
+    expect(h.state.pipedriveWebhookEvent![0]!.results[0]).toMatchObject({
+      status: "ignored",
+      errorCode: "lead_channel_or_attribution_unproven",
+    });
+    expect(h.state.conversionEventLog).toHaveLength(0);
+    expect(
+      h.state.pipedriveConversionDedupe!.filter((r) => r.mode === "production"),
+    ).toHaveLength(0);
+    expect(h.jobs.size).toBe(0);
+    expect(h.fetcher).not.toHaveBeenCalled();
   });
 });

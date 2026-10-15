@@ -20,7 +20,7 @@ const names = [
 ] as const;
 const migrationPath = resolve(
   __dirname,
-  "../prisma/migrations/20261013180000_pipedrive_integration/migration.sql",
+  "../prisma/migrations/20261016120000_pipedrive_integration/migration.sql",
 );
 const sql = () => readFileSync(migrationPath, "utf8");
 const body = (name: string) =>

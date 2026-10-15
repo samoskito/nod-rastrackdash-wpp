@@ -487,6 +487,88 @@ describe("Kommo with a Gupshup number inheriting the verified page/pixel", () =>
   });
 });
 
+describe("Kommo lead with ctwa_clid and no ad id (page/pixel, as the SaaS)", () => {
+  function noAdLead(ctwaClid: string | null, adId: string | null = null) {
+    const h = kommoHarness();
+    h.prisma.inboundWebhookChannel = channelTable([gupshupNumber()]);
+    h.prisma.inboundWebhookEvent = receiptEvents();
+    const lead = h.state.lead[0];
+    Object.assign(lead, {
+      whatsappInstanceId: null,
+      adId,
+      campaignId: null,
+      adSetId: null,
+      ctwaClid,
+    });
+    entryReceipt(h.state.conversionEventLog, {
+      leadId: lead.id,
+      phoneHash: lead.phoneHash,
+      ctwaClid: "trusted-click",
+      channelId: "channel-gupshup",
+    });
+    h.connection.allowedChannelRouteIds = ["channel-gupshup"];
+    return { h, lead };
+  }
+
+  it("now sends the lead through the verified page/pixel destination", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-05T12:05:00Z"));
+    const { h, lead } = noAdLead("trusted-click");
+    const event = await h.receive();
+    await h.service.process(event.id, event.workspaceId);
+    const log = h.state.conversionEventLog.find(
+      (row: any) => row.sourceTrigger === "kommo_stage",
+    );
+    expect(log).toMatchObject({
+      leadId: lead.id,
+      adId: null,
+      campaignId: null,
+      ctwaClid: "trusted-click",
+      metaConversionDestinationId: "destination-a",
+      status: "ready_to_send",
+    });
+    expect(log.sourcePayload).toMatchObject({
+      processingMode: KOMMO_CTWA_PROCESSING_MODE,
+      channelId: "channel-gupshup",
+      ctwaDestination: { pixelId: "synthetic-pixel", pageId: "synthetic-page" },
+    });
+    expect(h.state.kommoConversionDedupe[0].publicationIntent).toMatchObject({
+      kind: "ctwa_destination",
+      channelId: "channel-gupshup",
+    });
+    expect(h.conversionQueue.retrySend).toHaveBeenCalledWith(
+      log.id,
+      "workspace-a",
+    );
+  });
+
+  it.each([
+    ["without an ad id", null],
+    ["with an ad id", "ad-a"],
+  ])(
+    "without ctwa_clid nothing is sent (lead %s)",
+    async (_label, adId) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-05T12:05:00Z"));
+      const { h } = noAdLead(null, adId);
+      const event = await h.receive();
+      expect(
+        await h.service.process(event.id, event.workspaceId),
+      ).toMatchObject({
+        status: "blocked",
+        errorCode: "lead_channel_or_attribution_unproven",
+      });
+      expect(
+        h.state.conversionEventLog.some(
+          (row: any) => row.sourceTrigger === "kommo_stage",
+        ),
+      ).toBe(false);
+      expect(h.state.kommoConversionDedupe).toHaveLength(0);
+      expect(h.conversionQueue.retrySend).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("Pipedrive with a Gupshup number inheriting the verified page/pixel", () => {
   beforeEach(() =>
     vi.stubEnv(

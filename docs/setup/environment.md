@@ -249,6 +249,7 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `META_GRAPH_API_VERSION` | Não (tem padrão) | Documentação Graph API | `.env` da API | Não |
 | `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
 | `KOMMO_CRM_ENCRYPTION_KEY` | Sim, antes de criar uma conexão Kommo | Base64 canônico de 32 bytes, gerado pelo aluno | env efetiva do container da API | **Sim** |
+| `PIPEDRIVE_CRM_ENCRYPTION_KEY` | Sim, antes de criar uma conexão Pipedrive | Base64 canônico de 32 bytes, gerado pelo aluno (`openssl rand -base64 32`); **diferente** da chave do Kommo | env efetiva do container da API | **Sim** |
 | `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`) | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `META_VIDEO_THUMBNAILS_ENABLED` | Não (padrão desligado) | Só `true` liga a busca extra de miniaturas de vídeo (`/{video}/thumbnails`). Deixe desligado ao usar o login social PalmUP: o limite de chamadas do app Meta é compartilhado | `.env` da API | Não |
@@ -290,6 +291,31 @@ variáveis, não no chat):
 ```bash
 node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+Leads com `ctwa_clid` e **sem ID do anúncio** agora também são enviados pelo
+Kommo, pela página + pixel verificados do workspace, quando o lead entrou por um
+número autorizado na conexão Kommo que herda o destino do workspace (igual ao
+SaaS). Esse caminho usa o envio CTWA do produto, que exige
+`INBOUND_WEBHOOKS_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`.
+Leads com ID do anúncio seguem pela rota do número, como antes. Sem `ctwa_clid`
+nada é enviado.
+
+### Pipedrive CRM (opcional)
+
+Para conectar o Pipedrive (`/integrations` → aba **CRM** → card **Pipedrive**),
+gere uma chave **nova** de 32 bytes — nunca reutilize a do Kommo — e preencha
+`PIPEDRIVE_CRM_ENCRYPTION_KEY` somente no ambiente efetivo da API:
+
+```bash
+openssl rand -base64 32
+```
+
+Sem a variável a API sobe normalmente e só o Pipedrive fica indisponível. Se ela
+estiver definida com formato inválido ou com o mesmo valor da
+`KOMMO_CRM_ENCRYPTION_KEY`, a API **não sobe** (erro explícito no log). Não há
+flag de liberação: o envio é decidido por regra e exige licença válida. Passo a
+passo completo (token de API, webhook v2 de negócio alterado, regras de etapa)
+em [`pipedrive.md`](pipedrive.md).
 
 Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há o OAuth antigo (app Meta próprio) como caminho alternativo. A credencial Meta entra por workspace na UI de **Integrações**, nunca em variável pública: pelo botão **Conectar Meta (PalmUP)** (exige `PALMUP_META_BROKER_URL`, veja acima) ou colando o token do usuário do sistema — veja [`meta-manual.md`](meta-manual.md).
 

@@ -200,6 +200,28 @@ Detalhe completo de cada variável em [`setup/environment.md`](setup/environment
 
 A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). **Data Crazy** segue o fluxo CTWA de observação e ativação de produção do passo 10.2 (o parser já vem certificado); o canal só é descoberto após o primeiro webhook. Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. **WAHA e Z-API** recebem leads normalmente, mas **ainda não** têm essa criação automática de origem na central de Gatilhos — é uma lacuna conhecida, não um passo esquecido.
 
+### 10.4 Aba CRM — cards Kommo e Pipedrive (opcional)
+
+Os CRMs não conectam número de WhatsApp: eles dizem **quando** um negócio
+avançou, e o RastrackDash envia a conversão para a Meta usando o lead de
+WhatsApp que já existe no workspace. **Sem `ctwa_clid` nada é enviado.**
+
+- **Kommo:** exige `KOMMO_CRM_ENCRYPTION_KEY` na API. Leads com `ctwa_clid` e
+  **sem ID do anúncio** passam a ser enviados pela página + pixel verificados do
+  workspace (como no SaaS), quando entraram por um número autorizado na conexão;
+  esse caminho exige `INBOUND_WEBHOOKS_ENABLED=true` e
+  `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`.
+- **Pipedrive:** gere uma chave nova com `openssl rand -base64 32` e preencha
+  `PIPEDRIVE_CRM_ENCRYPTION_KEY` na env da API — **diferente** da chave do
+  Kommo (igual ou inválida, a API não sobe). Depois: token de API do Pipedrive →
+  conectar → atualizar catálogo → números autorizados → regras de etapa (nascem
+  em observação) → gerar a URL do webhook (aparece uma vez) → criar no Pipedrive
+  o webhook v2 de **negócio alterado**. Passo a passo em
+  [`setup/pipedrive.md`](setup/pipedrive.md).
+
+Com a licença bloqueada, os dois CRMs ficam só leitura (gravações respondem 423)
+e nada é processado ou enviado em segundo plano.
+
 ## 11. Marca (whitelabel) — opcional
 
 Defina `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR` para personalizar sua agência (veja [`../docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)). O rodapé residual **`RastrackDash · powered by PalmUP`** é fixo e não pode ser removido nem escondido, com ou sem essas variáveis.
@@ -222,7 +244,7 @@ Repita, no ambiente publicado (não só localmente):
 - [Índice de guias de instalação](setup/README.md)
 - [Local (Docker Compose)](setup/local.md) · [VPS — dimensionamento](setup/vps.md) · [Deploy com Dokploy](setup/dokploy.md) · [Atualizar instância já no ar](setup/update.md)
 - [Variáveis de ambiente](setup/environment.md) · [Troubleshooting](setup/troubleshooting.md)
-- [Meta Ads manual](setup/meta-manual.md) · [Provedores de WhatsApp, receivers e webhooks](setup/whatsapp-providers.md) · [Cobrança BYO](setup/billing/README.md)
+- [Meta Ads manual](setup/meta-manual.md) · [Provedores de WhatsApp, receivers e webhooks](setup/whatsapp-providers.md) · [Pipedrive CRM](setup/pipedrive.md) · [Cobrança BYO](setup/billing/README.md)
 - [Personalização permitida](CUSTOMIZATION.md)
 - [Matriz de aceite v1](release/ACCEPTANCE-v1.pt-BR.md) — o que já foi verificado nesta versão
 

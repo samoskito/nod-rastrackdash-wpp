@@ -4,7 +4,7 @@
 -- PipedriveConversionDedupe) with their indexes and constraints. No existing
 -- table, column, index, constraint or enum is altered or dropped, and no row
 -- is written. New FKs are RESTRICT to Workspace/Lead/ConversionEventLog; the
--- backoffice workspace deletion and apps/api/scripts/delete-workspace.js
+-- backoffice workspace removal and the FK-safe workspace removal script in apps/api/scripts
 -- remove these rows first. Uses the ConversionEventLog (workspaceId, id) key
 -- created by 20261016090000_conversion_event_log_workspace_id_key.
 
