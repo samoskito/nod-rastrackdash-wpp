@@ -61,7 +61,7 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
-- **Fase 4a — Payt sales as Meta conversions (API and shared)**, ported from
+- **Fase 4a — Payt sales as Meta conversions (API, web and shared)**, ported from
   the SaaS with the same behavior and no new env var, dependency or Meta
   permission:
   - Payt is a sales platform, not a WhatsApp number: it has no connection of
@@ -100,9 +100,18 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     the rule in Conversões and paste its URL in the Payt postback; check
     "Eventos recebidos". Guide: `docs/setup/payt.md`. **Roll back:** disable
     or delete the Payt rules and remove the postback; reverting the image is
-    safe when no Payt rule was created (see the guide otherwise). PENDING:
-    the web screens (Payt card in the Hub, Payt origin in Nova regra, Eventos
-    recebidos) land in a separate commit of this phase.
+    safe when no Payt rule was created (see the guide otherwise).
+  - Web: Payt card in the Integrations hub (Atendimento e vendas tab), which
+    explains that Payt has no connection of its own and points to Conversões;
+    Payt origin in Conversões > Nova regra with the three events (Carrinho
+    abandonado with the beta badge), bound to the connection of the chosen
+    numbers; the postback URL is shown only once (on create or "Gerar novo
+    endereço") next to the Payt setup steps; Eventos recebidos shows sale
+    names, lists postbacks of another status or event as "Ignorado" (neutral
+    tone, no longer counted as invalid payloads) and reprocesses in
+    observation; license-locked (423) notice.
+  - Update: rebuild shared, restart the API and publish the web of the same
+    release. No new env var or dependency on the web.
 - **Fase 4.0 — CTWA purchase foundation (API)**, ported from the SaaS with
   the same behavior and no new env var, dependency or Meta permission:
   - **Data Crazy, Gupshup and Umbler (messages) can go to production by

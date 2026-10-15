@@ -116,6 +116,10 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "Um dos números escolhidos não pertence a esta conexão.",
   "Um ou mais canais nao pertencem a este workspace":
     "Um dos números escolhidos não pertence a esta conta.",
+  "Um ou mais canais não pertencem a esta conexão e workspace":
+    "Um dos números escolhidos não pertence a esta conexão.",
+  "Um ou mais canais não pertencem a este workspace":
+    "Um dos números escolhidos não pertence a esta conta.",
   "Etiquetas so estao disponiveis em numeros com etiquetas do WhatsApp":
     "Etiquetas só funcionam em números Uazapi, que têm etiquetas do WhatsApp.",
   "Um ou mais numeros nao suportam esta origem de regra":

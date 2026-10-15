@@ -1970,7 +1970,7 @@ export class ProviderConversionRulesService {
     const uniqueIds = [...new Set(channelIds)];
     if (uniqueIds.length !== channelIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a este workspace",
+        "Um ou mais canais não pertencem a este workspace",
       );
     }
     if (uniqueIds.length === 0) return;
@@ -1984,7 +1984,7 @@ export class ProviderConversionRulesService {
     });
     if (channels.length !== uniqueIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a este workspace",
+        "Um ou mais canais não pertencem a este workspace",
       );
     }
     const providers = providerRuleChannelProviders({
@@ -2235,7 +2235,7 @@ export class ProviderConversionRulesService {
 
       if (channel.connectionId !== connectionId) {
         throw new BadRequestException(
-          "Um ou mais canais nao pertencem a esta conexao e workspace",
+          "Um ou mais canais não pertencem a esta conexão e workspace",
         );
       }
 
@@ -2328,7 +2328,7 @@ export class ProviderConversionRulesService {
 
     if (count !== uniqueIds.length || uniqueIds.length !== channelIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a esta conexao e workspace",
+        "Um ou mais canais não pertencem a esta conexão e workspace",
       );
     }
   }
@@ -2361,7 +2361,7 @@ export class ProviderConversionRulesService {
     });
     if (count !== uniqueIds.length || uniqueIds.length !== channelIds.length) {
       throw new BadRequestException(
-        "Um ou mais canais nao pertencem a este workspace",
+        "Um ou mais canais não pertencem a este workspace",
       );
     }
   }

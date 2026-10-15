@@ -444,7 +444,7 @@ export class InboundConversionAutomationIngestionService {
       throw new ConflictException(outcome.message);
     }
     if (!outcome.executionId) {
-      throw new ConflictException("O callback ainda nao pode ser reprocessado");
+      throw new ConflictException("O callback ainda não pode ser reprocessado");
     }
 
     return {
@@ -471,7 +471,7 @@ export class InboundConversionAutomationIngestionService {
     );
     if (delivery.status !== "processed") {
       throw new ConflictException(
-        "O callback ainda nao pode ser reavaliado",
+        "O callback ainda não pode ser reavaliado",
       );
     }
 
@@ -484,7 +484,7 @@ export class InboundConversionAutomationIngestionService {
     }
     if (parsed.value.externalExecutionKey !== input.occurrenceKey) {
       throw new ConflictException(
-        "A ocorrencia nao pertence ao callback informado",
+        "A ocorrência não pertence ao callback informado",
       );
     }
 
@@ -632,6 +632,13 @@ export class InboundConversionAutomationIngestionService {
         item.status === "ignored" &&
         ownedByAnotherRuleReasons.has(item.reasonCode ?? ""),
     ).length;
+    // Postbacks of another status/event this rule does not take are ignored.
+    const ignoredParseCount = items.filter(
+      (item) =>
+        !item.executionId &&
+        item.status === "ignored" &&
+        ignoredParseErrors.has(item.reasonCode ?? ""),
+    ).length;
 
     return {
       providerRuleId,
@@ -652,7 +659,8 @@ export class InboundConversionAutomationIngestionService {
             executionCount -
             decisionCount -
             leadMatchingBlocked.length -
-            otherChannelIgnored,
+            otherChannelIgnored -
+            ignoredParseCount,
           0,
         ),
         recoverable:
@@ -677,7 +685,7 @@ export class InboundConversionAutomationIngestionService {
     const delivery = await this.findAutomationDelivery(endpoint, deliveryId);
     const payload = this.decryptAutomationPayload(delivery);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      throw new ConflictException("O payload preservado nao e um objeto JSON");
+      throw new ConflictException("O payload preservado não é um objeto JSON");
     }
 
     await this.prisma.auditLog.create({
@@ -734,7 +742,7 @@ export class InboundConversionAutomationIngestionService {
           message:
             error instanceof Error
               ? error.message
-              : "Nao foi possivel reprocessar este callback",
+              : "Não foi possível reprocessar este callback",
         });
       }
     }
@@ -769,7 +777,7 @@ export class InboundConversionAutomationIngestionService {
     if (rule.mode === "observation") {
       if (rule.parserRelease.version !== UMBLER_AUTOMATION_V1_PARSER_VERSION) {
         throw new ConflictException(
-          "Ative o envio automatico da regra antes de reprocessar callbacks",
+          "Ative o envio automático da regra antes de reprocessar callbacks",
         );
       }
       return { endpoint, observationOnly: true };
@@ -843,7 +851,7 @@ export class InboundConversionAutomationIngestionService {
       !inboundParserProductionEligible(rule.connection.parserRelease)
     ) {
       throw new ConflictException(
-        "Ative o envio automatico da regra antes de reprocessar callbacks",
+        "Ative o envio automático da regra antes de reprocessar callbacks",
       );
     }
 
@@ -880,7 +888,7 @@ export class InboundConversionAutomationIngestionService {
       !delivery.encryptionKeyVersion
     ) {
       throw new ConflictException(
-        "O payload deste callback nao esta mais disponivel",
+        "O payload deste callback não está mais disponível",
       );
     }
 
@@ -901,7 +909,7 @@ export class InboundConversionAutomationIngestionService {
       return JSON.parse(rawBody.toString("utf8")) as unknown;
     } catch {
       throw new ConflictException(
-        "O payload preservado nao pode ser descriptografado",
+        "O payload preservado não pode ser descriptografado",
       );
     }
   }
@@ -934,9 +942,17 @@ export class InboundConversionAutomationIngestionService {
       deliveryNormalized?.parserStatus === "parsed" &&
       typeof deliveryNormalized?.reasonCode === "string" &&
       ownedByAnotherRuleReasons.has(deliveryNormalized.reasonCode);
+    // A postback of another status/event (canceled, refunded, an event this
+    // rule does not take) was parsed and deliberately ignored: audit-only
+    // classification, never an invalid payload.
+    const ignoredParse =
+      !execution &&
+      !decision &&
+      (ignoredParseErrors.has(delivery.parseErrorCode ?? "") ||
+        deliveryNormalized?.parserStatus === "not_purchase");
     const status = leadMatchingBlock
       ? "blocked"
-      : otherChannel
+      : otherChannel || ignoredParse
         ? "ignored"
         : (execution?.status ??
           this.automationDecisionAuditStatus(decision?.decisionCode ?? null));
@@ -1025,7 +1041,7 @@ export class InboundConversionAutomationIngestionService {
         status: "skipped",
         reasonCode: "already_materialized",
         message:
-          "Este callback ja criou um evento; acompanhe a entrega em Eventos Meta",
+          "Este callback já criou um evento; acompanhe a entrega em Eventos Meta",
       };
     }
     if (currentExecution?.status === "duplicate") {
@@ -1057,7 +1073,7 @@ export class InboundConversionAutomationIngestionService {
           status: "skipped",
           reasonCode: currentExecution.reasonCode ?? "failed_permanent",
           message:
-            "A falha e permanente; use uma reavaliacao explicita depois de corrigir os dados",
+            "A falha é permanente; use uma reavaliação explícita depois de corrigir os dados",
         };
       }
 
@@ -1119,7 +1135,7 @@ export class InboundConversionAutomationIngestionService {
         executionId: observed.executionId,
         status: "blocked",
         reasonCode: observed.reasonCode,
-        message: "O callback exige revisao operacional antes do envio",
+        message: "O callback exige revisão operacional antes do envio",
       };
     }
     if (observed.disposition === "blocked") {
@@ -1137,7 +1153,7 @@ export class InboundConversionAutomationIngestionService {
         executionId: observed.executionId,
         status: "skipped",
         reasonCode: observed.reasonCode,
-        message: "A regra ainda permanece em observacao",
+        message: "A regra ainda permanece em observação",
       };
     }
 
@@ -1148,12 +1164,12 @@ export class InboundConversionAutomationIngestionService {
       reasonCode: observed.reasonCode,
       message:
         observed.reasonCode === ignoredUntrackedLeadReason
-          ? "Callback ignorado porque o contato nao pertence aos leads pagos rastreados"
+          ? "Callback ignorado porque o contato não pertence aos leads pagos rastreados"
           : ownedByAnotherRuleReasons.has(observed.reasonCode)
             ? ownedByAnotherRuleMessage(observed.reasonCode)
             : observed.reasonCode === "purchase_duplicate"
               ? "Venda já reconhecida em outro callback; nada novo será enviado"
-              : "O callback nao exige envio para a Meta",
+              : "O callback não exige envio para a Meta",
     };
   }
 
@@ -1185,7 +1201,7 @@ export class InboundConversionAutomationIngestionService {
         reasonCode: "rule_in_observation",
         message:
           currentExecution.status === "materialized"
-            ? "Este callback ja criou um evento; acompanhe a entrega em Eventos Meta"
+            ? "Este callback já criou um evento; acompanhe a entrega em Eventos Meta"
             : "A regra está em observação; ative o envio automático para encaminhar este callback",
       };
     }
@@ -1254,7 +1270,7 @@ export class InboundConversionAutomationIngestionService {
         reasonCode: observed.reasonCode,
         message:
           observed.decisionCode === "review_required"
-            ? "O callback exige revisao operacional antes do envio"
+            ? "O callback exige revisão operacional antes do envio"
             : this.manualReprocessBlockMessage(observed.reasonCode),
       };
     }
@@ -1267,8 +1283,8 @@ export class InboundConversionAutomationIngestionService {
       message: ownedByAnotherRuleReasons.has(observed.reasonCode)
         ? ownedByAnotherRuleMessage(observed.reasonCode)
         : observed.reasonCode === ignoredUntrackedLeadReason
-          ? "Callback ignorado porque o contato nao pertence aos leads pagos rastreados"
-          : "O callback nao exige envio para a Meta",
+          ? "Callback ignorado porque o contato não pertence aos leads pagos rastreados"
+          : "O callback não exige envio para a Meta",
     };
   }
 
@@ -1298,9 +1314,9 @@ export class InboundConversionAutomationIngestionService {
       message:
         queued.status === "queued"
           ? input.retryingFailure
-            ? "Falha transitoria encaminhada para uma nova tentativa"
+            ? "Falha transitória encaminhada para uma nova tentativa"
             : "Callback encaminhado para a fila da Meta"
-          : "Callback ja estava na fila da Meta",
+          : "Callback já estava na fila da Meta",
     };
   }
 
@@ -1894,20 +1910,20 @@ export class InboundConversionAutomationIngestionService {
   private manualReprocessBlockMessage(reasonCode: string): string {
     const messages: Record<string, string> = {
       automation_event_mismatch:
-        "O callback nao corresponde ao evento configurado nesta regra",
+        "O callback não corresponde ao evento configurado nesta regra",
       automation_channel_unresolved:
-        "O canal do callback ainda nao foi localizado",
+        "O canal do callback ainda não foi localizado",
       automation_paid_lead_missing:
-        "O callback ainda nao possui um lead pago com CTWA",
+        "O callback ainda não possui um lead pago com CTWA",
       automation_value_missing:
-        "Configure o valor medio antes de reprocessar a compra",
+        "Configure o valor médio antes de reprocessar a compra",
       payt_channel_missing_or_ambiguous:
         "O comprador ainda não corresponde a um único lead pago com CTWA nos números desta regra",
       production_context_invalid:
-        "A conexao ou o canal ainda nao esta pronto para producao",
+        "A conexão ou o canal ainda não está pronto para produção",
     };
 
-    return messages[reasonCode] ?? "O callback ainda nao pode ser reprocessado";
+    return messages[reasonCode] ?? "O callback ainda não pode ser reprocessado";
   }
 
   private toJson(value: object): Prisma.InputJsonValue {

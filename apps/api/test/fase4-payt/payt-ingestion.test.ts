@@ -133,6 +133,65 @@ describe("Payt postback on the rule URL (Fase 4a)", () => {
     },
   );
 
+  it("lists postbacks of another status or event as ignored, never invalid", async () => {
+    const harness = createHarness({ eventName: "Purchase", payt: true });
+    const refunded = await harness.service.ingest(
+      input(paytBody({ ...paid(), status: "refunded" })),
+    );
+    const canceled = await harness.service.ingest(
+      input(paytBody({ ...paid(), status: "canceled" })),
+    );
+    const checkout = await harness.service.ingest(input(paytBody(waiting())));
+    const invalid = await harness.service.ingest(
+      input(paytBody({ ...paid(), seller_id: "" })),
+    );
+
+    const audit = await harness.service.listAutomationCallbacks(
+      "workspace_safe",
+      "provider_rule_1",
+    );
+
+    for (const deliveryId of [
+      refunded.deliveryId,
+      canceled.deliveryId,
+      checkout.deliveryId,
+    ]) {
+      expect(
+        audit.items.find((item) => item.deliveryId === deliveryId),
+      ).toMatchObject({
+        status: "ignored",
+        reasonCode: "payt_automation_v1_not_purchase",
+        reprocessable: false,
+      });
+    }
+    expect(
+      audit.items.find((item) => item.deliveryId === invalid.deliveryId),
+    ).toMatchObject({ status: "invalid_payload" });
+    // Only the real invalid payload counts as invalid.
+    expect(audit.summary).toMatchObject({ total: 4, invalid: 1 });
+    // Audit classification only: nothing reached the decision.
+    expect(
+      harness.conversionObservation.observeAutomation,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("lists an event outside an InitiateCheckout rule as ignored", async () => {
+    const harness = createHarness({ eventName: "InitiateCheckout", payt: true });
+    const purchase = await harness.service.ingest(input(paytBody(paid())));
+
+    const audit = await harness.service.listAutomationCallbacks(
+      "workspace_safe",
+      "provider_rule_1",
+    );
+
+    expect(audit.items[0]).toMatchObject({
+      deliveryId: purchase.deliveryId,
+      status: "ignored",
+      reasonCode: "payt_automation_v1_event_not_in_rule",
+    });
+    expect(audit.summary).toMatchObject({ total: 1, invalid: 0 });
+  });
+
   it("keeps a sale without seller/order identity as an invalid payload", async () => {
     const harness = createHarness({ eventName: "Purchase", payt: true });
     const noSeller = await harness.service.ingest(
@@ -396,7 +455,7 @@ describe("Payt observation-mode reprocess and lead from another number", () => {
         "manager_1",
       ),
     ).rejects.toThrow(
-      "Ative o envio automatico da regra antes de reprocessar callbacks",
+      "Ative o envio automático da regra antes de reprocessar callbacks",
     );
   });
 

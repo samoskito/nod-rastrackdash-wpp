@@ -101,6 +101,9 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Número da venda não identificado ou ambíguo",
     payt_lead_other_channel:
       "Lead de outro número: a regra desse número envia a venda",
+    automation_matched_payt_observation: "Reconhecido em observação",
+    payt_automation_v1_not_purchase: "Status da Payt não gera conversão",
+    payt_automation_v1_event_not_in_rule: "Evento da Payt fora desta regra",
   };
 
   if (reasonCode.startsWith("provider_conversion_route_")) {

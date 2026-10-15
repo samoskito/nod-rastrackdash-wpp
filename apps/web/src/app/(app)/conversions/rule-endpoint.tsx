@@ -67,20 +67,14 @@ function SetupSteps({
   capabilities?: ProviderConversionRuleCapabilitiesDto | null;
 }) {
   if (origin === "automation_payt") {
+    // The Payt panel already carries the setup steps: list them only once.
     return (
-      <>
-        <ol className="integration-steps">
-          <li>Na Payt, abra Postback (webhook de vendas) e cole a URL desta regra.</li>
-          <li>Só use o token se a Payt pedir em um campo separado: ele já está na URL.</li>
-          <li>Cada venda chega com o status e o valor reais; a regra reconhece o evento dela.</li>
-        </ol>
-        <PaytSetupPanel
-          eventName={rule.conversionRule.eventName}
-          beta={originBetaEvents(origin, capabilities ?? null).includes(
-            rule.conversionRule.eventName,
-          )}
-        />
-      </>
+      <PaytSetupPanel
+        eventName={rule.conversionRule.eventName}
+        beta={originBetaEvents(origin, capabilities ?? null).includes(
+          rule.conversionRule.eventName,
+        )}
+      />
     );
   }
   if (origin === "automation_umbler") {

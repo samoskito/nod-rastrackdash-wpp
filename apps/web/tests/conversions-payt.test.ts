@@ -461,7 +461,8 @@ describe("Payt: endereço e eventos recebidos", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Como configurar na Payt" })).toBeTruthy();
-    expect(screen.getAllByText(/abra Postback/).length).toBeGreaterThan(0);
+    // The setup steps appear once (only in the Payt panel).
+    expect(screen.getAllByText(/abra Postback/)).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Gerar novo endereço" }));
     expect(screen.getByText(/cole o novo endereço na Payt/)).toBeTruthy();
     expect(rotate).not.toHaveBeenCalled();
@@ -569,5 +570,74 @@ describe("Payt: endereço e eventos recebidos", () => {
     ).toBe("2 reavaliados em observação, 1 continua bloqueado.");
     expect(executionReasonLabel("payt_lead_other_channel")).toContain("Lead de outro número");
     expect(executionReasonLabel("purchase_duplicate")).toContain("Venda repetida");
+    expect(executionReasonLabel("payt_automation_v1_not_purchase")).toBe(
+      "Status da Payt não gera conversão",
+    );
+    expect(executionReasonLabel("payt_automation_v1_event_not_in_rule")).toBe(
+      "Evento da Payt fora desta regra",
+    );
+    expect(executionReasonLabel("automation_matched_payt_observation")).toBe(
+      "Reconhecido em observação",
+    );
+  });
+
+  it("mostra postbacks de outro status como ignorados, em tom neutro", async () => {
+    const user = setupUser();
+    const audit = {
+      providerRuleId: "rule_payt",
+      summary: {
+        total: 1,
+        observed: 0,
+        blocked: 0,
+        queued: 0,
+        materialized: 0,
+        failed: 0,
+        invalid: 0,
+        recoverable: 0,
+      },
+      items: [
+        {
+          deliveryId: "d_refund",
+          executionId: null,
+          receivedAt: "2026-10-14T13:00:00.000Z",
+          lastReceivedAt: "2026-10-14T13:00:00.000Z",
+          providerEventType: "automation_callback",
+          eventName: null,
+          automation: "automation_callback",
+          status: "ignored",
+          reasonCode: "payt_automation_v1_not_purchase",
+          attemptCount: 1,
+          executionAttemptCount: 0,
+          channel: null,
+          leadResolved: false,
+          payloadAvailable: false,
+          payloadExpiresAt: "2026-10-20T13:00:00.000Z",
+          reprocessable: false,
+        },
+      ],
+    };
+    render(
+      createElement(ReceivedEvents, {
+        ruleId: "rule_payt",
+        origin: "automation_payt",
+        mode: "observation",
+        canManage: true,
+        loadAction: vi.fn(async () => ({
+          ok: true,
+          message: "ok",
+          automationAudit: audit,
+        })) as never,
+        loadPayloadAction: vi.fn() as never,
+        reprocessAction: vi.fn() as never,
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Todos" }));
+    expect(await screen.findByText(/Status da Payt não gera conversão/)).toBeTruthy();
+    const chip = screen.getByText("Ignorado");
+    expect(chip.className).toContain("status-chip");
+    expect(chip.className).toContain("neutral");
+    expect(chip.className).not.toContain("bad");
+    expect(screen.queryByText("Dados fora do padrão")).toBeNull();
   });
 });
