@@ -80,11 +80,10 @@ Feito: shared `pipedrive.ts` e `crm-channels.ts` + campo `crmDestinationReadines
 Falhando: 35 dos 399 testes Pipedrive/CRM portados — supõem flags do SaaS (`PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED`, `pipedrive-feature-gate`), mensagens agora acentuadas, harness do Kommo sem `inboundWebhookEvent`, falta stub de licença no DI dos testes HTTP, `crm-channels-any-provider` usa a mesma chave de teste para Kommo e Pipedrive (trocar `alloc(32,7)` por `alloc(32,9)` ~linha 494), `pipedrive-pg-runtime.prepared.ts` não passa a licença.
 Falta: corrigir os 35 testes + testes novos (Kommo sem anúncio, "sem ctwa_clid nada é enviado", migration); web (`lib/crm-channel-options.ts`, opções de número no painel do Kommo, `pipedrive-actions` + modal no Hub aba CRM com logo do SaaS e `SOURCES.md`, leitura em Conversões com "Gerenciar no Hub", aviso de licença, testes web); docs (`docs/setup/pipedrive.md`, `environment.md`, `.env.example`, `GUIA-ALUNO.md`, README do setup), CHANGELOG e `unreleased.json` (resumo 1989/2000, não crescer); suítes completas (referência API 1390, web 759); revisão Opus → prints → aprovação → PR/merge.
 
-### Liberar licença manual (SaaS) — conversa da nuvem
-Branch `feat/licenca-manual-backoffice` em `samoskito/dash-com-ia`. Escopo:
-`POST backoffice/licenses/grant` só dono da plataforma, motivo obrigatório + auditoria, mesmo
-`issueLicenseForPurchase`, 409 se já houver licença ativa, chave por e-mail e mostrada uma vez;
-botão no backoffice; doc em `docs/integrations/community-license.md`.
+### Liberar licença manual (SaaS) — CONCLUÍDO
+Mesclado em `samoskito/dash-com-ia` (PR #149, 15/10). Falta só o deploy do SaaS e o Samuel liberar o
+aluno em Backoffice → Licenças → Liberar licença manual. Conferir na primeira liberação a entrega do
+e-mail e a ativação (não testadas em ambiente real).
 
 ## Próximos passos
 
@@ -93,7 +92,7 @@ botão no backoffice; doc em `docs/integrations/community-license.md`.
    de modo de roteamento por número (`inherit_workspace`/`channel_override`), origem
    `automation_unnichat`; envio sem ID do anúncio passa a valer.
 3. Fase 5: URL única por plataforma e URLs por evento (`IntegrationEndpoint`), depois de 4a e 4b.
-4. Licença manual no SaaS: revisão, aprovação, PR, deploy; Samuel libera o aluno pelo backoffice.
+4. Licença manual no SaaS: mesclada (#149); falta deploy e a liberação pelo backoffice.
 5. Pendências registradas: revisão geral de acentuação; parser Z-API com payload real; barra de
    filtros de Relatórios passando da largura em 1440px (já existia em `main`); export `.xlsx` do SaaS
    provavelmente quebrado por `import ExcelJS from` (corrigido no aluno com `import * as`).
