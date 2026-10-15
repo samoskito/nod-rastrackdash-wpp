@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   connectionWith,
@@ -21,6 +21,7 @@ afterEach(() => {
 });
 
 const LOCK_NOTE = /Licença bloqueada: criar, editar, pausar, gerar URL ou ativar envio está indisponível/;
+const RULE_FORM_LOCK_NOTE = /Licença bloqueada: esta regra não pode ser salva agora/;
 const connection = connectionWith({ rules: [ruleWith({ id: "r1" })] });
 
 describe("Pipedrive panel under a license lock", () => {
@@ -160,6 +161,47 @@ describe("Pipedrive panel under a license lock", () => {
       expect(button.disabled).toBe(true);
       fireEvent.click(button);
     }
+    expect(updateRuleAction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the new-rule form disabled and explains why after a 423 on create", async () => {
+    const createRuleAction = vi.fn(async (_: FormData) => ({
+      ok: false as const,
+      message: "Licença bloqueada: alterações indisponíveis. Verifique /backoffice/license.",
+      licenseLocked: true,
+    }));
+    renderPanel({ connections: [connectionWith({ rules: [] })], createRuleAction });
+
+    fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
+    fireEvent.change(screen.getByLabelText("Nome da regra"), {
+      target: { value: "Regra bloqueada" },
+    });
+    fireEvent.change(screen.getByLabelText("Funil e etapa no Pipedrive"), {
+      target: { value: "pipeline_1::stage_3" },
+    });
+    const submit = screen.getByRole("button", { name: "Criar regra" }) as HTMLButtonElement;
+    expect(screen.queryByText(RULE_FORM_LOCK_NOTE)).toBeNull();
+    fireEvent.click(submit);
+
+    await screen.findByText(RULE_FORM_LOCK_NOTE);
+    expect(createRuleAction).toHaveBeenCalledTimes(1);
+    const button = screen.getByRole("button", { name: "Criar regra" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect((screen.getByLabelText("Nome da regra") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Funil e etapa no Pipedrive") as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.submit(button.closest("form")!);
+    expect(createRuleAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the license notice in the rule editor and keeps it from saving", () => {
+    const updateRuleAction = vi.fn(async (_: FormData) => ({ ok: true as const, message: "ok" }));
+    renderPanel({ connections: [connection], licenseLocked: true, updateRuleAction });
+
+    const editor = screen.getByText("Editar regra").closest("details")!;
+    expect(within(editor).getByText(RULE_FORM_LOCK_NOTE)).toBeTruthy();
+    const save = within(editor).getByRole("button", { name: "Salvar regra", hidden: true }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.submit(save.closest("form")!);
     expect(updateRuleAction).not.toHaveBeenCalled();
   });
 

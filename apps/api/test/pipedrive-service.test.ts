@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE,
   pipedriveConnectionSchema,
   pipedrivePipelineSchema,
 } from "@wpptrack/shared";
@@ -100,7 +101,7 @@ describe("Pipedrive connections and catalog", () => {
       ])
         await expect(operation()).rejects.toMatchObject({
           status: 404,
-          message: "Conexão Pipedrive não encontrada",
+          message: PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE,
         });
     }
     expect(h.state.pipedriveConnection).toHaveLength(1);

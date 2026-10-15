@@ -163,7 +163,7 @@ describe("Pipedrive one-time webhook URL (memory only)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Atualizar catálogo de Pipedrive principal" }));
 
     await waitFor(() => expect(screen.queryByDisplayValue(SYNTHETIC_WEBHOOK_URL)).toBeNull());
-    expect(screen.getByText(/sessão não e mais válida/)).toBeTruthy();
+    expect(screen.getByText(/sessão não é mais válida/)).toBeTruthy();
   });
 
   it("hides the URL when manage permission is lost on a later render", async () => {

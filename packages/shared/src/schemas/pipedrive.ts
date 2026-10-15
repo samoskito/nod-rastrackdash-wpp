@@ -37,7 +37,15 @@ const originSchema = z
     } catch {
       return false;
     }
-  }, "Informe apenas o endereço HTTPS da empresa na Pipedrive (https://<empresa>.pipedrive.com)");
+  }, "Informe apenas o endereço HTTPS da empresa no Pipedrive (https://<empresa>.pipedrive.com)");
+
+/**
+ * Exact message of the workspace-scoped Pipedrive connection 404
+ * (code pipedrive_connection_not_found). The web client has no machine-readable
+ * error code, so it recognizes the scoped absence by this text.
+ */
+export const PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE =
+  "Conexão Pipedrive não encontrada";
 
 export const pipedriveConnectionStatuses = [
   "active",

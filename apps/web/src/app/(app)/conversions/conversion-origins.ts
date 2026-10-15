@@ -102,8 +102,8 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
   {
     id: "pipedrive",
     kind: "crm",
-    label: "Etapa no Pipedrive",
-    description: "Quando o negócio avança de etapa no Pipedrive.",
+    label: "Etapa ou negócio ganho no Pipedrive",
+    description: "Quando o negócio avança de etapa ou é ganho no Pipedrive.",
     logoProvider: "pipedrive",
     fallbackChannelProviders: [],
     connection: "none",

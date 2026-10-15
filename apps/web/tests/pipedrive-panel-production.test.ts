@@ -304,7 +304,7 @@ describe("Pipedrive production opt-in (new rule)", () => {
   function fillNew() {
     fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
     fireEvent.change(screen.getByLabelText("Nome da regra"), { target: { value: "Lead em producao" } });
-    fireEvent.change(screen.getByLabelText("Funil e etapa na Pipedrive"), {
+    fireEvent.change(screen.getByLabelText("Funil e etapa no Pipedrive"), {
       target: { value: "pipeline_1::stage_1" },
     });
     fireEvent.change(screen.getByLabelText("Evento da conversão"), { target: { value: "LeadSubmitted" } });

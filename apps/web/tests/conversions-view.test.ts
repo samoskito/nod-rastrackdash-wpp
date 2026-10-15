@@ -350,7 +350,7 @@ describe("conversions view: CRM rules, sorting and filters", () => {
     expect(rows[0]).toMatchObject({
       kind: "crm",
       origin: "pipedrive",
-      originLabel: "Etapa no Pipedrive",
+      originLabel: "Etapa ou negócio ganho no Pipedrive",
       platformLabel: "Pipedrive Comercial",
       triggerDetail: "Etapa “Proposta enviada” em Vendas",
       scopeLabel: "Atendimento",

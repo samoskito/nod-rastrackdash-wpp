@@ -180,7 +180,7 @@ describe("Pipedrive received events (bounded, read-only diagnostics)", () => {
     renderPanel({ listEventsAction: vi.fn(async () => ({ ok: false as const, reason: "unauthorized" as const })) });
     openEvents();
     await screen.findByText(/Sessão sem permissão para ver eventos/);
-    await screen.findByText(/sessão não e mais válida/);
+    await screen.findByText(/sessão não é mais válida/);
   });
 
   it("offers retry only for failed events with a transient code, behind a confirmation", async () => {

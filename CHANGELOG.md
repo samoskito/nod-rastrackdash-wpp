@@ -61,7 +61,7 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
-- **Fase 4c — Pipedrive CRM (API + shared)**, ported from the SaaS without
+- **Fase 4c — Pipedrive CRM (API + shared + web)**, ported from the SaaS without
   its pilot flags (`PIPEDRIVE_PANEL_*`, `PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED`):
   owner-managed connections (API token sealed with the new optional
   `PIPEDRIVE_CRM_ENCRYPTION_KEY`, Base64 32 bytes, must differ from
@@ -74,7 +74,13 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   writes (including the webhook) get the global `423`, and the worker and the
   sender stop while the license is locked. Additive migration
   `20261016120000_pipedrive_integration` (six `Pipedrive*` tables). Guide:
-  `docs/setup/pipedrive.md`.
+  `docs/setup/pipedrive.md`. Web: a Pipedrive card in the Integrations Hub
+  (CRM tab) with API-token connect, the webhook URL shown once, stage and
+  "deal won" rules, authorized channels and received events; Conversions
+  lists Pipedrive rules read-only with "Gerenciar no Hub"; Kommo and Pipedrive
+  share the WhatsApp number options (any provider, with the reason a number
+  cannot be authorized); a locked license (`423`) shows a notice and keeps the
+  panel, including the rule forms, read-only.
 - **Kommo leads without an ad id (API)**: a lead with `ctwa_clid` and no ad
   id is now sent through the verified workspace page + pixel when it entered
   through a number authorized on the Kommo connection that inherits the

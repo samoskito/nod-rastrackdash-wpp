@@ -16,6 +16,7 @@ import {
   randomUUID,
 } from "node:crypto";
 import {
+  PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE,
   pipedriveConnectionSchema,
   type PipedriveConnectionDto,
   type PipedriveConnectionCreateInputDto,
@@ -472,7 +473,7 @@ export class PipedriveService {
       throw new NotFoundException({
         statusCode: 404,
         code: "pipedrive_connection_not_found",
-        message: "Conexão Pipedrive não encontrada",
+        message: PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE,
       });
     return row;
   }

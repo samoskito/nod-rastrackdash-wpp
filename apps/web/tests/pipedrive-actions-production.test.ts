@@ -31,6 +31,7 @@ vi.mock("../src/lib/server-api", () => ({
   isLicenseLockedError: (error: unknown) => error instanceof LicenseLockedErrorStub,
 }));
 
+import { PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE } from "@wpptrack/shared";
 import {
   getPipedriveCapabilitiesAction,
   getPipedriveConnectionAction,
@@ -126,7 +127,7 @@ describe("Pipedrive production capabilities read", () => {
 
   it("distinguishes scoped absence, unknown (503/network) and unauthorized", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new ApiRequestErrorStub("Conexão Pipedrive não encontrada", 404),
+      new ApiRequestErrorStub(PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE, 404),
     );
     expect(await getPipedriveCapabilitiesAction("workspace_1", "pipedrive_connection_1")).toEqual({
       ok: false,
@@ -201,7 +202,7 @@ describe("Pipedrive revision-fenced reads", () => {
 
   it("treats only the structured scoped 404 as proof of absence", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new ApiRequestErrorStub("Conexão Pipedrive não encontrada", 404),
+      new ApiRequestErrorStub(PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE, 404),
     );
     expect(await getPipedriveConnectionAction("workspace_1", "pipedrive_connection_1")).toEqual({
       ok: false,

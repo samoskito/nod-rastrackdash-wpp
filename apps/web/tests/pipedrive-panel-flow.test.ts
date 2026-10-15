@@ -37,7 +37,7 @@ function fillNewRule(options: {
   fireEvent.change(screen.getByLabelText("Nome da regra"), {
     target: { value: options.name ?? "Regra de teste" },
   });
-  fireEvent.change(screen.getByLabelText("Funil e etapa na Pipedrive"), {
+  fireEvent.change(screen.getByLabelText("Funil e etapa no Pipedrive"), {
     target: { value: options.stage ?? "pipeline_1::stage_3" },
   });
   if (options.eventName) {
@@ -298,7 +298,7 @@ describe("Pipedrive status and health", () => {
     });
     expect((screen.getByRole("button", { name: "Retomar conexão Pipedrive principal" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Credencial inválida")).toBeTruthy();
-    expect(screen.getAllByText(/A Pipedrive recusou a credencial/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/O Pipedrive recusou a credencial/).length).toBeGreaterThan(0);
   });
 
   it("shows a blocked connection as actionable and never offers resume", () => {
@@ -313,7 +313,7 @@ describe("Pipedrive status and health", () => {
   it("replaces the credential with a password field and never echoes the token", async () => {
     const replaceCredentialAction = vi.fn(async () => ({
       ok: true as const,
-      message: "Credenciais da Pipedrive atualizadas.",
+      message: "Credenciais do Pipedrive atualizadas.",
       connection: snapshotOf(baseConnection),
     }));
     renderPanel({ replaceCredentialAction });
@@ -323,7 +323,7 @@ describe("Pipedrive status and health", () => {
     fireEvent.change(input, { target: { value: "synthetic-new-token-0123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Substituir token" }));
 
-    await screen.findByText("Credenciais da Pipedrive atualizadas.");
+    await screen.findByText("Credenciais do Pipedrive atualizadas.");
     const sent = formValues(sentForm(replaceCredentialAction));
     expect(JSON.parse(sent.payload)).toEqual({ apiToken: "synthetic-new-token-0123456" });
     expect(screen.queryByDisplayValue("synthetic-new-token-0123456")).toBeNull();
@@ -559,7 +559,7 @@ describe("Pipedrive rule CRUD", () => {
         }),
       ],
     });
-    expect(screen.getByText("Valor do negócio na Pipedrive (BRL)")).toBeTruthy();
+    expect(screen.getByText("Valor do negócio no Pipedrive (BRL)")).toBeTruthy();
     expect(screen.getByText(/Valor fixo: .*50,00/)).toBeTruthy();
     expect(screen.getByText(/Produto: Kit/)).toBeTruthy();
     expect(screen.getByText("Evento sem valor")).toBeTruthy();
@@ -579,7 +579,7 @@ describe("Pipedrive rule CRUD", () => {
     fireEvent.click(editSummary);
     const form = editSummary.closest("details")!;
     fireEvent.change(within(form).getByLabelText("Nome da regra"), { target: { value: "Ganho renomeado" } });
-    fireEvent.click(within(form).getByRole("radio", { name: "Valor do negócio na Pipedrive" }));
+    fireEvent.click(within(form).getByRole("radio", { name: "Valor do negócio no Pipedrive" }));
     fireEvent.change(within(form).getByLabelText("Produto (opcional)"), { target: { value: "" } });
     fireEvent.click(within(form).getByRole("button", { name: "Salvar regra" }));
 

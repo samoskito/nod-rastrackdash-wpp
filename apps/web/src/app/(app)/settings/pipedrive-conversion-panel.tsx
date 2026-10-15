@@ -136,6 +136,8 @@ const TRANSPORT_ERROR_MESSAGE =
   "Não foi possível concluir a ação. Verifique sua conexão/sessão e tente novamente.";
 const SESSION_MESSAGE =
   "Sua sessão expirou ou não tem permissão para esta ação. Atualize a página.";
+const LICENSE_LOCKED_RULE_FORM_NOTE =
+  "Licença bloqueada: esta regra não pode ser salva agora. Verifique /backoffice/license.";
 const LICENSE_LOCKED_NOTE =
   "Licença bloqueada: criar, editar, pausar, gerar URL ou ativar envio está indisponível. Você ainda pode consultar conexões, regras e eventos.";
 const MAX_FIXED_VALUE_CENTS = 2_147_483_647;
@@ -317,14 +319,14 @@ const errorCodePattern = /^[a-z0-9_]{1,64}$/;
  */
 const errorCodeText: Record<string, string> = {
   pipedrive_unauthorized:
-    "A Pipedrive recusou a credencial. Substitua o token da conexão.",
+    "O Pipedrive recusou a credencial. Substitua o token da conexão.",
   pipedrive_rate_limited:
-    "A Pipedrive limitou as requisições. Aguarde e atualize o catálogo depois.",
+    "O Pipedrive limitou as requisições. Aguarde e atualize o catálogo depois.",
   pipedrive_transport:
-    "Falha de comunicação com a Pipedrive. Tente novamente em instantes.",
-  pipedrive_timeout: "A Pipedrive demorou demais para responder.",
+    "Falha de comunicação com o Pipedrive. Tente novamente em instantes.",
+  pipedrive_timeout: "O Pipedrive demorou demais para responder.",
   pipedrive_invalid_response:
-    "A Pipedrive retornou uma resposta inesperada.",
+    "O Pipedrive retornou uma resposta inesperada.",
   pipedrive_account_mismatch:
     "O token pertence a outra conta Pipedrive. Substitua a credencial pela correta.",
   pipedrive_persistence_failed:
@@ -333,7 +335,7 @@ const errorCodeText: Record<string, string> = {
     "A instalação ainda não está configurada para guardar credenciais Pipedrive. Fale com o suporte.",
   credential_decrypt_failed:
     "A credencial salva não pode ser lida. Substitua o token da conexão.",
-  pipedrive_payload_invalid: "Aviso da Pipedrive em formato não reconhecido.",
+  pipedrive_payload_invalid: "Aviso do Pipedrive em formato não reconhecido.",
   pipedrive_identity_or_timestamp_invalid:
     "Aviso de outra conta Pipedrive ou com horário inválido.",
   not_deal_change: "Aviso que não é alteração de negócio; ignorado.",
@@ -374,9 +376,9 @@ const errorCodeText: Record<string, string> = {
     "Tentativas esgotadas. Não é reprocessado automaticamente.",
   lease_lost: "Processamento interrompido.",
   production_activation_fence:
-    "Movimento anterior a ativação do envio automático: mantido apenas como observado.",
+    "Movimento anterior à ativação do envio automático: mantido apenas como observado.",
   channel_activation_fence:
-    "Movimento anterior a autorização do canal: mantido apenas como observado.",
+    "Movimento anterior à autorização do canal: mantido apenas como observado.",
   pipedrive_materialization_incomplete:
     "A conversão não foi registrada por completo; nada foi enviado.",
   pipedrive_semantic_identity_conflict:
@@ -832,7 +834,7 @@ export function PipedriveConversionPanel({
               Webhooks, crie um webhook para negócio alterado (objeto: deal,
               ação: change) e cole essa URL completa; a autenticação já está na
               URL. Ela
-              não e guardada nem exibida de novo: se perder, gere outra (a
+              não é guardada nem exibida de novo: se perder, gere outra (a
               anterior deixa de funcionar).
             </p>
           </div>
@@ -850,7 +852,7 @@ export function PipedriveConversionPanel({
 
       {authFailureDetected ? (
         <p className="action-note" role="status">
-          Sua sessão não e mais válida. Atualize a página para continuar; URLs de
+          Sua sessão não é mais válida. Atualize a página para continuar; URLs de
           webhook exibidas foram ocultadas.
         </p>
       ) : null}
@@ -892,7 +894,7 @@ export function PipedriveConversionPanel({
                 type="password"
                 autoComplete="off"
                 minLength={16}
-                placeholder="Token pessoal de API da Pipedrive"
+                placeholder="Token pessoal de API do Pipedrive"
                 disabled={formDisabled}
                 required
               />
@@ -906,7 +908,7 @@ export function PipedriveConversionPanel({
           />
 
           <p className="action-note">
-            O token fica apenas no servidor e nunca e reexibido. Depois de
+            O token fica apenas no servidor e nunca é reexibido. Depois de
             conectar, gere a URL do webhook no cartão da conexão.
           </p>
 
@@ -1050,10 +1052,10 @@ function RouteSelector({
         </div>
       )}
       <small className="action-note">
-        A Pipedrive e apenas o CRM: escolha quais números de WhatsApp deste
+        O Pipedrive é apenas o CRM: escolha quais números de WhatsApp deste
         workspace (de qualquer provedor) podem ter seus leads associados por
         telefone. O número precisa estar ativo e com destino Meta
-        verificado. Sem número autorizado, nenhum movimento e associado.
+        verificado. Sem número autorizado, nenhum movimento é associado.
       </small>
     </fieldset>
   );
@@ -1799,7 +1801,7 @@ function PipedriveConnectionCard({
 
       {canManage && confirmingKey === rotateKey ? (
         <InlineConfirm
-          message="Gerar uma nova URL de webhook invalida qualquer URL anterior desta conexão: a Pipedrive para de ser aceita até você colar a nova. A URL aparece uma única vez."
+          message="Gerar uma nova URL de webhook invalida qualquer URL anterior desta conexão: o Pipedrive para de ser aceito até você colar a nova. A URL aparece uma única vez."
           confirmLabel="Gerar nova URL"
           tone="primary"
           disabled={Boolean(pending) || locked}
@@ -1820,7 +1822,7 @@ function PipedriveConnectionCard({
 
       {canManage && confirmingKey === revokeKey ? (
         <InlineConfirm
-          message="Revogar a URL do webhook? A Pipedrive deixa de ser aceita até gerar uma nova URL."
+          message="Revogar a URL do webhook? O Pipedrive deixa de ser aceito até gerar uma nova URL."
           confirmLabel="Revogar URL"
           tone="danger"
           disabled={Boolean(pending) || locked}
@@ -1907,7 +1909,7 @@ function PipedriveConnectionCard({
             onSubmit={handleCredentialSubmit}
           >
             <p className="action-note">
-              O token atual nunca e reexibido. Informe um novo token para
+              O token atual nunca é reexibido. Informe um novo token para
               substituir a credencial; a origem só precisa ser preenchida se
               mudou. Trocar de conta apaga catálogo, canais e desativa as
               regras.
@@ -1981,7 +1983,9 @@ function PipedriveConnectionCard({
         {createRuleOpen && canManage ? (
           <PipedriveRuleForm
             key={connectionIdentity(canonical)}
-            pending={locked || pending === createRuleKey || stateUnresolved}
+            pending={pending === createRuleKey}
+            blocked={unsettledLock || stateUnresolved}
+            licenseLocked={licenseLocked}
             pipelines={pipelines}
             onSubmit={handleCreateRuleSubmit}
           />
@@ -2032,6 +2036,7 @@ function PipedriveConnectionCard({
               pending={pending}
               setPending={setPending}
               mutationsBlocked={locked || stateUnresolved}
+              licenseLocked={licenseLocked}
               capsView={capsView}
               readiness={readiness}
               loadCapabilities={loadCapabilities}
@@ -2061,13 +2066,13 @@ function PipedriveConnectionCard({
       />
 
       <p className="action-note">
-        Um movimento só e associado quando a pessoa do negócio tem telefone
+        Um movimento só é associado quando a pessoa do negócio tem telefone
         igual ao de um lead de WhatsApp que já existe neste workspace, em um canal
-        autorizado; nenhum lead e criado. Mudanças so de campos personalizados
+        autorizado; nenhum lead é criado. Mudanças só de campos personalizados
         são ignoradas e negócio perdido não gera conversão. Regras em
         observação não enviam nada; com envio automático o resultado de cada
-        envio aparece em Eventos recebidos e só e mostrado como enviado quando
-        confirmado. Histórico anterior não e reenviado.
+        envio aparece em Eventos recebidos e só é mostrado como enviado quando
+        confirmado. Histórico anterior não é reenviado.
       </p>
     </article>
   );
@@ -2112,7 +2117,7 @@ function ProductionGate({
         <small role="status">
           Envio automático disponível nesta instalação.
           {!capsView.capabilities.historicalReplay
-            ? " Movimentos anteriores a ativação não são reenviados."
+            ? " Movimentos anteriores à ativação não são reenviados."
             : ""}
           {!capsView.capabilities.unknownDeliveryRetry
             ? " Um envio de resultado desconhecido nunca é reenviado."
@@ -2476,7 +2481,7 @@ function PipedriveEventsSection({
         <div className="provider-conversion-empty">
           <Database size={18} aria-hidden="true" />
           <span>
-            Nenhum evento recebido ainda. Depois de colar a URL do webhook na
+            Nenhum evento recebido ainda. Depois de colar a URL do webhook no
             Pipedrive, os movimentos de etapa aparecem aqui.
           </span>
         </div>
@@ -2558,14 +2563,14 @@ function PipedriveEventsSection({
                     </small>
                   ) : materialized && item.status === "failed" ? (
                     <small className="action-note">
-                      Este evento já tem conversão registrada: ele não e
-                      reprocessado por aqui e nada e reenviado a partir desta
+                      Este evento já tem conversão registrada: ele não é
+                      reprocessado por aqui e nada é reenviado a partir desta
                       lista.
                     </small>
                   ) : null}
                   {item.status === "failed" && item.errorCode === "attempts_exhausted" ? (
                     <small className="action-note">
-                      Corrija a causa e aguarde um novo movimento na Pipedrive.
+                      Corrija a causa e aguarde um novo movimento no Pipedrive.
                     </small>
                   ) : null}
                   {item.status === "failed" &&
@@ -2746,11 +2751,18 @@ function validateMergedRuleCandidate(
 
 function PipedriveRuleForm({
   pending,
+  blocked = false,
+  licenseLocked = false,
   pipelines,
   onSubmit,
   initial,
 }: {
+  /** This form's own save is in flight. */
   pending: boolean;
+  /** Writes stopped for another reason (unsettled request, unconfirmed state). */
+  blocked?: boolean;
+  /** License locked (known or after a 423): nothing here can be saved. */
+  licenseLocked?: boolean;
   pipelines: PipedrivePipelineDto[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   initial?: PipedriveConversionRuleDto;
@@ -2795,6 +2807,16 @@ function PipedriveRuleForm({
     }
   }
 
+  const inert = pending || blocked || licenseLocked;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (inert) {
+      event.preventDefault();
+      return;
+    }
+    onSubmit(event);
+  }
+
   const stageStillInCatalog = pipelines.some(
     (pipeline) =>
       `${pipeline.id}::${WON_STAGE_VALUE}` === stage ||
@@ -2802,7 +2824,7 @@ function PipedriveRuleForm({
   );
 
   return (
-    <form className="provider-conversion-builder" onSubmit={onSubmit}>
+    <form className="provider-conversion-builder" onSubmit={handleSubmit}>
       <div className="provider-conversion-base-fields">
         <label>
           <span className="field-label">Nome da regra</span>
@@ -2813,17 +2835,17 @@ function PipedriveRuleForm({
             minLength={2}
             maxLength={120}
             placeholder="Ex.: Lead qualificado"
-            disabled={pending}
+            disabled={inert}
             required
           />
         </label>
         <label>
-          <span className="field-label">Funil e etapa na Pipedrive</span>
+          <span className="field-label">Funil e etapa no Pipedrive</span>
           <select
             name="stage"
             value={stage}
             onChange={(event) => setStage(event.target.value)}
-            disabled={pending}
+            disabled={inert}
             required
           >
             <option value="" disabled>
@@ -2856,7 +2878,7 @@ function PipedriveRuleForm({
             onChange={(event) =>
               selectEventName(event.target.value as ConversionEventNameDto)
             }
-            disabled={pending || wonSelected}
+            disabled={inert || wonSelected}
           >
             {conversionEventOptions.map((option) => (
               <option key={option} value={option}>
@@ -2889,7 +2911,7 @@ function PipedriveRuleForm({
                 value="observation"
                 checked={mode === "observation"}
                 onChange={() => setMode("observation")}
-                disabled={pending}
+                disabled={inert}
               />
               <span>Observação (padrão): nada é enviado</span>
             </label>
@@ -2900,7 +2922,7 @@ function PipedriveRuleForm({
                 value="production"
                 checked={mode === "production"}
                 onChange={() => setMode("production")}
-                disabled={pending}
+                disabled={inert}
               />
               <span>Envio automático: envia o evento para a Meta</span>
             </label>
@@ -2909,7 +2931,7 @@ function PipedriveRuleForm({
       ) : null}
       <p className="action-note">
         {wonSelected
-          ? "O valor e a moeda vêm do negócio ganho na Pipedrive (ou use um valor fixo)."
+          ? "O valor e a moeda vêm do negócio ganho no Pipedrive (ou use um valor fixo)."
           : valuePolicyHint(effectiveEvent)}
       </p>
 
@@ -2925,9 +2947,9 @@ function PipedriveRuleForm({
                   value="deal"
                   checked={valueMode === "deal"}
                   onChange={() => setValueMode("deal")}
-                  disabled={pending}
+                  disabled={inert}
                 />
-                <span>Valor do negócio na Pipedrive</span>
+                <span>Valor do negócio no Pipedrive</span>
               </label>
               <label>
                 <input
@@ -2936,7 +2958,7 @@ function PipedriveRuleForm({
                   value="fixed"
                   checked={valueMode === "fixed"}
                   onChange={() => setValueMode("fixed")}
-                  disabled={pending}
+                  disabled={inert}
                 />
                 <span>Valor fixo</span>
               </label>
@@ -2953,7 +2975,7 @@ function PipedriveRuleForm({
                   onChange={(event) => setFixedValueAmount(event.target.value)}
                   inputMode="decimal"
                   placeholder="Ex.: 199,90"
-                  disabled={pending}
+                  disabled={inert}
                   required
                 />
               </label>
@@ -2972,7 +2994,7 @@ function PipedriveRuleForm({
                 onChange={(event) => setCurrency(event.target.value)}
                 maxLength={3}
                 placeholder="BRL"
-                disabled={pending}
+                disabled={inert}
                 required={currencyRequired}
               />
             </label>
@@ -2984,17 +3006,23 @@ function PipedriveRuleForm({
                 onChange={(event) => setContentName(event.target.value)}
                 maxLength={180}
                 placeholder="Ex.: Plano anual"
-                disabled={pending}
+                disabled={inert}
               />
             </label>
           </div>
           {valueMode === "deal" ? (
             <p className="action-note">
-              Se a moeda do negócio for diferente da configurada, o movimento e
-              ignorado: não ha conversão cambial.
+              Se a moeda do negócio for diferente da configurada, o movimento é
+              ignorado: não há conversão cambial.
             </p>
           ) : null}
         </>
+      ) : null}
+
+      {licenseLocked ? (
+        <p className="action-note warn" role="status">
+          {LICENSE_LOCKED_RULE_FORM_NOTE}
+        </p>
       ) : null}
 
       <div className="provider-conversion-builder-footer">
@@ -3002,7 +3030,7 @@ function PipedriveRuleForm({
           Crie uma regra por etapa (e uma de negócio ganho por funil); todos
           os funis da conta aparecem acima.
         </span>
-        <button className="button primary" type="submit" disabled={pending}>
+        <button className="button primary" type="submit" disabled={inert}>
           <Check size={15} aria-hidden="true" />
           {pending
             ? "Salvando..."
@@ -3026,6 +3054,7 @@ function PipedriveRuleListItem({
   pending,
   setPending,
   mutationsBlocked,
+  licenseLocked,
   capsView,
   readiness,
   loadCapabilities,
@@ -3047,6 +3076,7 @@ function PipedriveRuleListItem({
   pending: string | null;
   setPending: (value: string | null) => void;
   mutationsBlocked: boolean;
+  licenseLocked: boolean;
   capsView: CapabilitiesView;
   readiness: ReadinessItem[];
   loadCapabilities: () => Promise<void>;
@@ -3205,7 +3235,7 @@ function PipedriveRuleListItem({
             <small>
               {rule.valueMode === "fixed"
                 ? `Valor fixo: ${moneyLabel(rule.fixedValueCents, rule.currency)}`
-                : `Valor do negócio na Pipedrive${rule.currency ? ` (${rule.currency})` : " (sem moeda configurada)"}`}
+                : `Valor do negócio no Pipedrive${rule.currency ? ` (${rule.currency})` : " (sem moeda configurada)"}`}
               {rule.contentName ? ` / Produto: ${rule.contentName}` : ""}
             </small>
           ) : (
@@ -3352,7 +3382,9 @@ function PipedriveRuleListItem({
               never submits a stale draft over a newer canonical rule. */}
           <PipedriveRuleForm
             key={`${rule.id}-${rule.updatedAt}-${editOpen}`}
-            pending={pending === editKey || mutationsBlocked}
+            pending={pending === editKey}
+            blocked={mutationsBlocked}
+            licenseLocked={licenseLocked}
             pipelines={pipelines}
             onSubmit={handleEditSubmit}
             initial={rule}

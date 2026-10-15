@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE,
   pipedriveChannelBindingMessages,
   pipedriveConnectionChannelBindingsInputSchema,
   pipedriveConnectionCreateInputSchema,
@@ -385,7 +386,7 @@ const knownApiMessages: Record<string, string> = {
   "Conexão com eventos auditados não pode ser removida; pause-a":
     "Esta conexão já tem eventos auditados e não pode ser removida. Pause-a.",
   "Evento não pode ser reprocessado":
-    "Este evento não pode ser reprocessado (so falhas transitórias com a mesma credencial).",
+    "Este evento não pode ser reprocessado (só falhas transitórias com a mesma credencial).",
   "Catálogo Pipedrive requer atualização":
     "O catálogo está desatualizado. Atualize o catálogo antes de salvar a regra.",
   "Etapa Pipedrive indisponível":
@@ -394,18 +395,18 @@ const knownApiMessages: Record<string, string> = {
     "Funil indisponível no catálogo atual. Atualize o catálogo e escolha outro.",
   "Regra ou evento Pipedrive já existe":
     "Já existe uma regra equivalente (no máximo uma regra de negócio ganho por funil).",
-  "Conexão Pipedrive não encontrada":
+  [PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE]:
     "Conexão não encontrada. Atualize a página.",
   "Regra Pipedrive não encontrada": "Regra não encontrada. Atualize a página.",
   "Evento Pipedrive não encontrado": "Evento não encontrado. Atualize a lista.",
   pipedrive_unauthorized:
-    "A Pipedrive recusou a credencial. Substitua o token da conexão.",
+    "O Pipedrive recusou a credencial. Substitua o token da conexão.",
   pipedrive_rate_limited:
-    "A Pipedrive limitou as requisições. Aguarde alguns minutos e tente novamente.",
+    "O Pipedrive limitou as requisições. Aguarde alguns minutos e tente novamente.",
   pipedrive_transport:
-    "Não foi possível contatar a Pipedrive. Tente novamente em instantes.",
+    "Não foi possível contatar o Pipedrive. Tente novamente em instantes.",
   pipedrive_invalid_response:
-    "A Pipedrive retornou uma resposta inesperada. Tente novamente mais tarde.",
+    "O Pipedrive retornou uma resposta inesperada. Tente novamente mais tarde.",
   pipedrive_account_mismatch:
     "O token pertence a outra conta Pipedrive. A conexão foi bloqueada; substitua a credencial pela correta.",
   pipedrive_persistence_failed:
@@ -517,7 +518,7 @@ type ReadFailure =
  * scoped 404 is recognized by the exact message PipedriveService raises
  * (code pipedrive_connection_not_found). Any other 404 stays unknown.
  */
-const scopedAbsenceMessage = "Conexão Pipedrive não encontrada";
+const scopedAbsenceMessage = PIPEDRIVE_CONNECTION_NOT_FOUND_MESSAGE;
 
 function isScopedAbsence(error: unknown): boolean {
   return (
@@ -734,7 +735,7 @@ export async function createPipedriveConnectionAction(
     return {
       ok: true,
       message:
-        "Conexão Pipedrive criada. Gere a URL do webhook para concluir a configuração na Pipedrive.",
+        "Conexão Pipedrive criada. Gere a URL do webhook para concluir a configuração no Pipedrive.",
       connection,
     };
   } catch (error) {
@@ -757,8 +758,8 @@ export async function replacePipedriveCredentialAction(
     path: "/credentials",
     method: "POST",
     body: JSON.stringify(input),
-    okMessage: "Credenciais da Pipedrive atualizadas.",
-    failMessage: "Não foi possível atualizar as credenciais da Pipedrive.",
+    okMessage: "Credenciais do Pipedrive atualizadas.",
+    failMessage: "Não foi possível atualizar as credenciais do Pipedrive.",
   });
 }
 
@@ -822,7 +823,7 @@ export async function refreshPipedriveCatalogAction(
     method: "POST",
     body: "{}",
     okMessage: "Catálogo de pipelines e etapas atualizado.",
-    failMessage: "Não foi possível atualizar o catálogo da Pipedrive.",
+    failMessage: "Não foi possível atualizar o catálogo do Pipedrive.",
   });
   if (result.ok && result.connection && result.connection.catalogState !== "fresh") {
     return {
@@ -937,7 +938,7 @@ export async function revokePipedriveWebhookSecretAction(
     revalidateCrmPaths();
     return {
       ok: true,
-      message: "URL do webhook revogada. A Pipedrive deixa de ser aceita até gerar uma nova.",
+      message: "URL do webhook revogada. O Pipedrive deixa de ser aceito até gerar uma nova.",
       revoked: true,
     };
   } catch (error) {
