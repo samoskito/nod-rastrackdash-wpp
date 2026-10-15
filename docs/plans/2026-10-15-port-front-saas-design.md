@@ -19,6 +19,7 @@ leads novos × que voltaram, exportar leads) **adaptando** à edição de aluno 
 | Sidebar | Continua fixa (`position: fixed; height: 100vh`). |
 | Hub: abas (15/10) | 4 abas: **WhatsApp** (Uazapi, WAHA, WhatsApp Cloud API, Z-API e NOD API "Em breve"), **Atendimento e vendas** (Umbler, Gupshup, Data Crazy; Payt/Unnichat na Fase 4), **Anúncios** (Meta Ads), **CRM** (Kommo; Pipedrive na Fase 4). |
 | Meta: dois conceitos (15/10) | **Meta Ads** (aba Anúncios) = login social/token para trazer dados de tráfego, cruzar com leads e enviar conversões; o login social é mantido. **WhatsApp Cloud API** (aba WhatsApp, logo da Meta) = webhook direto da Meta para receber as conversas. Nunca misturar os dois. |
+| WAHA (15/10) | Também "Em breve" no Hub (nunca validado); fora da regra global da Fase 3. |
 | Z-API e NOD API (15/10) | "Em breve" no Hub. Parser Z-API será criado/validado quando o Samuel enviar payload real. |
 | Logos (15/10) | Cloud API usa a logo da Meta; pesquisar logos oficiais de Uazapi e WAHA. |
 | Acentuação (15/10) | Textos sem acento existentes ficam para uma revisão geral depois; texto novo já sai acentuado. |
