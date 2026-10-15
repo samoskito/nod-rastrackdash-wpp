@@ -730,6 +730,18 @@ export const providerConversionExecutionSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
+/**
+ * Telefone cuja regra global roda num canal que ainda esta em observacao
+ * (conexao fora de producao) enquanto outro canal do mesmo telefone esta em
+ * producao: a tela avisa ("a regra so observa este numero").
+ */
+const observationCanonicalChannelsSchema = z.array(
+  z.object({
+    canonicalChannelId: idSchema,
+    productionChannelIds: z.array(idSchema).min(1),
+  }),
+);
+
 export const providerConversionRuleSchema = z.object({
   id: idSchema,
   workspaceId: idSchema,
@@ -765,6 +777,7 @@ export const providerConversionRuleSchema = z.object({
   // canal (mesmo telefone em dois provedores/instancias): a regra roda uma
   // vez por telefone.
   duplicatePhoneChannelIds: z.array(idSchema).optional(),
+  observationCanonicalChannels: observationCanonicalChannelsSchema.optional(),
   globalPrecedence: z
     .literal(providerConversionRuleGlobalPrecedence)
     .optional(),
@@ -855,6 +868,7 @@ export const providerConversionRuleUnifyCandidateSchema = z.object({
   overriddenChannelIds: z.array(idSchema),
   // Numeros cujo telefone ja seria avaliado por outro canal.
   duplicatePhoneChannelIds: z.array(idSchema).optional(),
+  observationCanonicalChannels: observationCanonicalChannelsSchema.optional(),
   // Regra global identica ja existente, que sera reaproveitada.
   existingGlobalRuleId: idSchema.nullable(),
 });

@@ -14,6 +14,8 @@ import {
   providerRuleCapabilities,
   providerRuleCoversChannel,
   providerRuleOrigin,
+  PROVIDER_RULE_SCOPE_CHANNEL_LIMIT,
+  resolveApplicableProviderRules,
   resolveProviderRuleScopeChannelIds,
   selectApplicableProviderRules,
   type ScopedChannel,
@@ -233,9 +235,10 @@ describe("provider rule workspace scope: precedence", () => {
     expect(providerRuleCoversChannel(contactMessage, gupshupChannel)).toBe(
       false,
     );
-    // Structured catalog: Umbler only.
+    // Structured catalog: Umbler and Uazapi team messages (as the SaaS).
     expect(providerRuleCoversChannel(catalog, umblerChannel)).toBe(true);
-    expect(providerRuleCoversChannel(catalog, brandNewQr)).toBe(false);
+    expect(providerRuleCoversChannel(catalog, brandNewQr)).toBe(true);
+    expect(providerRuleCoversChannel(catalog, gupshupChannel)).toBe(false);
     // Tags only exist on numbers with WhatsApp labels (Uazapi).
     expect(providerRuleOrigin(label)).toBe("whatsapp_label");
     expect(providerRuleCoversChannel(label, brandNewQr)).toBe(true);
@@ -400,6 +403,65 @@ describe("provider rule workspace scope: precedence", () => {
       skip: 1,
       cursor: { id: "channel_0499" },
     });
+  });
+});
+
+describe("provider rule workspace scope: channel limit", () => {
+  function hugeWorkspace() {
+    const total = PROVIDER_RULE_SCOPE_CHANNEL_LIMIT + 1;
+    const rows = Array.from({ length: total }, (_, index) => ({
+      id: `channel_${String(index).padStart(5, "0")}`,
+      connectionId: "connection_umbler",
+      organizationId: "org",
+      providerChannelId: `pc_${index}`,
+      status: "active",
+      createdAt: new Date("2026-07-18T00:00:00.000Z"),
+      connectedPhone: "",
+      connection: { provider: "umbler", status: "production" },
+    }));
+    let page = 0;
+    return vi.fn(async () => rows.slice(page * 500, ++page * 500));
+  }
+
+  it("does not throw past the limit: specific rules run, global rules are skipped", async () => {
+    const global = scopedRule({ id: "global", scope: "all_numbers" });
+    const specificOther = scopedRule({
+      id: "specific_other_event",
+      conversionRule: {
+        triggerType: "message_phrase",
+        eventName: "QualifiedLead",
+        active: true,
+      },
+      channels: [{ channelId: "channel_umbler" }],
+    });
+    const client = {
+      inboundWebhookChannel: { findMany: hugeWorkspace() },
+      providerConversionRuleConfig: { findMany: vi.fn(async () => []) },
+    };
+
+    const result = await resolveApplicableProviderRules(client as never, {
+      workspaceId,
+      rules: [global, specificOther],
+      channel: umblerChannel,
+    });
+
+    expect(result.applicable.map((rule) => rule.id)).toEqual([
+      "specific_other_event",
+    ]);
+    expect(result.skippedGlobal).toEqual([
+      { rule: global, reason: "scope_channel_limit" },
+    ]);
+    expect(client.providerConversionRuleConfig.findMany).not.toHaveBeenCalled();
+  });
+
+  it("resolves no channel for a global rule past the limit (never a partial scope)", async () => {
+    await expect(
+      resolveProviderRuleScopeChannelIds(
+        { inboundWebhookChannel: { findMany: hugeWorkspace() } } as never,
+        workspaceId,
+        scopedRule({ id: "global", scope: "all_numbers" }),
+      ),
+    ).resolves.toEqual([]);
   });
 });
 
@@ -1107,6 +1169,106 @@ describe("provider rule workspace scope: Uazapi evaluation", () => {
       }),
     );
     expect(harness.productionQueue.enqueueProviderConversion).not.toHaveBeenCalled();
+  });
+});
+
+describe("provider rule workspace scope: Uazapi structured catalog (as the SaaS)", () => {
+  function catalogRule(input: {
+    id: string;
+    scope: "all_numbers" | "specific_numbers";
+  }) {
+    const base = messageRule({
+      id: input.id,
+      scope: input.scope,
+      bound: false,
+      eventName: "Purchase",
+      phrase: "pedido confirmado",
+      authorScope: "team",
+    });
+    return {
+      ...base,
+      channels:
+        input.scope === "specific_numbers" ? [{ channelId: "channel_qr_b" }] : [],
+      conversionRule: {
+        ...base.conversionRule,
+        triggerType: "structured_catalog",
+        defaultCurrency: "BRL",
+        defaultContentName: "Cama elastica",
+      },
+      catalog: {
+        id: "catalog_1",
+        name: "Camas",
+        productName: "Cama elastica",
+        currency: "BRL",
+        active: true,
+        attributes: [
+          { id: "attribute_1", position: 1, key: "tamanho", label: "Tamanho" },
+        ],
+        variants: [
+          {
+            id: "variant_1",
+            normalizedKey: "4,90",
+            attributeValues: ["4,90"],
+            aliases: [],
+            valueCents: 359_700,
+            contentName: null,
+            active: true,
+          },
+        ],
+      },
+    };
+  }
+
+  it("evaluates a catalog rule on a Uazapi team message with its catalog snapshot", async () => {
+    const harness = uazapiHarness([
+      catalogRule({ id: "catalog_qr", scope: "specific_numbers" }),
+    ]);
+
+    const result = await harness.service.evaluateTeamMessage({
+      workspaceId,
+      instance: instanceB,
+      phone: "5511999990000",
+      messageText: "Pedido confirmado\nTamanho: 4,90",
+      externalMessageId: "msg_catalog",
+    });
+
+    expect(result.evaluated).toBe(true);
+    const evaluated = harness.evaluated.at(-1)!;
+    expect(evaluated.input.rule).toMatchObject({
+      providerRuleId: "catalog_qr",
+      triggerType: "structured_catalog",
+      valueMode: "fixed",
+    });
+    expect(evaluated.input.catalog).toMatchObject({
+      version: expect.stringMatching(/^catalog-v1:/),
+      catalog: { id: "catalog_1", productName: "Cama elastica" },
+    });
+    expect(
+      firstCallArg(harness.prisma.providerConversionRuleConfig.findMany).where
+        .conversionRule,
+    ).toEqual({
+      active: true,
+      triggerType: { in: ["structured_catalog", "message_phrase"] },
+    });
+  });
+
+  it("keeps phrase rules on Uazapi with the same snapshot as before (no catalog)", async () => {
+    const harness = uazapiHarness([
+      messageRule({ id: "phrase", scope: "specific_numbers", bound: false }),
+    ]);
+
+    await harness.service.evaluateTeamMessage({
+      workspaceId,
+      instance: instanceB,
+      phone: "5511999990000",
+      messageText: "vou te passar os valores",
+      externalMessageId: "msg_phrase",
+    });
+
+    expect(harness.evaluated.at(-1)!.input).toMatchObject({
+      catalog: null,
+      rule: { triggerType: "message_phrase" },
+    });
   });
 });
 

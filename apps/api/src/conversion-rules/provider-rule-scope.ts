@@ -37,7 +37,7 @@ import { phoneIdentityKey } from "../common/phone/phone-identity";
  *  - frase do contato: umbler (o parser marca authorType "contact"); Uazapi
  *    so avalia mensagens da equipe; gupshup/data_crazy/meta_cloud ainda nao
  *    avaliam regras de mensagem (a observacao so aceita eventos umbler);
- *  - catalogo estruturado: umbler;
+ *  - catalogo estruturado: umbler e uazapi (mensagem da equipe, como no SaaS);
  *  - etiqueta: uazapi (por nome entre instancias);
  *  - automacao Umbler: presa a conexao que recebe o callback.
  *  WAHA, Z-API e NOD API nao entram em regras de provedor (nao possuem canal
@@ -73,6 +73,11 @@ export type ScopedChannel = {
   phoneKey?: string | null;
   status?: string;
   createdAt?: Date;
+  /**
+   * Channel active AND its connection in production: an occurrence here can
+   * be sent. Undefined when unknown (occurrence-side channels).
+   */
+  productionReady?: boolean;
 };
 
 /** For UI copy: a specific rule disables the global rule on that number. */
@@ -86,8 +91,8 @@ export const PROVIDER_RULE_OVERRIDDEN_REASON = "overridden_by_specific_rule";
 export const MESSAGE_TEAM_CHANNEL_PROVIDERS = ["umbler", "uazapi"] as const;
 /** Providers whose CONTACT messages run message_phrase rules. */
 export const MESSAGE_CONTACT_CHANNEL_PROVIDERS = ["umbler"] as const;
-/** Providers whose messages run structured catalog rules. */
-export const CATALOG_RULE_CHANNEL_PROVIDERS = ["umbler"] as const;
+/** Providers whose team messages run structured catalog rules (as the SaaS). */
+export const CATALOG_RULE_CHANNEL_PROVIDERS = ["umbler", "uazapi"] as const;
 /** Providers whose chats expose WhatsApp labels (tags). */
 export const LABEL_RULE_CHANNEL_PROVIDERS = ["uazapi"] as const;
 /** WhatsApp providers of this edition that do not run provider rules yet. */
@@ -281,6 +286,11 @@ export type ProviderRuleApplicability<R> = {
   overridden: Array<{ rule: R; bySpecificRuleIds: string[] }>;
   /** Global rules skipped because the same phone runs them on another channel. */
   duplicatePhone: Array<{ rule: R; canonicalChannelId: string }>;
+  /**
+   * Global rules not evaluated because the workspace scope could not be
+   * resolved (more than PROVIDER_RULE_SCOPE_CHANNEL_LIMIT channels).
+   */
+  skippedGlobal: Array<{ rule: R; reason: "scope_channel_limit" }>;
 };
 
 export type ProviderRulePhoneContext = {
@@ -364,7 +374,7 @@ export function selectApplicableProviderRules<R extends ScopedProviderRule>(
     }
     applicable.push(rule);
   }
-  return { applicable, overridden, duplicatePhone };
+  return { applicable, overridden, duplicatePhone, skippedGlobal: [] };
 }
 
 /**
@@ -433,16 +443,27 @@ export function channelPhoneKey(channel: {
   return phoneIdentityKey(phone) ?? null;
 }
 
+export type WorkspaceScopeChannelScan = {
+  channels: ScopedChannel[];
+  /**
+   * True past PROVIDER_RULE_SCOPE_CHANNEL_LIMIT: `channels` is then cut at the
+   * limit and must never be used to evaluate a global rule.
+   */
+  limitExceeded: boolean;
+};
+
 /**
  * Every live channel of the workspace with its connection provider and phone.
  * Channels of removed connections, and of deleted (suspended) WhatsApp
  * instances, are never part of a dynamic scope. Pages through the workspace;
- * past PROVIDER_RULE_SCOPE_CHANNEL_LIMIT it fails instead of truncating.
+ * past PROVIDER_RULE_SCOPE_CHANNEL_LIMIT it stops, logs and reports
+ * `limitExceeded` instead of throwing (callers then skip global rules and keep
+ * evaluating specific ones).
  */
-export async function listWorkspaceScopeChannels(
+export async function scanWorkspaceScopeChannels(
   client: ChannelLookupClient,
   workspaceId: string,
-): Promise<ScopedChannel[]> {
+): Promise<WorkspaceScopeChannelScan> {
   const result: ScopedChannel[] = [];
   let cursor: string | undefined;
   for (;;) {
@@ -463,7 +484,7 @@ export async function listWorkspaceScopeChannels(
         status: true,
         createdAt: true,
         connectedPhone: true,
-        connection: { select: { provider: true } },
+        connection: { select: { provider: true, status: true } },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: PROVIDER_RULE_SCOPE_CHANNEL_PAGE,
@@ -478,6 +499,9 @@ export async function listWorkspaceScopeChannels(
         phoneKey: channelPhoneKey({ ...channel, provider }),
         status: channel.status,
         createdAt: channel.createdAt,
+        productionReady:
+          channel.status === "active" &&
+          channel.connection?.status === "production",
       });
     }
     if (result.length > PROVIDER_RULE_SCOPE_CHANNEL_LIMIT) {
@@ -488,11 +512,27 @@ export async function listWorkspaceScopeChannels(
           limit: PROVIDER_RULE_SCOPE_CHANNEL_LIMIT,
         }),
       );
-      throw new Error("provider_rule_scope_channel_limit_exceeded");
+      return {
+        channels: result.slice(0, PROVIDER_RULE_SCOPE_CHANNEL_LIMIT),
+        limitExceeded: true,
+      };
     }
-    if (page.length < PROVIDER_RULE_SCOPE_CHANNEL_PAGE) return result;
+    if (page.length < PROVIDER_RULE_SCOPE_CHANNEL_PAGE)
+      return { channels: result, limitExceeded: false };
     cursor = page[page.length - 1]!.id;
   }
+}
+
+/**
+ * Channels for display (DTOs, "Unificar" preview). Past the limit the list is
+ * cut at PROVIDER_RULE_SCOPE_CHANNEL_LIMIT (logged); evaluation paths use
+ * `scanWorkspaceScopeChannels` and skip global rules instead.
+ */
+export async function listWorkspaceScopeChannels(
+  client: ChannelLookupClient,
+  workspaceId: string,
+): Promise<ScopedChannel[]> {
+  return (await scanWorkspaceScopeChannels(client, workspaceId)).channels;
 }
 
 /** Channels of the same phone as `channelId` (itself included). */
@@ -518,8 +558,12 @@ export async function resolveProviderRuleScopeChannelIds(
   if (providerRuleScope(rule) === "specific_numbers") {
     return rule.channels.map((scope) => scope.channelId);
   }
-  const channels = await listWorkspaceScopeChannels(client, workspaceId);
-  return channels
+  const scan = await scanWorkspaceScopeChannels(client, workspaceId);
+  if (scan.limitExceeded) {
+    // The global rule is skipped (logged by the scan): never a partial scope.
+    return [];
+  }
+  return scan.channels
     .filter((channel) => providerRuleCoversChannel(rule, channel))
     .map((channel) => channel.id);
 }
@@ -583,7 +627,32 @@ export async function resolveApplicableProviderRules<
   if (globals.length === 0) {
     return selectApplicableProviderRules(input.rules, input.channel);
   }
-  const channels = await listWorkspaceScopeChannels(client, input.workspaceId);
+  const scan = await scanWorkspaceScopeChannels(client, input.workspaceId);
+  if (scan.limitExceeded) {
+    // Specific rules keep running; global rules are skipped (never evaluated
+    // on a partial view of the phone's channels).
+    const result = selectApplicableProviderRules(
+      input.rules.filter((rule) => providerRuleScope(rule) !== "all_numbers"),
+      input.channel,
+    );
+    scopeLogger.warn(
+      JSON.stringify({
+        event: "provider_rule_global_skipped",
+        reason: "scope_channel_limit",
+        workspaceId: input.workspaceId,
+        channelId: input.channel.id,
+        providerRuleIds: globals.map((rule) => rule.id),
+      }),
+    );
+    return {
+      ...result,
+      skippedGlobal: globals.map((rule) => ({
+        rule,
+        reason: "scope_channel_limit" as const,
+      })),
+    };
+  }
+  const channels = scan.channels;
   const phoneChannels = samePhoneChannels(channels, input.channel.id).map(
     (candidate) =>
       // The occurrence knows its own provider/connection for sure.
@@ -622,10 +691,13 @@ export async function findOverridingSpecificRuleIds(
   if (providerRuleScope(input.rule) !== "all_numbers") return [];
   const origin = providerRuleOrigin(input.rule);
   if (!origin) return [];
-  const phoneChannelIds = samePhoneChannels(
-    await listWorkspaceScopeChannels(client, input.workspaceId),
-    input.channelId,
-  ).map((channel) => channel.id);
+  const scan = await scanWorkspaceScopeChannels(client, input.workspaceId);
+  // Past the channel limit only the channel itself is checked.
+  const phoneChannelIds = scan.limitExceeded
+    ? [input.channelId]
+    : samePhoneChannels(scan.channels, input.channelId).map(
+        (channel) => channel.id,
+      );
   const channelIds = [...new Set([input.channelId, ...phoneChannelIds])];
   const candidates = await client.providerConversionRuleConfig.findMany({
     where: {
