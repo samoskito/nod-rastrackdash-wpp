@@ -40,9 +40,10 @@ Sem backfill. Preserva `ProviderConversionRuleConfig`, canais, endpoints, execu�
 ## Backend
 
 - `provider-rule-scope.ts` do SaaS sem a flag `INBOUND_CONVERSION_WORKSPACE_SCOPE_ENABLED` e com a
-  matriz de capacidade do aluno, derivada dos parsers (confirmar na implementação):
-  frase da equipe = umbler, uazapi; frase do contato = umbler, uazapi, gupshup, data_crazy,
-  meta_cloud; etiqueta = uazapi (por nome entre instâncias); automação continua presa à conexão.
+  mesma matriz do SaaS (`MESSAGE_RULE_CHANNEL_PROVIDERS = umbler, uazapi`;
+  `LABEL_RULE_CHANNEL_PROVIDERS = uazapi`, etiqueta por nome entre instâncias); automação continua
+  presa à conexão. Gupshup, Data Crazy e Cloud API seguem gerando leads/conversões pelo webhook
+  inbound (CTWA), como no SaaS; regra de frase nesses provedores não existe nem no SaaS.
 - `provider-conversion-rules.service.ts`: create/update com `scope`, `create-receipt`,
   `unify-candidates`, `unify` (transação, advisory lock, idempotente, auditoria), DTO com canais
   efetivos e "substituída em".
