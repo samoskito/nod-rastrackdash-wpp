@@ -22,6 +22,10 @@ import {
   type KommoConnectionDetailDto,
 } from "../integrations/kommo-actions";
 import {
+  listPipedriveConnectionsAction,
+  type PipedriveConnectionDetailDto,
+} from "../integrations/pipedrive-actions";
+import {
   toConversionNumbers,
   type ConversionConnection,
   type ConversionNumber,
@@ -56,6 +60,7 @@ export type ConversionsData = {
   capabilities: ProviderConversionRuleCapabilitiesDto | null;
   unifyGroups: ProviderConversionRuleUnifyCandidatesDto["groups"];
   kommo: KommoConnectionDetailDto[];
+  pipedrive: PipedriveConnectionDetailDto[];
   /** As regras do CRM são só do responsável da conta: a lista avisa, não esconde calada. */
   crmVisible: boolean;
   crmError: boolean;
@@ -76,7 +81,7 @@ async function settle<T>(promise: Promise<T>): Promise<T | null> {
   }
 }
 
-/** As rotas do Kommo só respondem ao responsável da conta (membros recebem 403). */
+/** As rotas do Kommo e do Pipedrive só respondem ao responsável da conta (membros recebem 403). */
 export function canViewWorkspaceCrm(
   workspace: CurrentWorkspaceDto | null,
 ): boolean {
@@ -104,6 +109,7 @@ export async function loadConversionsData(): Promise<ConversionsData> {
     legacyRaw,
     whatsappRaw,
     kommoResult,
+    pipedriveResult,
     licenseStatus,
   ] = await Promise.all([
     serverApiFetch<ProviderConversionRuleDto[]>(
@@ -128,6 +134,9 @@ export async function loadConversionsData(): Promise<ConversionsData> {
     settle(serverApiFetch<unknown>("/integrations/whatsapp-connections")),
     crmVisible && workspace
       ? settle(listKommoConnectionsAction(workspace.id))
+      : Promise.resolve(null),
+    crmVisible && workspace
+      ? settle(listPipedriveConnectionsAction(workspace.id))
       : Promise.resolve(null),
     fetchLicenseStatus(),
   ]);
@@ -206,7 +215,13 @@ export async function loadConversionsData(): Promise<ConversionsData> {
     capabilities,
     unifyGroups: parsedCandidates.success ? parsedCandidates.data.groups : [],
     kommo: kommoResult?.ok ? kommoResult.connections : [],
+    pipedrive: pipedriveResult?.ok ? pipedriveResult.connections : [],
     crmVisible,
-    crmError: crmVisible && (kommoResult === null || !kommoResult.ok),
+    crmError:
+      crmVisible &&
+      (kommoResult === null ||
+        !kommoResult.ok ||
+        pipedriveResult === null ||
+        !pipedriveResult.ok),
   };
 }

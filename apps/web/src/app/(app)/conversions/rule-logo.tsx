@@ -14,6 +14,7 @@ const originIcons: Record<RuleOriginId, LucideIcon> = {
   whatsapp_label: Tag,
   automation_umbler: Webhook,
   kommo: KanbanSquare,
+  pipedrive: KanbanSquare,
 };
 
 /**

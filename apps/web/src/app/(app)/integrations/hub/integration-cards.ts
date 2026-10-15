@@ -66,6 +66,7 @@ export type IntegrationHubSnapshot = {
   };
   crm: {
     kommo: CrmSnapshot;
+    pipedrive: CrmSnapshot;
   };
   meta: {
     connected: boolean;

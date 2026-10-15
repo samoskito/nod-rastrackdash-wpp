@@ -387,7 +387,7 @@ describe("Kommo panel: credentials-only connection", () => {
     renderPanel({ connections: [conn({ allowedChannelRouteIds: [] })], allChannels: [] });
     expect(screen.getByText("Nenhum canal autorizado")).toBeTruthy();
     expect(
-      screen.getByText("Nenhum canal com rota de conversão válida foi encontrado ainda."),
+      screen.getByText("Nenhum número de WhatsApp foi encontrado neste workspace ainda."),
     ).toBeTruthy();
   });
 

@@ -41,7 +41,7 @@ const snapshot: IntegrationHubSnapshot = {
     connections: [{ provider: "umbler", status: "observation" }],
   },
   whatsapp: { loaded: true, connections: [], legacyUazapiInstances: 0 },
-  crm: { kommo: { loadState: "real", statuses: ["active"] } },
+  crm: { kommo: { loadState: "real", statuses: ["active"] }, pipedrive: { loadState: "empty", statuses: [] } },
   meta: { connected: true, needsAttention: false, statusLabel: "Conectada" },
 };
 

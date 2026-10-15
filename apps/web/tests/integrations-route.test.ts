@@ -161,12 +161,20 @@ describe("integrations route", () => {
     );
 
     expect([...new Set(cardIds)].sort()).toEqual(
-      ["kommo", "meta", "nod_api", "umbler", "uazapi_byo", "waha", "zapi"].sort(),
+      [
+        "kommo",
+        "meta",
+        "nod_api",
+        "pipedrive",
+        "umbler",
+        "uazapi_byo",
+        "waha",
+        "zapi",
+      ].sort(),
     );
     for (const absent of [
       "payt",
       "unnichat",
-      "pipedrive",
       "gohighlevel",
       "guimo",
       "whatsapp-qr",

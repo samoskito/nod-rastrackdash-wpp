@@ -33,10 +33,15 @@ import {
   licenseLockReason,
 } from "../../../lib/license-status";
 import { KommoCrmManager } from "../settings/kommo-crm-manager";
+import { PipedriveCrmManager } from "../settings/pipedrive-crm-manager";
 import {
   listKommoConnectionsAction,
   type KommoConnectionDetailDto,
 } from "./kommo-actions";
+import {
+  listPipedriveConnectionsAction,
+  type PipedriveConnectionDetailDto,
+} from "./pipedrive-actions";
 import { buildIntegrationCards } from "./hub/integration-cards";
 import { integrationsHubInitialState } from "./hub/initial-state";
 import { IntegrationsHub } from "./hub/integrations-hub";
@@ -437,6 +442,39 @@ async function getKommoSettings(
 
   try {
     const result = await listKommoConnectionsAction(workspaceId);
+
+    if (result.ok) {
+      return {
+        connections: result.connections,
+        state: result.connections.length > 0 ? "real" : "empty",
+      };
+    }
+
+    return {
+      connections: [],
+      state: result.reason === "unauthorized" ? "forbidden" : "error",
+    };
+  } catch {
+    return { connections: [], state: "error" };
+  }
+}
+
+type PipedriveSettingsResult = {
+  connections: PipedriveConnectionDetailDto[];
+  // Same rule as Kommo: a failed load never collapses into "empty".
+  state: "real" | "empty" | "error" | "forbidden";
+};
+
+async function getPipedriveSettings(
+  workspaceId: string | null,
+  enabled: boolean,
+): Promise<PipedriveSettingsResult> {
+  if (!workspaceId || !enabled) {
+    return { connections: [], state: "empty" };
+  }
+
+  try {
+    const result = await listPipedriveConnectionsAction(workspaceId);
 
     if (result.ok) {
       return {
@@ -952,6 +990,7 @@ export default async function IntegrationsPage({
     whatsappConnectionsResult,
     legacyWhatsappInstancesResult,
     kommoSettings,
+    pipedriveSettings,
   ] = await Promise.all([
     oauthConnected
       ? getMetaOAuthAdvancedConfiguration()
@@ -962,6 +1001,11 @@ export default async function IntegrationsPage({
     getWhatsappConnections(),
     getLegacyWhatsappInstances(),
     getKommoSettings(
+      workspace?.id ?? null,
+      canManageKommo && Boolean(kommoViewerId),
+    ),
+    // Pipedrive routes share the owner-only guard of Kommo.
+    getPipedriveSettings(
       workspace?.id ?? null,
       canManageKommo && Boolean(kommoViewerId),
     ),
@@ -1081,6 +1125,10 @@ export default async function IntegrationsPage({
     workspace && !canManageKommo
       ? ("forbidden" as const)
       : kommoSettings.state;
+  const pipedriveCardLoadState =
+    workspace && !canManageKommo
+      ? ("forbidden" as const)
+      : pipedriveSettings.state;
 
   const cards = buildIntegrationCards({
     inbound: inboundWebhookData
@@ -1107,6 +1155,12 @@ export default async function IntegrationsPage({
       kommo: {
         loadState: kommoCardLoadState,
         statuses: kommoSettings.connections.map((connection) => connection.status),
+      },
+      pipedrive: {
+        loadState: pipedriveCardLoadState,
+        statuses: pipedriveSettings.connections.map(
+          (connection) => connection.status,
+        ),
       },
     },
     meta: {
@@ -1239,9 +1293,9 @@ export default async function IntegrationsPage({
     </div>
   );
 
-  const crmUnavailableNote = (
+  const crmUnavailableNote = (crmName: string) => (
     <div className="integration-modal-note">
-      <strong>Não foi possível carregar o Kommo</strong>
+      <strong>Não foi possível carregar o {crmName}</strong>
       <p className="muted">
         Não foi possível confirmar a sua conta agora. Atualize a página em
         instantes.
@@ -1574,7 +1628,25 @@ export default async function IntegrationsPage({
           />
         </div>
       ) : canManageKommo || !workspace ? (
-        crmUnavailableNote
+        crmUnavailableNote("Kommo")
+      ) : (
+        crmOwnerOnlyNote
+      ),
+    pipedrive:
+      workspace && kommoViewerId && canManageKommo ? (
+        <div className="integration-modal-stack">
+          <PipedriveCrmManager
+            workspaceId={workspace.id}
+            viewerId={kommoViewerId}
+            connections={pipedriveSettings.connections}
+            loadState={pipedriveSettings.state}
+            allChannels={allInboundChannels}
+            canManage={canManageKommo}
+            licenseLocked={licenseLocked}
+          />
+        </div>
+      ) : canManageKommo || !workspace ? (
+        crmUnavailableNote("Pipedrive")
       ) : (
         crmOwnerOnlyNote
       ),

@@ -16,6 +16,7 @@ import {
   conversionEventDisplayLabels,
   conversionEventNameSchema,
   conversionEventRequiresValue,
+  kommoChannelBindingMessages,
   kommoConnectionChannelBindingsInputSchema,
   kommoConnectionCreateInputSchema,
   kommoConnectionCredentialReplaceInputSchema,
@@ -38,6 +39,10 @@ import { useRouter } from "next/navigation";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
+import {
+  crmChannelOptionsFor,
+  type CrmChannelOption,
+} from "../../../lib/crm-channel-options";
 import { displayTimeZone } from "../../../lib/date-time";
 import type {
   KommoActionResult,
@@ -120,12 +125,9 @@ const LICENSE_LOCKED_NOTE =
 const SESSION_LOST_MESSAGE =
   "Sua sessão expirou ou você não tem permissão para esta ação.";
 
-type RouteOption = {
-  routeId: string;
-  label: string;
-  eligible: boolean;
-  statusDetail: string;
-};
+/** One authorizable WhatsApp number of the workspace (any provider); shared
+ * with Pipedrive (lib/crm-channel-options). */
+type RouteOption = CrmChannelOption;
 
 const conversionEventOptions = conversionEventNameSchema.options;
 
@@ -167,16 +169,7 @@ function catalogStateTone(
 }
 
 function routeOptionsFor(channels: InboundWebhookChannelDto[]): RouteOption[] {
-  return channels.flatMap((channel) =>
-    channel.routes.map((route) => ({
-      routeId: route.id,
-      label: channel.channelName ?? channel.connectedPhone,
-      eligible: route.active && route.validationStatus === "valid",
-      statusDetail: route.active
-        ? route.validationStatus
-        : `${route.validationStatus}, rota inativa`,
-    })),
-  );
+  return crmChannelOptionsFor(channels, kommoChannelBindingMessages);
 }
 
 function resolveRouteLabels(
@@ -834,7 +827,7 @@ function RouteSelector({
       <legend className="field-label">Canais autorizados</legend>
       {options.length === 0 && missingSelectedIds.length === 0 ? (
         <small className="action-note">
-          Nenhum canal com rota de conversão válida foi encontrado ainda.
+          Nenhum número de WhatsApp foi encontrado neste workspace ainda.
         </small>
       ) : (
         <div>
@@ -856,11 +849,14 @@ function RouteSelector({
                         checked: isSelected,
                         onChange: () => onToggle!(option.routeId),
                       }
-                    : { defaultChecked: false })}
+                    : { defaultChecked: option.preselect })}
                 />
                 <span>
                   <PresentationMask placeholder="Canal oculto">{option.label}</PresentationMask>
                   {!option.eligible ? " (indisponível)" : ""}
+                  {!option.eligible && option.reason ? (
+                    <small className="action-note"> {option.reason}</small>
+                  ) : null}
                 </span>
               </label>
             );
@@ -879,8 +875,10 @@ function RouteSelector({
         </div>
       )}
       <small className="action-note">
-        Apenas canais com uma rota de conversão válida para a Meta podem ser
-        autorizados.
+        O Kommo é apenas o CRM: escolha quais números de WhatsApp deste
+        workspace (de qualquer provedor) podem ter seus leads associados por
+        telefone. O número precisa estar ativo e com destino Meta verificado.
+        Sem número autorizado, nenhum movimento é associado.
       </small>
     </fieldset>
   );

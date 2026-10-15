@@ -2,7 +2,7 @@
  * Catalog of the integrations shown in the Integrations hub.
  *
  * Only providers the student backend implements end to end appear here.
- * Adding a provider later (Payt, Unnichat, Pipedrive, ...) is one entry:
+ * Adding a provider later (Payt, Unnichat, ...) is one entry:
  *   1. add its id to `integrationProviderIds`;
  *   2. add a logo file in `public/integrations/` and a row in `logoAssets`
  *      (and in SOURCES.md);
@@ -112,6 +112,7 @@ export const integrationProviderIds = [
   "gupshup",
   "data_crazy",
   "kommo",
+  "pipedrive",
   "meta",
 ] as const;
 
@@ -125,7 +126,7 @@ export type WhatsappIntegrationProvider =
 export type InboundIntegrationProvider =
   "meta_cloud" | "umbler" | "gupshup" | "data_crazy";
 
-export type CrmIntegrationProvider = "kommo";
+export type CrmIntegrationProvider = "kommo" | "pipedrive";
 
 /**
  * Decides when a card is offered at all. Every gate reads data the API
@@ -176,6 +177,7 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   gupshup: { file: "gupshup.svg", surface: "light" },
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
   kommo: { file: "kommo.png", surface: "light" },
+  pipedrive: { file: "pipedrive.svg", surface: "dark" },
   meta: { file: "meta.svg", surface: "dark" },
 };
 
@@ -307,6 +309,16 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
       "Envie conversões quando o lead muda de etapa no Kommo.",
     gate: { kind: "crm", provider: "kommo" },
   },
+  {
+    id: "pipedrive",
+    name: "Pipedrive",
+    category: "crm",
+    logo: integrationLogoPath("pipedrive"),
+    initials: "Pd",
+    logoSurface: logoSurface("pipedrive"),
+    description: "Envie conversões quando o negócio avança no Pipedrive.",
+    gate: { kind: "crm", provider: "pipedrive" },
+  },
 ];
 
 export function integrationProvider(
@@ -399,6 +411,10 @@ export function integrationDeepLinkFromHash(
   // Old Settings anchor for the Kommo CRM block.
   if (value === "crm-configurado") {
     return { tab: "crm", provider: "kommo" };
+  }
+
+  if (value === "crm-configurado-pipedrive") {
+    return { tab: "crm", provider: "pipedrive" };
   }
 
   return { tab: null, provider: null };
