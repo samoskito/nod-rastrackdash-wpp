@@ -286,7 +286,7 @@ credencial ou variável de ambiente própria neste template.
    `ignored_no_ctwa`; gatilhos por palavra-chave, tag ou automação do
    provedor não fazem parte do parser Data Crazy v1.
 6. O parser **Data Crazy v1** já vem certificado pela migration
-   `20261016090300_data_crazy_parser_certification` (contrato validado com
+   `20261016090300_validated_parser_certification` (contrato validado com
    CTWAs reais no SaaS). Após uma entrega CTWA real ser processada em
    observação, configure a rota Meta do canal e ative a conexão em
    produção, no mesmo gate usado por Gupshup e Meta Cloud; cada regra
@@ -308,6 +308,11 @@ credencial ou variável de ambiente própria neste template.
 4. Vá em `/conversions` (menu **Conversões**) e crie a regra em
    **Nova regra**, escolhendo "Todos os números" ou apenas os números que
    devem converter.
+5. Os parsers **Umbler v1** e **Gupshup v1** (mensagens) já vêm
+   certificados pela migration `20261016090300_validated_parser_certification`
+   (os mesmos contratos em produção no SaaS). Isso só os torna elegíveis:
+   a conexão e cada regra continuam em observação até você ativar a
+   produção, uma a uma.
 
 Umbler Talk entrega também as mensagens do atendente, então regras de
 frase com autor "equipe" funcionam. Gupshup entrega apenas o que o

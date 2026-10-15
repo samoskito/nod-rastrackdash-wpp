@@ -134,6 +134,7 @@ Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gups
 1. Abra o card da plataforma (Umbler Talk ou Gupshup) → **Gerar webhook** (a janela já vem fixa na plataforma; use **Adicionar conexão** se já houver outra) e copie a **URL de callback** (aparece uma única vez) para o painel da Umbler/Gupshup.
 2. **Cadastre o canal/número agora**, com o botão **Cadastrar canal/número** — você **não precisa** esperar o primeiro lead chegar. O canal fica provisório e é mesclado automaticamente quando a primeira mensagem real daquele número chegar.
 3. Vá em `/conversions` (menu **Conversões**) → **Nova regra** e escolha o alcance: **Todos os números** ou **Números específicos**.
+4. Os parsers **Umbler v1** e **Gupshup v1** já vêm certificados pela atualização (mesmos contratos em produção no SaaS). A conexão e cada regra só vão para produção quando você ativar, uma a uma.
 
 **Data Crazy** também é uma conexão inbound por workspace, mas o fluxo de
 canal é diferente:

@@ -65,15 +65,19 @@ describe("Fase 4.0 migrations (additive)", () => {
     );
   });
 
-  it("certifies only the Data Crazy v1 parser release and never activates production", () => {
-    const sql = code(migration("20261016090300_data_crazy_parser_certification"));
+  it("certifies only the validated v1 message parsers and never activates production", () => {
+    const sql = code(migration("20261016090300_validated_parser_certification"));
     expect(sql).toMatch(/UPDATE "InboundWebhookParserRelease"/);
-    expect(sql).toContain("\"provider\" = 'data_crazy'");
+    expect(sql).toContain(
+      "\"provider\" IN ('data_crazy', 'gupshup', 'umbler')",
+    );
     expect(sql).toContain("\"version\" = 'v1'");
     expect(sql).toContain("\"status\" <> 'retired'");
+    // Meta Cloud keeps its built-in eligibility; automation releases untouched.
+    expect(sql).not.toMatch(/meta_cloud|automation-v1/);
     // No connection, channel or rule is promoted: production stays per rule.
     expect(sql).not.toMatch(
-      /InboundWebhookConnection|InboundWebhookChannel|ProviderConversionRuleConfig|productionActivatedAt/,
+      /InboundWebhookConnection|InboundWebhookChannel|ProviderConversionRuleConfig|productionActivatedAt|certifiedByUserId/,
     );
     expect(sql.match(/\bUPDATE\b/g)).toHaveLength(1);
   });

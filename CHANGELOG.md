@@ -63,10 +63,13 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 - **Fase 4.0 — CTWA purchase foundation (API)**, ported from the SaaS with
   the same behavior and no new env var, dependency or Meta permission:
-  - **Data Crazy can go to production by rule**: migration
-    `20261016090300_data_crazy_parser_certification` certifies the Data Crazy
-    `v1` parser release (validated with real CTWA deliveries in the SaaS).
-    Connections and rules still need their own production activation.
+  - **Data Crazy, Gupshup and Umbler (messages) can go to production by
+    rule**: migration `20261016090300_validated_parser_certification`
+    certifies the `v1` parser releases of `data_crazy`, `gupshup` and
+    `umbler` (the same contracts running in production in the SaaS; only
+    the parser release row changes, retired stays retired). Connections and
+    rules still need their own production activation. Meta Cloud `v1` needs
+    no change (built-in eligibility).
   - **CTWA rule**: no `ctwa_clid` → nothing is sent to Meta. A lead with
     `ctwa_clid` and no ad id may be sent to the unique authorized page +
     pixel of its number (`authorized-ctwa-destination.ts`, CAPI
@@ -92,7 +95,7 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     migration; blocks conversion writes while it builds, ~2.6 s for 1M rows
     in a scratch database), `20261016090100_provider_purchase_claim`,
     `20261016090200_inbound_webhook_meta_routing_mode`,
-    `20261016090300_data_crazy_parser_certification`. Back up the database
+    `20261016090300_validated_parser_certification`. Back up the database
     before updating. **Roll back:** revert the API image; the new
     table/columns are harmless to it (optional SQL in
     `docs/releases/unreleased.json`).
