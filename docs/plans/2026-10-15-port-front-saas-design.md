@@ -22,7 +22,7 @@ leads novos × que voltaram, exportar leads) **adaptando** à edição de aluno 
 | WAHA (15/10) | Também "Em breve" no Hub (nunca validado); fora da regra global da Fase 3. |
 | Z-API e NOD API (15/10) | "Em breve" no Hub. Parser Z-API será criado/validado quando o Samuel enviar payload real. |
 | Logos (15/10) | Cloud API usa a logo da Meta; pesquisar logos oficiais de Uazapi e WAHA. |
-| Validado no SaaS (15/10) | Integrações já validadas no SaaS (Gupshup, Cloud API, Data Crazy, Payt, Unnichat, Pipedrive, Guimoo, CRMs) entram no aluno no mesmo comportamento, sem revalidar. O aluno segue o SaaS: regras de frase/catálogo só em Umbler e Uazapi, etiqueta só em Uazapi (igual ao SaaS). Guimoo entra na Fase 4. |
+| Validado no SaaS (15/10) | Integrações já validadas no SaaS (Gupshup, Cloud API, Data Crazy, Payt, Unnichat, Pipedrive, Guimoo, CRMs) entram no aluno no mesmo comportamento, sem revalidar. O aluno segue o SaaS: regras de frase/catálogo só em Umbler e Uazapi, etiqueta só em Uazapi (igual ao SaaS). Guimoo ficou fora do aluno (específico de um cliente, decisão de 15/10). |
 | Acentuação (15/10) | Textos sem acento existentes ficam para uma revisão geral depois; texto novo já sai acentuado. |
 | Assinatura (`/subscription`) | Não vai para o aluno (cobrança Asaas/vagas do SaaS). |
 | Execução | Em fases; cada fase sai documentada para o aluno antes de seguir. |
