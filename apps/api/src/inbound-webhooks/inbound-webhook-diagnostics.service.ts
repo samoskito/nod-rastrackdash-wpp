@@ -17,7 +17,8 @@ type DiagnosticSource =
   | "internal"
   | "waha"
   | "zapi"
-  | "data_crazy";
+  | "data_crazy"
+  | "payt";
 
 function diagnosticSourceForProvider(
   provider: InboundWebhookProviderDto,

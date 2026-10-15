@@ -14,12 +14,21 @@ import {
   readMessagePhraseConfig,
   type ConversionEventNameDto,
 } from "@wpptrack/shared";
-import { hashPhoneIdentity } from "../common/phone/phone-identity";
+import {
+  hashPhoneIdentity,
+  hashPhoneIdentityVariants,
+} from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedUmblerAutomationV1 } from "../inbound-webhooks/providers/umbler/umbler-automation-v1.parser";
+import type { ParsedPaytAutomationV1 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
+import {
+  PAYT_LEAD_OTHER_CHANNEL_REASON,
+  resolvePurchaseChannels,
+} from "./provider-purchase-routing";
+import { buildProviderPurchaseIdentity } from "./provider-purchase-identity";
 import {
   ProviderConversionDecisionRepository,
   type PersistedProviderConversionDecision,
@@ -28,6 +37,7 @@ import type { ProviderConversionDecisionInput } from "./provider-conversion-deci
 import { ProviderConversionEngineRolloutService } from "./provider-conversion-engine-rollout.service";
 import {
   ProviderConversionOrchestrator,
+  type ProviderConversionManualReplayApproval,
   type ProviderConversionTechnicalDisposition,
 } from "./provider-conversion-orchestrator.service";
 import { ProviderConversionPaidLeadResolver } from "./provider-conversion-paid-lead-resolver.service";
@@ -103,6 +113,9 @@ type ObservedChannel = {
   conversionEngineMode: ProviderConversionEngineMode;
 };
 
+/** Endpoint automations of this edition (Umbler, Payt). */
+type ParsedProviderAutomation = ParsedUmblerAutomationV1 | ParsedPaytAutomationV1;
+
 export type ProviderConversionObservationResult = {
   executionIds: string[];
   eligibleExecutionIds: string[];
@@ -127,6 +140,9 @@ export type ProviderConversionEvaluationMode =
   | {
       type: "reevaluate";
       requestKey: string;
+      /** Automation only: a callback that never produced a decision (e.g.
+       * stopped at lead matching) records its first decision instead. */
+      recordInitialWhenMissing?: boolean;
     };
 
 export type ProviderConversionReevaluationTarget = {
@@ -193,10 +209,29 @@ export class ProviderConversionObservationService {
     externalDeliveryId?: string | null;
     deliveryReceivedAt: Date;
     providerRuleId: string;
-    automation: ParsedUmblerAutomationV1;
+    automation: ParsedProviderAutomation;
     manualRecovery?: boolean;
     evaluationMode?: ProviderConversionEvaluationMode;
+    /** Only the explicit production "Reprocessar selecionados" action. */
+    manualReplayApproval?: ProviderConversionManualReplayApproval;
   }): Promise<ProviderConversionAutomationObservationResult> {
+    if (input.automation.provider === "payt") {
+      // One sale (seller + order + event) is one occurrence, whatever endpoint
+      // or delivery carried it.
+      input = {
+        ...input,
+        automation: {
+          ...input.automation,
+          externalExecutionKey: buildProviderPurchaseIdentity({
+            workspaceId: input.workspaceId,
+            provider: "payt",
+            accountRef: input.automation.accountRef,
+            orderRef: input.automation.orderRef,
+            eventName: input.automation.eventName,
+          }),
+        },
+      };
+    }
     const config = parseInboundWebhooksConfig(this.env);
     if (!config.enabled || !config.conversionRulesEnabled) {
       return {
@@ -232,11 +267,28 @@ export class ProviderConversionObservationService {
       };
     }
     const rule = loadedRule as AutomationRule;
+    const phoneCandidates =
+      "phoneCandidates" in input.automation
+        ? input.automation.phoneCandidates
+        : undefined;
+    // A Payt sale is attributed only to a tracked CTWA lead: its verified
+    // entry (on any channel of the workspace) is then bound to the rule scope.
+    const purchaseLead =
+      rule.parserRelease.provider === "payt"
+        ? await this.paidLeads.resolve({
+            workspaceId: input.workspaceId,
+            ctwaProofAnyChannel: true,
+            phone: input.automation.phone,
+            phoneCandidates,
+          })
+        : null;
     const channel = await this.resolveAutomationChannel({
       workspaceId: input.workspaceId,
       connectionId: input.connectionId,
       phone: input.automation.phone,
+      phoneCandidates,
       deliveryReceivedAt: input.deliveryReceivedAt,
+      purchaseLead,
       rule,
     });
     // A workspace-wide ("all numbers") automation yields to the specific rule
@@ -267,14 +319,59 @@ export class ProviderConversionObservationService {
           eligibleExecutionId: null,
           reviewId: null,
           channelId: channel.id,
-          leadResolved: false,
+          leadResolved: purchaseLead?.status === "resolved",
         };
       }
     }
-    const leadResolution = await this.paidLeads.resolve({
-      workspaceId: input.workspaceId,
-      phone: input.automation.phone,
-    });
+    if (rule.parserRelease.provider === "payt" && !channel) {
+      // One Payt rule per WhatsApp number receives the same sale. When the
+      // buyer is a tracked lead whose verified origin is another number, this
+      // rule simply does not own the purchase: record it as such (the rule of
+      // the origin number produces the event), never as ambiguous.
+      if (
+        purchaseLead?.status === "resolved" &&
+        (await this.paytLeadFromAnotherChannel({
+          workspaceId: input.workspaceId,
+          rule,
+          lead: purchaseLead.lead,
+          phone: input.automation.phone,
+          phoneCandidates,
+          deliveryReceivedAt: input.deliveryReceivedAt,
+        }))
+      ) {
+        return {
+          decisionId: null,
+          decisionCode: null,
+          reasonCode: PAYT_LEAD_OTHER_CHANNEL_REASON,
+          disposition: "ignored",
+          executionId: null,
+          eligibleExecutionId: null,
+          reviewId: null,
+          channelId: null,
+          leadResolved: true,
+        };
+      }
+      // No tracked CTWA lead (no ctwa_clid) or no single verified origin in
+      // the rule scope: nothing is decided and nothing reaches Meta.
+      return {
+        decisionId: null,
+        decisionCode: null,
+        reasonCode: "payt_channel_missing_or_ambiguous",
+        disposition: "blocked",
+        executionId: null,
+        eligibleExecutionId: null,
+        reviewId: null,
+        channelId: null,
+        leadResolved: false,
+      };
+    }
+    const leadResolution =
+      purchaseLead ??
+      (await this.paidLeads.resolve({
+        workspaceId: input.workspaceId,
+        phone: input.automation.phone,
+        phoneCandidates,
+      }));
     const persistedDecision = await this.resolveAutomationDecision({
       input,
       rule,
@@ -308,16 +405,26 @@ export class ProviderConversionObservationService {
     const orchestration = await this.orchestrator.orchestrate({
       persistedDecision,
       disposition,
+      // An approval is only meaningful for an explicit manual recovery; it
+      // is never derived from ingestion, sweeps or automatic retries.
+      ...(input.manualRecovery === true && input.manualReplayApproval
+        ? { manualReplayApproval: input.manualReplayApproval }
+        : {}),
     });
 
     return {
       decisionId: persistedDecision.id,
       decisionCode: persistedDecision.decisionCode,
-      reasonCode: persistedDecision.reasonCode,
-      disposition:
-        persistedDecision.decisionCode === "ignored_empty_template" ||
-        persistedDecision.decisionCode === "ignored_untracked_lead" ||
-        persistedDecision.decisionCode === "duplicate"
+      // The sale already has an observation winner (another delivery of the
+      // same seller + order + event): reported once, never sent twice.
+      reasonCode: orchestration.purchaseDuplicate
+        ? "purchase_duplicate"
+        : persistedDecision.reasonCode,
+      disposition: orchestration.purchaseDuplicate
+        ? "ignored"
+        : persistedDecision.decisionCode === "ignored_empty_template" ||
+            persistedDecision.decisionCode === "ignored_untracked_lead" ||
+            persistedDecision.decisionCode === "duplicate"
           ? "ignored"
           : disposition.state,
       executionId: orchestration.executionId,
@@ -535,7 +642,7 @@ export class ProviderConversionObservationService {
       connectionId: string;
       deliveryId: string;
       externalDeliveryId?: string | null;
-      automation: ParsedUmblerAutomationV1;
+      automation: ParsedProviderAutomation;
     };
     rule: AutomationRule;
     channel: ObservedChannel | null;
@@ -564,7 +671,7 @@ export class ProviderConversionObservationService {
       ) ?? null,
       occurrence: {
         source: "automation",
-        provider: "umbler",
+        provider: input.input.automation.provider ?? "umbler",
         workspaceId: input.input.workspaceId,
         connectionId: input.input.connectionId,
         channelId: input.channel?.id ?? null,
@@ -574,10 +681,29 @@ export class ProviderConversionObservationService {
         externalEventId: input.input.automation.externalExecutionKey,
         externalMessageId: null,
         occurrenceKey,
+        ...(input.input.automation.provider === "payt"
+          ? {
+              purchaseKey: buildProviderPurchaseIdentity({
+                workspaceId: input.input.workspaceId,
+                provider: "payt",
+                accountRef: input.input.automation.accountRef,
+                orderRef: input.input.automation.orderRef,
+                eventName: input.input.automation.eventName,
+              }),
+            }
+          : {}),
         eventName: input.input.automation.eventName,
         occurredAt: input.input.automation.occurredAt.toISOString(),
         authorType: null,
         automation: input.input.automation.automation,
+        observedValueCents:
+          "valueCents" in input.input.automation
+            ? (input.input.automation.valueCents ?? undefined)
+            : undefined,
+        observedCurrency:
+          "currency" in input.input.automation
+            ? input.input.automation.currency
+            : undefined,
       },
     };
     const decision = await this.engineRollout.evaluate({
@@ -588,7 +714,8 @@ export class ProviderConversionObservationService {
     if (!decision) return null;
 
     const persisted =
-      input.evaluationMode.type === "reevaluate"
+      input.evaluationMode.type === "reevaluate" &&
+      (existing || !input.evaluationMode.recordInitialWhenMissing)
         ? await this.decisions.appendReevaluation({
             decision,
             sourceDeliveryId: input.input.deliveryId,
@@ -627,25 +754,85 @@ export class ProviderConversionObservationService {
     workspaceId: string;
     connectionId: string;
     phone: string;
+    phoneCandidates?: readonly string[];
     deliveryReceivedAt: Date;
     rule: AutomationRule;
+    purchaseLead?: ProviderConversionPaidLeadResolutionDto | null;
   }): Promise<ObservedChannel | null> {
-    const contactIdentityHash = hashPhoneIdentity(input.phone);
+    const contactIdentityHashes = [
+      ...new Set(
+        [input.phone, ...(input.phoneCandidates ?? [])]
+          .map((phone) => hashPhoneIdentity(phone))
+          .filter((hash): hash is string => Boolean(hash)),
+      ),
+    ];
     // Specific rules: their chosen channels (no query). "All numbers": every
-    // live channel of the rule connection (the automation is connection-bound).
+    // live channel of the workspace that the automation origin supports (the
+    // Umbler automation: of its connection; Payt: any WhatsApp number).
     const channelIds = await resolveProviderRuleScopeChannelIds(
       this.prisma,
       input.workspaceId,
       input.rule,
     );
-    if (!contactIdentityHash || channelIds.length === 0) return null;
+    if (contactIdentityHashes.length === 0 || channelIds.length === 0)
+      return null;
+
+    if (input.rule.parserRelease.provider === "payt") {
+      // A Payt sale belongs to the scoped channel where the paid lead's CTWA
+      // entry was verified; a phone match alone is never enough.
+      if (input.purchaseLead?.status !== "resolved") return null;
+      const lead = input.purchaseLead.lead;
+      const proof = lead.adId ? undefined : lead.ctwaDestination;
+      // A no-ad CTWA lead (authorized_ctwa_destination) is owned only by the
+      // rule scoped to the verified entry channel of that click.
+      if (!lead.adId && (!proof || !channelIds.includes(proof.channelId)))
+        return null;
+      const candidates = await resolvePurchaseChannels(this.prisma, {
+        workspaceId: input.workspaceId,
+        channelIds,
+        phoneHashes: this.paytPurchaseIdentityHashes(input, lead.phoneHash),
+        leadId: lead.id,
+        adId: lead.adId,
+        ctwaClid: lead.ctwaClid,
+        receivedAt: input.deliveryReceivedAt,
+      });
+      if (candidates.length === 0 && lead.adId && lead.ctwaDestination) {
+        // Ad lead without a materialized ad entry on a scoped channel (e.g.
+        // the per-ad routes were removed and the entry went through the
+        // authorized page/pixel destination): its verified CTWA entry proof
+        // selects the channel, exactly like a no-ad lead.
+        const fallback = lead.ctwaDestination;
+        if (!channelIds.includes(fallback.channelId)) return null;
+        return this.prisma.inboundWebhookChannel.findFirst({
+          where: {
+            id: fallback.channelId,
+            workspaceId: input.workspaceId,
+            connectionId: fallback.connectionId,
+          },
+          select: {
+            id: true,
+            organizationId: true,
+            providerChannelId: true,
+            status: true,
+            productionActivatedAt: true,
+            conversionEngineMode: true,
+          },
+        });
+      }
+      if (candidates.length !== 1) return null;
+      if (proof && candidates[0]!.id !== proof.channelId) return null;
+      return candidates[0]!;
+    }
 
     const recentEvent = await this.prisma.inboundWebhookEvent.findFirst({
       where: {
         workspaceId: input.workspaceId,
         connectionId: input.connectionId,
         channelId: { in: channelIds },
-        contactIdentityHash,
+        contactIdentityHash:
+          contactIdentityHashes.length === 1
+            ? contactIdentityHashes[0]!
+            : { in: contactIdentityHashes },
         occurredAt: {
           lte: new Date(input.deliveryReceivedAt.getTime() + 5 * 60 * 1_000),
         },
@@ -680,6 +867,71 @@ export class ProviderConversionObservationService {
       productionActivatedAt: fallback.productionActivatedAt,
       conversionEngineMode: fallback.conversionEngineMode,
     };
+  }
+
+  /** The lead may have been matched through an equivalent BR form (with or
+   * without 55 / the mobile 9th digit); its entry evidence is stored under
+   * the lead's own identity hash. */
+  private paytPurchaseIdentityHashes(
+    input: { phone: string; phoneCandidates?: readonly string[] },
+    leadPhoneHash: string,
+  ): string[] {
+    const phones = [input.phone, ...(input.phoneCandidates ?? [])];
+    return [
+      ...new Set([
+        leadPhoneHash,
+        ...phones
+          .map((phone) => hashPhoneIdentity(phone))
+          .filter((hash): hash is string => Boolean(hash)),
+        ...hashPhoneIdentityVariants(phones),
+      ]),
+    ];
+  }
+
+  /**
+   * True only when the paid lead's verified CTWA origin is a channel OUTSIDE
+   * this Payt rule's scope (the sale belongs to the rule of another number).
+   * No-ad leads use their typed entry proof; ad leads use the same
+   * materialized-origin evidence as the purchase routing.
+   */
+  private async paytLeadFromAnotherChannel(input: {
+    workspaceId: string;
+    rule: AutomationRule;
+    lead: Extract<
+      ProviderConversionPaidLeadResolutionDto,
+      { status: "resolved" }
+    >["lead"];
+    phone: string;
+    phoneCandidates?: readonly string[];
+    deliveryReceivedAt: Date;
+  }): Promise<boolean> {
+    const scoped = new Set(
+      await resolveProviderRuleScopeChannelIds(
+        this.prisma,
+        input.workspaceId,
+        input.rule,
+      ),
+    );
+    if (!input.lead.adId) {
+      const proof = input.lead.ctwaDestination;
+      return Boolean(proof && !scoped.has(proof.channelId));
+    }
+    const others = await this.prisma.inboundWebhookChannel.findMany({
+      where: { workspaceId: input.workspaceId, id: { notIn: [...scoped] } },
+      select: { id: true },
+      take: 500,
+    });
+    if (others.length === 0) return false;
+    const origins = await resolvePurchaseChannels(this.prisma, {
+      workspaceId: input.workspaceId,
+      channelIds: others.map((channel) => channel.id),
+      phoneHashes: this.paytPurchaseIdentityHashes(input, input.lead.phoneHash),
+      leadId: input.lead.id,
+      adId: input.lead.adId,
+      ctwaClid: input.lead.ctwaClid,
+      receivedAt: input.deliveryReceivedAt,
+    });
+    return origins.length > 0;
   }
 
   private async loadChannels(
@@ -792,6 +1044,18 @@ export class ProviderConversionObservationService {
       return {
         state: "blocked",
         reasonCode: "automation_channel_unresolved",
+      };
+    }
+    // Payt is only sent by the canonical engine; legacy/shadow channels keep
+    // its sales audit-only. Canonical production still requires every live
+    // certification, activation and feature gate below.
+    if (
+      input.rule.parserRelease?.provider === "payt" &&
+      input.channel.conversionEngineMode !== "canonical"
+    ) {
+      return {
+        state: "observed",
+        reasonCode: `${input.decision.reasonCode}_payt_observation`,
       };
     }
     // Manual recovery reuses the frozen decision snapshot (including the mode

@@ -19,9 +19,16 @@ export function inboundParserProductionEligible(
   // remain unchanged. No new built-in trust is granted to other providers.
   if (release.provider !== "meta_cloud")
     return (
-      ["umbler", "gupshup", "data_crazy", "waha", "zapi", "uazapi"].includes(
-        release.provider,
-      ) && release.status === "certified"
+      [
+        "umbler",
+        "gupshup",
+        "data_crazy",
+        "waha",
+        "zapi",
+        "uazapi",
+        // Fase 4a: Payt sale parsers (certified by migration).
+        "payt",
+      ].includes(release.provider) && release.status === "certified"
     );
   try {
     const parser = registry.resolve({

@@ -57,6 +57,7 @@ enum DiagnosticSource {
   waha
   zapi
   data_crazy
+  payt
 }
 
 enum DiagnosticSeverity {
@@ -291,6 +292,7 @@ enum InboundWebhookProvider {
   uazapi
   meta_cloud
   data_crazy
+  payt
 }
 
 enum InboundWebhookParserReleaseStatus {

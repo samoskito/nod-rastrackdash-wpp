@@ -69,9 +69,10 @@ export class InboundWebhookConnectionsService {
       enabled: config.enabled,
       productionEnabled: config.enabled && config.productionEnabled,
       // UAZAPI/NOD is bridged automatically from the WhatsApp instance and
-      // never goes through the generic manual creation flow.
+      // never goes through the generic manual creation flow. Payt is a sales
+      // platform with no WhatsApp number: its rules live in Conversoes.
       providers: inboundWebhookProviders
-        .filter((provider) => provider !== "uazapi")
+        .filter((provider) => provider !== "uazapi" && provider !== "payt")
         .map((provider) => {
           const release = releaseByProvider.get(provider);
 
@@ -183,6 +184,13 @@ export class InboundWebhookConnectionsService {
       // they never go through the generic secret-based creation flow.
       throw new ConflictException(
         "Conexoes UAZAPI sao criadas automaticamente a partir da instancia WhatsApp",
+      );
+    }
+    if (input.provider === "payt") {
+      // Payt has no WhatsApp number: a Payt rule is created in Conversões
+      // and bound to the connection of its WhatsApp numbers.
+      throw new ConflictException(
+        "A Payt não usa conexão própria: crie a regra de venda em Conversões",
       );
     }
 

@@ -1214,11 +1214,20 @@ describe("provider rules API: Conversoes screen support", () => {
       structured_catalog: ["umbler", "uazapi"],
       whatsapp_label: ["uazapi"],
       automation_umbler: ["umbler"],
+      // Fase 4a: a Payt sale may belong to any WhatsApp number.
+      automation_payt: ["umbler", "gupshup", "uazapi", "meta_cloud", "data_crazy"],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
         ?.authorChannelProviders,
     ).toEqual({ team: ["umbler", "uazapi"], contact: ["umbler"] });
+    expect(
+      capabilities.origins.find((origin) => origin.origin === "automation_payt"),
+    ).toMatchObject({
+      eventNames: ["Purchase", "InitiateCheckout", "CartAbandoned"],
+      betaEventNames: ["CartAbandoned"],
+      unifiable: false,
+    });
     expect(capabilities.unsupportedWhatsappProviders).toEqual([
       "waha",
       "zapi",

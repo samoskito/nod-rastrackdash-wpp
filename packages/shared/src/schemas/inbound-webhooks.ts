@@ -8,6 +8,9 @@ export const inboundWebhookProviders = [
   "uazapi",
   "meta_cloud",
   "data_crazy",
+  // Fase 4a: plataforma de venda. Nao e um numero de WhatsApp: so existe
+  // como release de parser das regras de venda (sem conexao propria).
+  "payt",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",

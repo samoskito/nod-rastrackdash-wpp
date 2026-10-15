@@ -16,7 +16,8 @@ export const diagnosticSources = [
   "internal",
   "waha",
   "zapi",
-  "data_crazy"
+  "data_crazy",
+  "payt"
 ] as const;
 export const diagnosticSeverities = [
   "info",
