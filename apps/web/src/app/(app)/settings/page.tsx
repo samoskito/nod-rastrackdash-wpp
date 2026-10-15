@@ -36,11 +36,7 @@ import { TeamActionButton } from "../../../components/team-action-button";
 import { displayTimeZone } from "../../../lib/date-time";
 import { serverApiFetch } from "../../../lib/server-api";
 import { getCurrentWorkspace } from "../../../lib/current-workspace";
-import { fetchLicenseStatus, licenseLockReason } from "../../../lib/license-status";
-import { listKommoConnectionsAction } from "../integrations/kommo-actions";
-import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import { ProviderConversionRulePanel } from "../integrations/provider-conversion-rule-panel";
-import { KommoCrmManager } from "./kommo-crm-manager";
 import { saveOpsAlertSettingsAction } from "./ops-alert-settings-actions";
 import {
   createProviderConversionRuleAction,
@@ -669,38 +665,6 @@ async function requestEmailVerification() {
   }
 }
 
-type KommoSettingsResult = {
-  connections: KommoConnectionDetailDto[];
-  state: "real" | "empty" | "error" | "forbidden";
-};
-
-async function getKommoSettings(
-  workspaceId: string | null,
-  enabled: boolean,
-): Promise<KommoSettingsResult> {
-  if (!workspaceId || !enabled) {
-    return { connections: [], state: "empty" };
-  }
-
-  try {
-    const result = await listKommoConnectionsAction(workspaceId);
-
-    if (result.ok) {
-      return {
-        connections: result.connections,
-        state: result.connections.length > 0 ? "real" : "empty",
-      };
-    }
-
-    return {
-      connections: [],
-      state: result.reason === "unauthorized" ? "forbidden" : "error",
-    };
-  } catch {
-    return { connections: [], state: "error" };
-  }
-}
-
 export default async function SettingsPage() {
   const [
     workspaceSettings,
@@ -738,16 +702,6 @@ export default async function SettingsPage() {
       workspace.permissions.canManageIntegrations &&
       (!isPlatformSupport || isPlatformOwnerSupport),
   );
-  const kommoViewerId = accountUser?.id ?? null;
-  const kommoManagerAvailable = Boolean(workspace && kommoViewerId);
-  const [kommoSettings, licenseStatus] = await Promise.all([
-    getKommoSettings(workspace?.id ?? null, canManageKommo && Boolean(kommoViewerId)),
-    fetchLicenseStatus(),
-  ]);
-  const kommoLicenseLocked = Boolean(
-    licenseStatus && licenseLockReason(licenseStatus) !== null,
-  );
-  const kommoChannels = inboundConnections.flatMap(({ channels }) => channels);
   const canManageTeam = Boolean(
     workspace?.permissions.canManageMembers &&
     (!isPlatformSupport || isPlatformOwnerSupport),
@@ -1571,9 +1525,9 @@ export default async function SettingsPage() {
                               testMessageAction={
                                 testProviderCatalogMessageAction
                               }
-                              kommoManagerAnchorId={
-                                canManageKommo && kommoManagerAvailable
-                                  ? "crm-configurado"
+                              kommoManagerHref={
+                                canManageKommo
+                                  ? "/integrations?aba=crm#integracao-kommo"
                                   : undefined
                               }
                             />
@@ -1597,19 +1551,25 @@ export default async function SettingsPage() {
                 )}
               </section>
 
-              {workspace && kommoViewerId ? (
-                <section className="trigger-source-section" aria-label="Kommo CRM">
-                  <KommoCrmManager
-                    workspaceId={workspace.id}
-                    viewerId={kommoViewerId}
-                    connections={kommoSettings.connections}
-                    loadState={kommoSettings.state}
-                    allChannels={kommoChannels}
-                    canManage={canManageKommo}
-                    licenseLocked={kommoLicenseLocked}
-                  />
-                </section>
-              ) : null}
+              <section
+                className="trigger-source-section"
+                id="crm-configurado"
+                aria-label="Kommo CRM"
+              >
+                <div className="trigger-source-empty">
+                  <strong>O Kommo agora fica em Integracoes</strong>
+                  <span>
+                    Conecte e gerencie o Kommo (CRM) na aba CRM de Integracoes,
+                    uma vez para a conta inteira.
+                  </span>
+                  <Link
+                    className="button"
+                    href="/integrations?aba=crm#integracao-kommo"
+                  >
+                    Abrir Kommo em Integracoes
+                  </Link>
+                </div>
+              </section>
             </div>
           </details>
         </div>

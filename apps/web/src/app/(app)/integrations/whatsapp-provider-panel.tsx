@@ -75,8 +75,11 @@ const providerCards: Array<{
   },
 ];
 
+export type WhatsappProviderId = ProviderId;
+
 export function WhatsappProviderPanel({
-  connections,
+  connections: allConnections,
+  provider: scopedProvider,
   canManage,
   createAction,
   testAction,
@@ -86,6 +89,11 @@ export function WhatsappProviderPanel({
   deleteAction,
 }: {
   connections: WhatsappConnectionDto[];
+  /**
+   * Scopes the panel to one provider (Integrations hub modal): only its
+   * connections and status are shown and the create form is fixed to it.
+   */
+  provider?: ProviderId;
   canManage: boolean;
   createAction: WhatsappProviderAction;
   testAction: WhatsappProviderAction;
@@ -95,7 +103,18 @@ export function WhatsappProviderPanel({
   deleteAction: WhatsappProviderAction;
 }) {
   const router = useRouter();
-  const [provider, setProvider] = useState<ProviderId>("uazapi_byo");
+  const [provider, setProvider] = useState<ProviderId>(
+    scopedProvider ?? "uazapi_byo",
+  );
+  const connections = scopedProvider
+    ? allConnections.filter(
+        (connection) => connection.provider === scopedProvider,
+      )
+    : allConnections;
+  const visibleCards = scopedProvider
+    ? providerCards.filter((card) => card.id === scopedProvider)
+    : providerCards;
+  const scopedTitle = visibleCards[0]?.title;
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<WhatsappProviderActionResult | null>(
     null,
@@ -291,7 +310,11 @@ export function WhatsappProviderPanel({
       <div className="inbound-webhook-heading">
         <div>
           <span className="eyebrow">Conexoes WhatsApp</span>
-          <h2 id="whatsapp-providers-title">Provedores e receivers</h2>
+          <h2 id="whatsapp-providers-title">
+            {scopedProvider
+              ? `Conexoes ${scopedTitle ?? scopedProvider}`
+              : "Provedores e receivers"}
+          </h2>
           <p className="muted">
             As credenciais ficam somente na API. O token do receiver e salvo
             apenas como hash no servidor.
@@ -299,16 +322,18 @@ export function WhatsappProviderPanel({
         </div>
       </div>
 
-      <p className="muted">
-        Usa Umbler Talk ou Gupshup? Essas plataformas sao configuradas no bloco
-        de webhooks logo abaixo, e nao nesta lista.
-      </p>
+      {scopedProvider ? null : (
+        <p className="muted">
+          Usa Umbler Talk ou Gupshup? Essas plataformas sao configuradas no
+          bloco de webhooks logo abaixo, e nao nesta lista.
+        </p>
+      )}
 
       <div
         className="inbound-counter-grid"
         data-testid="whatsapp-provider-statuses"
       >
-        {providerCards.map((card) => (
+        {visibleCards.map((card) => (
           <div className="inbound-counter" key={card.id}>
             <strong>{card.title}</strong>
             <span
@@ -328,22 +353,26 @@ export function WhatsappProviderPanel({
           onSubmit={submitCreate}
           onInvalid={(event) => clearCredentials(event.currentTarget)}
         >
-          <label>
-            <span className="field-label">Provedor</span>
-            <select
-              name="provider"
-              value={provider}
-              onChange={(event) =>
-                setProvider(event.target.value as ProviderId)
-              }
-            >
-              {providerCards.map((card) => (
-                <option key={card.id} value={card.id}>
-                  {card.title}
-                </option>
-              ))}
-            </select>
-          </label>
+          {scopedProvider ? (
+            <input type="hidden" name="provider" value={scopedProvider} />
+          ) : (
+            <label>
+              <span className="field-label">Provedor</span>
+              <select
+                name="provider"
+                value={provider}
+                onChange={(event) =>
+                  setProvider(event.target.value as ProviderId)
+                }
+              >
+                {providerCards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {card.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             <span className="field-label">Nome</span>
             <input name="name" required minLength={1} maxLength={120} />

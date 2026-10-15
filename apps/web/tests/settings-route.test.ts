@@ -352,14 +352,11 @@ describe("settings route", () => {
     expect(html).toContain('href="#configuracao-equipe"');
     expect(html).toContain('href="#configuracao-conversoes"');
     expect(html).toContain('href="#configuracao-operacao"');
-    expect(html).toContain('href="#configuracao-trocar-cliente"');
     expect(html).toContain('id="configuracao-conta"');
     expect(html).toContain('id="configuracao-equipe"');
     expect(html).toContain('id="configuracao-conversoes"');
     expect(html).toContain('id="configuracao-operacao"');
-    expect(html).toContain('id="configuracao-trocar-cliente"');
-    expect(html).toContain("Trocar de cliente");
-    expect(html.match(/class="settings-domain-section/g)).toHaveLength(5);
+    expect(html.match(/class="settings-domain-section/g)).toHaveLength(4);
     expect(
       html.match(/class="surface-panel settings-automation-details [^"]+"/g),
     ).toHaveLength(2);
@@ -457,6 +454,22 @@ describe("settings route", () => {
     expect(html).toContain("Regras por conexao e canal");
     expect(html).toContain("Nenhuma conexao WhatsApp disponivel");
     expect(html).toContain('href="/integrations"');
+  });
+
+  it("points Kommo to the Integrations hub instead of mounting its manager", async () => {
+    mockSettingsFetch({ rulesBody: [] });
+
+    const element = await SettingsPage();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("O Kommo agora fica em Integracoes");
+    expect(html).toContain('href="/integrations?aba=crm#integracao-kommo"');
+    expect(html).not.toContain('data-testid="kommo-crm-manager"');
+    expect(html).not.toContain("Mudança de estágio no CRM");
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/kommo/connections"),
+      expect.anything(),
+    );
   });
 
   it("centralizes Umbler rules by connection without legacy adaptation controls", async () => {
@@ -707,7 +720,6 @@ describe("settings route", () => {
     expect(html).toContain("Suporte da plataforma");
     expect(html).toContain("Acesso interno ao workspace do cliente");
     expect(html).toContain('placeholder="pessoa@empresa.com"');
-    expect(html).toContain("Reenviar e-mail de acesso");
     expect(html).not.toContain("Slug loja-samuel com papel owner");
   });
 

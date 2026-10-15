@@ -31,7 +31,7 @@ Os dois caminhos de instalação convergem nos mesmos passos de produto: licenç
 4. **Cliente de licença** — `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY`; a ativação acontece sozinha no boot da API → confira `/backoffice/license`.
 5. Crie o primeiro administrador e o primeiro workspace/cliente.
 6. [Meta Ads manual](meta-manual.md) (usuário do sistema) — anúncios e Pixel, não mensagens.
-7. WhatsApp, tudo em `/integrations`: **Provedores e receivers** (Uazapi BYO, NOD API, WAHA, Z-API) e **Webhooks de entrada** (Umbler Talk, Gupshup, Meta WhatsApp Cloud API). Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
+7. WhatsApp, tudo em `/integrations` (o **Hub de Integrações**, com abas **WhatsApp**, **Conversões e vendas** e **CRM**; cada card abre uma janela de conexão): aba **WhatsApp** com Uazapi BYO, NOD API, WAHA, Z-API e WhatsApp Cloud API (Meta); aba **Conversões e vendas** com Umbler Talk, Gupshup, Data Crazy e Meta Ads; aba **CRM** com o Kommo. Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
    - Precisa de **Gatilhos de conversão → Nova regra**? As envs `INBOUND_*` são **obrigatórias** e vêm desligadas por padrão.
 8. Personalização de marca opcional: `BRAND_*` (rodapé residual não removível).
 9. Deploy Dokploy (API) + Vercel (web) — ou permaneça local.

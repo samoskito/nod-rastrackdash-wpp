@@ -15,7 +15,7 @@ fechada; não tente contornar isso com OAuth.
 | | **Meta Ads** (este guia) | **Meta WhatsApp (Cloud API)** |
 |---|---|---|
 | O que entrega | Anúncios, Pixel, Página, conta de anúncios, destino de conversão | **Mensagens** recebidas pelo seu número oficial, com atribuição de CTWA |
-| Onde se configura | `/integrations` → conexão manual Meta | `/integrations` → **Webhooks de entrada** → Meta WhatsApp (Cloud API) |
+| Onde se configura | `/integrations` → aba **Conversões e vendas** → card **Meta Ads** | `/integrations` → aba **WhatsApp** → card **WhatsApp Cloud API** |
 | Credencial | Token de **usuário do sistema** do Gerenciador de Negócios | **Verify token** gerado pelo produto + (opcional) `META_APP_SECRET` |
 | Webhook | `GET`/`POST /webhooks/meta`, com `META_WEBHOOK_VERIFY_TOKEN` | `GET`/`POST /webhooks/inbound/:id` |
 
@@ -51,7 +51,7 @@ atribuições ambíguas. Veja [ativação e limites de recuperação de CTWA](wh
 
 ## Verificação
 
-- `/integrations` mostra a conexão manual Meta como conectada, os ativos descobertos e o destino (BM/Pixel/Página/conta) selecionado
+- `/integrations` (aba **Conversões e vendas** → card **Meta Ads**) mostra a conexão manual Meta como conectada, os ativos descobertos e o destino (BM/Pixel/Página/conta) selecionado
 - `GET /onboarding/status` → `metaConnected: true` (com workspace ativo)
 - Relatórios/leads deixam de falhar por “meta not configured”
 

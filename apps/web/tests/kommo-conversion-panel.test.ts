@@ -233,10 +233,13 @@ function managerElement(
   });
 }
 
+// The hub keeps the Kommo modal mounted (hidden) while closed: hiding and
+// showing the manager's container mirrors close/reopen without unmounting.
 function closeAndReopenManager() {
-  const summary = document.querySelector("#crm-configurado > summary") as HTMLElement;
-  fireEvent.click(summary);
-  fireEvent.click(summary);
+  const manager = document.querySelector("#crm-configurado") as HTMLElement;
+  const container = manager.parentElement as HTMLElement;
+  container.hidden = true;
+  container.hidden = false;
 }
 
 const clipboard = { writeText: vi.fn() };
@@ -1380,7 +1383,7 @@ describe("Kommo panel: audit authorization loss revokes everything", () => {
 });
 
 describe("KommoCrmManager: single mount and persistence of locks", () => {
-  it("renders one details section with the stable anchor", () => {
+  it("renders one manager section with the stable anchor", () => {
     const scope = freshScope();
     render(managerElement(scope, managerActions(), [conn()]));
     const sections = document.querySelectorAll("#crm-configurado");

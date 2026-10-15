@@ -83,7 +83,7 @@ function originSelect() {
 }
 
 describe("Kommo as an opt-in origin in the existing builder", () => {
-  it("does not offer Kommo when the manager is not mounted (default, other providers untouched)", () => {
+  it("does not offer Kommo when the manager link is absent (default, other providers untouched)", () => {
     renderBuilder();
     openBuilder();
     const values = Array.from(originSelect().options).map((option) => option.value);
@@ -91,8 +91,8 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
     expect(screen.getByLabelText("Nome da regra")).toBeTruthy();
   });
 
-  it("offers Kommo beside the existing origins when the manager anchor is provided", () => {
-    renderBuilder({ kommoManagerAnchorId: "crm-configurado" });
+  it("offers Kommo beside the existing origins when the manager link is provided", () => {
+    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
     openBuilder();
     const values = Array.from(originSelect().options).map((option) => option.value);
     expect(values).toEqual(["message", "tag", "catalog", "kommo"]);
@@ -102,13 +102,13 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 
   it("choosing Kommo shows a pointer instead of the provider form and creates nothing", () => {
-    const { action } = renderBuilder({ kommoManagerAnchorId: "crm-configurado" });
+    const { action } = renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
     openBuilder();
     fireEvent.change(originSelect(), { target: { value: "kommo" } });
 
     expect(screen.getByTestId("kommo-origin-pointer")).toBeTruthy();
     expect(screen.queryByLabelText("Nome da regra")).toBeNull();
-    expect(screen.getByRole("button", { name: "Abrir gerenciador Kommo" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Abrir Kommo em Integrações" })).toBeTruthy();
     expect(originSelect().value).toBe("kommo");
     expect((screen.getByLabelText("Evento enviado a Meta") as HTMLSelectElement).disabled).toBe(
       true,
@@ -117,7 +117,7 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 
   it("switching back restores the untouched provider form and every other origin", () => {
-    renderBuilder({ kommoManagerAnchorId: "crm-configurado" });
+    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
     openBuilder();
     for (const origin of ["tag", "catalog", "message"]) {
       fireEvent.change(originSelect(), { target: { value: "kommo" } });
@@ -129,28 +129,19 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
     }
   });
 
-  it("opens the single manager, focuses its summary and never duplicates it", () => {
-    const manager = document.createElement("details");
-    manager.id = "crm-configurado";
-    const summary = document.createElement("summary");
-    summary.tabIndex = 0;
-    manager.appendChild(summary);
-    document.body.appendChild(manager);
-    manager.scrollIntoView = vi.fn();
-
-    renderBuilder({ kommoManagerAnchorId: "crm-configurado" });
+  it("points to the Kommo card in the Integrations hub instead of a local manager", () => {
+    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
     openBuilder();
     fireEvent.change(originSelect(), { target: { value: "kommo" } });
-    fireEvent.click(screen.getByRole("button", { name: "Abrir gerenciador Kommo" }));
+    const link = screen.getByRole("link", { name: "Abrir Kommo em Integrações" });
 
-    expect(manager.open).toBe(true);
-    expect(manager.scrollIntoView).toHaveBeenCalled();
-    expect(document.activeElement).toBe(summary);
-    expect(document.querySelectorAll("#crm-configurado")).toHaveLength(1);
+    expect(link.getAttribute("href")).toBe("/integrations?aba=crm#integracao-kommo");
+    expect(screen.queryByRole("button", { name: "Abrir gerenciador Kommo" })).toBeNull();
+    expect(document.querySelectorAll("#crm-configurado")).toHaveLength(0);
   });
 
   it("closing and reopening the builder returns to the provider default", () => {
-    renderBuilder({ kommoManagerAnchorId: "crm-configurado" });
+    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
     openBuilder();
     fireEvent.change(originSelect(), { target: { value: "kommo" } });
     fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
@@ -160,22 +151,28 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 });
 
-describe("settings page wiring (structural)", () => {
+describe("integrations page wiring (structural)", () => {
   const page = readFileSync(
+    resolve(__dirname, "../src/app/(app)/integrations/page.tsx"),
+    "utf8",
+  );
+  const settingsPage = readFileSync(
     resolve(__dirname, "../src/app/(app)/settings/page.tsx"),
     "utf8",
   );
 
-  it("mounts the Kommo manager exactly once", () => {
+  it("mounts the Kommo manager exactly once, in the hub page only", () => {
     expect(page.match(/<KommoCrmManager\b/g)).toHaveLength(1);
+    expect(settingsPage).not.toContain("<KommoCrmManager");
+    expect(settingsPage).not.toContain("listKommoConnectionsAction");
   });
 
-  it("mounts it outside every WhatsApp connection card loop", () => {
+  it("mounts it outside every WhatsApp connection loop", () => {
     const managerIndex = page.indexOf("<KommoCrmManager");
-    const loopIndex = page.indexOf("inboundConnections.map(({ connection, channels })");
-    const loopEnd = page.indexOf("})}", loopIndex);
-    expect(loopIndex).toBeGreaterThan(-1);
-    expect(managerIndex).toBeGreaterThan(loopEnd);
+    const loopIndex = page.indexOf("inboundWebhookData.connections.map(");
+    expect(managerIndex).toBeGreaterThan(-1);
+    // The manager never sits inside a per-connection .map in the hub page.
+    expect(loopIndex === -1 || managerIndex < loopIndex).toBe(true);
   });
 
   it("gates the manager only by workspace/viewer (zero-WhatsApp entry preserved)", () => {
@@ -183,5 +180,10 @@ describe("settings page wiring (structural)", () => {
     const guard = page.lastIndexOf("workspace && kommoViewerId", managerIndex);
     expect(guard).toBeGreaterThan(-1);
     expect(managerIndex - guard).toBeLessThan(200);
+  });
+
+  it("settings still hands the builder a link to the hub Kommo card", () => {
+    expect(settingsPage).toContain("kommoManagerHref");
+    expect(settingsPage).toContain("/integrations?aba=crm#integracao-kommo");
   });
 });

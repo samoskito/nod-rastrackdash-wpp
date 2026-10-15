@@ -7,6 +7,41 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ## [Unreleased]
 
+### Changed
+
+- **Integrations hub** (`/integrations`, web only): the page is now a catalog
+  with tabs — **WhatsApp** (Uazapi, NOD API, WAHA, Z-API, WhatsApp Cloud API),
+  **Conversões e vendas** (Umbler Talk, Gupshup, Data Crazy, Meta Ads) and
+  **CRM** (Kommo) — with logo cards (**Ativo** / **Disponível**) and one
+  connection modal per platform. The modals reuse the existing panels, scoped
+  to the platform, so create/test/receiver/edit/delete behave as before. New
+  files: `apps/web/src/app/(app)/integrations/hub/*`,
+  `apps/web/src/components/modal.tsx`, logos in `apps/web/public/integrations/`
+  (see `SOURCES.md`; a missing logo falls back to the platform initials).
+- **Kommo moved from Settings to Integrations → CRM.** Same manager and
+  safeguards; Settings keeps a shortcut card and the rule builder's Kommo
+  option now links to the hub card (`kommoManagerAnchorId` →
+  `kommoManagerHref` in `ProviderConversionRulePanel`).
+- **Removing a WhatsApp number** stays in the provider card (**Excluir**, type
+  the connection name to confirm) — no billing or package flow.
+- **Locked license (HTTP 423)** now shows "Licença bloqueada: alterações
+  indisponíveis…" on WhatsApp-connection, inbound-webhook and Meta writes done
+  from this screen, instead of a generic error.
+- No new environment variable, no migration, no new dependency (`pnpm-lock.yaml`
+  unchanged). Web only: rebuild shared, rebuild and redeploy the web; the API is
+  untouched.
+- **If you customized** `integrations/page.tsx`, the Kommo block of
+  `settings/page.tsx`, `settings/kommo-crm-manager.tsx`,
+  `provider-conversion-rule-panel.tsx` or `layout-system.css`, expect merge
+  conflicts: take the official file and re-apply your change in the matching
+  block (each hub modal is an entry of `panels` in `integrations/page.tsx`).
+  Branding (`BRAND_*`), the residual footer, the fixed sidebar and the license
+  guard are not touched.
+- **Verify:** open `/integrations` (three tabs, logo cards, your existing
+  connections under **Ativos**); open a card and check its connections; as the
+  owner open **CRM → Kommo**; as a member confirm there are no write buttons.
+  **Roll back:** revert this change in the web and redeploy — no data changes.
+
 ### Fixed
 
 - **URGENT — fewer Meta Graph API calls** (stops exhausting the shared

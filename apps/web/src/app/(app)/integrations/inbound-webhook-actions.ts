@@ -12,6 +12,7 @@ import {
   type InboundWebhookProviderDto,
 } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
+import { licenseLockedMessageFor } from "../../../lib/license-locked-message";
 import { serverApiFetch } from "../../../lib/server-api";
 
 export type InboundWebhookOneTimeSecret = {
@@ -104,8 +105,8 @@ export async function createInboundWebhookConnectionAction(
         secret: result.data.secret,
       }),
     };
-  } catch {
-    return failure("Nao foi possivel criar a conexao de webhook.");
+  } catch (error) {
+    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel criar a conexao de webhook.");
   }
 }
 
@@ -145,8 +146,8 @@ export async function rotateInboundWebhookSecretAction(
         secret: result.data.secret,
       }),
     };
-  } catch {
-    return failure("Nao foi possivel rotacionar o segredo desta conexao.");
+  } catch (error) {
+    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel rotacionar o segredo desta conexao.");
   }
 }
 
@@ -208,8 +209,8 @@ export async function removeInboundWebhookConnectionAction(
       ok: true,
       message: "Conexao removida. O historico de observacao foi preservado.",
     };
-  } catch {
-    return failure("Nao foi possivel remover esta conexao.");
+  } catch (error) {
+    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel remover esta conexao.");
   }
 }
 
@@ -241,8 +242,8 @@ export async function createInboundWebhookChannelAction(
       message:
         "Canal cadastrado. Ja e possivel criar regras de conversao para ele antes de qualquer mensagem chegar.",
     };
-  } catch {
-    return failure("Nao foi possivel cadastrar o canal.");
+  } catch (error) {
+    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel cadastrar o canal.");
   }
 }
 
@@ -307,8 +308,8 @@ export async function saveInboundWebhookChannelRoutesAction(
       ok: true,
       message: "Rotas do canal salvas e validadas.",
     };
-  } catch {
-    return failure("Nao foi possivel salvar as rotas deste canal.");
+  } catch (error) {
+    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel salvar as rotas deste canal.");
   }
 }
 
@@ -332,8 +333,8 @@ export async function removeInboundWebhookChannelRouteAction(
       ok: true,
       message: "Rota removida do canal.",
     };
-  } catch {
-    return failure("Nao foi possivel remover esta rota.");
+  } catch (error) {
+    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel remover esta rota.");
   }
 }
 
@@ -385,6 +386,12 @@ function knownOperationalError(
   error: unknown,
   allowedMessages: ReadonlySet<string>,
 ): string | null {
+  const licenseMessage = licenseLockedMessageFor(error);
+
+  if (licenseMessage) {
+    return licenseMessage;
+  }
+
   if (!(error instanceof Error)) {
     return null;
   }

@@ -278,7 +278,8 @@ Meta próprio nem preencher `META_APP_ID`/`META_APP_SECRET` para isso.
 
 ### Kommo CRM (opcional)
 
-Se você habilitar a integração Kommo, gere uma chave Base64 de **32 bytes** e
+Se você habilitar a integração Kommo (conectada em `/integrations` → aba
+**CRM** → card **Kommo**; até a versão anterior ficava em Configurações), gere uma chave Base64 de **32 bytes** e
 preencha `KOMMO_CRM_ENCRYPTION_KEY` somente no ambiente efetivo da API. A API
 rejeita formatos inválidos e nunca devolve tokens Kommo pelas rotas de gestão
 ou auditoria. Não use uma chave no frontend nem a versione no `.env`.
@@ -349,12 +350,12 @@ Não use `https://`, barra final nem o hostname completo da API em `AUTH_COOKIE_
 
 ⚠️ **Estas variáveis deixaram de ser o caminho principal.** As conexões de
 WhatsApp são criadas **por workspace** na própria UI (`/integrations` →
-painel "Provedores e receivers"), com as credenciais digitadas ali e
+aba **WhatsApp** → card do provedor), com as credenciais digitadas ali e
 guardadas criptografadas. As envs abaixo continuam sendo lidas como
 **padrão do deployment**: o adapter usa a credencial salva na conexão e só
 cai na env quando aquele campo não foi preenchido na conexão. Elas também
-alimentam o card de status global "Instância Uazapi (BYO)" no rodapé de
-`/integrations`.
+alimentam o bloco de status global "Instância Uazapi (BYO)" dentro do card
+**Uazapi** (aba **WhatsApp**) de `/integrations`.
 
 Umbler Talk, Gupshup, Data Crazy e Meta WhatsApp (Cloud API) **não têm
 variável de ambiente específica do provedor** — são conexões de webhook de entrada criadas em

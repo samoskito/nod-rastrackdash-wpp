@@ -5010,3 +5010,580 @@ body {
     font-size: 17px;
   }
 }
+
+/* Integrations hub (catalog tabs, logo cards) + shared modal */
+
+.integrations-hub {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+
+.integrations-hub-notice > .feedback-banner {
+  margin: 0;
+}
+
+.integrations-hub-notice.in-modal {
+  margin-bottom: 16px;
+}
+
+.integrations-hub-tabs {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.integrations-hub-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.integrations-hub-tab:hover {
+  color: var(--ink);
+}
+
+.integrations-hub-tab[aria-selected="true"] {
+  border-bottom-color: var(--mint);
+  color: var(--ink);
+}
+
+.integrations-hub-tab:focus-visible,
+.integration-hub-card-main:focus-visible,
+.app-modal-close:focus-visible,
+.app-modal:focus-visible {
+  outline: 2px solid rgba(66, 240, 168, 0.55);
+  outline-offset: 2px;
+}
+
+.integrations-hub-tab-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(66, 240, 168, 0.14);
+  color: var(--mint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.integrations-hub-panel {
+  display: grid;
+  min-width: 0;
+  gap: 22px;
+  scroll-margin-top: 24px;
+}
+
+.integrations-hub-panel[hidden],
+.app-modal-layer[hidden] {
+  display: none !important;
+}
+
+.integrations-hub-panel:focus-visible {
+  outline: none;
+}
+
+.integrations-hub-panel-intro {
+  max-width: 760px;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.integrations-hub-group {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.integrations-hub-group > h2 {
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.integrations-hub-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.integrations-hub-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.integrations-hub-grid > li {
+  display: grid;
+  min-width: 0;
+}
+
+.integration-hub-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 1fr auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 120ms ease;
+}
+
+.integration-hub-card:hover {
+  border-color: rgba(66, 240, 168, 0.32);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.3);
+}
+
+.integration-hub-card.is-active {
+  border-color: rgba(66, 240, 168, 0.24);
+}
+
+.integration-hub-card-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 16px 16px 10px;
+  border: 0;
+  border-radius: 14px 14px 0 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The whole card is clickable; quick links sit above this layer. */
+.integration-hub-card-main::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+}
+
+.integration-hub-card-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.integration-logo {
+  display: grid;
+  width: 88px;
+  height: 56px;
+  /* Definite track so the logo image can scale to the tile. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--graphite-900);
+}
+
+.integration-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 8px 10px;
+}
+
+/* Shown when the logo file is missing or fails to load. */
+.integration-logo-initials {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.integration-logo.on-light .integration-logo-initials {
+  color: #1c2a25;
+}
+
+/* Official artwork with dark ink: neutral light tile, never recolored. */
+.integration-logo.on-light {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: #f6f8f7;
+}
+
+.integration-hub-card-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.integration-hub-card-category {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.integration-hub-card-copy strong {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.integration-hub-card-description {
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.integration-hub-card-footer {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.integration-hub-card-status {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.integration-hub-card-links {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 4px 14px;
+}
+
+.integration-hub-card-detail {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.integration-hub-card-link {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.integration-hub-card-link:hover,
+.integration-hub-card-link:focus-visible {
+  color: var(--mint);
+  text-decoration: underline;
+}
+
+.integration-hub-card-link:focus-visible {
+  outline: 2px solid rgba(66, 240, 168, 0.55);
+  outline-offset: 2px;
+}
+
+.integration-hub-card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.integration-hub-card-cta.primary {
+  border-color: rgba(66, 240, 168, 0.5);
+  color: var(--mint);
+}
+
+.integration-hub-card:hover .integration-hub-card-cta {
+  border-color: rgba(66, 240, 168, 0.5);
+  color: var(--ink);
+}
+
+.integration-modal-stack {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.integration-modal-stack > .surface-panel {
+  margin: 0;
+}
+
+.integration-modal-note {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.integration-modal-note strong {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.integration-modal-note p {
+  margin: 0;
+}
+
+.integration-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.integration-qr-create {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.integration-flow-domain .integration-domain-heading {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.integration-flow-domain .integration-domain-content {
+  margin-left: 0;
+}
+
+.crm-moved-pointer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.crm-moved-pointer h3 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+.crm-moved-pointer p {
+  margin: 4px 0 0;
+}
+
+/* Shared modal (components/modal.tsx) */
+
+.app-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.app-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 7, 6, 0.78);
+  backdrop-filter: blur(3px);
+}
+
+.app-modal {
+  position: relative;
+  display: grid;
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 48px);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(66, 240, 168, 0.28);
+  border-radius: 14px;
+  background: var(--graphite-850);
+  color: var(--ink);
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.58);
+  animation: app-modal-in 180ms ease-out;
+}
+
+.app-modal-wide {
+  width: min(1040px, 100%);
+}
+
+.app-modal-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-modal-media {
+  flex: 0 0 auto;
+}
+
+.integration-logo-modal {
+  width: 76px;
+  height: 48px;
+  border-radius: 10px;
+}
+
+.app-modal-heading {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 4px;
+}
+
+.app-modal-heading h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.app-modal-heading p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app-modal-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.app-modal-close:hover {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.app-modal-body {
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+}
+
+@keyframes app-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .app-modal-layer {
+    padding: 0;
+    place-items: end stretch;
+  }
+
+  .app-modal,
+  .app-modal-wide {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .app-modal-body {
+    padding: 16px;
+  }
+
+  .crm-moved-pointer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-modal {
+    animation: none;
+  }
+
+  .integration-hub-card,
+  .integrations-hub-tab {
+    transition: none;
+  }
+}
+
+/* Kommo CRM manager inside the Integrations hub modal */
+.kommo-crm-manager {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.kommo-crm-manager-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}

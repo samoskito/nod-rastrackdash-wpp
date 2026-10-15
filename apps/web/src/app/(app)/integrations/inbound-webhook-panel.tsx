@@ -4,6 +4,7 @@ import type {
   InboundWebhookCapabilitiesDto,
   InboundWebhookChannelDto,
   InboundWebhookConnectionOverviewDto,
+  InboundWebhookProviderDto,
   MetaManualConfigurationDto,
   ProviderConversionRuleDto,
 } from "@wpptrack/shared";
@@ -60,6 +61,17 @@ export type InboundWebhookPanelProps = {
   createChannelAction: InboundWebhookAction;
   setChannelStatusAction: InboundWebhookAction;
   saveRoutesAction: InboundWebhookAction;
+  /**
+   * Scopes the panel to one platform (Integrations hub modal): only its
+   * connections are listed and the create form is fixed to it.
+   */
+  provider?: InboundWebhookProviderDto;
+  /** False hides the create form (e.g. connections bridged from Uazapi). */
+  allowCreate?: boolean;
+  /** Whether the create form starts open (default: when nothing exists). */
+  defaultCreateOpen?: boolean;
+  /** Replaces the scoped heading's helper text. */
+  scopeDescription?: string;
 };
 
 type PanelNotice = {
@@ -73,6 +85,7 @@ export function inboundWebhookProviderLabel(provider: string): string {
     gupshup: "Gupshup",
     meta_cloud: "Meta WhatsApp (Cloud API)",
     umbler: "Umbler Talk",
+    uazapi: "Uazapi",
   };
 
   return labels[provider] ?? provider;
@@ -102,7 +115,7 @@ function allowsManualChannelRegistration(provider: string): boolean {
 
 export function InboundWebhookPanel({
   capabilities,
-  connections,
+  connections: allConnections,
   providerRules,
   providerRulesEnabled,
   metaConfiguration,
@@ -115,17 +128,38 @@ export function InboundWebhookPanel({
   createChannelAction,
   setChannelStatusAction,
   saveRoutesAction,
+  provider: scopedProvider,
+  allowCreate = true,
+  defaultCreateOpen,
+  scopeDescription,
 }: InboundWebhookPanelProps) {
   const router = useRouter();
-  const [createOpen, setCreateOpen] = useState(connections.length === 0);
+  const connections = scopedProvider
+    ? allConnections.filter(
+        ({ overview }) => overview.connection.provider === scopedProvider,
+      )
+    : allConnections;
+  const [createOpen, setCreateOpen] = useState(
+    defaultCreateOpen ?? connections.length === 0,
+  );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<PanelNotice | null>(null);
   const [oneTimeSecret, setOneTimeSecret] =
     useState<InboundWebhookOneTimeSecret | null>(null);
   const [copied, setCopied] = useState(false);
-  const creatableProviders = capabilities.providers.filter(
-    (provider) => provider.creationEnabled,
-  );
+  const creatableProviders = allowCreate
+    ? capabilities.providers.filter(
+        (provider) =>
+          provider.creationEnabled &&
+          (!scopedProvider || provider.provider === scopedProvider),
+      )
+    : [];
+  const canCreate =
+    canManage && capabilities.enabled && creatableProviders.length > 0;
+  // Inside a hub modal the form is the main content while nothing exists
+  // yet: no inner "close" next to the modal's own X.
+  const showCreateToggle =
+    canCreate && !(scopedProvider && createOpen && connections.length === 0);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -230,16 +264,33 @@ export function InboundWebhookPanel({
   return (
     <section className="surface-panel inbound-webhook-panel">
       <div className="inbound-webhook-heading">
-        <div>
-          <span className="eyebrow">Fontes de mensagens</span>
-          <h2>Webhooks de entrada</h2>
-          <p className="muted">
-            Configure Umbler Talk, Gupshup, Data Crazy ou Meta WhatsApp (Cloud
-            API). Cada conexao gera uma URL propria; so mensagens vindas de
-            anuncio (CTWA) viram lead.
-          </p>
-        </div>
-        {canManage && capabilities.enabled ? (
+        {scopedProvider ? (
+          <div>
+            <span className="eyebrow">Conexoes</span>
+            <h2>
+              {connections.length > 0
+                ? `Suas conexoes ${inboundWebhookProviderLabel(scopedProvider)}`
+                : `Conectar ${inboundWebhookProviderLabel(scopedProvider)}`}
+            </h2>
+            <p className="muted">
+              {scopeDescription ??
+                (allowCreate
+                  ? "De um nome e gere a URL desta conexao. So mensagens vindas de anuncio (CTWA) viram lead."
+                  : "Confira as conexoes e escolha quais canais enviam conversoes.")}
+            </p>
+          </div>
+        ) : (
+          <div>
+            <span className="eyebrow">Fontes de mensagens</span>
+            <h2>Webhooks de entrada</h2>
+            <p className="muted">
+              Configure Umbler Talk, Gupshup, Data Crazy ou Meta WhatsApp (Cloud
+              API). Cada conexao gera uma URL propria; so mensagens vindas de
+              anuncio (CTWA) viram lead.
+            </p>
+          </div>
+        )}
+        {showCreateToggle ? (
           <button
             className="button"
             type="button"
@@ -251,33 +302,45 @@ export function InboundWebhookPanel({
             ) : (
               <Plus size={16} aria-hidden="true" />
             )}
-            {createOpen ? "Fechar" : "Adicionar conexao"}
+            {createOpen
+              ? scopedProvider
+                ? "Cancelar"
+                : "Fechar"
+              : "Adicionar conexao"}
           </button>
-        ) : (
+        ) : canCreate ? null : (
           <span className="status-chip">
-            {capabilities.enabled ? "Somente leitura" : "Indisponivel"}
+            {!capabilities.enabled
+              ? "Indisponivel"
+              : canManage && !allowCreate
+                ? "Gerenciar"
+                : "Somente leitura"}
           </span>
         )}
       </div>
 
-      {createOpen && canManage ? (
+      {createOpen && canCreate ? (
         <form className="inbound-webhook-create" onSubmit={handleCreate}>
-          <label>
-            <span className="field-label">Plataforma</span>
-            <select
-              name="provider"
-              defaultValue={creatableProviders[0]?.provider ?? ""}
-              disabled={
-                pendingAction === "create" || creatableProviders.length === 0
-              }
-            >
-              {creatableProviders.map((provider) => (
-                <option key={provider.provider} value={provider.provider}>
-                  {inboundWebhookProviderLabel(provider.provider)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {scopedProvider ? (
+            <input type="hidden" name="provider" value={scopedProvider} />
+          ) : (
+            <label>
+              <span className="field-label">Plataforma</span>
+              <select
+                name="provider"
+                defaultValue={creatableProviders[0]?.provider ?? ""}
+                disabled={
+                  pendingAction === "create" || creatableProviders.length === 0
+                }
+              >
+                {creatableProviders.map((provider) => (
+                  <option key={provider.provider} value={provider.provider}>
+                    {inboundWebhookProviderLabel(provider.provider)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             <span className="field-label">Nome da conexao</span>
             <input

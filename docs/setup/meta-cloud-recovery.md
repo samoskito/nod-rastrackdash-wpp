@@ -36,8 +36,8 @@ comportamento e aviso existentes.
 
 ## Novas mensagens — owner do workspace
 
-1. Em **Integrações → Webhooks de entrada**, abra a conexão **Meta WhatsApp
-   (Cloud API)**. Cadastre/identifique o número, configure a rota e confira
+1. Em **Integrações → aba WhatsApp → card WhatsApp Cloud API**, abra a conexão
+   **Meta WhatsApp (Cloud API)**. Cadastre/identifique o número, configure a rota e confira
    BM, credencial, conta e destino autorizados no workspace.
 2. Habilite o canal e clique em **Ativar envios automaticos**, confirmando a
    operação. **Canal habilitado**, **rota pronta** e **CTWA roteado** não
@@ -60,7 +60,7 @@ continua sendo uma etapa manual; esta alteração não assina a WABA sozinha.
 
 ## CTWAs anteriores — prévia, um teste, depois os demais
 
-1. Em **Integrações → Webhooks de entrada → conexão Meta Cloud → canal**,
+1. Em **Integrações → aba WhatsApp → card WhatsApp Cloud API → conexão → canal**,
    clique em **Recuperar CTWAs anteriores**. Abrir ou atualizar a prévia
    apenas consulta metadados; não envia nada. Ela mostra quantidade
    elegível, eventos consultados, limite da consulta e resultado do último

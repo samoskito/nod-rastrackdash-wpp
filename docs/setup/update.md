@@ -1,6 +1,6 @@
 # Atualizar uma instância que já está no ar
 
-Saiu uma novidade no template (ex.: **Data Crazy** em Webhooks de entrada) e a sua instância do RastrackDash já está funcionando com clientes? Este é o guia. **Você não reinstala nada**: só puxa o código novo da `main`, deixa a API aplicar as migrations sozinha no boot e publica o web de novo.
+Saiu uma novidade no template (ex.: o card **Data Crazy** em Integrações) e a sua instância do RastrackDash já está funcionando com clientes? Este é o guia. **Você não reinstala nada**: só puxa o código novo da `main`, deixa a API aplicar as migrations sozinha no boot e publica o web de novo.
 
 > **Regra de mentor:** atualizar é **redeploy**, não instalação. Se em algum momento um passo pedir para criar banco novo, gerar segredo novo, recriar o administrador ou trocar a licença, **pare** — isso é instalação, não atualização, e apagaria o que já está rodando.
 
@@ -96,12 +96,12 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 
 ### Exemplo: depois da atualização com Data Crazy
 
-- Em `/integrations` → **Webhooks de entrada** → **Adicionar conexão**, a opção **Data Crazy** aparece na lista.
+- Em `/integrations` → aba **Conversões e vendas**, o card **Data Crazy** aparece (em **Disponíveis** ou **Ativos**).
 - Ao gerar o webhook, a conexão nasce **em observação** — é esperado. Ela só vai para produção depois de uma entrega **CTWA real** ser processada e o parser **Data Crazy v1** ser certificado no backoffice.
 - Não existe canal/número provisório: o canal aparece sozinho após o primeiro webhook. E só mensagens inbound com **CTWA** viram lead.
 - Passo a passo completo da conexão: [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy--conexão-de-webhook-de-entrada-ctwa) e passo 10.2 do [Guia do Aluno](../GUIA-ALUNO.md#102-painel-webhooks-de-entrada--umbler-gupshup-data-crazy-e-meta-whatsapp-cloud-api).
 
-Se **Webhooks de entrada** nem aparece, ou Data Crazy não está na lista, veja [Não apareceu Data Crazy / feature nova depois do merge](troubleshooting.md#não-apareceu-data-crazy--feature-nova-depois-do-merge).
+Se a aba **Conversões e vendas** nem aparece, ou o card Data Crazy não está lá, veja [Não apareceu Data Crazy / feature nova depois do merge](troubleshooting.md#não-apareceu-data-crazy--feature-nova-depois-do-merge).
 
 ## Conversões Meta depois desta atualização (Trocar token)
 

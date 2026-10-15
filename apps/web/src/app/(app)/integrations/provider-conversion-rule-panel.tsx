@@ -147,8 +147,11 @@ export type ProviderConversionRulePanelProps = {
   reprocessAutomationCallbacksAction: ProviderRuleAction;
   removeAction: ProviderRuleAction;
   testMessageAction: ProviderRuleAction;
-  /** Quando presente, oferece Kommo como origem opt-in apontando para o gerenciador único. */
-  kommoManagerAnchorId?: string;
+  /**
+   * Quando presente, oferece Kommo como origem opt-in e aponta para o
+   * gerenciador único (card Kommo em Integrações, aba CRM).
+   */
+  kommoManagerHref?: string;
 };
 
 export function ProviderConversionRulePanel({
@@ -168,7 +171,7 @@ export function ProviderConversionRulePanel({
   reprocessAutomationCallbacksAction,
   removeAction,
   testMessageAction,
-  kommoManagerAnchorId,
+  kommoManagerHref,
 }: ProviderConversionRulePanelProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -497,7 +500,7 @@ export function ProviderConversionRulePanel({
         </div>
       ) : null}
 
-      {createOpen && kommoManagerAnchorId && kommoSelected ? (
+      {createOpen && kommoManagerHref && kommoSelected ? (
         <div className="provider-conversion-builder" data-testid="kommo-origin-pointer">
           <ConversionRuleOriginEventSelector
             origin={origin}
@@ -510,34 +513,25 @@ export function ProviderConversionRulePanel({
           />
           <p className="action-note">
             As regras do Kommo CRM (estágio, evento, valor, canais e modo observação ou
-            produção) ficam no gerenciador próprio, no mesmo painel de gatilhos. Nada é
+            produção) ficam no gerenciador próprio, em Integrações &gt; CRM. Nada é
             criado aqui e nenhuma outra origem é alterada.
           </p>
           <div className="provider-conversion-builder-footer">
-            <button
-              className="button primary"
-              type="button"
-              onClick={() => {
-                const target = document.getElementById(kommoManagerAnchorId);
-                if (target instanceof HTMLDetailsElement) target.open = true;
-                target?.scrollIntoView({ block: "start" });
-                target?.querySelector<HTMLElement>("summary")?.focus();
-              }}
-            >
-              Abrir gerenciador Kommo
-            </button>
+            <Link className="button primary" href={kommoManagerHref}>
+              Abrir Kommo em Integrações
+            </Link>
           </div>
         </div>
       ) : null}
 
-      {createOpen && !(kommoManagerAnchorId && kommoSelected) ? (
+      {createOpen && !(kommoManagerHref && kommoSelected) ? (
         <form className="provider-conversion-builder" onSubmit={handleCreate}>
           <ConversionRuleOriginEventSelector
             origin={origin}
             eventName={eventName}
             onOriginChange={selectOrigin}
             onEventChange={selectEvent}
-            kommoOption={Boolean(kommoManagerAnchorId)}
+            kommoOption={Boolean(kommoManagerHref)}
             kommoSelected={false}
             onKommoSelect={() => setKommoSelected(true)}
           />

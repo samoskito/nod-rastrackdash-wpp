@@ -1,7 +1,7 @@
 "use client";
 
 import type { InboundWebhookChannelDto } from "@wpptrack/shared";
-import { ChevronDown, Database } from "lucide-react";
+import { Database } from "lucide-react";
 import {
   createKommoConnectionAction,
   createKommoRuleAction,
@@ -84,10 +84,9 @@ export type KommoCrmManagerProps = {
 };
 
 /**
- * Single mount point of the Kommo CRM trigger. Rendered once, outside the
- * WhatsApp connection loops; the content stays mounted while the section is
- * collapsed so unsettled operations and the visible webhook URL survive
- * close/reopen.
+ * Single mount point of the Kommo CRM trigger, rendered once inside the
+ * Integrations hub Kommo modal (the modal stays mounted while closed, so
+ * unsettled operations and the visible webhook URL survive close/reopen).
  */
 export function KommoCrmManager({
   workspaceId,
@@ -102,12 +101,12 @@ export function KommoCrmManager({
   const scope = JSON.stringify([workspaceId, viewerId]);
 
   return (
-    <details
+    <section
       id={KOMMO_MANAGER_ANCHOR_ID}
-      className="trigger-source-details kommo-crm-manager"
+      className="kommo-crm-manager"
       data-testid="kommo-crm-manager"
     >
-      <summary>
+      <header className="kommo-crm-manager-head">
         <span className="trigger-source-identity">
           <span className="micro-label">Kommo CRM</span>
           <strong>Mudança de estágio no CRM</strong>
@@ -122,8 +121,7 @@ export function KommoCrmManager({
             ? "Indisponível"
             : `${connections.length} conexão(ões)`}
         </span>
-        <ChevronDown size={16} aria-hidden="true" />
-      </summary>
+      </header>
       <div className="trigger-source-body">
         <KommoConversionPanel
           key={scope}
@@ -137,6 +135,6 @@ export function KommoCrmManager({
           {...actions}
         />
       </div>
-    </details>
+    </section>
   );
 }

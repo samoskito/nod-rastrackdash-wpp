@@ -6,7 +6,10 @@ const { revalidatePath, serverApiFetch } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath }));
-vi.mock("../src/lib/server-api", () => ({ serverApiFetch }));
+vi.mock("../src/lib/server-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/lib/server-api")>()),
+  serverApiFetch,
+}));
 
 import {
   createInboundWebhookChannelAction,
@@ -490,6 +493,24 @@ describe("inbound webhook server actions", () => {
     expect(JSON.stringify(result)).not.toContain(sensitive);
     expect(JSON.stringify(result)).not.toContain("super-secret-value");
     expect(JSON.stringify(result)).not.toContain("+5511999999999");
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("shows the license lock message when the API answers 423", async () => {
+    const { LicenseLockedError } = await import("../src/lib/server-api");
+    serverApiFetch.mockRejectedValueOnce(
+      new LicenseLockedError("bloqueada", "revoked"),
+    );
+
+    const result = await createInboundWebhookConnectionAction(
+      form({ provider: "umbler", displayName: "Comercial" }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message:
+        "Licença bloqueada: alterações indisponíveis. Verifique /backoffice/license.",
+    });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 

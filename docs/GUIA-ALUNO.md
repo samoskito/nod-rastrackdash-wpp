@@ -110,9 +110,9 @@ Essas duas orientações (**Trocar token** e **Reenviar bloqueados**) continuam 
 
 ## 10. Conectar WhatsApp
 
-Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escolher — lá está o contrato completo, a matriz do que já funciona e o que ainda não. Existem **dois painéis diferentes** em `/integrations`, e escolher o errado é o erro mais comum:
+Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escolher — lá está o contrato completo, a matriz do que já funciona e o que ainda não. Em `/integrations` (o **Hub de Integrações**) cada plataforma é um **card** com a logo e o estado **Ativo** ou **Disponível**; clique no card para abrir a janela de conexão. Existem **dois tipos de conexão** e escolher o errado é o erro mais comum — eles ficam em abas diferentes:
 
-### 10.1 Painel "Provedores e receivers" — Uazapi, NOD API, WAHA, Z-API
+### 10.1 Aba WhatsApp — cards Uazapi, NOD API, WAHA, Z-API
 
 São conexões **por workspace**, criadas na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
 
@@ -121,22 +121,22 @@ São conexões **por workspace**, criadas na própria tela — você digita as c
 - **WAHA** — sua instância self-hosted [WAHA](https://github.com/devlikeape/waha) (URL da API, API key, Sessão). Receiver inbound **pronto**.
 - **Z-API** — sua instância [Z-API](https://www.z-api.io/) (URL da API, Instance ID, Token). Receiver inbound **pronto**.
 
-Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, com `?token=`, e cole no campo de webhook do painel do provedor) → confirme `connected`. Para trocar credenciais use **Editar**; para remover use **Excluir**, que pede o **nome exato da conexão** digitado para confirmar.
+Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, com `?token=`, e cole no campo de webhook do painel do provedor) → confirme `connected`. Para trocar credenciais use **Editar**; para remover um número/instância use **Excluir** no card do provedor, que pede o **nome exato da conexão** digitado para confirmar.
 
 As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
 
-### 10.2 Painel "Webhooks de entrada" — Umbler, Gupshup, Data Crazy e Meta WhatsApp (Cloud API)
+### 10.2 Aba Conversões e vendas — cards Umbler, Gupshup e Data Crazy (e WhatsApp Cloud API na aba WhatsApp)
 
 Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
 
-1. **Adicionar conexão** → escolha a plataforma → **Gerar webhook** e copie a **URL de callback** (aparece uma única vez) para o painel da Umbler/Gupshup.
+1. Abra o card da plataforma (Umbler Talk ou Gupshup) → **Gerar webhook** (a janela já vem fixa na plataforma; use **Adicionar conexão** se já houver outra) e copie a **URL de callback** (aparece uma única vez) para o painel da Umbler/Gupshup.
 2. **Cadastre o canal/número agora**, com o botão **Cadastrar canal/número** — você **não precisa** esperar o primeiro lead chegar. O canal fica provisório e é mesclado automaticamente quando a primeira mensagem real daquele número chegar.
 3. Vá em `/settings#whatsapp-triggers` → **Gatilhos de conversão** → **Nova regra**, limitando a regra aos canais que devem converter.
 
 **Data Crazy** também é uma conexão inbound por workspace, mas o fluxo de
 canal é diferente:
 
-1. **Adicionar conexão** → escolha **Data Crazy** → **Gerar webhook** e
+1. Abra o card **Data Crazy** → **Gerar webhook** e
    copie a URL completa, com `?token=` (ela aparece uma única vez).
 2. No Data Crazy, crie uma automação HTTP de **mensagem recebida** e cole
    essa URL. Não há variável de ambiente nem credencial específica de Data
@@ -155,7 +155,7 @@ canal é diferente:
 
 É a opção para conectar **seu número oficial da Meta sem intermediário**, no mesmo papel que Kinbox/Data Crazy cumprem quando "conectam a Meta". Não é a conexão de Meta Ads do passo 9 e não usa o token do Gerenciador de Negócios.
 
-1. `/integrations` → **Webhooks de entrada** → **Adicionar conexão** → **Meta WhatsApp (Cloud API)** → **Gerar webhook**.
+1. `/integrations` → aba **WhatsApp** → card **WhatsApp Cloud API** → **Gerar webhook**.
 2. Copie **URL de callback** e **Verify token** (os dois aparecem uma única vez, em linhas separadas). Aqui a URL **não** leva `?token=`.
 3. No app Meta: **Configurar webhooks** → cole URL e Verify token → verificar e salvar.
 4. Assine o campo **`messages`**. Sem isso a Meta valida e nunca envia nada.
