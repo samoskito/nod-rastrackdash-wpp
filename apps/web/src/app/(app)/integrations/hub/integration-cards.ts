@@ -312,7 +312,11 @@ export function buildIntegrationCards(
         logo: definition.logo,
         initials: definition.initials,
         logoSurface: definition.logoSurface,
-        description: definition.description,
+        // An active card (existing connection) shows the normal description.
+        description:
+          definition.comingSoon && decision.state !== "active"
+            ? (definition.comingSoonDescription ?? definition.description)
+            : definition.description,
         category: definition.category,
         tab: integrationTabForCategory(definition.category),
         // Existing connections keep a coming-soon provider manageable, so the

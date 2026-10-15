@@ -150,6 +150,8 @@ export type IntegrationProviderDefinition = {
    * has connections stays manageable (existing data is never hidden).
    */
   comingSoon?: boolean;
+  /** Shown instead of `description` while the card is "Em breve". */
+  comingSoonDescription?: string;
   /** Short initials shown if the logo file is missing or fails to load. */
   initials: string;
   /**
@@ -216,8 +218,10 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     initials: "WA",
     logoSurface: logoSurface("waha"),
     comingSoon: true,
-    description:
+    comingSoonDescription:
       "Em breve: a conexão com o WAHA ainda não está disponível para novas contas.",
+    description:
+      "Conecte a sua instalação WAHA (WhatsApp HTTP API).",
     gate: { kind: "whatsapp_provider", provider: "waha" },
   },
   {
@@ -228,8 +232,10 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     initials: "Z",
     logoSurface: logoSurface("zapi"),
     comingSoon: true,
-    description:
+    comingSoonDescription:
       "Em breve: a conexão com a Z-API ainda não está disponível para novas contas.",
+    description:
+      "Conecte a sua instância Z-API.",
     gate: { kind: "whatsapp_provider", provider: "zapi" },
   },
   {
@@ -240,8 +246,10 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     initials: "NOD",
     logoSurface: logoSurface("nod_api"),
     comingSoon: true,
-    description:
+    comingSoonDescription:
       "Em breve: a conexão com a NOD API ainda não está disponível para novas contas.",
+    description:
+      "Conecte a instância NOD API (PalmUP) do seu WhatsApp.",
     gate: { kind: "whatsapp_provider", provider: "nod_api" },
   },
   {

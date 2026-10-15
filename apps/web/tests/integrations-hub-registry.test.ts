@@ -283,6 +283,9 @@ describe("buildIntegrationCards", () => {
     const existingWaha = cards.find((card) => card.id === "waha");
     expect(existingWaha?.state).toBe("active");
     expect(existingWaha?.comingSoon).toBe(false);
+    // Active (existing connection): normal description, not the "Em breve" one.
+    expect(existingWaha?.description).not.toContain("Em breve");
+    expect(nod?.description).toContain("Em breve");
     const existingZapi = cards.find((card) => card.id === "zapi");
     expect(existingZapi?.state).toBe("active");
     expect(existingZapi?.comingSoon).toBe(false);
