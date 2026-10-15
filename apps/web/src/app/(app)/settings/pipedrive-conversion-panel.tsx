@@ -2157,7 +2157,7 @@ function ProductionGate({
                   ? "Pendente"
                   : "Conferido a cada movimento"}
             </span>
-            {item.label}
+            <span className="pipedrive-readiness-label">{item.label}</span>
           </li>
         ))}
       </ul>
@@ -2825,7 +2825,7 @@ function PipedriveRuleForm({
 
   return (
     <form className="provider-conversion-builder" onSubmit={handleSubmit}>
-      <div className="provider-conversion-base-fields">
+      <div className="provider-conversion-base-fields pipedrive-rule-fields">
         <label>
           <span className="field-label">Nome da regra</span>
           <input
@@ -2864,7 +2864,7 @@ function PipedriveRuleForm({
                   </option>
                 ))}
                 <option value={`${pipeline.id}::${WON_STAGE_VALUE}`}>
-                  Negócio ganho (Compra com o valor do negócio)
+                  Negócio ganho (Compra com o valor)
                 </option>
               </optgroup>
             ))}

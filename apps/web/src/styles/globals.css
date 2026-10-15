@@ -15475,10 +15475,30 @@ button.meta-manual-entry[aria-expanded="true"] {
 }
 
 .pipedrive-readiness li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.pipedrive-readiness li > .event-chip {
+  justify-self: start;
+}
+
+.pipedrive-readiness-label {
+  min-width: 0;
+  padding-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.pipedrive-conversion-panel .pipedrive-connection-card > .provider-conversion-rule-list {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 981px) {
+  .pipedrive-conversion-panel .pipedrive-rule-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) minmax(0, 1fr);
+  }
 }
 
 .pipedrive-conversion-panel .provider-conversion-rule-title,
@@ -15513,6 +15533,10 @@ button.meta-manual-entry[aria-expanded="true"] {
 }
 
 @media (max-width: 700px) {
+  .pipedrive-readiness li {
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+  }
+
   .pipedrive-conversion-panel .provider-conversion-heading-actions {
     width: 100%;
   }
