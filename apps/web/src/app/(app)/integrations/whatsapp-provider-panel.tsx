@@ -58,7 +58,7 @@ const providerCards: Array<{
     id: "nod_api",
     title: "NOD API",
     ingestion:
-      "Ingestão pendente: o payload do broker ainda não tem parser compatível comprovado.",
+      "Em breve: novas conexões ainda não estão disponíveis; as existentes continuam gerenciáveis.",
     pending: true,
   },
   {
@@ -70,8 +70,9 @@ const providerCards: Array<{
   {
     id: "zapi",
     title: "Z-API",
-    ingestion: "Receptor e parser da Z-API disponíveis para configuração.",
-    pending: false,
+    ingestion:
+      "Em breve: novas conexões ainda não estão disponíveis; as existentes continuam gerenciáveis.",
+    pending: true,
   },
 ];
 

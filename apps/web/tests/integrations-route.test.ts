@@ -427,55 +427,15 @@ describe("integrations route", () => {
   });
 
   it("renders unavailable states without visual fallback providers or fake pipeline metrics", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
+    // Path-based (not call-order based): every endpoint fails, whatever the
+    // page reads and in whatever order.
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
         new Response(JSON.stringify({ message: "unavailable" }), {
           status: 503,
           headers: { "Content-Type": "application/json" },
         }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ message: "unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+    );
 
     const element = await IntegrationsPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));

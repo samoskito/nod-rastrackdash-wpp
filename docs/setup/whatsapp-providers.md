@@ -49,7 +49,7 @@ Na prática:
 > por workspace listadas acima dele no mesmo card. Se o aluno perguntar, é
 > isso: dois blocos, dois escopos.
 
-## Aba WhatsApp — Uazapi, NOD API, WAHA e Z-API: o que o aluno faz
+## Aba WhatsApp — Uazapi e WAHA (Z-API e NOD API: Em breve): o que o aluno faz
 
 Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA; Z-API e NOD API estão como "Em breve" para novas conexões). A janela que abre já vem fixa nesse provedor:
 
@@ -61,8 +61,8 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
    |---|---|
    | Uazapi (BYO) | URL da API, Token, Instance ID (opcional) |
    | WAHA | URL da API, API key, Sessão |
-   | Z-API | URL da API, Token, Instance ID |
-   | NOD API | Instance ID, Instance token |
+   | Z-API (Em breve no Hub; só conexões já existentes) | URL da API, Token, Instance ID |
+   | NOD API (Em breve no Hub; só conexões já existentes) | Instance ID, Instance token |
 
    As credenciais vão **criptografadas** para o banco da API e nunca
    voltam para a tela. Digite direto no formulário — nunca em chat.
@@ -96,8 +96,8 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
 |---|---|---|---|
 | `POST /webhooks/whatsapp/:id` — **Uazapi (BYO)** | Token do receiver (header `x-wpptrack-webhook-token`, Bearer ou `?token=`) comparado ao hash salvo | — | **Pronto** |
 | `POST /webhooks/whatsapp/:id` — **WAHA** | Idem | `payload.session` precisa ser **exatamente** a Sessão salva na conexão | **Pronto** |
-| `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** |
-| `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel") |
+| `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** — Em breve no Hub: só para conexões já existentes |
+| `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
 | `POST /webhooks/inbound/:id` — **Meta WhatsApp (Cloud API)** | `x-hub-signature-256` via `META_APP_SECRET`; **sem** `META_APP_SECRET`, só é aceito enquanto a conexão está em **observação** | — | **Pronto (CTWA)** — veja a seção Meta Cloud |
 | `GET /webhooks/inbound/:id` — handshake Meta Cloud | `hub.verify_token` comparado ao **Verify token** daquela conexão | `hub.mode=subscribe` | **Pronto** |

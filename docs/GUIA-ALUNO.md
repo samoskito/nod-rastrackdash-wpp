@@ -116,12 +116,12 @@ Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escol
 
 > **Z-API e NOD API aparecem como "Em breve"** para novas conexões. Se você já tinha uma conexão de um deles, ela continua aparecendo como **Ativo** e você segue podendo testar, editar e excluir; só não é possível criar novas por enquanto.
 
-São conexões **por workspace**, criadas na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
+Uazapi e WAHA são conexões **por workspace**, criadas na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
 
 - **Uazapi (BYO)** — sua própria instância Uazapi (URL da API, Token, Instance ID opcional). Receiver inbound **pronto**. É o único provedor que também avalia **mensagem do atendente** e **etiquetas** para gatilhos.
-- **NOD API** — broker gerenciado pela PalmUP, add-on licenciado (Instance ID + Instance token; autentica com a sua `LICENSE_KEY`). Status funciona; **receiver inbound ainda não existe**.
-- **WAHA** — sua instância self-hosted [WAHA](https://github.com/devlikeape/waha) (URL da API, API key, Sessão). Receiver inbound **pronto**.
-- **Z-API** — sua instância [Z-API](https://www.z-api.io/) (URL da API, Instance ID, Token). Receiver inbound **pronto**.
+- **WAHA** — sua instância self-hosted [WAHA](https://github.com/devlikeapro/waha) (URL da API, API key, Sessão). Receiver inbound **pronto**.
+- **Z-API — Em breve (só conexões já existentes).** Não é possível criar conexões novas pela tela; quem já tinha uma continua podendo testar, editar e excluir.
+- **NOD API — Em breve (só conexões já existentes).** Mesma regra da Z-API. Hoje o receiver inbound da NOD API ainda não existe.
 
 Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, com `?token=`, e cole no campo de webhook do painel do provedor) → confirme `connected`. Para trocar credenciais use **Editar**; para remover um número/instância use **Excluir** no card do provedor, que pede o **nome exato da conexão** digitado para confirmar.
 
