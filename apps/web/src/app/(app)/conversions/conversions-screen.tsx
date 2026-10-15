@@ -29,7 +29,6 @@ import type {
 } from "./actions";
 import { ruleEventLabel } from "./event-copy";
 import {
-  providerDisplayName,
   ruleOriginDefinition,
   type RuleOriginId,
 } from "./conversion-origins";
@@ -46,6 +45,7 @@ import {
 } from "./conversion-rules-view";
 import type { ComingSoonNumber } from "./conversions-data";
 import { conversionsLicenseLockedNote } from "./license-lock";
+import { NumbersWithoutRules } from "./numbers-without-rules";
 import { LegacyRules, type LegacyRuleActions } from "./legacy-rules";
 import { NewRuleFlow } from "./new-rule-flow";
 import { RuleExecutions } from "./rule-executions";
@@ -219,21 +219,6 @@ export function ConversionsScreen({
         ),
       ) as ConversionEventNameDto[],
     [rows],
-  );
-  const notYet = useMemo(
-    () => [
-      ...ineligibleNumbers(numbers, capabilities).map((number) => ({
-        id: number.id,
-        label: number.label,
-        provider: number.provider,
-      })),
-      ...comingSoonNumbers.map((number) => ({
-        id: number.id,
-        label: number.label,
-        provider: number.provider,
-      })),
-    ],
-    [numbers, capabilities, comingSoonNumbers],
   );
   const liveCount = rows.filter((row) => row.status === "production").length;
   const observationCount = rows.filter((row) => row.status === "observation").length;
@@ -431,21 +416,10 @@ export function ConversionsScreen({
         ) : null}
       </form>
 
-      {notYet.length > 0 ? (
-        <div className="conversion-coming-soon" aria-label="Números ainda sem regras">
-          <p className="action-note">
-            Estes números ainda não participam das regras (em breve):
-          </p>
-          <ul className="conversion-number-chips" role="list">
-            {notYet.map((number) => (
-              <li key={number.id}>
-                <PresentationMask placeholder="Número oculto">{number.label}</PresentationMask>
-                <small>{providerDisplayName(number.provider)} · Em breve</small>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <NumbersWithoutRules
+        comingSoon={comingSoonNumbers}
+        webhookOnly={ineligibleNumbers(numbers, capabilities)}
+      />
 
       {numbersPartial ? (
         <p className="action-note warn">

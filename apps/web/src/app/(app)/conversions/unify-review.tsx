@@ -8,6 +8,7 @@ import { PresentationMask } from "../../../components/presentation-mask";
 import { ruleEventLabel } from "./event-copy";
 import type { ConversionScreenActionResult } from "./actions";
 import { ruleOriginDefinition } from "./conversion-origins";
+import { observationCanonicalWarning } from "./conversion-rules-view";
 import type { ConversionNumber } from "./conversion-rules-view";
 
 type UnifyAction = (formData: FormData) => Promise<ConversionScreenActionResult>;
@@ -147,6 +148,7 @@ export function UnifyReviewModal({
   }
 
   const duplicatePhone = group?.duplicatePhoneChannelIds ?? [];
+  const observationCanonical = group?.observationCanonicalChannels ?? [];
 
   return (
     <Modal
@@ -259,6 +261,24 @@ export function UnifyReviewModal({
                   O telefone destes números já é lido por outra conexão. A
                   regra roda uma vez só por telefone, para nunca enviar o
                   evento em dobro.
+                </p>
+              </section>
+            ) : null}
+
+            {observationCanonical.length > 0 ? (
+              <section className="conversion-review-block">
+                <h3>
+                  Canal em observação ({observationCanonical.length})
+                </h3>
+                <NumberList
+                  ids={observationCanonical.map((item) => item.canonicalChannelId)}
+                  numbersById={numbersById}
+                />
+                <p className="action-note warn">
+                  {observationCanonicalWarning(
+                    observationCanonical.map((item) => item.canonicalChannelId),
+                    numbersById,
+                  )}
                 </p>
               </section>
             ) : null}

@@ -151,6 +151,47 @@ describe("conversions view: provider rules", () => {
     expect(covered!.warnings).toEqual([]);
   });
 
+  it("warns when a global rule runs on a channel still in observation", () => {
+    const [row] = buildProviderRuleRows(
+      [
+        {
+          ...providerRule({
+            id: "global",
+            scope: "all_numbers",
+            origin: "message_phrase",
+            effective: ["ch_01", "ch_02"],
+            mode: "production",
+          }),
+          observationCanonicalChannels: [
+            { canonicalChannelId: "ch_01", productionChannelIds: ["ch_02"] },
+          ],
+        },
+      ],
+      numbers,
+      connections,
+      capabilities,
+    );
+
+    expect(row!.warnings).toEqual([
+      "Em Recepção: a regra global roda no canal em observação; outro canal do mesmo número está em produção.",
+    ]);
+    // Pausada: sem aviso.
+    const [paused] = buildProviderRuleRows(
+      [
+        {
+          ...providerRule({ id: "g2", scope: "all_numbers", active: false, effective: ["ch_01"] }),
+          observationCanonicalChannels: [
+            { canonicalChannelId: "ch_01", productionChannelIds: ["ch_02"] },
+          ],
+        },
+      ],
+      numbers,
+      connections,
+      capabilities,
+    );
+    expect(paused!.warnings).toEqual([]);
+  });
+
   it("names removed numbers and shortens long scopes", () => {
     const [row] = buildProviderRuleRows(
       [
@@ -313,13 +354,13 @@ describe("conversions view: origins offered in Nova regra", () => {
   });
 
   it("follows the capabilities, never a hardcoded list", () => {
-    // A API passa a aceitar catálogo também na Uazapi: a origem é oferecida
-    // para quem só tem Uazapi e os números Uazapi viram escolha possível.
-    const widened = {
+    // A API aceita catálogo também na Uazapi (o fixture reflete isso); se a
+    // matriz mudar, a tela segue a API e não uma lista fixa.
+    const narrowed = {
       ...capabilities,
       origins: capabilities.origins.map((origin) =>
         origin.origin === "structured_catalog"
-          ? { ...origin, channelProviders: ["umbler", "uazapi"] }
+          ? { ...origin, channelProviders: ["umbler"] }
           : origin,
       ),
     };
@@ -330,7 +371,7 @@ describe("conversions view: origins offered in Nova regra", () => {
       offeredRuleOrigins({
         numbers: uazapiNumbers,
         connections: uazapiConnections,
-        capabilities,
+        capabilities: narrowed,
         crm: { kommo: false },
       }),
     ).not.toContain("structured_catalog");
@@ -338,13 +379,16 @@ describe("conversions view: origins offered in Nova regra", () => {
       offeredRuleOrigins({
         numbers: uazapiNumbers,
         connections: uazapiConnections,
-        capabilities: widened,
+        capabilities,
         crm: { kommo: false },
       }),
     ).toContain("structured_catalog");
     expect(
-      numbersForOrigin("structured_catalog", numbers, null, widened).map((item) => item.id),
+      numbersForOrigin("structured_catalog", numbers, null, capabilities).map((item) => item.id),
     ).toEqual(["ch_01", "ch_02", "ch_03"]);
+    expect(
+      numbersForOrigin("structured_catalog", numbers, null, narrowed).map((item) => item.id),
+    ).toEqual(["ch_01"]);
   });
 
   it("offers only the CRM pointer without the capabilities answer", () => {

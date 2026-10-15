@@ -103,9 +103,17 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   the student unifies them or creates a "Todos os números" rule. No new env
   var, no new dependency. The Conversões screen (web) is described in the
   next entry.
-  **Roll back:** pause/delete "Todos os números" rules and reactivate the
-  originals before downgrading; the previous version ignores the new columns
-  (optional rollback SQL in `docs/releases/unreleased.json`).
+  **Roll back:** before downgrading, DELETE (pausing is not enough) every rule
+  without a connection ("Todos os números" rules and specific rules spanning
+  connections) and reactivate unified originals. Any such row, even paused,
+  makes the previous version fail on `GET /conversion-rules/providers` (Prisma
+  P2032). `SELECT count(*) FROM "ProviderConversionRuleConfig" WHERE
+  "connectionId" IS NULL AND "removedAt" IS NULL` must return 0; execution
+  history of the deleted rules may not open in the previous version. Optional
+  rollback SQL in `docs/releases/unreleased.json`.
+- Uazapi team messages now evaluate structured catalog rules (as the SaaS);
+  existing catalog rules bound to a Uazapi connection, which never fired
+  before, start firing after upgrade.
 
 - **Conversões screen** (`/conversions`, web; Fase 3 UI): a new
   **Conversões** item in the sidebar (group Gestão, between Integrações and
@@ -118,8 +126,9 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   `GET /conversion-rules/providers/capabilities` says this edition supports
   and the student has connected, and lets the reach be **Todos os números**
   (new numbers join automatically) or **Números específicos**. WAHA, Z-API
-  and NOD API numbers (and Gupshup / Data Crazy / Cloud API numbers, which do
-  not run rules yet) show as **Em breve**. "Substituída em X" notes explain
+  and NOD API numbers show as **Em breve**; Gupshup, Data Crazy and WhatsApp
+  Cloud API numbers keep working (their conversions arrive through the
+  provider webhook) and are only noted as not using phrase/label/catalog rules. "Substituída em X" notes explain
   where a specific rule replaces a global one. **Unificar** is offered, never
   forced, and the review explains it can be undone. **Gerenciar** edits a
   rule, shows the Umbler automation address (a new address is shown once) and

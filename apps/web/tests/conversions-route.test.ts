@@ -337,7 +337,9 @@ describe("Conversions route", () => {
 
     expect(html).toContain("WAHA Loja");
     expect(html).toContain("WAHA · Em breve");
-    // Gupshup numbers: connected, but no rule origin evaluates them yet.
-    expect(html).toContain("Gupshup · Em breve");
+    // Gupshup works through the provider webhook: never labelled "Em breve".
+    expect(html).toContain("Gupshup · pelo webhook");
+    expect(html).not.toContain("Gupshup · Em breve");
+    expect(html).toContain("Conversões chegam pelo webhook do provedor");
   });
 });

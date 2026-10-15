@@ -117,12 +117,14 @@ describe("Nova regra flow", () => {
     await user.click(screen.getByRole("checkbox", { name: /Recepção/ }));
     await user.click(screen.getByRole("checkbox", { name: /Atendimento/ }));
     expect((screen.getByRole("checkbox", { name: /Atendimento/ }) as HTMLInputElement).checked).toBe(true);
-    // Gupshup and WAHA are listed but cannot be chosen.
-    const soon = screen.getByLabelText("Números ainda sem regras");
-    expect(within(soon).getByText("Gupshup SP")).toBeTruthy();
-    expect(within(soon).getByText("Gupshup · Em breve")).toBeTruthy();
+    // WAHA is "Em breve"; Gupshup works, it only receives conversions by webhook.
+    const soon = screen.getByLabelText("Números sem regras");
     expect(within(soon).getByText("WAHA Loja")).toBeTruthy();
     expect(within(soon).getByText("WAHA · Em breve")).toBeTruthy();
+    expect(within(soon).getByText("Gupshup SP")).toBeTruthy();
+    expect(within(soon).getByText("Gupshup · pelo webhook")).toBeTruthy();
+    expect(within(soon).getByText(/Conversões chegam pelo webhook do provedor/)).toBeTruthy();
+    expect(within(soon).queryByText("Gupshup · Em breve")).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /Gupshup SP/ })).toBeNull();
   });
 
@@ -479,6 +481,27 @@ describe("Conversions screen", () => {
       "Pausadas",
       "Unificadas",
     ]);
+  });
+
+  it("warns in the unify review when the global rule would observe a number that already sends", async () => {
+    const user = setupUser();
+    const base = props();
+    const group = {
+      ...base.unifyGroups[0]!,
+      observationCanonicalChannels: [
+        { canonicalChannelId: "ch_03", productionChannelIds: ["ch_02"] },
+      ],
+    };
+    render(createElement(ConversionsScreen, { ...base, unifyGroups: [group] }));
+
+    await user.click(screen.getByRole("button", { name: "Revisar e unificar" }));
+    const dialog = screen.getByRole("dialog", { name: "Unificar regras iguais" });
+    expect(within(dialog).getByText("Canal em observação (1)")).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        "Em Pós-venda: a regra global roda no canal em observação; outro canal do mesmo número está em produção.",
+      ),
+    ).toBeTruthy();
   });
 
   it("explains that unifying can be undone and is never forced", async () => {

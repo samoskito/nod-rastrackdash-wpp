@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { accentEventCopy, ruleEventLabel } from "./event-copy";
 import { conversionsLicenseLockedNote } from "./license-lock";
+import { NumbersWithoutRules } from "./numbers-without-rules";
 import { MessagePhraseFields } from "./message-phrase-fields";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
@@ -26,7 +27,6 @@ import {
   contactMessageProviders,
   crmManageHref,
   hubProviderForInbound,
-  providerDisplayName,
   providerLogo,
   ruleOriginDefinition,
   type CrmRuleOrigin,
@@ -678,19 +678,6 @@ export function ScopeStep({
   for (const number of available) {
     grouped.set(number.connectionId, [...(grouped.get(number.connectionId) ?? []), number]);
   }
-  const comingSoon = [
-    ...notYet.map((number) => ({
-      id: number.id,
-      label: number.label,
-      provider: number.provider,
-    })),
-    ...comingSoonNumbers.map((number) => ({
-      id: number.id,
-      label: number.label,
-      provider: number.provider,
-    })),
-  ];
-
   function toggle(id: string) {
     onChange({
       channelIds: draft.channelIds.includes(id)
@@ -836,23 +823,7 @@ export function ScopeStep({
         </p>
       ) : null}
 
-      {comingSoon.length > 0 ? (
-        <div className="conversion-coming-soon" aria-label="Números ainda sem regras">
-          <p className="action-note">
-            Em breve nas regras (ainda não dá para escolher):
-          </p>
-          <ul className="conversion-number-chips" role="list">
-            {comingSoon.map((number) => (
-              <li key={number.id}>
-                <PresentationMask placeholder="Número oculto">
-                  {number.label}
-                </PresentationMask>
-                <small>{providerDisplayName(number.provider)} · Em breve</small>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <NumbersWithoutRules comingSoon={comingSoonNumbers} webhookOnly={notYet} />
 
       <p className="action-note">
         Se um número tiver uma regra só dele com a mesma origem e o mesmo

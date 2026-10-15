@@ -63,7 +63,7 @@ export const capabilities: ProviderConversionRuleCapabilitiesDto = {
     {
       origin: "structured_catalog",
       scopes: ["all_numbers", "specific_numbers"],
-      channelProviders: ["umbler"],
+      channelProviders: ["umbler", "uazapi"],
       authorChannelProviders: null,
       connectionBound: false,
       labelMatch: null,

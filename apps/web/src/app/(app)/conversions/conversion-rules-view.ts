@@ -194,8 +194,23 @@ const executionLabels: Record<
 export function providerRuleWarnings(input: {
   status: RuleStatus;
   numberIds: readonly string[];
+  observationCanonicalChannels?: ReadonlyArray<{ canonicalChannelId: string }>;
+  numbersById?: ReadonlyMap<string, ConversionNumber>;
 }): string[] {
   const warnings: string[] = [];
+
+  if (
+    input.status !== "paused" &&
+    input.status !== "unified" &&
+    input.observationCanonicalChannels?.length
+  ) {
+    warnings.push(
+      observationCanonicalWarning(
+        input.observationCanonicalChannels.map((item) => item.canonicalChannelId),
+        input.numbersById ?? new Map(),
+      ),
+    );
+  }
 
   if (
     (input.status === "production" || input.status === "observation") &&
@@ -207,6 +222,15 @@ export function providerRuleWarnings(input: {
   }
 
   return warnings;
+}
+
+/** Telefone cuja regra global roda num canal em observação enquanto outro canal já envia. */
+export function observationCanonicalWarning(
+  channelIds: readonly string[],
+  numbersById: ReadonlyMap<string, ConversionNumber>,
+): string {
+  const where = numberNames(channelIds, numbersById);
+  return `Em ${where}: a regra global roda no canal em observação; outro canal do mesmo número está em produção.`;
 }
 
 function triggerDetailForProviderRule(
@@ -398,7 +422,12 @@ export function buildProviderRuleRows(
       status,
       statusLabel: ruleStatusLabels[status],
       notes,
-      warnings: providerRuleWarnings({ status, numberIds }),
+      warnings: providerRuleWarnings({
+        status,
+        numberIds,
+        observationCanonicalChannels: rule.observationCanonicalChannels,
+        numbersById,
+      }),
       lastExecution: execution
         ? {
             label: executionLabels[execution.status].label,
@@ -706,7 +735,8 @@ export function connectionsForOrigin(
 /**
  * Números conectados que NENHUMA origem avalia ainda (Gupshup, Data Crazy,
  * WhatsApp Cloud API: só geram leads pelo webhook de entrada). Aparecem como
- * "Em breve" no alcance, nunca como escolha.
+ * nota neutra no alcance (as conversões chegam pelo webhook do provedor),
+ * nunca como escolha e nunca como "Em breve".
  */
 export function ineligibleNumbers(
   numbers: readonly ConversionNumber[],
