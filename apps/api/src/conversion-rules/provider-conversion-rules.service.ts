@@ -63,6 +63,7 @@ import {
   PROVIDER_RULE_GLOBAL_PRECEDENCE,
   providerRuleCapabilities,
   providerRuleChannelProviders,
+  scanWorkspaceScopeChannels,
   providerRuleCoversChannel,
   providerRuleOrigin,
   providerRuleOriginRequiresConnection,
@@ -1515,11 +1516,15 @@ export class ProviderConversionRulesService {
           providerRuleScope(peer) === "all_numbers" &&
           this.unifySignature(peer)?.key === key,
       );
-      const channels = await listWorkspaceScopeChannels(
-        transaction,
-        workspaceId,
-      );
-      const coverage = this.unifyCoverage(rules, peers, channels);
+      // Unificar cria uma regra global: com mais canais do que o limite de
+      // avaliação a cobertura não é confiável, então recusa em vez de criar.
+      const scan = await scanWorkspaceScopeChannels(transaction, workspaceId);
+      if (scan.limitExceeded) {
+        throw new ConflictException(
+          "Este workspace tem canais demais para unificar regras com segurança; mantenha as regras por número",
+        );
+      }
+      const coverage = this.unifyCoverage(rules, peers, scan.channels);
 
       const targetId =
         existing?.id ??

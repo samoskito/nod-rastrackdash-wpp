@@ -148,7 +148,10 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   (`integrations/provider-conversion-rule-panel.tsx`) and
   `integrations/provider-conversion-rule-actions.ts` were removed; the actions
   now live in `conversions/actions.ts` (with license 423 handling). **If you
-  customized** `settings/page.tsx` or those two files, take the official
+  customized** `settings/page.tsx`, `integrations/page.tsx` (the "Regras de
+  conversão" card links now open `/conversions`), `integrations/inbound-webhook-panel.tsx`
+  ("Gerenciar gatilhos" is now "Abrir Conversões", linking to `/conversions`)
+  or those two files, take the official
   `settings/page.tsx` and re-apply your change inside "Jornada" (or, for rule
   panels, in `conversions/new-rule-flow.tsx`, `rule-manage.tsx`,
   `message-phrase-fields.tsx`); accept the removal of the two deleted files.
@@ -156,7 +159,8 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   untouched. **Verify:** open Conversões (existing rules show as "Números
   específicos"), Configurações (only Jornada) and Integrações → CRM → Kommo;
   as a member the Conversões item is hidden. **Roll back:** revert the web
-  change and redeploy; no data changes.
+  change (including the `integrations/page.tsx` and `inbound-webhook-panel.tsx`
+  links) and redeploy; no data changes.
 
 ### Fixed
 

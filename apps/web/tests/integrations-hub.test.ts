@@ -280,13 +280,13 @@ describe("integrations hub", () => {
         umbler: [
           {
             label: "Regras de conversão",
-            href: "/settings#configuracao-conversoes",
+            href: "/conversions",
           },
         ],
         gupshup: [
           {
             label: "Regras de conversão",
-            href: "/settings#configuracao-conversoes",
+            href: "/conversions",
           },
         ],
       },

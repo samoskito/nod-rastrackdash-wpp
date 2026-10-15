@@ -16,6 +16,8 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { ConversionRulesService } from "../../src/conversion-rules/conversion-rules.service";
 import { ProviderConversionRulesService } from "../../src/conversion-rules/provider-conversion-rules.service";
+import { PROVIDER_RULE_SCOPE_CHANNEL_LIMIT } from "../../src/conversion-rules/provider-rule-scope";
+import { ConflictException } from "@nestjs/common";
 
 const workspaceId = "workspace_1";
 const now = new Date("2026-10-15T12:00:00.000Z");
@@ -945,6 +947,33 @@ describe("provider rules API: unify", () => {
       overriddenChannelIds: [],
       existingGlobalRuleId: null,
     });
+  });
+
+  it("refuses to unify with 409 when the workspace has more channels than the scope limit", async () => {
+    const world = createWorld();
+    const ruleIds = await identicalRules(world);
+    for (let index = 0; index < PROVIDER_RULE_SCOPE_CHANNEL_LIMIT + 1; index += 1) {
+      world.channels.push({
+        id: `channel_bulk_${index}`,
+        workspaceId,
+        connectionId: "connection_qr_b",
+        whatsappInstanceId: null,
+        status: "discovered",
+        productionActivatedAt: null,
+        organizationId: "org_bulk",
+        providerChannelId: `provider_bulk_${index}`,
+        connectedPhone: `provider_bulk_${index}`,
+        createdAt: new Date(now.getTime() + 1_000 + index),
+      });
+    }
+
+    await expect(
+      world.service.unifyRules(workspaceId, { ruleIds }, "user_1"),
+    ).rejects.toBeInstanceOf(ConflictException);
+    // Nothing was created or paused.
+    expect(
+      world.providerRules.every((rule) => rule.unifiedIntoProviderRuleId == null),
+    ).toBe(true);
   });
 
   it("creates one all-numbers rule, pauses the originals with their history and is idempotent", async () => {

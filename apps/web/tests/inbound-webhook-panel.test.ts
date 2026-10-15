@@ -373,13 +373,16 @@ describe("inbound webhook panel", () => {
     }
   });
 
-  it("keeps integrations focused on connection health and links to trigger settings", () => {
+  it("keeps integrations focused on connection health and links to the Conversões screen", () => {
     const html = renderPanel();
 
     expect(html).toContain("Gatilhos de conversao");
     expect(html).toContain("0 regra(s) nesta conexao");
-    expect(html).toContain('href="/settings#whatsapp-triggers"');
-    expect(html).toContain("Gerenciar gatilhos");
+    expect(html).toContain('href="/conversions"');
+    expect(html).toContain("Abrir Conversões");
+    expect(html).toContain("Crie e revise as regras na tela Conversões");
+    expect(html).not.toContain("whatsapp-triggers");
+    expect(html).not.toContain("Gerenciar gatilhos");
     expect(html).not.toContain("Qualificados e compras");
   });
 

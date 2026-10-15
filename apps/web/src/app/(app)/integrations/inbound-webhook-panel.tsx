@@ -761,8 +761,7 @@ export function InboundWebhookPanel({
                           regra(s) nesta conexao
                         </strong>
                         <span>
-                          Crie e revise conversoes por canal na Central de
-                          Configuracoes.
+                          Crie e revise as regras na tela Conversões.
                         </span>
                       </div>
                       <span
@@ -771,15 +770,15 @@ export function InboundWebhookPanel({
                         }`}
                       >
                         {providerRulesEnabled
-                          ? "Central disponivel"
+                          ? "Regras disponíveis"
                           : "Regras indisponiveis"}
                       </span>
                       <Link
                         className="button"
-                        href="/settings#whatsapp-triggers"
+                        href="/conversions"
                       >
                         <Settings2 size={15} aria-hidden="true" />
-                        Gerenciar gatilhos
+                        Abrir Conversões
                       </Link>
                     </section>
                   ) : null}

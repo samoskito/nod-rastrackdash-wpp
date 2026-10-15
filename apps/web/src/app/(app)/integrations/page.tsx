@@ -1119,7 +1119,7 @@ export default async function IntegrationsPage({
 
   const rulesLink = {
     label: "Regras de conversão",
-    href: "/settings#configuracao-conversoes",
+    href: "/conversions",
   };
 
   function whatsappProviderPanel(
