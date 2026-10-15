@@ -63,31 +63,32 @@ ClickUp: espaço **Geral** → pasta **Student Rastrackdash Wpp** → lista
 
 `main` depois do #82: `d26ef44`. Testes em `main`: API ~1390 ok, web 759 ok, 0 falhas.
 
-## Em andamento (só local no container da nuvem — NÃO está no GitHub)
+## Em andamento
 
-| Frente | Branch / repositório | Estado |
-|---|---|---|
-| 4a Payt | `port/f4-a-payt` (aluno) | Implementação por agente Opus em andamento |
-| 4c Pipedrive + Kommo sem ID do anúncio | `port/f4-c-pipedrive` (aluno) | Implementação por agente Opus em andamento |
-| Liberar licença manual | `feat/licenca-manual-backoffice` (SaaS `dash-com-ia`) | Implementação por agente Opus em andamento |
+Payt e Pipedrive seguem na conversa LOCAL do Samuel (decisão de 15/10). A licença manual segue na
+conversa da nuvem.
 
-Se a sessão da nuvem cair antes do push, esse trabalho se perde e precisa ser refeito a partir dos
-planos. Escopo de cada um:
-- **4a Payt:** enum + parser releases certificados (migrations `2026101610xxxx`), parser
-  `payt-automation-v1`, eventos Compra aprovada → `Purchase`, Pix/boleto → `InitiateCheckout`,
-  Carrinho abandonado (beta) → `CartAbandoned`; URL por regra; card em Atendimento e vendas; origem
-  `automation_payt` em Conversões. Sem nada da Fase 5 (`IntegrationEndpoint`).
-- **4c Pipedrive:** migration consolidada (6 tabelas, `2026101612xxxx`), módulo `pipedrive/*`
-  (token de API + URL da empresa, webhook v2), variável `PIPEDRIVE_CRM_ENCRYPTION_KEY`
-  (`openssl rand -base64 32`), card CRM com editor de regras, leitura em Conversões; Kommo passa a
-  usar o envio sem ID do anúncio como no SaaS. Sem flags do SaaS.
-- **Licença manual (SaaS):** `POST backoffice/licenses/grant` só dono da plataforma, motivo
-  obrigatório + auditoria, mesmo `issueLicenseForPurchase`, 409 se já houver licença ativa, chave por
-  e-mail e mostrada uma vez; botão no backoffice; doc em `docs/integrations/community-license.md`.
+### 4a Payt — parado em WIP `e3589a4` (branch `port/f4-a-payt`, no GitHub)
+Feito (só backend): migrations `20261016100000_payt_inbound_provider` e `20261016100100_payt_parser_releases` (v1 e automation-v1 certificados, sem ativar regras; NÃO aplicadas em Postgres ainda); parser + classificação de eventos de venda; recebimento na URL da regra, reprocessar em observação com aprovação do operador; decisão (canal do lead, valor da Payt, compra duplicada = 1 conversão via claim); envio reconfere a venda; `payt` aceito no envio; conexão Payt própria não pode ser criada; shared (schemas, alcance, capacidades com selo beta); 47 testes novos em `apps/api/test/fase4-payt/` passando ("sem ctwa_clid nada é enviado", "postback duplicado = 1 conversão").
+Última suíte API completa: 1389 ok + 1 falha (capacidades, corrigida depois). Depois disso NÃO rodou typecheck/suíte completa da API; web NÃO rodado.
+Falta: web inteiro (card Payt em Atendimento e vendas com logo do SaaS, origem Payt em Nova regra com selo beta e regra presa à conexão dos números escolhidos, mensagens 423, Eventos recebidos); docs do aluno; `unreleased.json` + CHANGELOG; aplicar migrations em banco temporário; renomear teste "fails closed on a sale identity no shipped provider can verify"; acentuar mensagens novas da API.
+Próximos passos: typecheck + suíte API completa → web + notas → migrations em banco temporário → revisão Opus → prints → aprovação → PR/merge.
+Observações: venda de lead sem ID do anúncio só funciona com Unnichat (4b). Filtro de produto é Fase 5.
+
+### 4c Pipedrive + Kommo sem ID do anúncio — parado em WIP `d885796` (branch `port/f4-c-pipedrive`, no GitHub)
+Feito: shared `pipedrive.ts` e `crm-channels.ts` + campo `crmDestinationReadiness` (37 testes de `pipedrive.test.ts` ok); migration `20261016120000_pipedrive_integration` (6 tabelas) aplicada em Postgres 16 descartável sem drift; módulo `pipedrive/*` sem flags do SaaS, com checagem de licença no worker e no envio; `crm-channels/*` e `crm-dispatch-context`; `PIPEDRIVE_CRM_ENCRYPTION_KEY` validada no boot só quando definida (≠ chave do Kommo); Kommo com caminho CTWA sem ID do anúncio portado do SaaS (códigos de recusa para leads com anúncio iguais); body parser, log sem `?token=`, `app.module`, exclusão de workspace. Typecheck da API ok; 5 arquivos de teste existentes corrigidos (133 testes ok); suíte completa NÃO rodada depois.
+Falhando: 35 dos 399 testes Pipedrive/CRM portados — supõem flags do SaaS (`PIPEDRIVE_CONVERSION_PRODUCTION_ENABLED`, `pipedrive-feature-gate`), mensagens agora acentuadas, harness do Kommo sem `inboundWebhookEvent`, falta stub de licença no DI dos testes HTTP, `crm-channels-any-provider` usa a mesma chave de teste para Kommo e Pipedrive (trocar `alloc(32,7)` por `alloc(32,9)` ~linha 494), `pipedrive-pg-runtime.prepared.ts` não passa a licença.
+Falta: corrigir os 35 testes + testes novos (Kommo sem anúncio, "sem ctwa_clid nada é enviado", migration); web (`lib/crm-channel-options.ts`, opções de número no painel do Kommo, `pipedrive-actions` + modal no Hub aba CRM com logo do SaaS e `SOURCES.md`, leitura em Conversões com "Gerenciar no Hub", aviso de licença, testes web); docs (`docs/setup/pipedrive.md`, `environment.md`, `.env.example`, `GUIA-ALUNO.md`, README do setup), CHANGELOG e `unreleased.json` (resumo 1989/2000, não crescer); suítes completas (referência API 1390, web 759); revisão Opus → prints → aprovação → PR/merge.
+
+### Liberar licença manual (SaaS) — conversa da nuvem
+Branch `feat/licenca-manual-backoffice` em `samoskito/dash-com-ia`. Escopo:
+`POST backoffice/licenses/grant` só dono da plataforma, motivo obrigatório + auditoria, mesmo
+`issueLicenseForPurchase`, 409 se já houver licença ativa, chave por e-mail e mostrada uma vez;
+botão no backoffice; doc em `docs/integrations/community-license.md`.
 
 ## Próximos passos
 
-1. Terminar 4a e 4c → revisão Opus → prints → página de aprovação → merge.
+1. (Local) Terminar 4a e 4c a partir dos WIPs acima → revisão Opus → prints → aprovação → merge.
 2. 4b Unnichat (depois da 4a): enum + parsers certificados, conexão com `connectedPhone`, seletor
    de modo de roteamento por número (`inherit_workspace`/`channel_override`), origem
    `automation_unnichat`; envio sem ID do anúncio passa a valer.
