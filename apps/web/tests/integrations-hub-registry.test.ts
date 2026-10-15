@@ -34,6 +34,7 @@ function snapshot(
       connections: [],
     },
     whatsapp: { loaded: true, connections: [], legacyUazapiInstances: 0 },
+    payt: { loaded: true, ruleCount: 0, activeRuleCount: 0 },
     crm: { kommo: { loadState: "empty", statuses: [] } },
     meta: {
       connected: false,
@@ -78,12 +79,12 @@ describe("integration registry", () => {
         "umbler",
         "gupshup",
         "data_crazy",
+        "payt",
         "kommo",
         "meta",
       ].sort(),
     );
     for (const later of [
-      "payt",
       "unnichat",
       "pipedrive",
       "gohighlevel",
@@ -153,7 +154,12 @@ describe("integration registry", () => {
     expect(
       integrationProviders.filter((p) => p.comingSoon).map((p) => p.id),
     ).toEqual(["waha", "zapi", "nod_api"]);
-    expect(inTab("attendance")).toEqual(["umbler", "gupshup", "data_crazy"]);
+    expect(inTab("attendance")).toEqual([
+      "umbler",
+      "gupshup",
+      "data_crazy",
+      "payt",
+    ]);
     expect(inTab("ads")).toEqual(["meta"]);
     expect(inTab("crm")).toEqual(["kommo"]);
     expect(integrationTabForCategory("crm")).toBe("crm");
@@ -177,6 +183,10 @@ describe("integration registry", () => {
       provider: "uazapi_byo",
     });
     // Old Settings anchor for the Kommo block.
+    expect(integrationDeepLinkFromHash("#integracao-payt")).toEqual({
+      tab: "attendance",
+      provider: "payt",
+    });
     expect(integrationDeepLinkFromHash("#crm-configurado")).toEqual({
       tab: "crm",
       provider: "kommo",
@@ -224,6 +234,10 @@ describe("integration registry", () => {
     expect(integrationsHubInitialState({ abrir: "umbler" })).toEqual({
       tab: "attendance",
       provider: "umbler",
+    });
+    expect(integrationsHubInitialState({ abrir: "payt" })).toEqual({
+      tab: "attendance",
+      provider: "payt",
     });
     expect(integrationsHubInitialState({ abrir: "nao-existe" })).toEqual({
       tab: "whatsapp",
@@ -297,7 +311,7 @@ describe("buildIntegrationCards", () => {
 
     const conversions = cardsForTab(cards, "attendance");
     expect(ids(conversions.active)).toEqual(["umbler"]);
-    expect(ids(conversions.available)).toEqual(["gupshup"]);
+    expect(ids(conversions.available)).toEqual(["gupshup", "payt"]);
     expect(ids(cardsForTab(cards, "ads").active)).toEqual(["meta"]);
     expect(
       conversions.active.find((card) => card.id === "umbler")?.status.label,
@@ -399,6 +413,37 @@ describe("buildIntegrationCards", () => {
     const kommo = paused.find((card) => card.id === "kommo");
     expect(kommo?.state).toBe("active");
     expect(kommo?.status).toEqual({ label: "Pausada", tone: "warn" });
+  });
+
+  it("shows the Payt card from its rules, never as a connection", () => {
+    const find = (patch: IntegrationHubSnapshot["payt"]) =>
+      buildIntegrationCards(snapshot({ payt: patch })).find(
+        (card) => card.id === "payt",
+      );
+
+    const none = find({ loaded: true, ruleCount: 0, activeRuleCount: 0 });
+    expect(none?.state).toBe("available");
+    expect(none?.status).toEqual({ label: "Disponível", tone: "neutral" });
+    expect(none?.tab).toBe("attendance");
+    expect(none?.comingSoon).toBe(false);
+
+    const receiving = find({ loaded: true, ruleCount: 3, activeRuleCount: 2 });
+    expect(receiving?.state).toBe("active");
+    expect(receiving?.status).toEqual({ label: "Recebendo vendas", tone: "ok" });
+    expect(receiving?.detail).toBe("3 regras");
+
+    const paused = find({ loaded: true, ruleCount: 1, activeRuleCount: 0 });
+    expect(paused?.status).toEqual({ label: "Regras pausadas", tone: "warn" });
+    expect(paused?.detail).toBe("1 regra");
+
+    const unknown = find({ loaded: false, ruleCount: 0, activeRuleCount: 0 });
+    expect(unknown?.state).toBe("available");
+    expect(unknown?.status).toEqual({
+      label: "Não foi possível verificar",
+      tone: "warn",
+    });
+    // Offered even though the API never lists Payt as a connection provider.
+    expect(ids(buildIntegrationCards(snapshot()))).toContain("payt");
   });
 
   it("reflects the Meta connection state", () => {

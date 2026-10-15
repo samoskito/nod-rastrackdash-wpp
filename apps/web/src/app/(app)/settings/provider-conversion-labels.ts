@@ -88,6 +88,19 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Falha interna ao criar o evento Meta",
     queue_recovery_pending: "Aguardando recuperacao da fila",
     qualified_lead_already_materialized: "Lead ja qualificado anteriormente",
+    // Venda da Payt (Fase 4a).
+    purchase_duplicate: "Venda repetida: recibo registrado, nada novo enviado",
+    rule_in_observation: "Regra em observação: nada é enviado à Meta",
+    payt_purchase_identity_missing:
+      "Venda sem vendedor ou pedido identificados",
+    provider_purchase_identity_missing:
+      "Venda sem vendedor ou pedido identificados",
+    payt_channel_missing_or_ambiguous:
+      "Número da venda não identificado ou ambíguo",
+    provider_purchase_channel_missing_or_ambiguous:
+      "Número da venda não identificado ou ambíguo",
+    payt_lead_other_channel:
+      "Lead de outro número: a regra desse número envia a venda",
   };
 
   if (reasonCode.startsWith("provider_conversion_route_")) {

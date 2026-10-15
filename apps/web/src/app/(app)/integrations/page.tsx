@@ -14,6 +14,7 @@ import type {
   CurrentWorkspaceDto,
   WhatsappConnectionDto,
 } from "@wpptrack/shared";
+import Link from "next/link";
 import { metaAssetsSchema, whatsappConnectionsSchema } from "@wpptrack/shared";
 import { Activity } from "lucide-react";
 import { revalidatePath } from "next/cache";
@@ -1082,6 +1083,11 @@ export default async function IntegrationsPage({
       ? ("forbidden" as const)
       : kommoSettings.state;
 
+  // Payt has no connection: its rules live in Conversões.
+  const paytRules = (inboundWebhookData?.providerRules ?? []).filter(
+    (rule) => rule.automationSource === "payt",
+  );
+
   const cards = buildIntegrationCards({
     inbound: inboundWebhookData
       ? {
@@ -1102,6 +1108,13 @@ export default async function IntegrationsPage({
       legacyUazapiInstances: usesExternalWhatsapp
         ? 0
         : legacyWhatsappInstances.length + inboundConnectionsFor("uazapi").length,
+    },
+    payt: {
+      loaded:
+        Boolean(inboundWebhookData) && inboundWebhookData!.providerRulesEnabled,
+      ruleCount: paytRules.length,
+      activeRuleCount: paytRules.filter((rule) => rule.conversionRule.active)
+        .length,
     },
     crm: {
       kommo: {
@@ -1181,6 +1194,63 @@ export default async function IntegrationsPage({
       />
     );
   }
+
+  const hasWhatsappNumber = inboundConnections.length > 0;
+  const paytPanel = (
+    <div className="integration-modal-stack">
+      <div className="integration-modal-note">
+        <strong>
+          {paytRules.length > 0
+            ? `${paytRules.length} ${paytRules.length === 1 ? "regra de venda configurada" : "regras de venda configuradas"}`
+            : "Como funciona"}
+        </strong>
+        <p className="muted">
+          A Payt não tem conexão própria. Ela funciona por regra em Conversões:
+          cada regra gera uma URL de postback, que você cola na Payt. Quando o
+          comprador é um lead que chegou pelo WhatsApp, a venda vai para a Meta
+          como conversão do anúncio de origem.
+        </p>
+        <ol className="integration-steps">
+          <li>
+            Em Conversões, crie uma regra de venda da Payt (compra aprovada,
+            Pix/boleto gerado ou carrinho abandonado).
+          </li>
+          <li>
+            Copie a URL gerada e cole na Payt, em Postback. Ela aparece uma
+            única vez.
+          </li>
+          <li>
+            A regra começa em observação; ative o envio quando conferir as
+            primeiras vendas.
+          </li>
+        </ol>
+        {hasWhatsappNumber ? (
+          <Link
+            className="button primary"
+            href={
+              paytRules.length > 0
+                ? "/conversions"
+                : "/conversions?nova=automation_payt"
+            }
+          >
+            {paytRules.length > 0
+              ? "Gerenciar regras da Payt"
+              : "Criar regra de venda da Payt"}
+          </Link>
+        ) : (
+          <>
+            <p className="muted">
+              Antes, conecte um número de WhatsApp para saber de qual anúncio
+              veio cada comprador.
+            </p>
+            <a className="button" href="#integracao-whatsapp">
+              Ir para WhatsApp
+            </a>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   const uazapiPanel = (
     <div className="integration-modal-stack">
@@ -1559,6 +1629,7 @@ export default async function IntegrationsPage({
     umbler: inboundPanel("umbler"),
     gupshup: inboundPanel("gupshup"),
     data_crazy: inboundPanel("data_crazy"),
+    payt: paytPanel,
     meta: metaPanel,
     kommo:
       workspace && kommoViewerId && canManageKommo ? (
@@ -1736,6 +1807,7 @@ export default async function IntegrationsPage({
           umbler: [rulesLink],
           gupshup: [rulesLink],
           data_crazy: [rulesLink],
+          payt: [rulesLink],
         }}
         tabIntro={{
           whatsapp: whatsappIntro,

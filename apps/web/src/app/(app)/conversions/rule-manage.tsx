@@ -41,6 +41,7 @@ export type RuleManageTab = "edit" | "endpoint" | "received" | "catalog-test";
 
 const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_umbler",
+  "automation_payt",
 ];
 
 /**
@@ -311,6 +312,7 @@ export function RuleManage({
             canManage={canManage && !licenseLocked}
             rotateAction={actions.rotateEndpoint}
             freshUrl={freshUrl}
+            capabilities={capabilities}
             onRotated={(url) => {
               onFreshUrl?.(url);
               onChanged?.();
@@ -321,6 +323,7 @@ export function RuleManage({
         {tab === "received" ? (
           <ReceivedEvents
             ruleId={rule.id}
+            origin={origin}
             mode={rule.mode}
             canManage={canManage && !licenseLocked}
             loadAction={actions.loadReceivedEvents}

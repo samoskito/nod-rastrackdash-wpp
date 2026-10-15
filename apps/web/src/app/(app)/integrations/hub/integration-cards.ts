@@ -64,6 +64,16 @@ export type IntegrationHubSnapshot = {
      */
     legacyUazapiInstances: number;
   };
+  /**
+   * Payt has no connection: it is a rule origin in Conversões. The card
+   * reflects the Payt rules of the workspace.
+   */
+  payt: {
+    /** False when the conversion rules could not be read. */
+    loaded: boolean;
+    ruleCount: number;
+    activeRuleCount: number;
+  };
   crm: {
     kommo: CrmSnapshot;
   };
@@ -202,6 +212,29 @@ function whatsappDecision(
   };
 }
 
+function paytDecision(snapshot: IntegrationHubSnapshot): CardDecision {
+  const { loaded, ruleCount, activeRuleCount } = snapshot.payt;
+
+  if (ruleCount === 0) {
+    return loaded
+      ? available
+      : {
+          state: "available",
+          status: { label: "Não foi possível verificar", tone: "warn" },
+          detail: null,
+        };
+  }
+
+  return {
+    state: "active",
+    status:
+      activeRuleCount > 0
+        ? { label: "Recebendo vendas", tone: "ok" }
+        : { label: "Regras pausadas", tone: "warn" },
+    detail: plural(ruleCount, "regra", "regras"),
+  };
+}
+
 const crmStatusLabels: Record<string, string> = {
   active: "Ativa",
   paused: "Pausada",
@@ -286,6 +319,8 @@ function decide(
       return inboundDecision(snapshot, gate.provider);
     case "crm":
       return crmDecision(snapshot, gate.provider);
+    case "payt_rules":
+      return paytDecision(snapshot);
     case "always":
       return definition.id === "meta" ? metaDecision(snapshot) : available;
   }

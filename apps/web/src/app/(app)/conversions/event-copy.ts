@@ -35,3 +35,37 @@ export function accentEventCopy(text: string): string {
 export function ruleEventLabel(eventName: string): string {
   return accentEventCopy(conversionEventBuilderLabel(eventName));
 }
+
+/**
+ * Eventos de venda da Payt: o evento vem do status de cada venda, então o
+ * rótulo fala da venda (Pix/boleto gerado, e não “Iniciar checkout”).
+ */
+export const paytEventLabels: Readonly<Record<string, string>> = {
+  Purchase: "Compra aprovada",
+  InitiateCheckout: "Pix/boleto gerado",
+  CartAbandoned: "Carrinho abandonado",
+};
+
+export const paytEventExplanations: Readonly<Record<string, string>> = {
+  Purchase: "Pagamento confirmado.",
+  InitiateCheckout:
+    "Pedido aguardando pagamento (Pix ou boleto gerado). Cartão aprovado na hora não gera este evento: vai direto para compra aprovada.",
+  CartAbandoned:
+    "Carrinho abandonado no checkout. Em beta: confira as primeiras vendas antes de ligar o envio automático.",
+};
+
+export const paytBetaBadge = "beta";
+
+export function paytEventLabel(eventName: string): string {
+  return paytEventLabels[eventName] ?? ruleEventLabel(eventName);
+}
+
+/** Rótulo do evento de uma regra, conforme a origem (Payt tem rótulos próprios). */
+export function ruleEventLabelForOrigin(
+  origin: string,
+  eventName: string,
+): string {
+  return origin === "automation_payt"
+    ? paytEventLabel(eventName)
+    : ruleEventLabel(eventName);
+}

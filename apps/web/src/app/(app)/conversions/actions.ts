@@ -161,6 +161,10 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "Esta regra ainda não tem catálogo configurado.",
   "O teste de mensagem exige uma regra de catalogo estruturado":
     "O teste de pedido só existe para regras de catálogo.",
+  "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado":
+    "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado.",
+  "Escolha a conexao de WhatsApp dos numeros desta regra":
+    "Escolha números de uma conexão de WhatsApp para esta regra.",
   "Sem permissao para gerenciar integracoes": noPermissionMessage,
   "Este workspace tem canais demais para unificar regras com segurança; mantenha as regras por número":
     "Este workspace tem canais demais para unificar regras com segurança. Mantenha as regras por número.",

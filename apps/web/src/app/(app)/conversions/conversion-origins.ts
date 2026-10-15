@@ -38,12 +38,16 @@ export type RuleOriginDefinition = {
   /**
    * "same_provider": a automação por endereço fica presa à conexão que a
    * chama (Umbler); o alcance "todos os números" vale para essa conexão.
+   * "any": a regra de venda (Payt) fica presa à conexão dos números
+   * escolhidos, só como âncora da URL; a Payt não tem conexão própria.
    */
-  connection: "none" | "same_provider";
+  connection: "none" | "same_provider" | "any";
   /** Evento fixo da origem. */
   lockedEvent?: ConversionEventNameDto;
   /** Eventos que a origem reconhece (padrão: todo o catálogo). */
   allowedEvents?: readonly ConversionEventNameDto[];
+  /** Eventos ainda em beta nesta origem (selo “beta”); a API informa o atual. */
+  betaEvents?: readonly ConversionEventNameDto[];
 };
 
 export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
@@ -91,6 +95,25 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     allowedEvents: ["QualifiedLead", "Purchase"],
   },
   {
+    id: "automation_payt",
+    kind: "provider",
+    label: "Venda na Payt",
+    description:
+      "Quando a Payt avisa uma compra aprovada, um Pix/boleto gerado ou um carrinho abandonado de alguém que chegou pelo WhatsApp.",
+    logoProvider: "payt",
+    fallbackChannelProviders: [
+      "umbler",
+      "gupshup",
+      "uazapi",
+      "meta_cloud",
+      "data_crazy",
+    ],
+    connection: "any",
+    // O evento vem do status de cada venda; o valor vem da própria venda.
+    allowedEvents: ["Purchase", "InitiateCheckout", "CartAbandoned"],
+    betaEvents: ["CartAbandoned"],
+  },
+  {
     id: "kommo",
     kind: "crm",
     label: "Etapa no Kommo",
@@ -127,6 +150,36 @@ export function originChannelProviders(
     capabilities?.origins.find((item) => item.origin === origin)
       ?.channelProviders ?? definition.fallbackChannelProviders
   );
+}
+
+/**
+ * Eventos que a origem reconhece, na ordem da tela. A API de capacidades
+ * manda (`eventNames`); sem ela vale a lista da origem.
+ */
+export function originEventNames(
+  origin: RuleOriginId,
+  capabilities: ProviderConversionRuleCapabilitiesDto | null,
+): readonly ConversionEventNameDto[] | null {
+  const definition = ruleOriginDefinition(origin);
+  const fromApi = capabilities?.origins.find(
+    (item) => item.origin === origin,
+  )?.eventNames;
+
+  return fromApi && fromApi.length > 0
+    ? fromApi
+    : (definition.allowedEvents ?? null);
+}
+
+/** Eventos em beta da origem (API primeiro; só a Payt tem hoje). */
+export function originBetaEvents(
+  origin: RuleOriginId,
+  capabilities: ProviderConversionRuleCapabilitiesDto | null,
+): readonly ConversionEventNameDto[] {
+  const fromApi = capabilities?.origins.find(
+    (item) => item.origin === origin,
+  )?.betaEventNames;
+
+  return fromApi ?? ruleOriginDefinition(origin).betaEvents ?? [];
 }
 
 /** Provedores que leem mensagens do contato (regra "Só o contato"). */

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { providerRule } from "./conversions-fixtures";
 import IntegrationsPage from "../src/app/(app)/integrations/page";
 import {
   metaAdAccountsForBusiness,
@@ -161,10 +162,18 @@ describe("integrations route", () => {
     );
 
     expect([...new Set(cardIds)].sort()).toEqual(
-      ["kommo", "meta", "nod_api", "umbler", "uazapi_byo", "waha", "zapi"].sort(),
+      [
+        "kommo",
+        "meta",
+        "nod_api",
+        "payt",
+        "umbler",
+        "uazapi_byo",
+        "waha",
+        "zapi",
+      ].sort(),
     );
     for (const absent of [
-      "payt",
       "unnichat",
       "pipedrive",
       "gohighlevel",
@@ -173,11 +182,41 @@ describe("integrations route", () => {
     ]) {
       expect(html).not.toContain(`data-integration="${absent}"`);
     }
+    // Payt has no connection: its card explains the rule flow in Conversões.
+    expect(html).toContain('src="/integrations/payt.svg"');
+    expect(html).toContain('data-integration="payt" data-state="available"');
+    expect(html).toContain("A Payt não tem conexão própria");
+    expect(html).toContain("/conversions?nova=automation_payt");
+    expect(html).toContain("Criar regra de venda da Payt");
     // Official logos with a fallback for missing files.
     expect(html).toContain('src="/integrations/umbler.svg"');
     expect(html).toContain('src="/integrations/kommo.png"');
     expect(html).toContain('src="/integrations/uazapi.svg"');
     expect(html).not.toContain("/billing/package");
+  });
+
+  it("shows the Payt card as active once a sale rule exists and links to Conversões", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/conversion-rules/providers": [
+          paytRuleFixture("rule_payt_1", true),
+          paytRuleFixture("rule_payt_2", false),
+        ],
+      },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('data-integration="payt" data-state="active"');
+    expect(html).toContain("Recebendo vendas");
+    expect(html).toContain("2 regras");
+    expect(html).toContain("2 regras de venda configuradas");
+    expect(html).toContain("Gerenciar regras da Payt");
+    expect(html).not.toContain("Criar regra de venda da Payt");
+    // The rule is not a connection: no inbound panel is asked for Payt.
+    expect(html).not.toContain("Criar conexão Payt");
   });
 
   it("shows the external WhatsApp source without instance sales or false API errors", async () => {
@@ -1469,3 +1508,18 @@ const wave7MetaConfiguration = {
     },
   ],
 };
+
+function paytRuleFixture(id: string, active: boolean) {
+  return providerRule({
+    id,
+    name: `Venda ${id}`,
+    triggerType: "provider_automation",
+    origin: "automation_payt",
+    eventName: "Purchase",
+    connectionId: "connection_wave7",
+    scope: "all_numbers",
+    active,
+    phrases: [],
+    automationSource: "payt",
+  });
+}

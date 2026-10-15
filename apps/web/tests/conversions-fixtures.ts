@@ -91,6 +91,25 @@ export const capabilities: ProviderConversionRuleCapabilitiesDto = {
   unsupportedWhatsappProviders: ["waha", "zapi", "nod_api"],
 };
 
+/** Capacidades com a venda da Payt (qualquer número de WhatsApp; carrinho em beta). */
+export const capabilitiesWithPayt: ProviderConversionRuleCapabilitiesDto = {
+  ...capabilities,
+  origins: [
+    ...capabilities.origins,
+    {
+      origin: "automation_payt",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: ["umbler", "gupshup", "uazapi", "meta_cloud", "data_crazy"],
+      authorChannelProviders: null,
+      connectionBound: false,
+      labelMatch: null,
+      unifiable: false,
+      eventNames: ["Purchase", "InitiateCheckout", "CartAbandoned"],
+      betaEventNames: ["CartAbandoned"],
+    },
+  ],
+};
+
 export function channelDto(
   numberView: ConversionNumber,
 ): InboundWebhookChannelDto {
@@ -157,6 +176,7 @@ type RuleInput = {
   active?: boolean;
   unifiedIntoRuleId?: string | null;
   phrases?: string[];
+  automationSource?: "payt" | null;
   lastExecution?: ProviderConversionRuleDto["lastExecution"];
 };
 
@@ -198,6 +218,9 @@ export function providerRule(input: RuleInput): ProviderConversionRuleDto {
     messageAuthorScope: "team",
     valueMode: "fixed",
     exampleMessage: null,
+    ...(input.automationSource === undefined
+      ? {}
+      : { automationSource: input.automationSource }),
     endpoint: null,
     catalog: null,
     lastExecution: input.lastExecution ?? null,

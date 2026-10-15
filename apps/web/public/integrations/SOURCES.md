@@ -19,6 +19,7 @@ instead of a broken image.
 | `umbler.svg` | https://assets.umbler.com/site/shared/umblertalk.svg (Umbler Talk logo used on umbler.com) | Dark ink, shown on light tile. |
 | `gupshup.svg` | https://gs-upload.gupshup.io/revamp/assets/v3/images/new-home-page/new-logo-gupshup.svg (gupshup.io header) | Guidelines: https://www.gupshup.io/resources/wp-content/uploads/2022/03/Gupshup-Brand-Guidelines-2022.pdf. Dark text, light tile. |
 | `waha.png` | https://raw.githubusercontent.com/devlikeapro/waha/core/logo.png (logo in the root of the open-source repository https://github.com/devlikeapro/waha, 150x150 RGBA, 7.9 KB) | Project's own logo, repository under Apache-2.0 (https://raw.githubusercontent.com/devlikeapro/waha/core/LICENSE). The license does not grant trademark rights: nominative use only, unmodified, on a light tile. Contains the WhatsApp glyph (WhatsApp brand rules apply). |
+| `payt.svg` | Logo markup of the `PaytLogo` component on https://payt.com.br (site bundle `assets/BzoOw8z8.js`), wrapped as a standalone SVG (`viewBox 0 0 48 39`), colors unchanged. Same file as the SaaS reference (copied 2026-10-15) | Colored artwork, shown on the dark card. No public brand kit found. |
 | `kommo.png` | https://www.kommo.com/static/images/pages/support/kommo-logo.png (1200x256) | Dark ink, light tile. No public brand kit found. |
 
 ## Plain wordmark fallbacks (official file not used)
@@ -30,5 +31,5 @@ instead of a broken image.
 | `uazapi.svg` | No official logo file could be retrieved with a verifiable source (docs.uazapi.com was not reachable when this was prepared); neutral wordmark until the owner provides the file. |
 | `nod-api.svg`, `zapi.svg` | "Em breve" cards; no public logo kit found; neutral wordmarks. |
 
-Providers that arrive in later updates (Payt, Unnichat, Pipedrive, Go High Level)
+Providers that arrive in later updates (Unnichat, Pipedrive, Go High Level)
 add their own logo file and a row here.
