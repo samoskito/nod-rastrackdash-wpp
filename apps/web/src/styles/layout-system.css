@@ -5406,23 +5406,6 @@ body {
   margin-left: 0;
 }
 
-.crm-moved-pointer {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-}
-
-.crm-moved-pointer h3 {
-  margin: 4px 0 0;
-  font-family: var(--font-display);
-  font-size: 17px;
-}
-
-.crm-moved-pointer p {
-  margin: 4px 0 0;
-}
-
 /* Shared modal (components/modal.tsx) */
 
 .app-modal-layer {
@@ -5555,10 +5538,6 @@ body {
   .app-modal-body {
     padding: 16px;
   }
-
-  .crm-moved-pointer {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5579,11 +5558,12 @@ body {
   gap: 14px;
 }
 
-.kommo-crm-manager-head {
-  display: flex;
+/* Wraps a panel's write controls: disabled as a whole while the license is
+   locked, invisible (no box) otherwise. */
+.license-lock-scope {
+  display: contents;
   min-width: 0;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }

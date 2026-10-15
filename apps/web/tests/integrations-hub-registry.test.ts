@@ -184,6 +184,19 @@ describe("integration registry", () => {
     expect(
       integrationsHubInitialState({ notice: "meta-license-locked" }),
     ).toEqual({ tab: "conversions", provider: "meta" });
+    // Server-side deep link used by Settings (no dependency on the URL hash).
+    expect(integrationsHubInitialState({ abrir: "kommo" })).toEqual({
+      tab: "crm",
+      provider: "kommo",
+    });
+    expect(integrationsHubInitialState({ abrir: "umbler" })).toEqual({
+      tab: "conversions",
+      provider: "umbler",
+    });
+    expect(integrationsHubInitialState({ abrir: "nao-existe" })).toEqual({
+      tab: "whatsapp",
+      provider: null,
+    });
     expect(integrationsHubInitialState({ aba: "crm" })).toEqual({
       tab: "crm",
       provider: null,
@@ -235,7 +248,7 @@ describe("buildIntegrationCards", () => {
     const uazapi = cards.find((card) => card.id === "uazapi_byo");
     expect(uazapi?.detail).toBe("1 conexão");
     const zapi = cards.find((card) => card.id === "zapi");
-    expect(zapi?.status).toEqual({ label: "Pagamento pendente", tone: "warn" });
+    expect(zapi?.status).toEqual({ label: "Aguardando ativação", tone: "warn" });
 
     const conversions = cardsForTab(cards, "conversions");
     expect(ids(conversions.active).sort()).toEqual(["meta", "umbler"]);
@@ -270,11 +283,16 @@ describe("buildIntegrationCards", () => {
     ).toBe("Em teste");
   });
 
-  it("drops inbound cards when the connections could not be read", () => {
+  it("keeps inbound cards, flagged, when the connections could not be read", () => {
     const cards = buildIntegrationCards(snapshot({ inbound: null }));
 
     for (const id of ["meta_cloud", "umbler", "gupshup", "data_crazy"]) {
-      expect(ids(cards)).not.toContain(id);
+      const card = cards.find((item) => item.id === id);
+      expect(card?.state).toBe("available");
+      expect(card?.status).toEqual({
+        label: "Não foi possível verificar",
+        tone: "warn",
+      });
     }
     expect(ids(cards)).toContain("uazapi_byo");
     expect(ids(cards)).toContain("kommo");

@@ -90,8 +90,14 @@ function inboundDecision(
 ): CardDecision | null {
   const inbound = snapshot.inbound;
 
+  // The connections could not be read: keep the card (and any open modal)
+  // instead of silently dropping the provider.
   if (!inbound) {
-    return null;
+    return {
+      state: "available",
+      status: { label: "Não foi possível verificar", tone: "warn" },
+      detail: null,
+    };
   }
 
   const connections = inbound.connections.filter(
@@ -154,7 +160,7 @@ function whatsappDecision(
   if (statuses.includes("pending_payment")) {
     return {
       state: "active",
-      status: { label: "Pagamento pendente", tone: "warn" },
+      status: { label: "Aguardando ativação", tone: "warn" },
       detail: plural(count, "conexão", "conexões"),
     };
   }

@@ -136,7 +136,7 @@ describe("integrations route", () => {
     expect(html).toContain("Vendas");
     expect(html).toContain("provider_instance_1");
     expect(html).toContain("Suporte");
-    expect(html).toContain("Pagamento pendente");
+    expect(html).toContain("Aguardando ativação");
     expect(html).not.toContain("Pagar agora");
     expect(html).not.toContain("Adicionar instancia");
     expect(html).not.toContain("Abrir assinatura");
@@ -895,7 +895,7 @@ describe("integrations route", () => {
 
     expect(html.match(/data-testid="kommo-crm-manager"/g)).toHaveLength(1);
     expect(html).toContain('id="crm-configurado"');
-    expect(html).toContain("Mudança de estágio no CRM");
+    expect(html).not.toContain("0 conexão(ões)");
     expect(html).toContain('data-integration="kommo" data-state="available"');
     expect(html).toContain('aria-label="Conectar Kommo"');
     expect(html).not.toContain("Somente o dono da conta conecta CRMs");
@@ -960,6 +960,119 @@ describe("integrations route", () => {
     expect(html).toContain('name="provider" value="waha"');
     expect(html).toContain('name="provider" value="nod_api"');
     expect(html).not.toContain("<span class=\"field-label\">Provedor</span>");
+  });
+
+  it("opens the Kommo modal from ?abrir=kommo on the server render", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/auth/me": { user: { id: "user_owner" } },
+        "/workspaces/workspace_current/kommo/connections": [],
+      },
+    });
+
+    const element = await IntegrationsPage({
+      searchParams: Promise.resolve({ abrir: "kommo" }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toMatch(
+      /<div class="app-modal-layer" data-state="open"><div class="app-modal-backdrop"[^>]*><\/div><div class="app-modal app-modal-wide"[^>]*id="integration-modal-kommo"/,
+    );
+    expect(html).toMatch(/id="integrations-tab-crm"[^>]*aria-selected="true"/);
+  });
+
+  it("shows members only the owner-only note in the Kommo modal", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: false,
+      extraResponses: { "/auth/me": { user: { id: "user_member" } } },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Somente o dono da conta conecta CRMs");
+    expect(html).not.toContain('data-testid="kommo-crm-manager"');
+    expect(html).not.toContain("0 conexão(ões)");
+  });
+
+  it("keeps inbound cards and warns on both tabs when the inbound API fails", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {},
+    });
+    const original = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/integrations/inbound-webhooks/capabilities") {
+        return jsonResponse({ message: "unavailable" }, 503);
+      }
+      return original(input, init);
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    for (const id of ["umbler", "gupshup", "meta_cloud", "data_crazy"]) {
+      expect(html).toContain(`data-integration="${id}" data-state="available"`);
+    }
+    expect(html).toContain("Não foi possível verificar");
+    const banners = html.match(/Algumas conexões não carregaram/g) ?? [];
+    expect(banners).toHaveLength(2);
+  });
+
+  it("disables WhatsApp and webhook write controls while the license is locked", async () => {
+    const lockedStatus = {
+      status: "blocked",
+      softLock: true,
+      hardLock: true,
+      usable: false,
+      expiresAt: null,
+      validUntil: null,
+      source: "cache",
+      locked: true,
+      lockReason: "revoked",
+    };
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/license-client/status": lockedStatus,
+        "/integrations/whatsapp-connections": [
+          {
+            id: "connection_waha",
+            name: "WAHA Comercial",
+            displayName: null,
+            provider: "waha",
+            status: "active",
+            lastHealthStatus: null,
+            lastHealthCheckedAt: null,
+            createdAt: "2026-07-02T03:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const locked = renderToStaticMarkup(
+      createElement("div", null, await IntegrationsPage({})),
+    );
+
+    expect(locked).toContain(
+      "Licença bloqueada: criar, testar, editar e excluir conexões está",
+    );
+    expect(locked).toContain(
+      "Licença bloqueada: criar, alterar e remover conexões está",
+    );
+    expect(locked.match(/<fieldset class="license-lock-scope" disabled=""/g)?.length)
+      .toBeGreaterThanOrEqual(5);
+    expect(locked).toContain("Excluir");
+
+    vi.restoreAllMocks();
+    mockWave7IntegrationsFetch({ canManage: true });
+    const unlocked = renderToStaticMarkup(
+      createElement("div", null, await IntegrationsPage({})),
+    );
+    expect(unlocked).not.toContain('class="license-lock-scope" disabled=""');
+    expect(unlocked).not.toContain("Licença bloqueada: criar, testar");
   });
 
   it("shows a generic inbound detail error without payload or secret data", async () => {

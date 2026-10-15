@@ -1,7 +1,6 @@
 "use client";
 
 import type { InboundWebhookChannelDto } from "@wpptrack/shared";
-import { Database } from "lucide-react";
 import {
   createKommoConnectionAction,
   createKommoRuleAction,
@@ -106,22 +105,6 @@ export function KommoCrmManager({
       className="kommo-crm-manager"
       data-testid="kommo-crm-manager"
     >
-      <header className="kommo-crm-manager-head">
-        <span className="trigger-source-identity">
-          <span className="micro-label">Kommo CRM</span>
-          <strong>Mudança de estágio no CRM</strong>
-          <small>
-            Gatilho opcional · conecte só o endereço e o token · inclui auditoria de
-            webhooks
-          </small>
-        </span>
-        <span className="status-chip">
-          <Database size={13} aria-hidden="true" />{" "}
-          {loadState === "error" || loadState === "forbidden"
-            ? "Indisponível"
-            : `${connections.length} conexão(ões)`}
-        </span>
-      </header>
       <div className="trigger-source-body">
         <KommoConversionPanel
           key={scope}

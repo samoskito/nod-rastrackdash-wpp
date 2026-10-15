@@ -27,7 +27,6 @@ instead of a broken image.
 | `datacrazy.svg` | datacrazy.io only serves a 175x59 WebP logo (below 256 px, not SVG/PNG). |
 | `meta.svg` | Meta's brand resource center requires accepting its terms and Brand Review approval before use — the account owner must do this. |
 | `meta-cloud.svg` | Same as Meta (WhatsApp Cloud API card). |
-| `whatsapp-qr.svg` | Same as Meta (WhatsApp brand resources); neutral "QR code" wordmark, not referenced by a card in this edition yet. |
 | `uazapi.svg`, `nod-api.svg`, `waha.svg`, `zapi.svg` | Self-hosted / API-first products without a public logo kit found; neutral wordmarks. |
 
 Providers that arrive in later updates (Payt, Unnichat, Pipedrive, Go High Level)

@@ -92,7 +92,7 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 
   it("offers Kommo beside the existing origins when the manager link is provided", () => {
-    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
+    renderBuilder({ kommoManagerHref: "/integrations?abrir=kommo" });
     openBuilder();
     const values = Array.from(originSelect().options).map((option) => option.value);
     expect(values).toEqual(["message", "tag", "catalog", "kommo"]);
@@ -102,7 +102,7 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 
   it("choosing Kommo shows a pointer instead of the provider form and creates nothing", () => {
-    const { action } = renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
+    const { action } = renderBuilder({ kommoManagerHref: "/integrations?abrir=kommo" });
     openBuilder();
     fireEvent.change(originSelect(), { target: { value: "kommo" } });
 
@@ -117,7 +117,7 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 
   it("switching back restores the untouched provider form and every other origin", () => {
-    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
+    renderBuilder({ kommoManagerHref: "/integrations?abrir=kommo" });
     openBuilder();
     for (const origin of ["tag", "catalog", "message"]) {
       fireEvent.change(originSelect(), { target: { value: "kommo" } });
@@ -130,18 +130,18 @@ describe("Kommo as an opt-in origin in the existing builder", () => {
   });
 
   it("points to the Kommo card in the Integrations hub instead of a local manager", () => {
-    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
+    renderBuilder({ kommoManagerHref: "/integrations?abrir=kommo" });
     openBuilder();
     fireEvent.change(originSelect(), { target: { value: "kommo" } });
     const link = screen.getByRole("link", { name: "Abrir Kommo em Integrações" });
 
-    expect(link.getAttribute("href")).toBe("/integrations?aba=crm#integracao-kommo");
+    expect(link.getAttribute("href")).toBe("/integrations?abrir=kommo");
     expect(screen.queryByRole("button", { name: "Abrir gerenciador Kommo" })).toBeNull();
     expect(document.querySelectorAll("#crm-configurado")).toHaveLength(0);
   });
 
   it("closing and reopening the builder returns to the provider default", () => {
-    renderBuilder({ kommoManagerHref: "/integrations?aba=crm#integracao-kommo" });
+    renderBuilder({ kommoManagerHref: "/integrations?abrir=kommo" });
     openBuilder();
     fireEvent.change(originSelect(), { target: { value: "kommo" } });
     fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
@@ -184,6 +184,6 @@ describe("integrations page wiring (structural)", () => {
 
   it("settings still hands the builder a link to the hub Kommo card", () => {
     expect(settingsPage).toContain("kommoManagerHref");
-    expect(settingsPage).toContain("/integrations?aba=crm#integracao-kommo");
+    expect(settingsPage).toContain("/integrations?abrir=kommo");
   });
 });

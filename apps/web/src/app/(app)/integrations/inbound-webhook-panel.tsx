@@ -72,6 +72,11 @@ export type InboundWebhookPanelProps = {
   defaultCreateOpen?: boolean;
   /** Replaces the scoped heading's helper text. */
   scopeDescription?: string;
+  /**
+   * Client-side hint only (the API stays the authority with HTTP 423): while
+   * the license is locked every write control is disabled.
+   */
+  licenseLocked?: boolean;
 };
 
 type PanelNotice = {
@@ -132,6 +137,7 @@ export function InboundWebhookPanel({
   allowCreate = true,
   defaultCreateOpen,
   scopeDescription,
+  licenseLocked = false,
 }: InboundWebhookPanelProps) {
   const router = useRouter();
   const connections = scopedProvider
@@ -319,6 +325,13 @@ export function InboundWebhookPanel({
         )}
       </div>
 
+      <fieldset className="license-lock-scope" disabled={licenseLocked}>
+      {licenseLocked && canManage ? (
+        <p className="action-note warn" role="status">
+          Licença bloqueada: criar, alterar e remover conexões está
+          indisponível. Verifique /backoffice/license.
+        </p>
+      ) : null}
       {createOpen && canCreate ? (
         <form className="inbound-webhook-create" onSubmit={handleCreate}>
           {scopedProvider ? (
@@ -776,6 +789,7 @@ export function InboundWebhookPanel({
           })
         )}
       </div>
+      </fieldset>
     </section>
   );
 }

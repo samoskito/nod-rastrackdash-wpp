@@ -26,7 +26,8 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   the connection name to confirm) — no billing or package flow.
 - **Locked license (HTTP 423)** now shows "Licença bloqueada: alterações
   indisponíveis…" on WhatsApp-connection, inbound-webhook and Meta writes done
-  from this screen, instead of a generic error.
+  from this screen, instead of a generic error. While the license is locked, the write controls of the WhatsApp and
+  inbound-webhook modals are disabled with an explanatory note.
 - No new environment variable, no migration, no new dependency (`pnpm-lock.yaml`
   unchanged). Web only: rebuild shared, rebuild and redeploy the web; the API is
   untouched.

@@ -10,7 +10,7 @@ import {
   Webhook,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import type {
   WhatsappConnectionEditData,
   WhatsappConnectionEditResult,
@@ -51,27 +51,27 @@ const providerCards: Array<{
   {
     id: "uazapi_byo",
     title: "Uazapi (BYO)",
-    ingestion: "Receiver e parser Uazapi disponiveis para configuracao.",
+    ingestion: "Receptor e parser da Uazapi disponíveis para configuração.",
     pending: false,
   },
   {
     id: "nod_api",
     title: "NOD API",
     ingestion:
-      "Ingestion pendente: o payload do broker ainda nao tem parser compativel comprovado.",
+      "Ingestão pendente: o payload do broker ainda não tem parser compatível comprovado.",
     pending: true,
   },
   {
     id: "waha",
     title: "WAHA",
-    ingestion: "Ingestion pendente: receiver e parser WAHA ainda nao existem.",
-    pending: true,
+    ingestion: "Receptor e parser do WAHA disponíveis para configuração.",
+    pending: false,
   },
   {
     id: "zapi",
     title: "Z-API",
-    ingestion: "Ingestion pendente: receiver e parser Z-API ainda nao existem.",
-    pending: true,
+    ingestion: "Receptor e parser da Z-API disponíveis para configuração.",
+    pending: false,
   },
 ];
 
@@ -87,6 +87,7 @@ export function WhatsappProviderPanel({
   editAction,
   loadEditAction,
   deleteAction,
+  licenseLocked = false,
 }: {
   connections: WhatsappConnectionDto[];
   /**
@@ -101,7 +102,13 @@ export function WhatsappProviderPanel({
   editAction: WhatsappProviderAction;
   loadEditAction: WhatsappProviderLoadEditAction;
   deleteAction: WhatsappProviderAction;
+  /**
+   * Client-side hint only (the API stays the authority with HTTP 423): while
+   * the license is locked every write control is disabled.
+   */
+  licenseLocked?: boolean;
 }) {
+  const titleId = useId();
   const router = useRouter();
   const [provider, setProvider] = useState<ProviderId>(
     scopedProvider ?? "uazapi_byo",
@@ -305,12 +312,12 @@ export function WhatsappProviderPanel({
   return (
     <section
       className="surface-panel"
-      aria-labelledby="whatsapp-providers-title"
+      aria-labelledby={titleId}
     >
       <div className="inbound-webhook-heading">
         <div>
           <span className="eyebrow">Conexoes WhatsApp</span>
-          <h2 id="whatsapp-providers-title">
+          <h2 id={titleId}>
             {scopedProvider
               ? `Conexoes ${scopedTitle ?? scopedProvider}`
               : "Provedores e receivers"}
@@ -322,6 +329,13 @@ export function WhatsappProviderPanel({
         </div>
       </div>
 
+      <fieldset className="license-lock-scope" disabled={licenseLocked}>
+      {licenseLocked && canManage ? (
+        <p className="action-note warn" role="status">
+          Licença bloqueada: criar, testar, editar e excluir conexões está
+          indisponível. Verifique /backoffice/license.
+        </p>
+      ) : null}
       {scopedProvider ? null : (
         <p className="muted">
           Usa Umbler Talk ou Gupshup? Essas plataformas sao configuradas no
@@ -336,13 +350,9 @@ export function WhatsappProviderPanel({
         {visibleCards.map((card) => (
           <div className="inbound-counter" key={card.id}>
             <strong>{card.title}</strong>
-            <span
-              className={
-                card.pending ? "action-note warn" : "action-note success"
-              }
-            >
+            <p className={card.pending ? "muted action-note warn" : "muted"}>
               {card.ingestion}
-            </span>
+            </p>
           </div>
         ))}
       </div>
@@ -701,6 +711,7 @@ export function WhatsappProviderPanel({
           ))
         )}
       </div>
+      </fieldset>
     </section>
   );
 }

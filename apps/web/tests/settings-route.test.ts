@@ -463,7 +463,7 @@ describe("settings route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("O Kommo agora fica em Integracoes");
-    expect(html).toContain('href="/integrations?aba=crm#integracao-kommo"');
+    expect(html).toContain('href="/integrations?abrir=kommo"');
     expect(html).not.toContain('data-testid="kommo-crm-manager"');
     expect(html).not.toContain("Mudança de estágio no CRM");
     expect(globalThis.fetch).not.toHaveBeenCalledWith(

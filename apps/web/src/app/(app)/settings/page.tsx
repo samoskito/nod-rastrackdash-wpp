@@ -1527,7 +1527,7 @@ export default async function SettingsPage() {
                               }
                               kommoManagerHref={
                                 canManageKommo
-                                  ? "/integrations?aba=crm#integracao-kommo"
+                                  ? "/integrations?abrir=kommo"
                                   : undefined
                               }
                             />
@@ -1557,17 +1557,30 @@ export default async function SettingsPage() {
                 aria-label="Kommo CRM"
               >
                 <div className="trigger-source-empty">
-                  <strong>O Kommo agora fica em Integracoes</strong>
-                  <span>
-                    Conecte e gerencie o Kommo (CRM) na aba CRM de Integracoes,
-                    uma vez para a conta inteira.
-                  </span>
-                  <Link
-                    className="button"
-                    href="/integrations?aba=crm#integracao-kommo"
-                  >
-                    Abrir Kommo em Integracoes
-                  </Link>
+                  {canManageKommo ? (
+                    <>
+                      <strong>O Kommo agora fica em Integracoes</strong>
+                      <span>
+                        Conecte e gerencie o Kommo (CRM) na aba CRM de
+                        Integracoes, uma vez para a conta inteira.
+                      </span>
+                      <Link
+                        className="button"
+                        href="/integrations?abrir=kommo"
+                      >
+                        Abrir Kommo em Integracoes
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <strong>
+                        O dono da conta conecta o Kommo em Integracoes
+                      </strong>
+                      <span>
+                        Peca ao dono da conta para conectar ou alterar o CRM.
+                      </span>
+                    </>
+                  )}
                 </div>
               </section>
             </div>

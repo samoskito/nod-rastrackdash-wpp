@@ -1389,16 +1389,9 @@ describe("KommoCrmManager: single mount and persistence of locks", () => {
     const sections = document.querySelectorAll("#crm-configurado");
     expect(sections).toHaveLength(1);
     expect(sections[0].getAttribute("data-testid")).toBe("kommo-crm-manager");
-    expect(screen.getByText("Mudança de estágio no CRM", { selector: "strong" })).toBeTruthy();
-    expect(within(sections[0] as HTMLElement).getByText("1 conexão(ões)")).toBeTruthy();
   });
 
-  it("shows 'Indisponível' when the list could not be loaded", () => {
-    const scope = freshScope();
-    render(managerElement(scope, managerActions(), [], { loadState: "forbidden" }));
-    expect(screen.getAllByText("Indisponível").length).toBeGreaterThan(0);
-  });
-
+  
   it("an unknown operation survives close/reopen and a remount for the same account, not for another", async () => {
     const scope = freshScope();
     const setStatusAction = vi.fn().mockResolvedValue({

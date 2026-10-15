@@ -151,7 +151,9 @@ configuração mais comum hoje.
   origem "Mensagem no WhatsApp" com autor **equipe** nunca vai casar numa
   conexão `meta_cloud`. Quem precisa disso hoje usa **Uazapi (BYO)** ou
   **Umbler Talk**.
-- **Gatilhos vindos de CRM / call center** (Kommo, Kinbox e similares):
+- **Gatilhos vindos de CRM** — **Kommo existe** e é conectado em
+  `/integrations` → aba **CRM** → card **Kommo** (somente o dono da conta);
+  ele não depende da conexão Meta Cloud. **Kinbox e outros CRM / call center**:
   **futuro**, não existe no código.
 - Mensagem recebida **sem** `referral.ctwa_clid` é ignorada
   (`ignored_no_ctwa`) — não vira lead.

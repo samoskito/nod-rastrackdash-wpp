@@ -106,6 +106,8 @@ type ResourceResult<T> = {
 };
 
 type IntegrationsSearchParams = {
+  aba?: string;
+  abrir?: string;
   meta?: string;
   notice?: string;
 };
@@ -677,7 +679,7 @@ function statusLabel(status: string) {
     disconnected: "Configurar",
     not_connected: "Nao conectado",
     error: "Erro",
-    pending_payment: "Pagamento pendente",
+    pending_payment: "Aguardando ativação",
     active: "Ativa",
     needs_reconnect: "Reconectar",
     not_configured: "Nao configurado",
@@ -964,7 +966,7 @@ export default async function IntegrationsPage({
       canManageKommo && Boolean(kommoViewerId),
     ),
   ]);
-  const kommoLicenseLocked = Boolean(
+  const licenseLocked = Boolean(
     licenseStatus && licenseLockReason(licenseStatus) !== null,
   );
   const inboundWebhookData = inboundWebhookResult.data;
@@ -1132,6 +1134,7 @@ export default async function IntegrationsPage({
         editAction={updateWhatsappConnectionAction}
         loadEditAction={loadWhatsappConnectionForEditAction}
         deleteAction={deleteWhatsappConnectionAction}
+        licenseLocked={licenseLocked}
       />
     );
   }
@@ -1170,6 +1173,7 @@ export default async function IntegrationsPage({
         createChannelAction={createInboundWebhookChannelAction}
         setChannelStatusAction={setInboundWebhookChannelStatusAction}
         saveRoutesAction={saveInboundWebhookChannelRoutesAction}
+        licenseLocked={licenseLocked}
       />
     );
   }
@@ -1541,7 +1545,7 @@ export default async function IntegrationsPage({
     data_crazy: inboundPanel("data_crazy"),
     meta: metaPanel,
     kommo:
-      workspace && kommoViewerId ? (
+      workspace && kommoViewerId && canManageKommo ? (
         <div className="integration-modal-stack">
           <KommoCrmManager
             workspaceId={workspace.id}
@@ -1550,7 +1554,7 @@ export default async function IntegrationsPage({
             loadState={kommoSettings.state}
             allChannels={allInboundChannels}
             canManage={canManageKommo}
-            licenseLocked={kommoLicenseLocked}
+            licenseLocked={licenseLocked}
           />
         </div>
       ) : canManageKommo || !workspace ? (
@@ -1569,17 +1573,20 @@ export default async function IntegrationsPage({
     ]),
   );
 
+  const inboundErrorBanner =
+    inboundWebhookResult.state === "error" ? (
+      <div className="feedback-banner warn" role="status">
+        <strong>Algumas conexões não carregaram</strong>
+        <span>
+          Parte das informações está indisponível agora. Atualize a página em
+          instantes.
+        </span>
+      </div>
+    ) : null;
+
   const whatsappIntro = (
     <>
-      {inboundWebhookResult.state === "error" ? (
-        <div className="feedback-banner warn" role="status">
-          <strong>Algumas conexões não carregaram</strong>
-          <span>
-            Parte das informações está indisponível agora. Atualize a página em
-            instantes.
-          </span>
-        </div>
-      ) : null}
+      {inboundErrorBanner}
       {usesExternalWhatsapp ? (
         <div className="surface-panel whatsapp-instance-panel">
           <span className="eyebrow">Integracao externa MySQL</span>
@@ -1716,6 +1723,7 @@ export default async function IntegrationsPage({
         }}
         tabIntro={{
           whatsapp: whatsappIntro,
+          conversions: inboundErrorBanner,
           crm: !workspace || canManageKommo ? undefined : crmOwnerOnlyNote,
         }}
         initialTab={initialHubState.tab}
