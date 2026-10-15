@@ -1900,7 +1900,7 @@ function ReportComparisonMetrics({
           previous={previous.metaConversationsStarted}
         />
         <ComparisonMetric
-          label="Conversas reais"
+          label="Leads novos"
           current={current.realConversations}
           previous={previous.realConversations}
         />
@@ -1918,7 +1918,7 @@ function ReportComparisonMetrics({
     return (
       <>
         <ComparisonMetric
-          label="Conversas reais"
+          label="Leads novos"
           current={current.realConversations}
           previous={previous.realConversations}
         />
@@ -1997,7 +1997,7 @@ function ReportComparisonMetrics({
         previous={previous.metaConversationsStarted}
       />
       <ComparisonMetric
-        label="Conversas reais"
+        label="Leads novos"
         current={current.realConversations}
         previous={previous.realConversations}
       />
@@ -2034,8 +2034,8 @@ function reportSummaryMetrics(
         value: String(totals.metaConversationsStarted),
       },
       {
-        detail: "Identificadas no WhatsApp",
-        label: "Conversas reais",
+        detail: "1º contato no período",
+        label: "Leads novos",
         value: String(totals.realConversations),
       },
       {
@@ -2049,8 +2049,8 @@ function reportSummaryMetrics(
   if (metricGroup === "funnel") {
     return [
       {
-        detail: "Base rastreada",
-        label: "Conversas reais",
+        detail: "1º contato no período",
+        label: "Leads novos",
         value: String(totals.realConversations),
       },
       {
@@ -2108,8 +2108,8 @@ function reportSummaryMetrics(
       value: String(totals.metaConversationsStarted),
     },
     {
-      detail: "Identificadas no WhatsApp",
-      label: "Conversas reais",
+      detail: "1º contato no período",
+      label: "Leads novos",
       value: String(totals.realConversations),
     },
     {
