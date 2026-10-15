@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
-import { clientNavigation, backofficeNavigation } from "@wpptrack/shared";
+import {
+  clientNavigation,
+  clientNavVisibleForPermissions,
+  backofficeNavigation,
+} from "@wpptrack/shared";
 import { AppShell } from "../src/components/app-shell";
 import { defaultBrandConfig } from "../src/lib/brand";
 
@@ -44,8 +48,8 @@ describe("navigation", () => {
       "reports",
       "events",
       "integrations",
+      "conversions",
       "settings",
-      "subscription",
     ]);
     expect(clientNavigation.map((item) => item.label)).not.toContain(
       "Clientes",
@@ -102,7 +106,7 @@ describe("navigation", () => {
     expect(analystHtml).toContain('href="/events"');
     expect(analystHtml).not.toContain('href="/integrations"');
     expect(analystHtml).not.toContain('href="/settings"');
-    expect(analystHtml).not.toContain('href="/subscription"');
+    expect(analystHtml).not.toContain('href="/conversions"');
     expect(analystHtml).not.toContain('aria-label="Gestao"');
 
     const unknownHtml = renderToStaticMarkup(
@@ -113,7 +117,7 @@ describe("navigation", () => {
     expect(unknownHtml).not.toContain('aria-label="Gestao"');
   });
 
-  it("shows integrations and settings but not subscription for admin without billing", () => {
+  it("shows integrations, conversions and settings to a manager, in that order inside Gestao", () => {
     const html = renderToStaticMarkup(
       createElement(AppShell, {
         workspace: {
@@ -134,9 +138,64 @@ describe("navigation", () => {
     );
 
     expect(html).toContain('href="/integrations"');
+    expect(html).toContain('href="/conversions"');
     expect(html).toContain('href="/settings"');
-    expect(html).not.toContain('href="/subscription"');
     expect(html).toContain('aria-label="Gestao"');
+
+    const management = html.slice(html.indexOf('aria-label="Gestao"'));
+    expect(management.indexOf('href="/integrations"')).toBeLessThan(
+      management.indexOf('href="/conversions"'),
+    );
+    expect(management.indexOf('href="/conversions"')).toBeLessThan(
+      management.indexOf('href="/settings"'),
+    );
+    expect(html).toContain("Conversões");
+  });
+
+  it("gates Conversions by the integrations permission, like Integrations", () => {
+    const withoutIntegrations = renderToStaticMarkup(
+      createElement(AppShell, {
+        workspace: {
+          id: "workspace_admin",
+          name: "Workspace Admin",
+          slug: "workspace-admin",
+          role: "admin",
+          operationalStatus: "active",
+          permissions: {
+            ...analystPermissions,
+            canManageIntegrations: false,
+            canManageWorkspaceSettings: true,
+          },
+        },
+        children: createElement("p", null, "Panel content"),
+      }),
+    );
+
+    expect(withoutIntegrations).not.toContain('href="/conversions"');
+    expect(withoutIntegrations).toContain('href="/settings"');
+    expect(clientNavVisibleForPermissions("conversions", ownerPermissions)).toBe(true);
+    expect(clientNavVisibleForPermissions("conversions", analystPermissions)).toBe(false);
+    expect(clientNavVisibleForPermissions("conversions", null)).toBe(false);
+  });
+
+  it("keeps the residual footer in the sidebar and the content next to the new item", () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {
+        workspace: {
+          id: "workspace_owner",
+          name: "Workspace do Owner",
+          slug: "workspace-owner",
+          role: "owner",
+          operationalStatus: "active",
+          permissions: ownerPermissions,
+        },
+        brand: { ...defaultBrandConfig, name: "Minha Agencia" },
+        children: createElement("p", null, "Panel content"),
+      }),
+    );
+
+    expect(html.split("Minha Agencia · RastrackDash · powered by PalmUP")).toHaveLength(3);
+    expect(html).toContain('href="/conversions"');
   });
 
   it("adds platform administration only for platform users", () => {
@@ -405,13 +464,14 @@ describe("navigation", () => {
       "/reports",
       "/events",
       "/integrations",
+      "/conversions",
       "/settings",
-      "/subscription",
       "/backoffice",
     ]) {
       expect(middleware).toContain(route);
     }
 
+    expect(middleware).toContain('"/conversions/:path*"');
     expect(middleware).toContain("wpptrack_session");
     expect(middleware).toContain("/login");
   });

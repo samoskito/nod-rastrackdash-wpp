@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Route,
   Send,
   Settings2,
   ShieldCheck,
@@ -49,6 +50,7 @@ const navigationIconById: Record<ClientNavigationId, LucideIcon> = {
   reports: BarChart3,
   events: Send,
   integrations: Plug,
+  conversions: Route,
   settings: Settings2,
 };
 
@@ -59,7 +61,7 @@ const navigationGroupDefinitions = [
   },
   {
     label: "Gestao",
-    ids: ["integrations", "settings"],
+    ids: ["integrations", "conversions", "settings"],
   },
 ] as const;
 

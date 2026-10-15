@@ -133,7 +133,7 @@ Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gups
 
 1. Abra o card da plataforma (Umbler Talk ou Gupshup) → **Gerar webhook** (a janela já vem fixa na plataforma; use **Adicionar conexão** se já houver outra) e copie a **URL de callback** (aparece uma única vez) para o painel da Umbler/Gupshup.
 2. **Cadastre o canal/número agora**, com o botão **Cadastrar canal/número** — você **não precisa** esperar o primeiro lead chegar. O canal fica provisório e é mesclado automaticamente quando a primeira mensagem real daquele número chegar.
-3. Vá em `/settings#whatsapp-triggers` → **Gatilhos de conversão** → **Nova regra**, limitando a regra aos canais que devem converter.
+3. Vá em `/conversions` (menu **Conversões**) → **Nova regra** e escolha o alcance: **Todos os números** ou **Números específicos**.
 
 **Data Crazy** também é uma conexão inbound por workspace, mas o fluxo de
 canal é diferente:
@@ -191,7 +191,7 @@ suportado como conexão inbound por webhook, conforme o passo 10.2.
 3. `INBOUND_CONVERSION_RULES_ENABLED=true`
 4. `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (obrigatório em produção)
 5. Redeploy da API
-6. Confirme em `/settings#whatsapp-triggers` (com a conexão WhatsApp/origem já criada) que **Nova regra** aparece disponível
+6. Confirme em `/conversions` (com a conexão WhatsApp/origem já criada) que **Nova regra** aparece disponível
 
 Detalhe completo de cada variável em [`setup/environment.md`](setup/environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
 
@@ -209,7 +209,7 @@ Repita, no ambiente publicado (não só localmente):
 - `/backoffice` → checklist completo
 - `/backoffice/license` → licença utilizável
 - `/integrations` → Meta Ads conectado e ao menos uma conexão de WhatsApp (provedor com receiver **ou** webhook de entrada) funcionando
-- Se usa gatilhos: `/settings#whatsapp-triggers` mostra a origem e o botão **Nova regra**
+- Se usa gatilhos: `/conversions` mostra a origem e o botão **Nova regra**
 - Se usou Dokploy: sem crash-loop no log do serviço da API ([`setup/troubleshooting.md`](setup/troubleshooting.md) tem o roteiro de diagnóstico)
 - Se usou Dokploy: o log de build mostra `build identity: <SHA de 40 caracteres> (source: git)` e o `/backoffice` mostra `Versão instalada` com os mesmos 7 primeiros caracteres. Você não configura isso — o build lê o commit sozinho. Se aparecer "Não foi possível verificar atualizações", siga [Versão instalada](setup/update.md#versão-instalada); nunca preencha um SHA à mão
 

@@ -177,20 +177,20 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 ## Recebo leads/webhooks mas não aparece Nova regra
 
 - **Diagnóstico:** confira na env da API se `INBOUND_WEBHOOKS_ENABLED`, `INBOUND_CONVERSION_RULES_ENABLED` e (em produção) `INBOUND_WEBHOOK_PRODUCTION_ENABLED` estão `true`, e se `INBOUND_WEBHOOK_ENCRYPTION_KEY` está preenchida — veja [`environment.md`](environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
-- **Causa provável:** o padrão de todas as `INBOUND_*` é desligado (`false`/vazio); receber leads/webhooks (UAZAPI, NOD, WAHA, Z-API, etc.) não depende dessas variáveis, mas **Gatilhos de conversão → Nova regra** depende — sem elas ligadas, a tela fica sem criar regra mesmo com leads chegando normalmente. Também pode ser um deploy antigo que ainda não aplicou uma env alterada.
+- **Causa provável:** o padrão de todas as `INBOUND_*` é desligado (`false`/vazio); receber leads/webhooks (UAZAPI, NOD, WAHA, Z-API, etc.) não depende dessas variáveis, mas **Conversões → Nova regra** depende — sem elas ligadas, a tela fica sem criar regra mesmo com leads chegando normalmente. Também pode ser um deploy antigo que ainda não aplicou uma env alterada.
 - **Correção:** defina `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gerada com node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (produção) direto no painel de env do serviço da API; redeploy a API (e o web também, se a versão publicada estiver desatualizada).
-- **Verificação:** com uma conexão WhatsApp/origem já existente, `/settings#whatsapp-triggers` mostra **Nova regra** disponível.
+- **Verificação:** com uma conexão WhatsApp/origem já existente, `/conversions` mostra **Nova regra** disponível.
 
-## As envs `INBOUND_*` estão ligadas, mas a origem não aparece em Gatilhos
+## As envs `INBOUND_*` estão ligadas, mas o número não aparece em Conversões
 
-- **Diagnóstico:** `/settings#whatsapp-triggers` abre, mas a lista "Origens conectadas" está vazia (ou não lista a conexão que você criou).
+- **Diagnóstico:** `/conversions` abre, mas em **Nova regra → Alcance** não aparece o número que você esperava (ou ele aparece como "Em breve", sem poder escolher).
 - **Causa provável, por origem:**
   - **Umbler, Gupshup, Meta WhatsApp (Cloud API):** a origem aparece assim que a conexão existe em `/integrations` (card Umbler/Gupshup na aba **Atendimento e vendas**, ou card **WhatsApp Cloud API** na aba **WhatsApp**). Se você criou a conexão no card de um provedor Uazapi/NOD API/WAHA/Z-API, criou outra coisa — são cards diferentes.
   - **Uazapi:** a origem é criada automaticamente pelo produto, mas só quando chega pelo receiver uma mensagem **enviada pelo número conectado** (atendente) ou uma mudança de etiqueta. Uma mensagem apenas recebida do cliente não cria a origem. Responda uma conversa pelo número conectado e recarregue.
-  - **WAHA e Z-API:** recebem leads normalmente, mas **ainda não têm** criação automática de origem na central de Gatilhos. É lacuna conhecida do produto, não configuração.
-  - **NOD API:** sem receiver inbound (`501`), não há origem.
+  - **WAHA, Z-API e NOD API:** recebem leads normalmente, mas **ainda não participam das regras de conversão**: na tela Conversões os números aparecem como "Em breve". É lacuna conhecida do produto, não configuração.
+  - **Gupshup, Data Crazy e WhatsApp Cloud API:** geram leads pelo webhook de entrada, mas as regras de frase, etiqueta e catálogo ainda não rodam nesses números; eles também aparecem como "Em breve" no alcance.
 - **Correção:** use o painel certo para cada plataforma e, no caso da Uazapi, gere um evento de atendente/etiqueta. Não tente criar uma conexão inbound `uazapi` na mão — a API recusa de propósito ("Conexoes UAZAPI sao criadas automaticamente a partir da instancia WhatsApp").
-- **Verificação:** a origem aparece em "Origens conectadas" com o número de canais, e **Nova regra** abre o formulário.
+- **Verificação:** o número aparece em **Nova regra → Alcance → Números específicos** (ou entra em "Todos os números"), e **Nova regra** abre o formulário.
 
 ## Canal/número não aparece para escolher na regra (Umbler/Gupshup/Meta Cloud)
 

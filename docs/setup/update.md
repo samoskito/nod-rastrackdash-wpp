@@ -90,7 +90,7 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 2. `/backoffice` → checklist de onboarding continua completo.
 3. `/backoffice/license` → licença **utilizável**.
 4. `/integrations` → as conexões que já existiam continuam lá, com o status de antes.
-5. Se você usa gatilhos: `/settings#whatsapp-triggers` continua mostrando suas origens e **Nova regra**.
+5. Se você usa regras de conversão: `/conversions` (menu **Conversões**) lista as suas regras e abre **Nova regra**. Configurações agora tem só a seção **Jornada**; as regras do Kommo continuam em Integrações → CRM → Kommo.
 6. Se você envia conversões para a Meta: faça o passo de [Conversões Meta depois desta atualização](#conversões-meta-depois-desta-atualização-trocar-token) **antes** de conferir os eventos.
 7. Versão instalada conferida como em [Conferir depois do deploy](#conferir-depois-do-deploy).
 

@@ -1477,3 +1477,43 @@ describe("KommoCrmManager: single mount and persistence of locks", () => {
     expect(document.body.innerHTML).not.toContain("AAAA-secret-BBBB");
   });
 });
+
+describe("Kommo rules editor inside the Integrations hub window", () => {
+  it("edits the Kommo conversion rules where the CRM connection lives", async () => {
+    const scope = freshScope();
+    const createRuleAction = vi.fn().mockResolvedValue({
+      ok: true,
+      message: "Regra criada.",
+      rule: { ...observationRule, id: "rule_new" },
+    });
+    render(
+      managerElement(scope, managerActions({ createRuleAction }), [
+        conn({ rules: [observationRule, productionRule] }),
+      ]),
+    );
+
+    // The rules listed in Conversões are edited here: list, create and edit.
+    expect(screen.getAllByText("Negociacao avancada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Compra ganha").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Nova regra" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
+    expect(screen.getByRole("form", { name: "Nova regra Kommo" })).toBeTruthy();
+  });
+
+  it("keeps the rules read-only for non-managers and while the license is locked", () => {
+    const scope = freshScope();
+    render(
+      managerElement(scope, managerActions(), [conn()], { canManage: false }),
+    );
+    expect(screen.getAllByText("Negociacao avancada").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Nova regra" })).toBeNull();
+
+    cleanup();
+    render(
+      managerElement(freshScope(), managerActions(), [conn()], { licenseLocked: true }),
+    );
+    const create = screen.queryByRole("button", { name: "Nova regra" });
+    expect(create === null || (create as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText(/Licença bloqueada/).length).toBeGreaterThan(0);
+  });
+});

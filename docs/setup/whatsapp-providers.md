@@ -303,8 +303,9 @@ credencial ou variável de ambiente própria neste template.
    precisa** esperar o primeiro webhook chegar: o produto cria um canal
    provisório e, quando a primeira mensagem real chegar para o mesmo
    número, ela é mesclada nesse mesmo canal (nada duplica).
-4. Vá em `/settings#whatsapp-triggers` → **Gatilhos de conversão** e crie
-   a regra em **Nova regra**, limitando-a aos canais que devem converter.
+4. Vá em `/conversions` (menu **Conversões**) e crie a regra em
+   **Nova regra**, escolhendo "Todos os números" ou apenas os números que
+   devem converter.
 
 Umbler Talk entrega também as mensagens do atendente, então regras de
 frase com autor "equipe" funcionam. Gupshup entrega apenas o que o
@@ -324,7 +325,7 @@ Consequências práticas, confirmadas no código:
   **mudança de etiqueta** em uma conversa. Depois de registrar o receiver
   no painel da Uazapi, responda uma conversa pelo número conectado (ou
   aplique uma etiqueta): a origem então aparece em
-  `/settings#whatsapp-triggers` e você cria a **Nova regra** ali. Só uma
+  `/conversions` e você cria a **Nova regra** ali. Só uma
   mensagem recebida do cliente não basta para criar a origem.
 - A ponte só funciona com as flags `INBOUND_*` ligadas (veja abaixo) —
   com elas desligadas, a avaliação de regras nem começa.

@@ -60,7 +60,7 @@ Convenção de colunas:
 
 ⚠️ **O padrão de todas as `INBOUND_*` é desligado (`false`/vazio).** Isso
 significa que, mesmo com UAZAPI, NOD API, WAHA, Z-API ou outro provedor já
-recebendo leads/webhooks, a tela **Gatilhos de conversão → Nova regra** não
+recebendo leads/webhooks, a tela **Conversões → Nova regra** não
 aparece — não é bug, é a feature desligada. Gatilhos de conversão valem para
 **qualquer origem** que use esse módulo (UAZAPI, NOD API, WAHA, Z-API, Umbler,
 Gupshup e demais integrações futuras). Se o aluno precisa criar regras de
@@ -101,7 +101,7 @@ Cole o valor gerado **direto no painel de env do serviço** (Dokploy) ou no
 4. `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (obrigatório em produção/Dokploy)
 5. `API_PUBLIC_URL=https://<domínio da sua API>` (já obrigatória — ver seção Core acima)
 6. Redeploy da API
-7. Confirmar em `/settings#whatsapp-triggers` (depois de já existir uma conexão WhatsApp/origem) que **Nova regra** está disponível
+7. Confirmar em `/conversions` (depois de já existir uma conexão WhatsApp/origem) que **Nova regra** está disponível
 
 ## Banco de dados / autenticação
 

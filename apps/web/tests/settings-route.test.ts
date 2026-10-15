@@ -357,15 +357,18 @@ describe("settings route", () => {
     expect(html).toContain('id="configuracao-conversoes"');
     expect(html).toContain('id="configuracao-operacao"');
     expect(html.match(/class="settings-domain-section/g)).toHaveLength(4);
+    // Only the funnel journey is left in this section: the rule panels live
+    // in Conversões (providers) and in the Kommo window of Integrações.
     expect(
       html.match(/class="surface-panel settings-automation-details [^"]+"/g),
-    ).toHaveLength(2);
-    expect(html).toMatch(/<details[^>]*id="whatsapp-triggers"[^>]*open=""/);
-    expect(html).toContain("Regras por conexao e canal");
-    expect(html).not.toContain("Regras antigas sem conexao");
-    expect(html).not.toContain("Criar regra legada (sem conexao)");
-    expect(html).toContain("Nenhuma conexao WhatsApp disponivel");
-    expect(html).toContain('href="/integrations"');
+    ).toHaveLength(1);
+    expect(html).toContain('<h2 id="settings-conversion-title">Jornada</h2>');
+    expect(html).not.toContain("Jornada e gatilhos");
+    expect(html).not.toContain("whatsapp-triggers");
+    expect(html).not.toContain("Regras por conexao e canal");
+    expect(html).not.toContain("Gatilhos de conversao");
+    expect(html).not.toContain("Nenhuma conexao WhatsApp disponivel");
+    expect(html).toContain('href="/conversions"');
     expect(html).toContain("Jornada do funil");
     expect(html).toContain("Salvar jornada");
     expect(html.match(/name="stageProduct:/g)).toHaveLength(1);
@@ -407,7 +410,7 @@ describe("settings route", () => {
     expect(html).not.toContain("member-manager-toggle");
   });
 
-  it("counts backend conversion rules without rendering the legacy rule UI", async () => {
+  it("no longer reads or renders conversion rules, connections or the Kommo block", async () => {
     mockSettingsFetch({
       rulesBody: [
         {
@@ -428,71 +431,6 @@ describe("settings route", () => {
           updatedAt: "2026-07-02T03:00:00.000Z",
         },
       ],
-    });
-
-    const element = await SettingsPage();
-    const html = renderToStaticMarkup(createElement("div", null, element));
-
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      "http://localhost:3333/conversion-rules",
-      expect.objectContaining({ credentials: "include" }),
-    );
-    expect(html).toContain("1/1 ativos");
-    expect(html).not.toContain("Lead qualificado por palavra");
-    expect(html).not.toContain("Palavra-chave");
-    expect(html).not.toContain("quero comprar");
-    expect(html).not.toContain("Consultoria inicial");
-    expect(html).not.toContain("Criar gatilho");
-    expect(html).not.toContain("Nome interno opcional");
-    expect(html).not.toContain("Mensagem contem palavra ou frase");
-    expect(html).not.toContain("Etiqueta e aplicada");
-    expect(html).not.toContain(
-      '<option value="OrderDelivered">Pedido entregue</option>',
-    );
-    expect(html).not.toContain("Pausar");
-    expect(html).not.toContain("Editar valor");
-    expect(html).toContain("Regras por conexao e canal");
-    expect(html).toContain("Nenhuma conexao WhatsApp disponivel");
-    expect(html).toContain('href="/integrations"');
-  });
-
-  it("points Kommo to the Integrations hub instead of mounting its manager", async () => {
-    mockSettingsFetch({ rulesBody: [] });
-
-    const element = await SettingsPage();
-    const html = renderToStaticMarkup(createElement("div", null, element));
-
-    expect(html).toContain("O Kommo agora fica em Integracoes");
-    expect(html).toContain('href="/integrations?abrir=kommo"');
-    expect(html).not.toContain('data-testid="kommo-crm-manager"');
-    expect(html).not.toContain("Mudança de estágio no CRM");
-    expect(globalThis.fetch).not.toHaveBeenCalledWith(
-      expect.stringContaining("/kommo/connections"),
-      expect.anything(),
-    );
-  });
-
-  it("centralizes Umbler rules by connection without legacy adaptation controls", async () => {
-    mockSettingsFetch({
-      rulesBody: [
-        {
-          id: "legacy_purchase_1",
-          workspaceId: "workspace_1",
-          name: "Compra por aviso",
-          triggerType: "keyword",
-          triggerValue: "AVISO DE COMPRA",
-          matchMode: "exact",
-          eventName: "Purchase",
-          pixelId: null,
-          defaultValueCents: 9990,
-          defaultCurrency: "BRL",
-          defaultContentName: "Pedido medio",
-          defaultItems: null,
-          active: true,
-          createdAt: "2026-07-22T12:00:00.000Z",
-          updatedAt: "2026-07-22T12:00:00.000Z",
-        },
-      ],
       providerConnections: [
         {
           id: "connection_umbler_1",
@@ -500,62 +438,39 @@ describe("settings route", () => {
           provider: "umbler",
           displayName: "Umbler Comercial",
           parserVersion: "umbler/v1",
-          parserReleaseStatus: "certified",
           status: "production",
-          productionActivatedAt: "2026-07-22T12:00:00.000Z",
-          lastDeliveryAt: "2026-07-22T12:00:00.000Z",
-          lastSuccessfulParseAt: "2026-07-22T12:00:00.000Z",
+          productionActivatedAt: null,
+          lastDeliveryAt: null,
+          lastSuccessfulParseAt: null,
           createdAt: "2026-07-22T12:00:00.000Z",
           updatedAt: "2026-07-22T12:00:00.000Z",
         },
       ],
-      providerChannels: {
-        connection_umbler_1: [
-          {
-            id: "channel_umbler_1",
-            connectionId: "connection_umbler_1",
-            organizationId: "organization_1",
-            providerChannelId: "provider_channel_1",
-            connectedPhone: "+5511999990001",
-            channelName: "Vendas",
-            status: "active",
-            productionActivatedAt: "2026-07-22T12:00:00.000Z",
-            firstSeenAt: "2026-07-22T12:00:00.000Z",
-            lastSeenAt: "2026-07-22T12:00:00.000Z",
-            routes: [],
-            readiness: {
-              state: "ready",
-              blockers: [],
-              routeCount: 1,
-              validRouteCount: 1,
-              totalCtwa: 1,
-              routedCtwa: 1,
-              unresolvedCtwa: 0,
-              retainedCtwa: 1,
-              retainedRoutedCtwa: 1,
-              payloadUnavailableCtwa: 0,
-              alreadyMaterializedCtwa: 0,
-              nextPayloadExpiresAt: null,
-            },
-            createdAt: "2026-07-22T12:00:00.000Z",
-            updatedAt: "2026-07-22T12:00:00.000Z",
-          },
-        ],
-      },
     });
 
     const element = await SettingsPage();
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Umbler Comercial");
-    expect(html).toContain("1 canal(is) descoberto(s)");
-    expect(html).toContain("Regras por conexao e canal");
-    expect(html).toContain('href="/integrations"');
-    expect(html).not.toContain("Compra por aviso");
-    expect(html).not.toContain("Adaptar para conexao");
-    expect(html).not.toContain("Regras antigas sem conexao");
-    expect(html).not.toContain("Criar regra legada (sem conexao)");
-    expect(html).not.toContain("legacy-trigger-section");
+    const fetched = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([input]) => String(input),
+    );
+    for (const path of [
+      "/conversion-rules",
+      "/conversion-rules/providers",
+      "/integrations/inbound-webhooks",
+      "/kommo/connections",
+    ]) {
+      expect(fetched.some((url) => url.endsWith(path))).toBe(false);
+    }
+    expect(fetched.some((url) => url.endsWith("/conversion-rules/funnel"))).toBe(true);
+    expect(html).not.toContain("Lead qualificado por palavra");
+    expect(html).not.toContain("Umbler Comercial");
+    expect(html).not.toContain("quero comprar");
+    expect(html).not.toContain("Criar gatilho");
+    expect(html).not.toContain("O Kommo agora fica em Integracoes");
+    expect(html).not.toContain('data-testid="kommo-crm-manager"');
+    expect(html).not.toContain("ativos");
+    expect(html).toContain("As regras de conversão ficam em Conversões");
   });
 
   it("stops loading WhatsApp label suggestions once the legacy builder is gone", async () => {
@@ -675,35 +590,16 @@ describe("settings route", () => {
     expect(html).not.toContain('id="whatsapp-label-options"');
   });
 
-  it("hides conversion rule mutation controls for workspace members", async () => {
-    mockSettingsFetch({
-      workspaceRole: "member",
-      rulesBody: [
-        {
-          id: "rule_1",
-          workspaceId: "workspace_1",
-          name: "Lead qualificado por palavra",
-          triggerType: "keyword",
-          triggerValue: "quero comprar",
-          matchMode: "contains",
-          eventName: "QualifiedLead",
-          pixelId: null,
-          active: true,
-          createdAt: "2026-07-02T03:00:00.000Z",
-          updatedAt: "2026-07-02T03:00:00.000Z",
-        },
-      ],
-    });
+  it("keeps the journey read-only for workspace members", async () => {
+    mockSettingsFetch({ workspaceRole: "member", rulesBody: [] });
 
     const element = await SettingsPage();
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).not.toContain("Lead qualificado por palavra");
-    expect(html).not.toContain("Sem permissao para editar regras");
+    expect(html).toContain("Sem permissao para editar a jornada.");
+    expect(html).not.toContain("Salvar jornada");
     expect(html).not.toContain("Criar gatilho");
-    expect(html).not.toContain("Criar regra legada (sem conexao)");
-    expect(html).not.toContain("Pausar");
-    expect(html).toContain("Regras por conexao e canal");
+    expect(html).not.toContain("Regras por conexao e canal");
   });
 
   it("lets the platform owner manage the team and resend owner access in support mode", async () => {
@@ -740,7 +636,7 @@ describe("settings route", () => {
     expect(html).not.toContain("Reenviar e-mail de acesso");
   });
 
-  it("renders an unavailable state without demo rules when conversion rules fail", async () => {
+  it("renders an unavailable state when the workspace cannot be read", async () => {
     mockSettingsFetch({
       rulesBody: { message: "unavailable" },
       rulesStatus: 503,
@@ -752,25 +648,7 @@ describe("settings route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("API indisponivel");
-    expect(html).toContain("Regras indisponiveis");
-    expect(html).not.toContain("Nao foi possivel carregar regras");
-    expect(html).toMatch(
-      /<details[^>]*class="[^"]*conversion-rules-panel[^"]*"[^>]*open/,
-    );
-    expect(html).not.toContain("Novo lead");
-    expect(html).not.toContain("Compra confirmada");
-    expect(html).not.toContain("Venda fechada");
-  });
-
-  it("renders an empty state without demo rules when no conversion rules exist", async () => {
-    mockSettingsFetch({ rulesBody: [] });
-
-    const element = await SettingsPage();
-    const html = renderToStaticMarkup(createElement("div", null, element));
-
-    expect(html).toContain("Nenhuma conexao WhatsApp disponivel");
-    expect(html).toContain('href="/integrations"');
-    expect(html).not.toContain("Nenhuma regra configurada");
+    expect(html).not.toContain("Regras indisponiveis");
     expect(html).not.toContain("Novo lead");
     expect(html).not.toContain("Compra confirmada");
     expect(html).not.toContain("Venda fechada");

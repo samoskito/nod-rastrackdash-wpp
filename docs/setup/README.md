@@ -32,7 +32,7 @@ Os dois caminhos de instalação convergem nos mesmos passos de produto: licenç
 5. Crie o primeiro administrador e o primeiro workspace/cliente.
 6. [Meta Ads manual](meta-manual.md) (usuário do sistema) — anúncios e Pixel, não mensagens.
 7. WhatsApp, tudo em `/integrations` (o **Hub de Integrações**, com abas **WhatsApp**, **Atendimento e vendas**, **Anúncios** e **CRM**; cada card abre uma janela de conexão): aba **WhatsApp** com Uazapi BYO e WhatsApp Cloud API (Meta) — WAHA, Z-API e NOD API aparecem como **Em breve** (quem já tem conexão continua gerenciando); aba **Atendimento e vendas** com Umbler Talk, Gupshup e Data Crazy; aba **Anúncios** com a Meta Ads (login social ou token; tráfego e conversões CAPI, sem receber conversas); aba **CRM** com o Kommo. Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
-   - Precisa de **Gatilhos de conversão → Nova regra**? As envs `INBOUND_*` são **obrigatórias** e vêm desligadas por padrão.
+   - Precisa de **Conversões → Nova regra**? As envs `INBOUND_*` são **obrigatórias** e vêm desligadas por padrão.
 8. Personalização de marca opcional: `BRAND_*` (rodapé residual não removível).
 9. Deploy Dokploy (API) + Vercel (web) — ou permaneça local.
 10. [Guia de cobrança](billing/README.md) — opcional, gateway BYO do aluno.

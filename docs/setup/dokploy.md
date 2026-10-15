@@ -171,11 +171,11 @@ No serviço da API, abra o **painel/formulário de variáveis de ambiente do ser
 
 ### 6.5 Gatilhos de conversão — obrigatórias no caminho do aluno
 
-- **`INBOUND_WEBHOOKS_ENABLED=true`**, **`INBOUND_CONVERSION_RULES_ENABLED=true`** e **`INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`** — sem essas três, **Gatilhos de conversão → Nova regra** não aparece, mesmo com UAZAPI/NOD/WAHA/Z-API (ou outra origem) já recebendo leads. O padrão de todas as `INBOUND_*` é desligado. Isso vale para **qualquer provedor** que use gatilhos de conversão, não só Umbler/Gupshup.
+- **`INBOUND_WEBHOOKS_ENABLED=true`**, **`INBOUND_CONVERSION_RULES_ENABLED=true`** e **`INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`** — sem essas três, **Conversões → Nova regra** não aparece, mesmo com UAZAPI/NOD/WAHA/Z-API (ou outra origem) já recebendo leads. O padrão de todas as `INBOUND_*` é desligado. Isso vale para **qualquer provedor** que use gatilhos de conversão, não só Umbler/Gupshup.
 - **`INBOUND_WEBHOOK_ENCRYPTION_KEY`** — gere com `node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))"` e cole direto no painel do Dokploy. Formato completo, checklist e o motivo de cada variável em [`environment.md`](environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
 - Depois de preencher, faça **redeploy da API**.
 
-**Validação:** com uma conexão WhatsApp/origem já existente (passo 13), abra `/settings#whatsapp-triggers` no ambiente publicado e confirme que **Nova regra** aparece disponível.
+**Validação:** com uma conexão WhatsApp/origem já existente (passo 13), abra `/conversions` no ambiente publicado e confirme que **Nova regra** aparece disponível.
 
 ### 6.6 Segredos gerados
 
@@ -284,7 +284,7 @@ A chave vem da env `LICENSE_KEY` do serviço — não a cole no comando nem em c
   ⚠️ **Meta WhatsApp (Cloud API) serve para atribuição de CTWA, não para gatilho de atendente** — esse webhook não entrega as mensagens que o seu time envia. Para gatilho por palavra-chave/tag do atendente, use Uazapi (BYO) ou Umbler Talk.
   ⚠️ **Gatilhos de conversão exigem as envs `INBOUND_*` do passo [6.5](#65-gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno)** — sem `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true`, **Nova regra** não aparece, mesmo com o provedor já `connected` e recebendo leads.
 
-**Validação:** `/integrations` mostra Meta Ads conectado e ao menos uma conexão de WhatsApp funcionando; se você usa gatilhos, `/settings#whatsapp-triggers` lista a origem e abre **Nova regra**.
+**Validação:** `/integrations` mostra Meta Ads conectado e ao menos uma conexão de WhatsApp funcionando; se você usa gatilhos, `/conversions` lista a origem e abre **Nova regra**.
 
 ## 14. Marca opcional e verificação pós-deploy
 

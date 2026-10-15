@@ -101,10 +101,53 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   `connectionId`/`parserReleaseId` become nullable, with a data precheck
   before the new CHECKs. Existing rules keep working exactly as before until
   the student unifies them or creates a "Todos os números" rule. No new env
-  var, no new dependency. The Conversões screen (web) ships separately.
+  var, no new dependency. The Conversões screen (web) is described in the
+  next entry.
   **Roll back:** pause/delete "Todos os números" rules and reactivate the
   originals before downgrading; the previous version ignores the new columns
   (optional rollback SQL in `docs/releases/unreleased.json`).
+
+- **Conversões screen** (`/conversions`, web; Fase 3 UI): a new
+  **Conversões** item in the sidebar (group Gestão, between Integrações and
+  Configurações, for people who manage integrations) lists every rule in one
+  place — phrase, WhatsApp label, catalog order, Umbler automation and, for
+  the account owner, the Kommo stages (read-only, with **Gerenciar no Hub** →
+  `/integrations?abrir=kommo`). Filters: origem, número, evento and status
+  (envio automático, observação, pausadas, unificadas). **Nova regra** has four
+  steps (Origem → Evento → Alcance → Detalhes), offers only what
+  `GET /conversion-rules/providers/capabilities` says this edition supports
+  and the student has connected, and lets the reach be **Todos os números**
+  (new numbers join automatically) or **Números específicos**. WAHA, Z-API
+  and NOD API numbers (and Gupshup / Data Crazy / Cloud API numbers, which do
+  not run rules yet) show as **Em breve**. "Substituída em X" notes explain
+  where a specific rule replaces a global one. **Unificar** is offered, never
+  forced, and the review explains it can be undone. **Gerenciar** edits a
+  rule, shows the Umbler automation address (a new address is shown once) and
+  setup, tests a catalog order and deletes; **Execuções** is the history of
+  any rule, while **Eventos recebidos** (payload and Reprocessar) exists only
+  for the Umbler automation. Old keyword/label rules appear as **Regras
+  antigas** (pause, edit value, connect to numbers). New create is idempotent
+  (`Idempotency-Key`); an unconfirmed create is checked with
+  `GET providers/create-receipt` before anything is resent, and never after a
+  license 423. With a locked license every write control is disabled and shows
+  "Licença bloqueada: …". New files: `apps/web/src/app/(app)/conversions/*`,
+  CSS block at the end of `layout-system.css`; no new dependency or env var.
+- **Settings keeps only "Jornada"**: the "Jornada e gatilhos" section is now
+  "Jornada" (funnel stages) and no longer loads or shows rule panels or the
+  Kommo shortcut. Provider rules live in Conversões; Kommo rules are edited in
+  Integrações → CRM → Kommo. `ProviderConversionRulePanel`
+  (`integrations/provider-conversion-rule-panel.tsx`) and
+  `integrations/provider-conversion-rule-actions.ts` were removed; the actions
+  now live in `conversions/actions.ts` (with license 423 handling). **If you
+  customized** `settings/page.tsx` or those two files, take the official
+  `settings/page.tsx` and re-apply your change inside "Jornada" (or, for rule
+  panels, in `conversions/new-rule-flow.tsx`, `rule-manage.tsx`,
+  `message-phrase-fields.tsx`); accept the removal of the two deleted files.
+  Branding, the residual footer, the fixed sidebar and the license banner are
+  untouched. **Verify:** open Conversões (existing rules show as "Números
+  específicos"), Configurações (only Jornada) and Integrações → CRM → Kommo;
+  as a member the Conversões item is hidden. **Roll back:** revert the web
+  change and redeploy; no data changes.
 
 ### Fixed
 
