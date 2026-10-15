@@ -1130,13 +1130,18 @@ html[data-presentation-mode="active"]
 }
 
 /* License banner is a sibling of the app shell, so it is not offset by
-   .content: keep it clear of the fixed sidebar (260px, 76px collapsed). */
-.license-banner {
-  margin: 16px 26px 0 calc(260px + 26px);
+   .content. Mirror the shell's --sidebar-width on :root (only the product
+   shell has a sidebar; /backoffice pages render the banner unoffset). */
+:root {
+  --sidebar-width: 260px;
 }
 
-body:has(.app-shell.sidebar-collapsed) .license-banner {
-  margin-left: calc(76px + 26px);
+:root:has(.app-shell.sidebar-collapsed) {
+  --sidebar-width: 76px;
+}
+
+:root:has(.app-shell) .license-banner {
+  margin: 16px 26px 0 calc(var(--sidebar-width) + 26px);
 }
 
 @media (max-width: 900px) {
@@ -1149,12 +1154,13 @@ body:has(.app-shell.sidebar-collapsed) .license-banner {
     display: none;
   }
 
-  .license-banner {
-    margin: 12px 14px 0;
+  :root,
+  :root:has(.app-shell.sidebar-collapsed) {
+    --sidebar-width: 0px;
   }
 
-  body:has(.app-shell.sidebar-collapsed) .license-banner {
-    margin-left: 14px;
+  :root:has(.app-shell) .license-banner {
+    margin: 12px 14px 0;
   }
 }
 

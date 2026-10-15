@@ -34,6 +34,28 @@ vi.mock("next/navigation", () => ({
   redirect: redirectMock,
 }));
 
+function globalsCss(): string {
+  return readFileSync(join(process.cwd(), "src/styles/globals.css"), "utf8");
+}
+
+/** Bodies of every rule whose selector list contains `selector` exactly. */
+function ruleBodies(selector: string): string[] {
+  const bodies: string[] = [];
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  for (const m of globalsCss().matchAll(re)) {
+    const selectors = m[1]
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split(",")
+      .map((x) => x.replace(/\s+/g, " ").trim());
+    if (selectors.includes(selector)) bodies.push(m[2]);
+  }
+  return bodies;
+}
+
+function css_has(selector: string): boolean {
+  return ruleBodies(selector).length > 0;
+}
+
 const fullOwnerPermissions = {
   canInviteMembers: true,
   canManageMembers: true,
@@ -433,41 +455,52 @@ describe("product app layout", () => {
   });
 
   it("never leaves the footer hidden: mobile and collapsed sidebar fall back to the content footer", () => {
-    const css = readFileSync(
-      join(process.cwd(), "src/styles/globals.css"),
-      "utf8",
-    );
-    const mobile = css.slice(
-      css.indexOf("@media (max-width: 900px) {\n  .content-footer"),
-    );
+    const css = ruleBodies(".content-footer");
 
-    expect(css).toMatch(/\.content-footer\s*{[^}]*display:\s*none/s);
-    expect(css).toMatch(
-      /\.sidebar-collapsed \.content-footer\s*{[^}]*display:\s*block/s,
-    );
-    expect(mobile).toMatch(/\.content-footer\s*{[^}]*display:\s*block/s);
-    expect(mobile).toMatch(/\.sidebar \.brand-footer\s*{[^}]*display:\s*none/s);
-    // no rule may hide the content footer or a footer outside the sidebar
-    expect(css).not.toMatch(/\.sidebar-collapsed \.brand-footer\s*{/);
+    expect(css.some((body) => /display:\s*none/.test(body))).toBe(true);
+    expect(
+      ruleBodies(".sidebar-collapsed .content-footer").some((body) =>
+        /display:\s*block/.test(body),
+      ),
+    ).toBe(true);
+    expect(
+      css.some((body) => /display:\s*block/.test(body)),
+    ).toBe(true); // mobile media query
+    expect(
+      ruleBodies(".sidebar .brand-footer").some((body) =>
+        /display:\s*none/.test(body),
+      ),
+    ).toBe(true);
+    // no rule may hide a footer outside the sidebar
+    expect(ruleBodies(".sidebar-collapsed .brand-footer")).toEqual([]);
   });
 
-  it("keeps the license banner clear of the fixed sidebar on desktop and full width on mobile", () => {
-    const css = readFileSync(
-      join(process.cwd(), "src/styles/globals.css"),
+  it("offsets the license banner by --sidebar-width only inside the product shell, never in /backoffice", () => {
+    const offset = ruleBodies(":root:has(.app-shell) .license-banner");
+
+    expect(
+      offset.some((body) =>
+        /margin:[^;]*calc\(var\(--sidebar-width\)\s*\+\s*26px\)/.test(body),
+      ),
+    ).toBe(true);
+    // the unscoped selector must not carry any margin (backoffice has no sidebar)
+    expect(
+      ruleBodies(".license-banner").filter((body) => /margin/.test(body)),
+    ).toEqual([]);
+    expect(
+      ruleBodies(".backoffice-status-banners .license-banner"),
+    ).toEqual([]);
+    expect(ruleBodies(":root").some((b) => /--sidebar-width:\s*260px/.test(b))).toBe(true);
+    expect(css_has(":root:has(.app-shell.sidebar-collapsed)")).toBe(true);
+    expect(ruleBodies(".sidebar").some((b) => /position:\s*fixed/.test(b))).toBe(true);
+    expect(ruleBodies(".sidebar").some((b) => /height:\s*100vh/.test(b))).toBe(true);
+    // the banner is mounted by /backoffice without the app shell
+    const backoffice = readFileSync(
+      join(process.cwd(), "src/components/backoffice-status-banners.tsx"),
       "utf8",
     );
-
-    expect(css).toMatch(
-      /\.license-banner\s*{[^}]*margin:\s*16px 26px 0 calc\(260px \+ 26px\)/s,
-    );
-    expect(css).toContain(
-      "body:has(.app-shell.sidebar-collapsed) .license-banner",
-    );
-    expect(css).toMatch(
-      /@media \(max-width: 900px\) {\s*\.content-footer[\s\S]*?\.license-banner\s*{[^}]*margin:\s*12px 14px 0/,
-    );
-    expect(css).toMatch(/\.sidebar\s*{[^}]*position:\s*fixed/s);
-    expect(css).toMatch(/\.sidebar\s*{[^}]*height:\s*100vh/s);
+    expect(backoffice).toContain("<LicenseStatusBanner />");
+    expect(backoffice).not.toContain("app-shell");
   });
 
   it("passes server-computed brand props into the client app shell instead of NEXT_PUBLIC_ env sprawl", () => {
