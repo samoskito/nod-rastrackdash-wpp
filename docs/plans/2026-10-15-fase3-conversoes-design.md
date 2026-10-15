@@ -74,8 +74,14 @@ Sem backfill. Preserva `ProviderConversionRuleConfig`, canais, endpoints, execu�
    no Hub → CRM.
 3. Todas as regras aparecem como "Números específicos", com os mesmos números. Nada muda até o
    aluno unificar ou criar uma regra "Todos os números".
-4. Rollback: antes de voltar de versão, pausar/excluir regras "Todos os números" e reativar as
-   originais; a versão anterior ignora as colunas novas. SQL de reversão opcional no guia.
+4. Rollback: antes de voltar de versão, EXCLUIR (pausar não basta) toda regra sem conexão —
+   regras "Todos os números" e regras de "Números específicos" com números de conexões
+   diferentes — e reativar as originais unificadas. Com qualquer regra assim no banco, mesmo
+   pausada, a versão anterior falha ao listar regras (`GET /conversion-rules/providers`, erro
+   Prisma P2032). Conferir antes de voltar:
+   `SELECT count(*) FROM "ProviderConversionRuleConfig" WHERE "connectionId" IS NULL AND "removedAt" IS NULL`
+   deve dar 0. O histórico (execuções) dessas regras excluídas pode não abrir na versão anterior.
+   A versão anterior ignora as colunas novas; SQL de reversão opcional no guia.
 5. Verificação: regras existentes continuam disparando (Eventos recebidos e Eventos Meta).
 Sem variável nova e sem dependência nova (confirmar na implementação).
 
