@@ -4,6 +4,8 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type {
   ProviderConversionDecisionDto,
+  ProviderConversionCatalogDto,
+  ProviderConversionDecisionCatalogSnapshotDto,
   ProviderConversionDecisionRuleSnapshotDto,
 } from "@wpptrack/shared";
 import {
@@ -54,6 +56,12 @@ const ruleInclude = {
     },
   },
   parserRelease: true,
+  catalog: {
+    include: {
+      attributes: { orderBy: { position: "asc" } },
+      variants: { orderBy: { createdAt: "asc" } },
+    },
+  },
 } satisfies Prisma.ProviderConversionRuleConfigInclude;
 
 type Rule = Prisma.ProviderConversionRuleConfigGetPayload<{
@@ -210,11 +218,14 @@ export class UazapiProviderConversionService {
     let eligibleExecutionId: string | null = null;
 
     for (const rule of rules) {
-      const ruleSnapshot = this.ruleSnapshot(rule);
+      const ruleSnapshot = this.ruleSnapshot(
+        rule,
+        this.teamMessageTriggerType(rule),
+      );
       const decisionInput: ProviderConversionDecisionInput = {
         parserVersion: PARSER_VERSION,
         rule: ruleSnapshot,
-        catalog: null,
+        catalog: this.catalogSnapshot(rule),
         leadResolution,
         contactIdentityHash: hashPhoneIdentity(phone) ?? null,
         occurrence: {
@@ -668,7 +679,7 @@ export class UazapiProviderConversionService {
     workspaceId: string,
     connectionId: string,
     channelId: string,
-    triggerType: "message_phrase" | "provider_automation" = "message_phrase",
+    triggerType: "team_message" | "provider_automation" = "team_message",
   ): Promise<Rule[]> {
     const candidates = (await this.prisma.providerConversionRuleConfig.findMany(
       {
@@ -677,7 +688,12 @@ export class UazapiProviderConversionService {
           removedAt: null,
           conversionRule: {
             active: true,
-            triggerType,
+            // Team messages run phrase AND structured catalog rules (same as
+            // the Umbler observation and the SaaS).
+            triggerType:
+              triggerType === "team_message"
+                ? { in: ["structured_catalog", "message_phrase"] }
+                : { equals: triggerType },
           },
           ...providerRuleCandidateWhere({
             connectionId,
@@ -862,9 +878,71 @@ export class UazapiProviderConversionService {
     return null;
   }
 
+  private teamMessageTriggerType(
+    rule: Rule,
+  ): "message_phrase" | "structured_catalog" {
+    return rule.conversionRule.triggerType === "structured_catalog"
+      ? "structured_catalog"
+      : "message_phrase";
+  }
+
+  private catalogSnapshot(
+    rule: Rule,
+  ): ProviderConversionDecisionCatalogSnapshotDto | null {
+    if (
+      rule.conversionRule.triggerType !== "structured_catalog" ||
+      !rule.catalog
+    ) {
+      return null;
+    }
+    const catalog = this.catalogDto(rule);
+    const version = createHash("sha256")
+      .update(JSON.stringify(catalog), "utf8")
+      .digest("hex");
+    return { version: `catalog-v1:${version}`, catalog };
+  }
+
+  private catalogDto(rule: Rule): ProviderConversionCatalogDto {
+    const catalog = rule.catalog;
+    if (!catalog) {
+      throw new Error("Structured catalog rule is missing its catalog");
+    }
+    const strings = (value: Prisma.JsonValue): string[] =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+    return {
+      id: catalog.id,
+      name: catalog.name,
+      productName: catalog.productName,
+      currency: catalog.currency,
+      active: catalog.active,
+      attributes: catalog.attributes.map((attribute) => ({
+        id: attribute.id,
+        position: attribute.position,
+        key: attribute.key,
+        label: attribute.label,
+      })),
+      variants: catalog.variants.map((variant) => ({
+        id: variant.id,
+        normalizedKey: variant.normalizedKey,
+        attributeValues: strings(variant.attributeValues),
+        aliases: Array.isArray(variant.aliases)
+          ? variant.aliases.map((item) => strings(item))
+          : [],
+        valueCents: variant.valueCents,
+        contentName: variant.contentName,
+        active: variant.active,
+      })),
+    };
+  }
+
   private ruleSnapshot(
     rule: Rule,
-    triggerType: "message_phrase" | "provider_automation" = "message_phrase",
+    triggerType:
+      | "message_phrase"
+      | "structured_catalog"
+      | "provider_automation" = "message_phrase",
   ): ProviderConversionDecisionRuleSnapshotDto {
     const eventName = this.eventName(rule);
     const messagePhrase = readMessagePhraseConfig(
@@ -892,8 +970,10 @@ export class UazapiProviderConversionService {
       defaultValueCents: rule.conversionRule.defaultValueCents,
       defaultCurrency: rule.conversionRule.defaultCurrency,
       defaultContentName: rule.conversionRule.defaultContentName,
-      valueMode: messagePhrase.valueMode,
-      exampleMessage: messagePhrase.exampleMessage,
+      valueMode:
+        triggerType === "message_phrase" ? messagePhrase.valueMode : "fixed",
+      exampleMessage:
+        triggerType === "message_phrase" ? messagePhrase.exampleMessage : null,
       version: `rule-v1:${rule.updatedAt.getTime()}:${rule.conversionRule.updatedAt.getTime()}`,
     };
   }

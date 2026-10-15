@@ -717,6 +717,56 @@ describe("provider rules API: workspace scope", () => {
   });
 });
 
+describe("provider rules API: canonical channel of a phone", () => {
+  it("warns when the canonical channel of a phone observes while another channel of it is in production", async () => {
+    const world = createWorld();
+    // Same line on Umbler (oldest, but its connection is in observation) and
+    // on the Uazapi instance A (connection in production).
+    world.channels.find((row) => row.id === "channel_umbler")!.connectedPhone =
+      "5511987654321";
+    world.channels.find((row) => row.id === "channel_qr_a")!.connectedPhone =
+      "1187654321";
+    world.connections.find((row) => row.id === "connection_umbler")!.status =
+      "observation";
+
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers" }),
+      "user_1",
+    );
+
+    // Selection stays as in the SaaS (active channel first, then oldest)...
+    expect(rule).toMatchObject({
+      effectiveChannelIds: ["channel_umbler", "channel_qr_b"],
+      duplicatePhoneChannelIds: ["channel_qr_a"],
+      // ...and the UI gets what it needs to warn.
+      observationCanonicalChannels: [
+        {
+          canonicalChannelId: "channel_umbler",
+          productionChannelIds: ["channel_qr_a"],
+        },
+      ],
+    });
+    expect(providerConversionRuleListSchema.parse([rule])).toHaveLength(1);
+  });
+
+  it("reports nothing when the canonical channel is in production", async () => {
+    const world = createWorld();
+    world.channels.find((row) => row.id === "channel_umbler")!.connectedPhone =
+      "5511987654321";
+    world.channels.find((row) => row.id === "channel_qr_a")!.connectedPhone =
+      "1187654321";
+
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers" }),
+      "user_1",
+    );
+
+    expect(rule.observationCanonicalChannels).toEqual([]);
+  });
+});
+
 describe("provider rules API: idempotent create", () => {
   it("replays a committed create with the same key and refuses another body", async () => {
     const world = createWorld();
@@ -1132,7 +1182,7 @@ describe("provider rules API: Conversoes screen support", () => {
       ),
     ).toEqual({
       message_phrase: ["umbler", "uazapi"],
-      structured_catalog: ["umbler"],
+      structured_catalog: ["umbler", "uazapi"],
       whatsapp_label: ["uazapi"],
       automation_umbler: ["umbler"],
     });

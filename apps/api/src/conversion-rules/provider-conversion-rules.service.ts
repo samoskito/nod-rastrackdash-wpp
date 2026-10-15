@@ -112,6 +112,7 @@ type ScopeInfo = {
   overriddenChannelIds: string[];
   overriddenBy: Array<{ channelId: string; providerRuleIds: string[] }>;
   duplicatePhoneChannelIds: string[];
+  observationCanonicalChannels: Array<{ canonicalChannelId: string; productionChannelIds: string[] }>;
 };
 
 @Injectable()
@@ -1408,6 +1409,7 @@ export class ProviderConversionRulesService {
           newlyCoveredChannelIds: coverage.newlyCoveredChannelIds,
           overriddenChannelIds: coverage.overriddenChannelIds,
           duplicatePhoneChannelIds: coverage.duplicatePhoneChannelIds,
+          observationCanonicalChannels: coverage.observationCanonicalChannels,
           existingGlobalRuleId: globalsByKey.get(key)?.id ?? null,
         };
       }),
@@ -1767,6 +1769,7 @@ export class ProviderConversionRulesService {
     newlyCoveredChannelIds: string[];
     overriddenChannelIds: string[];
     duplicatePhoneChannelIds: string[];
+    observationCanonicalChannels: Array<{ canonicalChannelId: string; productionChannelIds: string[] }>;
   } {
     const first = members[0]!;
     const memberIds = new Set(members.map((rule) => rule.id));
@@ -1793,6 +1796,7 @@ export class ProviderConversionRulesService {
       ),
       overriddenChannelIds: placement.overriddenChannelIds,
       duplicatePhoneChannelIds: placement.duplicatePhoneChannelIds,
+      observationCanonicalChannels: placement.observationCanonicalChannels,
     };
   }
 
@@ -1811,6 +1815,7 @@ export class ProviderConversionRulesService {
     overriddenChannelIds: string[];
     overriddenBy: Array<{ channelId: string; providerRuleIds: string[] }>;
     duplicatePhoneChannelIds: string[];
+    observationCanonicalChannels: Array<{ canonicalChannelId: string; productionChannelIds: string[] }>;
   } {
     const effectiveChannelIds: string[] = [];
     const overriddenChannelIds: string[] = [];
@@ -1834,11 +1839,37 @@ export class ProviderConversionRulesService {
         duplicatePhoneChannelIds.push(channel.id);
       else if (result.applicable.length) effectiveChannelIds.push(channel.id);
     }
+    // The canonical channel of a phone is chosen like the SaaS (active
+    // first, then the oldest). When it is not ready to send (its connection
+    // is in observation) while another channel of the same phone is, the
+    // global rule only observes that phone: report it for the UI to warn.
+    const duplicates = new Set(duplicatePhoneChannelIds);
+    const byId = new Map(channels.map((channel) => [channel.id, channel]));
+    const observationCanonicalChannels: Array<{ canonicalChannelId: string; productionChannelIds: string[] }> = [];
+    for (const channelId of effectiveChannelIds) {
+      const canonical = byId.get(channelId);
+      if (!canonical || canonical.productionReady !== false) continue;
+      const productionChannelIds = samePhoneChannels(channels, channelId)
+        .filter(
+          (sibling) =>
+            sibling.id !== channelId &&
+            duplicates.has(sibling.id) &&
+            sibling.productionReady === true,
+        )
+        .map((sibling) => sibling.id);
+      if (productionChannelIds.length > 0) {
+        observationCanonicalChannels.push({
+          canonicalChannelId: channelId,
+          productionChannelIds,
+        });
+      }
+    }
     return {
       effectiveChannelIds,
       overriddenChannelIds,
       overriddenBy,
       duplicatePhoneChannelIds,
+      observationCanonicalChannels,
     };
   }
 
@@ -2061,6 +2092,7 @@ export class ProviderConversionRulesService {
         overriddenChannelIds: [],
         overriddenBy: [],
         duplicatePhoneChannelIds: [],
+        observationCanonicalChannels: [],
       };
     }
     if (!rule.conversionRule.active) {
@@ -2069,6 +2101,7 @@ export class ProviderConversionRulesService {
         overriddenChannelIds: [],
         overriddenBy: [],
         duplicatePhoneChannelIds: [],
+        observationCanonicalChannels: [],
       };
     }
     return this.globalPlacement(rule, peers, channels);
@@ -2603,6 +2636,7 @@ export class ProviderConversionRulesService {
       overriddenChannelIds: [],
       overriddenBy: [],
       duplicatePhoneChannelIds: [],
+      observationCanonicalChannels: [],
     };
     const messagePhrase =
       rule.conversionRule.triggerType === "message_phrase"
@@ -2644,6 +2678,7 @@ export class ProviderConversionRulesService {
       overriddenChannelIds: effective.overriddenChannelIds,
       overriddenBy: effective.overriddenBy,
       duplicatePhoneChannelIds: effective.duplicatePhoneChannelIds,
+      observationCanonicalChannels: effective.observationCanonicalChannels,
       globalPrecedence: PROVIDER_RULE_GLOBAL_PRECEDENCE,
       unifiedIntoRuleId: rule.unifiedIntoProviderRuleId ?? null,
       triggerPhrases: rule.messageTriggerPhrases,
