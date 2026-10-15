@@ -80,7 +80,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 - **Diagnóstico:** a resposta traz "Receiver inbound para nod_api ainda nao esta disponivel".
 - **Causa:** o `nod_api` tem adapter de status/health, mas **ainda não tem parser/receiver inbound** neste código. Não é configuração.
-- **Correção:** para receber mensagens hoje, use Uazapi (BYO), WAHA, Z-API, Umbler, Gupshup ou Meta WhatsApp (Cloud API) — veja [`whatsapp-providers.md`](whatsapp-providers.md#matriz-de-ingestão-inbound-o-que-realmente-chega-hoje). Não invente uma URL alternativa.
+- **Correção:** para receber mensagens hoje, use Uazapi (BYO), Umbler, Gupshup ou Meta WhatsApp (Cloud API) — veja [`whatsapp-providers.md`](whatsapp-providers.md#matriz-de-ingestão-inbound-o-que-realmente-chega-hoje). Não invente uma URL alternativa.
 - **Verificação:** com um provedor com receiver pronto, o evento de teste é aceito com `202`.
 
 ## Meta WhatsApp (Cloud API): a Meta recusa o webhook na verificação

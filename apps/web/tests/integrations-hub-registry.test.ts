@@ -144,11 +144,15 @@ describe("integration registry", () => {
         .map((p) => p.id);
     expect(inTab("whatsapp")).toEqual([
       "uazapi_byo",
-      "waha",
       "meta_cloud",
+      "waha",
       "zapi",
       "nod_api",
     ]);
+    // Only Uazapi (instance) and Cloud API create new WhatsApp connections.
+    expect(
+      integrationProviders.filter((p) => p.comingSoon).map((p) => p.id),
+    ).toEqual(["waha", "zapi", "nod_api"]);
     expect(inTab("attendance")).toEqual(["umbler", "gupshup", "data_crazy"]);
     expect(inTab("ads")).toEqual(["meta"]);
     expect(inTab("crm")).toEqual(["kommo"]);
@@ -276,6 +280,9 @@ describe("buildIntegrationCards", () => {
     const nod = cards.find((card) => card.id === "nod_api");
     expect(nod?.comingSoon).toBe(true);
     expect(nod?.status).toEqual({ label: "Em breve", tone: "neutral" });
+    const existingWaha = cards.find((card) => card.id === "waha");
+    expect(existingWaha?.state).toBe("active");
+    expect(existingWaha?.comingSoon).toBe(false);
     const existingZapi = cards.find((card) => card.id === "zapi");
     expect(existingZapi?.state).toBe("active");
     expect(existingZapi?.comingSoon).toBe(false);
@@ -342,7 +349,7 @@ describe("buildIntegrationCards", () => {
       }),
     );
 
-    expect(cards.find((card) => card.id === "waha")?.status).toEqual({
+    expect(cards.find((card) => card.id === "uazapi_byo")?.status).toEqual({
       label: "Não foi possível verificar",
       tone: "warn",
     });

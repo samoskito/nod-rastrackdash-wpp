@@ -112,14 +112,14 @@ Essas duas orientações (**Trocar token** e **Reenviar bloqueados**) continuam 
 
 Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escolher — lá está o contrato completo, a matriz do que já funciona e o que ainda não. Em `/integrations` (o **Hub de Integrações**) cada plataforma é um **card** com a logo e o estado **Ativo** ou **Disponível**; clique no card para abrir a janela de conexão. Existem **dois tipos de conexão** e escolher o errado é o erro mais comum — eles ficam em abas diferentes:
 
-### 10.1 Aba WhatsApp — cards Uazapi, WAHA (e Z-API / NOD API como "Em breve")
+### 10.1 Aba WhatsApp — card Uazapi (WAHA, Z-API e NOD API como "Em breve")
 
-> **Z-API e NOD API aparecem como "Em breve"** para novas conexões. Se você já tinha uma conexão de um deles, ela continua aparecendo como **Ativo** e você segue podendo testar, editar e excluir; só não é possível criar novas por enquanto.
+> **WAHA, Z-API e NOD API aparecem como "Em breve"** para novas conexões. Se você já tinha uma conexão de um deles, ela continua aparecendo como **Ativo** e você segue podendo testar, editar e excluir; só não é possível criar novas por enquanto.
 
-Uazapi e WAHA são conexões **por workspace**, criadas na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
+A Uazapi é uma conexão **por workspace**, criada na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
 
 - **Uazapi (BYO)** — sua própria instância Uazapi (URL da API, Token, Instance ID opcional). Receiver inbound **pronto**. É o único provedor que também avalia **mensagem do atendente** e **etiquetas** para gatilhos.
-- **WAHA** — sua instância self-hosted [WAHA](https://github.com/devlikeapro/waha) (URL da API, API key, Sessão). Receiver inbound **pronto**.
+- **WAHA — Em breve (só conexões já existentes).** Ainda não validado; não é possível criar conexões novas pela tela. Quem já tinha uma continua podendo testar, editar e excluir.
 - **Z-API — Em breve (só conexões já existentes).** Não é possível criar conexões novas pela tela; quem já tinha uma continua podendo testar, editar e excluir.
 - **NOD API — Em breve (só conexões já existentes).** Mesma regra da Z-API. Hoje o receiver inbound da NOD API ainda não existe.
 

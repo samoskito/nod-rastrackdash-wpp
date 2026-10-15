@@ -1538,11 +1538,11 @@ export default async function IntegrationsPage({
     </div>
   );
 
-  // Z-API and NOD API are "Em breve": no new connections, but a workspace
+  // WAHA, Z-API and NOD API are "Em breve": no new connections, but a workspace
   // that already has one keeps managing it (existing data is never hidden).
   const comingSoonPanels: Partial<Record<IntegrationProviderId, ReactNode>> =
     {};
-  for (const provider of ["zapi", "nod_api"] as const) {
+  for (const provider of ["waha", "zapi", "nod_api"] as const) {
     if (
       whatsappConnectionsResult.data.some(
         (connection) => connection.provider === provider,
@@ -1555,7 +1555,6 @@ export default async function IntegrationsPage({
   const panels: Partial<Record<IntegrationProviderId, ReactNode>> = {
     uazapi_byo: uazapiPanel,
     ...comingSoonPanels,
-    waha: whatsappProviderPanel("waha"),
     meta_cloud: inboundPanel("meta_cloud"),
     umbler: inboundPanel("umbler"),
     gupshup: inboundPanel("gupshup"),

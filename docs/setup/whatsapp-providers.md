@@ -15,7 +15,7 @@ qualquer provedor.
 
 | Modelo | Onde se cria | Escopo | Providers |
 |---|---|---|---|
-| **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi, WAHA; Z-API e NOD API aparecem como "Em breve" — conexões já existentes continuam gerenciáveis) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
+| **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi; WAHA, Z-API e NOD API aparecem como "Em breve" — conexões já existentes continuam gerenciáveis) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
 | **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → aba **Atendimento e vendas** → card Umbler Talk / Gupshup / Data Crazy; aba **WhatsApp** → card **WhatsApp Cloud API** (Meta) | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
 | **Meta Ads (conta de anúncios)** | `/integrations` → aba **Anúncios** → card **Meta Ads** (login social ou token; não recebe conversas) | Por workspace | `meta` — token de usuário do sistema, veja [`meta-manual.md`](meta-manual.md) |
 
@@ -49,9 +49,9 @@ Na prática:
 > por workspace listadas acima dele no mesmo card. Se o aluno perguntar, é
 > isso: dois blocos, dois escopos.
 
-## Aba WhatsApp — Uazapi e WAHA (Z-API e NOD API: Em breve): o que o aluno faz
+## Aba WhatsApp — Uazapi (WAHA, Z-API e NOD API: Em breve): o que o aluno faz
 
-Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA; Z-API e NOD API estão como "Em breve" para novas conexões). A janela que abre já vem fixa nesse provedor:
+Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi; WAHA, Z-API e NOD API estão como "Em breve" para novas conexões). A janela que abre já vem fixa nesse provedor:
 
 1. **Criar a conexão.** Dê um **Nome** (é esse
    nome que a exclusão vai pedir de volta) e um **Nome exibido**
@@ -60,7 +60,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
    | Provedor | Campos pedidos na UI |
    |---|---|
    | Uazapi (BYO) | URL da API, Token, Instance ID (opcional) |
-   | WAHA | URL da API, API key, Sessão |
+   | WAHA (Em breve no Hub; só conexões já existentes) | URL da API, API key, Sessão |
    | Z-API (Em breve no Hub; só conexões já existentes) | URL da API, Token, Instance ID |
    | NOD API (Em breve no Hub; só conexões já existentes) | Instance ID, Instance token |
 
@@ -95,7 +95,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
 | Rota | Autenticação confirmada | Vínculo obrigatório do payload | Status |
 |---|---|---|---|
 | `POST /webhooks/whatsapp/:id` — **Uazapi (BYO)** | Token do receiver (header `x-wpptrack-webhook-token`, Bearer ou `?token=`) comparado ao hash salvo | — | **Pronto** |
-| `POST /webhooks/whatsapp/:id` — **WAHA** | Idem | `payload.session` precisa ser **exatamente** a Sessão salva na conexão | **Pronto** |
+| `POST /webhooks/whatsapp/:id` — **WAHA** | Idem | `payload.session` precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** — Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |

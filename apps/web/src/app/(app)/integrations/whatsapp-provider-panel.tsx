@@ -64,8 +64,9 @@ const providerCards: Array<{
   {
     id: "waha",
     title: "WAHA",
-    ingestion: "Receptor e parser do WAHA disponíveis para configuração.",
-    pending: false,
+    ingestion:
+      "Em breve: novas conexões ainda não estão disponíveis; as existentes continuam gerenciáveis.",
+    pending: true,
   },
   {
     id: "zapi",

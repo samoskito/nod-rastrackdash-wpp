@@ -10,12 +10,12 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 ### Changed
 
 - **Integrations hub** (`/integrations`, web only): the page is now a catalog
-  with four tabs — **WhatsApp** (Uazapi, WAHA, WhatsApp Cloud API; Z-API and
+  with four tabs — **WhatsApp** (Uazapi, WhatsApp Cloud API; WAHA, Z-API and
   NOD API show "Em breve"), **Atendimento e vendas** (Umbler Talk, Gupshup,
   Data Crazy), **Anúncios** (Meta Ads: social login or token, traffic data and
   CAPI conversions — it receives no conversations) and **CRM** (Kommo) — with
   logo cards (**Ativo** / **Disponível**) and one connection modal per
-  platform. Z-API / NOD API: no new connections, but an existing one stays
+  platform. WAHA / Z-API / NOD API: no new connections, but an existing one stays
   active and manageable. The modals reuse the existing panels, scoped
   to the platform. New files: `apps/web/src/app/(app)/integrations/hub/*`,
   `apps/web/src/components/modal.tsx`, logos in `apps/web/public/integrations/`

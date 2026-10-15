@@ -56,7 +56,7 @@ export const integrationTabs: readonly IntegrationTabDefinition[] = [
     hash: "integracao-whatsapp",
     hashAliases: [],
     description:
-      "Por onde as conversas dos anúncios chegam: a sua instância (Uazapi, WAHA) ou a API oficial do WhatsApp (Cloud API), conectada direto à Meta.",
+      "Por onde as conversas dos anúncios chegam: a sua instância Uazapi ou a API oficial do WhatsApp (Cloud API), conectada direto à Meta. WAHA, Z-API e NOD API estão em breve.",
     categories: ["whatsapp_number", "whatsapp_official"],
   },
   {
@@ -198,17 +198,6 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     gate: { kind: "whatsapp_provider", provider: "uazapi_byo" },
   },
   {
-    id: "waha",
-    name: "WAHA",
-    category: "whatsapp_number",
-    logo: integrationLogoPath("waha"),
-    initials: "WA",
-    logoSurface: logoSurface("waha"),
-    description:
-      "Conecte a sua instalação WAHA (WhatsApp HTTP API).",
-    gate: { kind: "whatsapp_provider", provider: "waha" },
-  },
-  {
     id: "meta_cloud",
     name: "WhatsApp Cloud API",
     category: "whatsapp_official",
@@ -218,6 +207,18 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Gera o webhook que conecta direto à Meta (API oficial do WhatsApp) para receber as conversas dos anúncios, sem instância intermediária.",
     gate: { kind: "inbound_provider", provider: "meta_cloud" },
+  },
+  {
+    id: "waha",
+    name: "WAHA",
+    category: "whatsapp_number",
+    logo: integrationLogoPath("waha"),
+    initials: "WA",
+    logoSurface: logoSurface("waha"),
+    comingSoon: true,
+    description:
+      "Em breve: a conexão com o WAHA ainda não está disponível para novas contas.",
+    gate: { kind: "whatsapp_provider", provider: "waha" },
   },
   {
     id: "zapi",
