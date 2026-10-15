@@ -44,5 +44,7 @@ describe("Pipedrive panel layout", () => {
     expect(block(".pipedrive-readiness li")).toMatch(/display:\s*grid/);
     expect(block(".pipedrive-readiness li")).toMatch(/grid-template-columns:\s*[\d.]+rem minmax\(0, 1fr\)/);
     expect(block(".pipedrive-readiness-label")).toMatch(/min-width:\s*0/);
+    expect(block(".pipedrive-readiness li > .event-chip")).toMatch(/white-space:\s*normal/);
+    expect(block(".pipedrive-readiness li > .event-chip")).toMatch(/max-width:\s*100%/);
   });
 });

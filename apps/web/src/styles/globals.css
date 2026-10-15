@@ -15481,8 +15481,12 @@ button.meta-manual-entry[aria-expanded="true"] {
   gap: 8px;
 }
 
+/* Long badges ("Conferido a cada movimento") wrap inside their column
+   instead of overlapping the requirement text. */
 .pipedrive-readiness li > .event-chip {
   justify-self: start;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .pipedrive-readiness-label {
