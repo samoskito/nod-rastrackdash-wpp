@@ -61,6 +61,41 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 4.0 — CTWA purchase foundation (API)**, ported from the SaaS with
+  the same behavior and no new env var, dependency or Meta permission:
+  - **Data Crazy can go to production by rule**: migration
+    `20261016090300_data_crazy_parser_certification` certifies the Data Crazy
+    `v1` parser release (validated with real CTWA deliveries in the SaaS).
+    Connections and rules still need their own production activation.
+  - **CTWA rule**: no `ctwa_clid` → nothing is sent to Meta. A lead with
+    `ctwa_clid` and no ad id may be sent to the unique authorized page +
+    pixel of its number (`authorized-ctwa-destination.ts`, CAPI
+    `pagePixelDestination`, send-time re-verification in
+    `ConversionEventsService`), using only the scopes of the existing Meta
+    login (`business_management` + `ads_read`/`ads_management`). The SaaS
+    WhatsApp destination binding (`MetaConversionDestination.whatsappBinding`,
+    `whatsapp_business_management` / `whatsapp_business_manage_events`) is
+    not ported. The path is reachable from Unnichat (4b) and CRMs (4c);
+    Umbler, Gupshup, Data Crazy, Cloud API, Uazapi and Kommo keep requiring
+    a known ad.
+  - **`ProviderPurchaseClaim`** (one winner per sale and effect mode, with a
+    send outbox recovered every minute) and
+    **`InboundWebhookChannel.metaRoutingMode`** (`inherit_workspace` /
+    `channel_override`; existing numbers stay `NULL` = legacy, new ones
+    default to `inherit_workspace`), plus the effective Meta routing,
+    purchase identity and purchase routing helpers used by Payt/Unnichat.
+  - **Brazilian phone forms** in the paid-lead resolver: exact match first,
+    then with/without `55` and the mobile 9th digit; two leads stay
+    ambiguous.
+  - Migrations (additive, in order): `20261016090000_conversion_event_log_workspace_id_key`
+    (unique index on `ConversionEventLog(workspaceId, id)`, alone in its
+    migration; blocks conversion writes while it builds, ~2.6 s for 1M rows
+    in a scratch database), `20261016090100_provider_purchase_claim`,
+    `20261016090200_inbound_webhook_meta_routing_mode`,
+    `20261016090300_data_crazy_parser_certification`. Back up the database
+    before updating. **Roll back:** revert the API image; the new
+    table/columns are harmless to it (optional SQL in
+    `docs/releases/unreleased.json`).
 - **"Leads no período" block on Visão Geral** (always visible): leads novos
   (with CPL), voltaram por anúncio, conversaram mais de uma vez and conversas
   por anúncio, each linking to the matching Leads list when it can be
@@ -164,6 +199,11 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Fixed
 
+- **Workspace deletion order**: `apps/api/scripts/delete-workspace.js` now
+  deletes rule-create claims, purchase claims, Kommo tables and Uazapi chat
+  labels before their parents, and fixes the catalog → rule and ad
+  destination → ad order (static test against `schema.prisma`, run on a
+  scratch database). The backoffice deletion also removes purchase claims.
 - **Residual footer always visible**: on mobile (<=900px) and with the
   sidebar collapsed it now renders at the end of the main content instead of
   only inside the off-canvas drawer; the license lock/grace banner is offset

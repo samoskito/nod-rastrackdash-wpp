@@ -2,6 +2,7 @@ import type {
   ConversionEventCustomDataDto,
   ConversionEventNameDto,
 } from "@wpptrack/shared";
+import type { AuthorizedPagePixelCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
 import {
   buildMetaCapiPayload,
   type MetaCapiPayload,
@@ -33,12 +34,18 @@ export type MetaCapiSendEventErrorCode =
   | "MissingPhoneHash"
   | "MissingCtwaClid"
   | "MissingAdId"
+  | "MetaEventTimeExpired"
   | "MetaCapiRejected"
   | "MetaCapiNetworkError"
   | "MetaCapiDeliveryUnknown"
   | null;
 
 export type MetaCapiSendEventInput = {
+  /**
+   * CTWA lead with ctwa_clid and no known ad: the authorized page/pixel. The
+   * ad id becomes optional (only an optional hint); ctwa_clid stays mandatory.
+   */
+  pagePixelDestination?: AuthorizedPagePixelCtwaDestination;
   accessToken?: string | null;
   pixelId: string | null;
   pageId: string | null;
@@ -74,8 +81,10 @@ export class MetaCapiAdapter {
     input: MetaCapiSendEventInput,
     dispatch: DispatchOptions = {},
   ): Promise<MetaCapiSendEventResult> {
+    // The CTWA page/pixel path only uses the token resolved for its business
+    // connection, never the environment fallback token.
     const accessToken = (
-      input.accessToken === undefined
+      input.accessToken === undefined && !input.pagePixelDestination
         ? this.env.META_CAPI_ACCESS_TOKEN
         : input.accessToken
     )?.trim();
@@ -100,7 +109,7 @@ export class MetaCapiAdapter {
       phoneHash: phoneHash!,
       ctwaClid: ctwaClid!,
       pageId: pageId!,
-      adId: adId!,
+      adId: adId || null,
       valueCents: input.valueCents ?? null,
       currency: input.currency ?? null,
       contentName: input.contentName ?? null,
@@ -212,6 +221,32 @@ export function preflightMetaCapiEvent(
     );
   }
 
+  const pagePixel = input.pagePixelDestination;
+  if (
+    pagePixel &&
+    (pagePixel.kind !== "authorized_ctwa_destination" ||
+      pagePixel.deliveryKind !== "page_pixel" ||
+      !pagePixel.pixelId?.trim() ||
+      !pagePixel.pageId?.trim() ||
+      pagePixel.pixelId !== pixelId ||
+      pagePixel.pageId !== pageId)
+  )
+    return notConfigured(
+      "MissingMetaDestination",
+      "CTWA page/pixel intent mismatch",
+    );
+  if (
+    pagePixel &&
+    (!input.eventTime ||
+      !Number.isFinite(input.eventTime.getTime()) ||
+      input.eventTime.getTime() > Date.now() ||
+      Date.now() - input.eventTime.getTime() > 7 * 86400000)
+  )
+    return notConfigured(
+      "MetaEventTimeExpired",
+      "CTWA destination requires a real event time within seven days",
+    );
+
   if (!pixelId || !pageId) {
     return notConfigured(
       "MissingMetaDestination",
@@ -233,7 +268,9 @@ export function preflightMetaCapiEvent(
     );
   }
 
-  if (!adId) {
+  // ctwa_clid is checked above for every path. Only the authorized CTWA
+  // page/pixel path may travel without an ad id.
+  if (!adId && !pagePixel) {
     return notConfigured("MissingAdId", "Meta CAPI ad id not available");
   }
 

@@ -12,6 +12,20 @@ import {
   KOMMO_DELIVERY_UNKNOWN,
   KOMMO_DELIVERY_UNKNOWN_MESSAGE,
 } from "../kommo/kommo-sender-policy";
+import { authorizedCtwaDestinationSchema } from "@wpptrack/shared";
+import {
+  CTWA_DESTINATION_PROVIDER,
+  CTWA_DESTINATION_REASON,
+  CTWA_DESTINATION_AD_HINT_REASON,
+  ctwaDestinationProviderValue,
+  ctwaIntentAuthorized,
+  type AuthorizedCtwaDestination,
+} from "../inbound-webhooks/authorized-ctwa-destination";
+import { lockUnnichatMetaPolicy } from "../inbound-webhooks/inbound-webhook-effective-meta-routing";
+import { ConversionRecordError } from "./conversion-record.error";
+import { CTWA_SEND_SKIPPED_ERROR_CODE } from "./conversion-event-retry";
+import { providerAutomationManualReplayApproved } from "../conversion-rules/provider-manual-replay-approval";
+import { providerRuleCoversChannel } from "../conversion-rules/provider-rule-scope";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { Prisma } from "@prisma/client";
@@ -124,6 +138,8 @@ type ConversionEventPrismaClient = Pick<
 >;
 
 export type RecordExternalConversionInput = {
+  /** CTWA lead with ctwa_clid and no known ad: the authorized page/pixel. */
+  ctwaDestination?: AuthorizedCtwaDestination;
   workspaceId: string;
   externalConnectorId?: string | null;
   sourceEventId: string;
@@ -172,6 +188,7 @@ type InitialStatus = {
     | "MissingCtwaClid"
     | "EventValueMissing"
     | "UnsupportedConversionEventName"
+    | "MetaEventTimeExpired"
     | null;
   errorMessage: string | null;
 };
@@ -233,11 +250,46 @@ type LegacyRouteShadowParity = {
   parity: boolean;
 };
 
+export { CTWA_SEND_SKIPPED_ERROR_CODE };
+
+const CTWA_SEND_SKIP_REASONS: Record<string, string> = {
+  ctwa_destination_malformed: "destino CTWA gravado no evento é inválido",
+  ctwa_workspace_mismatch: "workspace do destino CTWA difere do evento",
+  ctwa_sender_unavailable: "serviço de envio CTWA indisponível no worker",
+  ctwa_license_locked: "licença bloqueada",
+  ctwa_click_missing: "evento sem ctwa_clid",
+  ctwa_destination_not_authorized:
+    "página/pixel CTWA não está mais autorizado para o número",
+  inbound_production_disabled: "produção de webhooks desativada",
+  ctwa_meta_hierarchy_present: "evento CTWA com conta/campanha/conjunto Meta",
+  ctwa_channel_mismatch: "número do evento difere do destino CTWA",
+  ctwa_entry_context_invalid: "entrada CTWA de origem inválida ou revogada",
+  ctwa_entry_receipt_invalid: "recibo da entrada CTWA inválido",
+  ctwa_replay_not_authorized: "reprocessamento CTWA não autorizado",
+  ctwa_entry_not_in_production: "entrada CTWA anterior à ativação",
+  ctwa_processing_mode_unsupported: "modo de processamento não suportado",
+  ctwa_provider_conversion_with_ad: "conversão de provedor CTWA com anúncio",
+  provider_conversion_production_disabled:
+    "produção de regras de conversão desativada",
+  provider_conversion_execution_missing: "execução da regra ausente",
+  provider_conversion_execution_not_materialized:
+    "execução da regra não materializada para este evento",
+  provider_conversion_origin_mismatch:
+    "número/conexão da regra difere da entrada CTWA",
+  provider_purchase_claim_missing: "venda não é a vencedora do claim de produção",
+  provider_rule_not_in_production: "regra inativa ou fora de produção",
+  provider_connection_not_certified: "conexão/parser da regra não certificado",
+  provider_channel_not_canonical: "número inativo ou não canônico",
+  provider_channel_out_of_scope: "número fora do alcance da regra",
+  provider_delivery_before_activation:
+    "callback anterior à ativação sem aprovação do operador",
+};
+
 export type SendReadyEventResult = {
   conversionEventLogId: string;
   workspaceId: string | null;
   status: "not_configured" | "sent" | "error" | "skipped";
-  errorCode?: MetaCapiSendEventErrorCode;
+  errorCode?: MetaCapiSendEventErrorCode | typeof CTWA_SEND_SKIPPED_ERROR_CODE;
   errorMessage?: string | null;
 };
 
@@ -640,11 +692,69 @@ export class ConversionEventsService {
       where: { dedupeKey: input.dedupeKey },
     })) as ConversionEventLogRecord | null;
 
+    if (
+      !existing &&
+      input.ctwaDestination &&
+      input.eventName === "LeadSubmitted"
+    ) {
+      // A retained legacy parser identity and the current per-click identity
+      // must share the original canonical receipt, event ID and occurrence time.
+      // Both entry materializers call this under the workspace policy lock.
+      const receipts = await client.conversionEventLog.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId,
+          phoneHash: input.phoneHash,
+          ctwaClid: input.ctwaClid,
+          eventName: "LeadSubmitted",
+          sourceTrigger: `inbound_webhook:${CTWA_DESTINATION_PROVIDER}`,
+          AND: [
+            {
+              sourcePayload: {
+                path: ["connectionId"],
+                equals: input.ctwaDestination.connectionId,
+              },
+            },
+            {
+              sourcePayload: {
+                path: ["channelId"],
+                equals: input.ctwaDestination.channelId,
+              },
+            },
+          ],
+        },
+        take: 2,
+      });
+      if (receipts.length > 1)
+        throw new ConversionRecordError("ctwa_original_receipt_ambiguous");
+      if (receipts[0])
+        return {
+          conversionEventLogId: receipts[0].id,
+          status: "duplicate",
+          deliveryStatus: receipts[0].status,
+        };
+    }
+
     if (existing) {
+      if (existing.workspaceId !== input.workspaceId)
+        throw new ConversionRecordError("conversion_workspace_mismatch");
       if (input.sourceTrigger === "kommo_stage")
         await this.assertKommoLicenseAllows();
       return this.reconcileExistingExternalConversion(existing, input, client);
     }
+
+    // No ctwa_clid, no CTWA path: the page/pixel destination exists only for a
+    // lead that carries the click id (the messaging pixel requires it).
+    if (
+      input.ctwaDestination &&
+      (!input.ctwaClid?.trim() ||
+        input.ctwaDestination.workspaceId !== input.workspaceId ||
+        !(await ctwaIntentAuthorized(
+          client as Prisma.TransactionClient,
+          input.ctwaDestination,
+        )))
+    )
+      throw new ConversionRecordError("ctwa_destination_not_authorized");
 
     const initialStatus = this.resolveExternalInitialStatus(input);
     const purchaseKind = await this.resolvePurchaseKind(
@@ -681,23 +791,39 @@ export class ConversionEventsService {
           pixelId: null,
           eventId: input.eventId,
           metaAccountId: input.metaAccountId ?? null,
-          metaBusinessConnectionId: input.metaBusinessConnectionId ?? null,
+          metaBusinessConnectionId:
+            input.ctwaDestination?.businessConnectionId ??
+            input.metaBusinessConnectionId ??
+            null,
           metaConversionDestinationId:
-            input.metaConversionDestinationId ?? null,
+            input.ctwaDestination?.destinationId ??
+            input.metaConversionDestinationId ??
+            null,
           campaignId: input.campaignId ?? null,
           adSetId: input.adSetId ?? null,
           adId: input.adId ?? null,
           ctwaClid: input.ctwaClid ?? null,
-          attributionStatus: input.adId
-            ? "attributed"
-            : "organic_or_unattributed",
+          // A CTWA destination decision never resolves the ad hierarchy: an ad
+          // id carried with it is an unverified hint, not an attribution.
+          attributionStatus: input.ctwaDestination
+            ? input.adId
+              ? "ctwa_ad_hint"
+              : "ctwa_ad_unknown"
+            : input.adId
+              ? "attributed"
+              : "organic_or_unattributed",
           dedupeKey: input.dedupeKey,
           valueCents: input.valueCents ?? null,
           currency: input.currency ?? null,
           contentName: input.contentName ?? null,
-          sourcePayload: input.sourcePayload
-            ? (input.sourcePayload as Prisma.InputJsonValue)
-            : Prisma.JsonNull,
+          sourcePayload: input.ctwaDestination
+            ? ({
+                ...input.sourcePayload,
+                ctwaDestination: input.ctwaDestination,
+              } as Prisma.InputJsonValue)
+            : input.sourcePayload
+              ? (input.sourcePayload as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
           customData: Prisma.JsonNull,
           errorCode: initialStatus.errorCode,
           errorMessage: initialStatus.errorMessage,
@@ -765,7 +891,17 @@ export class ConversionEventsService {
           input.metaConversionDestinationId ??
           null,
         ctwaClid: existing.ctwaClid ?? input.ctwaClid ?? null,
-        attributionStatus: adId ? "attributed" : existing.attributionStatus,
+        // A CTWA ad hint stays a hint until the ad hierarchy is attributed.
+        attributionStatus:
+          existing.attributionStatus === "ctwa_ad_hint" &&
+          !(
+            (existing.metaAccountId ?? input.metaAccountId) &&
+            (existing.campaignId ?? input.campaignId)
+          )
+            ? "ctwa_ad_hint"
+            : adId
+              ? "attributed"
+              : existing.attributionStatus,
         valueCents: existing.valueCents ?? input.valueCents ?? null,
         valueSource: existing.valueSource ?? input.valueSource ?? null,
         currency: existing.currency ?? input.currency ?? null,
@@ -1010,6 +1146,19 @@ export class ConversionEventsService {
         status: "skipped",
       };
     }
+
+    // CTWA lead with ctwa_clid and no known ad: dispatched only to the
+    // authorized page/pixel of its WhatsApp number, re-verified at send time.
+    const ctwaIntent = this.ctwaIntent(log);
+    if (ctwaIntent) return this.sendCtwaEvent(log, ctwaIntent);
+    // A malformed destination marker cannot fall back to canonical or legacy tokens.
+    if (
+      log.sourcePayload &&
+      typeof log.sourcePayload === "object" &&
+      !Array.isArray(log.sourcePayload) &&
+      "ctwaDestination" in log.sourcePayload
+    )
+      return this.recordCtwaSendSkip(log, "ctwa_destination_malformed");
 
     if (
       log.sourceTrigger === "inbound_webhook:meta_cloud" &&
@@ -1644,6 +1793,416 @@ export class ConversionEventsService {
     return Boolean(cutover);
   }
 
+  private ctwaIntent(
+    log: ConversionEventLogRecord,
+  ): AuthorizedCtwaDestination | null {
+    const source = log.sourcePayload;
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      return null;
+    const parsed = authorizedCtwaDestinationSchema.safeParse(
+      source.ctwaDestination,
+    );
+    return parsed.success ? parsed.data : null;
+  }
+
+  /**
+   * Returns null when the CTWA conversion context is authorized, otherwise a
+   * stable denial reason (persisted on the log when the sender skips it).
+   */
+  private async ctwaConversionContextDenial(
+    tx: Prisma.TransactionClient,
+    log: ConversionEventLogRecord,
+    intent: AuthorizedCtwaDestination,
+  ): Promise<string | null> {
+    const config = parseInboundWebhooksConfig(this.env);
+    // The messaging pixel requires the click id: no ctwa_clid, nothing sent.
+    if (!log.ctwaClid?.trim()) return "ctwa_click_missing";
+    // The CTWA destination path never carries account/campaign/ad set. An ad
+    // id is accepted only as the hint of a materialized ad-hint entry below.
+    if (!config.enabled || !config.productionEnabled)
+      return "inbound_production_disabled";
+    if (log.metaAccountId || log.campaignId || log.adSetId)
+      return "ctwa_meta_hierarchy_present";
+    const p = log.sourcePayload;
+    if (
+      !p ||
+      typeof p !== "object" ||
+      Array.isArray(p) ||
+      p.channelId !== intent.channelId
+    )
+      return "ctwa_channel_mismatch";
+    if (
+      p.processingMode === "live_production" ||
+      p.processingMode === "authorized_replay"
+    ) {
+      const provider = ctwaDestinationProviderValue();
+      if (
+        !provider ||
+        typeof p.inboundEventId !== "string" ||
+        p.connectionId !== intent.connectionId
+      )
+        return "ctwa_entry_context_invalid";
+      const e = await tx.inboundWebhookEvent.findFirst({
+        where: {
+          id: p.inboundEventId,
+          workspaceId: intent.workspaceId,
+          channelId: intent.channelId,
+          connectionId: intent.connectionId,
+          provider,
+          hasCtwa: true,
+          // No-ad entry, or ad-hint entry whose stored ad id is the log's.
+          ...(log.adId
+            ? {
+                adId: log.adId,
+                classificationReason: CTWA_DESTINATION_AD_HINT_REASON,
+              }
+            : { adId: null, classificationReason: CTWA_DESTINATION_REASON }),
+        },
+        include: {
+          delivery: true,
+          connection: { include: { parserRelease: true } },
+          channel: true,
+          productionItem: true,
+          replayItem: true,
+        },
+      });
+      if (
+        !e ||
+        e.connection.removedAt ||
+        e.channel.status !== "active" ||
+        e.connection.parserRelease.status !== "certified" ||
+        e.connection.parserRelease.version !== e.delivery.parserVersion ||
+        e.occurredAt.getTime() !== log.eventOccurredAt.getTime()
+      )
+        return "ctwa_entry_context_invalid";
+      const receipt =
+        p.processingMode === "live_production"
+          ? e.productionItem
+          : e.replayItem;
+      if (
+        !receipt ||
+        !["materialized", "duplicate"].includes(receipt.status) ||
+        receipt.leadId !== log.leadId ||
+        receipt.conversionEventLogId !== log.id
+      )
+        return "ctwa_entry_receipt_invalid";
+      if (p.processingMode === "authorized_replay")
+        return config.replayEnabled &&
+          e.replayItem &&
+          ["observation", "production"].includes(e.connection.status) &&
+          (await studentBatchAuthorizationValid(
+            tx,
+            intent.workspaceId,
+            e.replayItem.batchId,
+            e.id,
+          ))
+          ? null
+          : "ctwa_replay_not_authorized";
+      return e.connection.status === "production" &&
+        e.connection.productionActivatedAt &&
+        e.channel.productionActivatedAt &&
+        e.delivery.firstReceivedAt >= e.connection.productionActivatedAt &&
+        e.delivery.firstReceivedAt >= e.channel.productionActivatedAt
+        ? null
+        : "ctwa_entry_not_in_production";
+    }
+    if (p.processingMode !== "frozen_provider_conversion")
+      return "ctwa_processing_mode_unsupported";
+    if (log.adId) return "ctwa_provider_conversion_with_ad";
+    if (!config.conversionRulesEnabled || !config.conversionProductionEnabled)
+      return "provider_conversion_production_disabled";
+    if (typeof p.providerConversionExecutionId !== "string")
+      return "provider_conversion_execution_missing";
+    const e = await tx.providerConversionRuleExecution.findFirst({
+      where: {
+        id: p.providerConversionExecutionId,
+        workspaceId: intent.workspaceId,
+        channelId: intent.channelId,
+        status: "materialized",
+        conversionEventLogId: log.id,
+      },
+      include: {
+        sourceDelivery: true,
+        channel: { include: { connection: { select: { provider: true } } } },
+        providerRule: {
+          include: {
+            conversionRule: true,
+            parserRelease: true,
+            connection: { include: { parserRelease: true } },
+            channels: true,
+          },
+        },
+      },
+    });
+    if (!e || !e.channel) return "provider_conversion_execution_not_materialized";
+    // CTWA (no-ad) dispatch exists only for endpoint automations, which always
+    // keep their connection binding.
+    if (!e.providerRule.connection || !e.providerRule.parserRelease)
+      return "provider_conversion_origin_mismatch";
+    // A sale callback (Payt, Fase 4a) sits on its rule's endpoint (any
+    // WhatsApp connection of the workspace); its origin is the scoped channel,
+    // which must belong to the connection of the verified CTWA entry, and the
+    // event must be the durable winner of that sale.
+    const paytPurchase =
+      String(e.providerRule.parserRelease.provider) === "payt" &&
+      e.providerRule.parserRelease.version === "automation-v1" &&
+      ["Purchase", "InitiateCheckout", "CartAbandoned"].includes(
+        log.eventName,
+      );
+    if (paytPurchase) {
+      if (e.channel.connectionId !== intent.connectionId)
+        return "provider_conversion_origin_mismatch";
+      if (
+        !log.dedupeKey ||
+        !(await tx.providerPurchaseClaim.findFirst({
+          where: {
+            workspaceId: intent.workspaceId,
+            effectMode: "production",
+            purchaseKey: log.dedupeKey,
+            winnerExecutionId: e.id,
+            conversionEventLogId: log.id,
+          },
+          select: { id: true },
+        }))
+      )
+        return "provider_purchase_claim_missing";
+    } else if (
+      e.providerRule.connectionId !== intent.connectionId ||
+      e.sourceDelivery.connectionId !== intent.connectionId
+    )
+      return "provider_conversion_origin_mismatch";
+    if (
+      e.providerRule.removedAt ||
+      !e.providerRule.conversionRule.active ||
+      e.providerRule.conversionRule.eventName !== log.eventName ||
+      e.providerRule.mode !== "production" ||
+      !e.providerRule.productionActivatedAt
+    )
+      return "provider_rule_not_in_production";
+    if (
+      e.providerRule.parserRelease.status !== "certified" ||
+      e.providerRule.connection.removedAt ||
+      e.providerRule.connection.status !== "production" ||
+      e.providerRule.connection.parserRelease.status !== "certified"
+    )
+      return "provider_connection_not_certified";
+    if (
+      e.channel.status !== "active" ||
+      e.channel.conversionEngineMode !== "canonical" ||
+      !e.channel.productionActivatedAt
+    )
+      return "provider_channel_not_canonical";
+    if (
+      !providerRuleCoversChannel(e.providerRule, {
+        id: intent.channelId,
+        connectionId: e.channel.connectionId,
+        provider: e.channel.connection?.provider ?? "",
+      })
+    )
+      return "provider_channel_out_of_scope";
+    // A callback received before the rule/channel activation is sent only when
+    // an operator explicitly approved its manual reprocess.
+    const manuallyApproved =
+      e.providerRule.conversionRule.triggerType === "provider_automation" &&
+      providerAutomationManualReplayApproved(e.normalizedResult);
+    if (
+      !manuallyApproved &&
+      (e.sourceDelivery.firstReceivedAt < e.providerRule.productionActivatedAt ||
+        e.sourceDelivery.firstReceivedAt < e.channel.productionActivatedAt)
+    )
+      return "provider_delivery_before_activation";
+    return null;
+  }
+
+  /**
+   * A CTWA send that is refused before the dispatch claim keeps the log in
+   * ready_to_send (nothing reached Meta) but never silently: the reason is
+   * persisted so the audit shows it and the owner can requeue the event.
+   */
+  private async recordCtwaSendSkip(
+    log: ConversionEventLogRecord,
+    reason: string,
+  ): Promise<SendReadyEventResult> {
+    const errorMessage = `${reason}: ${
+      CTWA_SEND_SKIP_REASONS[reason] ?? "envio CTWA bloqueado"
+    }`;
+    try {
+      await this.prisma.conversionEventLog.updateMany({
+        where: { id: log.id, status: "ready_to_send", eventId: log.eventId },
+        data: { errorCode: CTWA_SEND_SKIPPED_ERROR_CODE, errorMessage },
+      });
+    } catch {
+      // Observability only: the outcome stays "skipped" without a Meta effect.
+    }
+    return {
+      conversionEventLogId: log.id,
+      workspaceId: log.workspaceId,
+      status: "skipped",
+      errorCode: CTWA_SEND_SKIPPED_ERROR_CODE,
+      errorMessage,
+    };
+  }
+
+  private async sendCtwaEvent(
+    log: ConversionEventLogRecord,
+    intent: AuthorizedCtwaDestination,
+  ): Promise<SendReadyEventResult> {
+    const skipped = {
+      conversionEventLogId: log.id,
+      workspaceId: log.workspaceId,
+      status: "skipped" as const,
+    };
+    if (!log.workspaceId || log.workspaceId !== intent.workspaceId)
+      return this.recordCtwaSendSkip(log, "ctwa_workspace_mismatch");
+    if (!log.ctwaClid?.trim())
+      return this.recordCtwaSendSkip(log, "ctwa_click_missing");
+    if (!this.connectionResolver)
+      return this.recordCtwaSendSkip(log, "ctwa_sender_unavailable");
+    // Claim commits BEFORE any provider effect. dispatching is a permanent fence:
+    // an unknown outcome, a crash, and queue retry cannot automatically resend.
+    const claim = await this.prisma.$transaction(async (tx) => {
+      if (!(await this.kommoLicenseAllows(tx)))
+        return { claimed: false, denial: "ctwa_license_locked" };
+      await lockUnnichatMetaPolicy(tx, intent.workspaceId);
+      if (!(await ctwaIntentAuthorized(tx, intent)))
+        return { claimed: false, denial: "ctwa_destination_not_authorized" };
+      const denial = await this.ctwaConversionContextDenial(tx, log, intent);
+      if (denial) return { claimed: false, denial };
+      const receipt = await tx.conversionEventLog.updateMany({
+        where: {
+          id: log.id,
+          workspaceId: intent.workspaceId,
+          status: "ready_to_send",
+          eventId: log.eventId,
+        },
+        data: { status: "dispatching", errorCode: "MetaCapiDeliveryUnknown" },
+      });
+      // count 0: another sender already moved it out of ready_to_send.
+      return { claimed: receipt.count === 1, denial: null };
+    });
+    if (claim.denial) return this.recordCtwaSendSkip(log, claim.denial);
+    if (!claim.claimed) return skipped;
+    const startedAt = new Date();
+    const started = await this.prisma.$transaction(async (tx) => {
+      await lockUnnichatMetaPolicy(tx, intent.workspaceId);
+      const current = await tx.conversionEventLog.findFirst({
+        where: {
+          id: log.id,
+          workspaceId: intent.workspaceId,
+          status: "dispatching",
+        },
+      });
+      const channel = await tx.inboundWebhookChannel.findFirst({
+        where: { id: intent.channelId, workspaceId: intent.workspaceId },
+        include: { connection: { include: { parserRelease: true } } },
+      });
+      if (
+        !current ||
+        !channel ||
+        channel.status !== "active" ||
+        channel.connection.removedAt ||
+        channel.connection.parserRelease.status !== "certified" ||
+        !(await this.kommoLicenseAllows(tx)) ||
+        !(await ctwaIntentAuthorized(tx, intent)) ||
+        (await this.ctwaConversionContextDenial(tx, log, intent))
+      )
+        return null;
+      const { accessToken, validUntil } =
+        await this.connectionResolver!.resolveAuthorizedCtwaDestination(
+          intent,
+          tx,
+        );
+      const deadline = performance.now() + KOMMO_DISPATCH_START_MS;
+      const delivery = this.metaCapiAdapter.sendEvent(
+        {
+          accessToken,
+          pixelId: intent.pixelId,
+          pageId: intent.pageId,
+          pagePixelDestination: intent,
+          eventName: log.eventName,
+          dedupeKey: log.eventId!,
+          phoneHash: log.phoneHash,
+          // Optional enrichment only: a non-numeric ad hint is never sent.
+          adId: log.adId && /^\d{1,32}$/u.test(log.adId) ? log.adId : null,
+          ctwaClid: log.ctwaClid,
+          eventTime: log.eventOccurredAt,
+          valueCents: log.valueCents,
+          currency: log.currency,
+          contentName: log.contentName,
+          customData: log.customData as ConversionEventCustomDataDto | null,
+        },
+        {
+          beforeDispatch: () => {
+            if (Date.now() >= validUntil || performance.now() >= deadline)
+              throw new Error("ctwa_dispatch_deadline");
+          },
+          signal: AbortSignal.timeout(KOMMO_NETWORK_MS),
+        },
+      );
+      void delivery.catch(() => undefined);
+      return { delivery };
+    });
+    if (!started) {
+      await this.prisma.conversionEventLog.updateMany({
+        where: {
+          id: log.id,
+          workspaceId: intent.workspaceId,
+          status: "dispatching",
+        },
+        data: {
+          status: "not_configured",
+          errorCode: "MissingMetaDestination",
+          errorMessage: "CTWA destination or context revoked before dispatch",
+        },
+      });
+      return {
+        ...skipped,
+        status: "not_configured",
+        errorCode: "MissingMetaDestination",
+      };
+    }
+    const result = await started.delivery;
+    const unknown = result.deliveryOutcome === "unknown";
+    await this.prisma.conversionEventLog.updateMany({
+      where: {
+        id: log.id,
+        workspaceId: intent.workspaceId,
+        status: "dispatching",
+      },
+      data: {
+        status: unknown ? "delivery_unknown" : result.status,
+        errorCode: unknown ? "MetaCapiDeliveryUnknown" : result.errorCode,
+        errorMessage: result.errorMessage,
+        sentAt: result.status === "sent" ? new Date() : null,
+        pixelId: intent.pixelId,
+        pageId: intent.pageId,
+        providerRequestPayload:
+          (result.requestPayload as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        providerResponseSummary:
+          (result.responseSummary as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+      },
+    });
+    await this.recordMetaCapiIntegrationLog(log, startedAt, result, {
+      source: "manual",
+      accessToken: null,
+      pixelId: intent.pixelId,
+      pageId: intent.pageId,
+      reportingAccountId: null,
+      adAccountId: null,
+      businessConnectionId: intent.businessConnectionId,
+      conversionDestinationId: intent.destinationId,
+      routeError: null,
+      legacyShadowParity: null,
+    });
+    return {
+      conversionEventLogId: log.id,
+      workspaceId: log.workspaceId,
+      status: result.status,
+      errorCode: unknown ? "MetaCapiDeliveryUnknown" : result.errorCode,
+      errorMessage: result.errorMessage,
+    };
+  }
+
   private async resolveDeliveryRoute(
     log: ConversionEventLogRecord,
     client?: Prisma.TransactionClient,
@@ -2099,6 +2658,7 @@ export class ConversionEventsService {
     adId?: string | null;
     ctwaClid?: string | null;
     valueCents?: number | null;
+    ctwaDestination?: AuthorizedCtwaDestination;
   }): InitialStatus {
     if (!isSupportedConversionEventName(input.eventName)) {
       return {
@@ -2108,7 +2668,7 @@ export class ConversionEventsService {
       };
     }
 
-    if (!input.adId) {
+    if (!input.adId && !input.ctwaDestination) {
       return {
         status: "pending_meta_context",
         errorCode: "MissingAdId",
@@ -2156,11 +2716,24 @@ export class ConversionEventsService {
       };
     }
 
+    if (
+      input.ctwaDestination &&
+      (!Number.isFinite(input.eventOccurredAt.getTime()) ||
+        input.eventOccurredAt.getTime() > Date.now() ||
+        Date.now() - input.eventOccurredAt.getTime() > 7 * 86400000)
+    )
+      return {
+        status: "not_eligible",
+        errorCode: "MetaEventTimeExpired",
+        errorMessage:
+          "Local CTWA lead retained; original event time is outside Meta's seven day window",
+      };
     const resolved = this.resolveInitialStatus({
       eventName: input.eventName,
       adId: input.adId,
       ctwaClid: input.ctwaClid,
       valueCents: input.valueCents,
+      ctwaDestination: input.ctwaDestination,
     });
 
     if (input.deliveryStatus !== "not_eligible") {

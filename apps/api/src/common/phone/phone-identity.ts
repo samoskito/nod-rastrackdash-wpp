@@ -218,3 +218,17 @@ export function phoneIdentityKey(phone?: string | null): string | undefined {
   const variants = phoneIdentityVariants(phone);
   return variants.length ? [...variants].sort()[0] : undefined;
 }
+
+/** Hashes (Lead.phoneHash format) of every equivalent form of the phones. */
+export function hashPhoneIdentityVariants(
+  phones: Iterable<string | null | undefined>,
+): string[] {
+  const hashes = new Set<string>();
+  for (const phone of phones) {
+    for (const variant of phoneIdentityVariants(phone)) {
+      const hash = hashNormalizedPhone(variant);
+      if (hash) hashes.add(hash);
+    }
+  }
+  return [...hashes];
+}

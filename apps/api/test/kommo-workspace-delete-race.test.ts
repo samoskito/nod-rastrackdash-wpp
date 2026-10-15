@@ -29,6 +29,7 @@ function attachWorkspaceDeleteConsumer(
     "purchaseValueAdjustment",
     "purchaseReviewItem",
     "purchaseReview",
+    "providerPurchaseClaim",
     "providerConversionRuleExecution",
     "providerConversionDecisionAudit",
     "providerConversionShadowComparison",

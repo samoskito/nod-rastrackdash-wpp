@@ -1,4 +1,10 @@
 import {
+  ctwaIntentAuthorized,
+  type CtwaIntentAuthorizationOptions,
+  type AuthorizedCtwaDestination,
+} from "../../inbound-webhooks/authorized-ctwa-destination";
+import type { Prisma } from "@prisma/client";
+import {
   BadRequestException,
   ConflictException,
   Inject,
@@ -72,6 +78,47 @@ export class MetaConnectionResolverService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     private readonly encryption: MetaTokenEncryptionService,
   ) {}
+
+  /**
+   * Token of the business connection that authorizes a CTWA page/pixel
+   * destination (lead with ctwa_clid and no known ad). Same credential the
+   * Meta login already stored; no WhatsApp Business permission is involved.
+   */
+  async resolveAuthorizedCtwaDestination(
+    intent: AuthorizedCtwaDestination,
+    client: Prisma.TransactionClient = this.prisma,
+    options: CtwaIntentAuthorizationOptions = {},
+  ): Promise<{
+    intent: AuthorizedCtwaDestination;
+    accessToken: string;
+    validUntil: number;
+  }> {
+    if (!(await ctwaIntentAuthorized(client, intent, options)))
+      throw new ConflictException("CTWA destination unavailable");
+    const credential = await client.metaCredential.findFirst({
+      where: {
+        id: intent.credentialId,
+        workspaceId: intent.workspaceId,
+        status: "active",
+      },
+    });
+    if (
+      !credential ||
+      credential.workspaceId !== intent.workspaceId ||
+      credential.status !== "active" ||
+      !credential.lastValidatedAt ||
+      credential.fingerprint !== intent.credentialFingerprint ||
+      !(await ctwaIntentAuthorized(client, intent, options))
+    )
+      throw new ConflictException("CTWA credential revoked");
+    const validUntil = credential.expiresAt?.getTime() ?? Infinity;
+    if (validUntil <= Date.now())
+      throw new ConflictException("CTWA authorization expired");
+    const accessToken = this.decrypt(credential);
+    if (!accessToken.trim())
+      throw new ConflictException("CTWA access token unavailable");
+    return { intent, accessToken, validUntil };
+  }
 
   async listReportingSyncTargets(
     workspaceId: string,

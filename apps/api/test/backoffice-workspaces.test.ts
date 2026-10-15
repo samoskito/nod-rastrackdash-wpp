@@ -295,6 +295,7 @@ function makeHarness(initialUsers: UserState[] = []) {
     "purchaseValueAdjustment",
     "purchaseReviewItem",
     "purchaseReview",
+    "providerPurchaseClaim",
     "providerConversionRuleExecution",
     "providerConversionDecisionAudit",
     "providerConversionShadowComparison",
@@ -1121,6 +1122,11 @@ describe("platform workspace access", () => {
       );
     };
 
+    before(
+      "delete:providerPurchaseClaim",
+      "delete:providerConversionRuleExecution",
+    );
+    before("delete:providerPurchaseClaim", "delete:conversionEventLog");
     before("delete:conversionCatalogVariant", "delete:conversionCatalog");
     before("delete:conversionCatalogAttribute", "delete:conversionCatalog");
     before("delete:conversionCatalog", "delete:providerConversionRuleConfig");

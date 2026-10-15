@@ -149,9 +149,11 @@ canal é diferente:
 4. Apenas mensagens inbound com **CTWA** viram leads operacionais.
    Palavra-chave, tag e outros gatilhos de automação do Data Crazy não
    fazem parte do parser v1.
-5. Depois que uma entrega CTWA real for processada em observação, certifique
-   o parser **Data Crazy v1** no backoffice; então configure a rota Meta e
-   ative produção, no mesmo gate de Gupshup e Meta Cloud.
+5. O parser **Data Crazy v1** já vem certificado pela atualização (é o mesmo
+   contrato validado com CTWAs reais no SaaS); não há passo de certificação.
+   Depois que uma entrega CTWA real for processada em observação, configure
+   a rota Meta e ative produção (a conexão e cada regra, uma a uma), no mesmo
+   gate de Gupshup e Meta Cloud. Nada vai para produção sozinho.
 
 ### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
 
@@ -195,7 +197,7 @@ suportado como conexão inbound por webhook, conforme o passo 10.2.
 
 Detalhe completo de cada variável em [`setup/environment.md`](setup/environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
 
-A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). **Data Crazy** segue o fluxo CTWA de observação, certificação e produção do passo 10.2; o canal só é descoberto após o primeiro webhook. Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. **WAHA e Z-API** recebem leads normalmente, mas **ainda não** têm essa criação automática de origem na central de Gatilhos — é uma lacuna conhecida, não um passo esquecido.
+A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). **Data Crazy** segue o fluxo CTWA de observação e ativação de produção do passo 10.2 (o parser já vem certificado); o canal só é descoberto após o primeiro webhook. Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. **WAHA e Z-API** recebem leads normalmente, mas **ainda não** têm essa criação automática de origem na central de Gatilhos — é uma lacuna conhecida, não um passo esquecido.
 
 ## 11. Marca (whitelabel) — opcional
 

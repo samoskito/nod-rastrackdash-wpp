@@ -382,6 +382,9 @@ export class ProviderConversionDecisionEngine {
       externalEventId: occurrence.externalEventId,
       externalMessageId: occurrence.externalMessageId,
       occurrenceKey: occurrence.occurrenceKey,
+      ...(occurrence.purchaseKey
+        ? { purchaseKey: occurrence.purchaseKey }
+        : {}),
       businessDedupePolicy,
       eventName: occurrence.eventName,
       occurredAt: occurrence.occurredAt,
@@ -399,6 +402,11 @@ export class ProviderConversionDecisionEngine {
       throw new Error("A business dedupe key requires a resolved paid lead");
     }
 
+    // A sale with a merchant order identity (Payt) is deduplicated forever by
+    // that identity (seller + order + event), never by the lead window.
+    if (input.occurrence.provider === "payt" && input.occurrence.purchaseKey) {
+      return { mode: "lifetime", scopeKey: input.occurrence.purchaseKey };
+    }
     const scopeKey = [
       input.rule.eventName,
       input.occurrence.workspaceId,

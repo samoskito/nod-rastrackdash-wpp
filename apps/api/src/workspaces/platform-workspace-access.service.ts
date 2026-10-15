@@ -471,6 +471,9 @@ export class PlatformWorkspaceAccessService {
     await tx.purchaseValueAdjustment.deleteMany({ where });
     await tx.purchaseReviewItem.deleteMany({ where });
     await tx.purchaseReview.deleteMany({ where });
+    // Sale claims reference the winning execution and its conversion
+    // (Restrict): they go before both.
+    await tx.providerPurchaseClaim.deleteMany({ where });
     await tx.providerConversionRuleExecution.deleteMany({ where });
     // ProviderConversionDecisionAudit has a Restrict self-reference. Clear it
     // first so every version chain can be removed in this transaction.

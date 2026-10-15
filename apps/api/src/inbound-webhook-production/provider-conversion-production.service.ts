@@ -1,11 +1,29 @@
 import { inboundParserProductionEligible } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+  type OnModuleDestroy,
+} from "@nestjs/common";
+import {
+  CTWA_DESTINATION_PROVIDER,
+  ctwaIntentAuthorized,
+  type AuthorizedCtwaDestination,
+} from "../inbound-webhooks/authorized-ctwa-destination";
+import {
+  effectiveUnnichatMetaRouting,
+  lockUnnichatMetaPolicy,
+} from "../inbound-webhooks/inbound-webhook-effective-meta-routing";
+import { resolveCtwaLeadProof } from "../conversion-rules/ctwa-lead-proof";
+import { CTWA_SEND_SKIPPED_ERROR_CODE } from "../conversion-events/conversion-event-retry";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import {
   conversionEventCarriesValue,
   conversionEventDedupeMode,
   conversionEventMetaEventIdPrefix,
+  authorizedCtwaDestinationSchema,
   conversionEventNameSchema,
   conversionEventRequiresValue,
   providerConversionDecisionSchema,
@@ -38,7 +56,10 @@ class ExternalChannelBillingAccessStub {
     // billing/ is removed.
   }
 }
-import { hashPhoneIdentity } from "../common/phone/phone-identity";
+import {
+  hashPhoneIdentity,
+  hashPhoneIdentityVariants,
+} from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import type { ProviderConversionProductionJobPayload } from "../common/queue/queue.constants";
@@ -125,8 +146,12 @@ export class ProviderConversionProductionFailure extends Error {
 }
 
 @Injectable()
-export class ProviderConversionProductionService {
+export class ProviderConversionProductionService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly billingAccess = new ExternalChannelBillingAccessStub();
+  private outboxTimer?: NodeJS.Timeout;
+  private recoveringOutbox = false;
 
   private readonly logger = new Logger(
     ProviderConversionProductionService.name,
@@ -148,6 +173,98 @@ export class ProviderConversionProductionService {
     private readonly conversionQueue: ConversionEventsQueueService,
     @Inject(RUNTIME_ENV) private readonly env: RuntimeEnv = process.env,
   ) {}
+
+  onApplicationBootstrap(): void {
+    if (!this.productionEnabled()) return;
+    this.outboxTimer = setInterval(() => {
+      void this.recoverPurchaseOutbox().catch(() =>
+        this.logger.error("provider_purchase_outbox_recovery_failed"),
+      );
+    }, 60_000);
+    this.outboxTimer.unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.outboxTimer) clearInterval(this.outboxTimer);
+  }
+
+  /**
+   * A sale claim commits its conversion with outboxPending when the send must
+   * be queued; a crash between commit and enqueue is recovered here. Rows
+   * exist only for providers with a sale identity (Payt, Fase 4a).
+   */
+  async recoverPurchaseOutbox(): Promise<number> {
+    if (!this.productionEnabled() || this.recoveringOutbox) return 0;
+    this.recoveringOutbox = true;
+    let enqueued = 0;
+    try {
+      const claims = await this.prisma.providerPurchaseClaim.findMany({
+        where: {
+          effectMode: "production",
+          outboxPending: true,
+          conversionEventLogId: { not: null },
+          OR: [
+            { outboxNextAttemptAt: null },
+            { outboxNextAttemptAt: { lte: new Date() } },
+          ],
+        },
+        orderBy: [
+          { outboxNextAttemptAt: { sort: "asc", nulls: "first" } },
+          { createdAt: "asc" },
+          { id: "asc" },
+        ],
+        take: 100,
+      });
+      for (const claim of claims) {
+        // Rotate pending rows durably before attempting a queue call, so an old failed batch cannot starve later claims.
+        try {
+          await this.prisma.providerPurchaseClaim.updateMany({
+            where: {
+              id: claim.id,
+              workspaceId: claim.workspaceId,
+              outboxPending: true,
+            },
+            data: { outboxNextAttemptAt: new Date(Date.now() + 60_000) },
+          });
+          const log = await this.prisma.conversionEventLog.findFirst({
+            where: {
+              id: claim.conversionEventLogId!,
+              workspaceId: claim.workspaceId,
+            },
+            select: { status: true, errorCode: true },
+          });
+          if (!log) continue;
+          // A send refused by the final CTWA check keeps its reason on the log
+          // and waits for the owner's retry instead of looping every minute.
+          if (
+            log.status === "ready_to_send" &&
+            log.errorCode !== CTWA_SEND_SKIPPED_ERROR_CODE
+          ) {
+            await this.conversionQueue.enqueueSend(
+              claim.conversionEventLogId!,
+              claim.workspaceId,
+            );
+            enqueued++;
+            continue;
+          }
+          await this.prisma.providerPurchaseClaim.updateMany({
+            where: {
+              id: claim.id,
+              workspaceId: claim.workspaceId,
+              effectMode: "production",
+              outboxPending: true,
+            },
+            data: { outboxPending: false },
+          });
+        } catch {
+          this.logger.warn("provider_purchase_outbox_enqueue_failed");
+        }
+      }
+      return enqueued;
+    } finally {
+      this.recoveringOutbox = false;
+    }
+  }
 
   async processExecution(
     input: Readonly<ProviderConversionProductionJobPayload>,
@@ -210,7 +327,13 @@ export class ProviderConversionProductionService {
         return materialized;
       }
 
-      if (materialized.queueRequired) {
+      if (materialized.queueRequired && materialized.ctwaHandoff) {
+        // CTWA page/pixel conversion: re-verified before it is queued.
+        await this.enqueueMaterialized({
+          ...execution,
+          conversionEventLogId: materialized.conversionEventLogId,
+        });
+      } else if (materialized.queueRequired) {
         await this.conversionQueue.enqueueSend(
           materialized.conversionEventLogId,
           execution.workspaceId,
@@ -269,6 +392,7 @@ export class ProviderConversionProductionService {
         status: "materialized";
         conversionEventLogId: string;
         queueRequired: boolean;
+        ctwaHandoff?: boolean;
       }
   > {
     if (!execution.channelId) {
@@ -526,10 +650,16 @@ export class ProviderConversionProductionService {
         status: "materialized";
         conversionEventLogId: string;
         queueRequired: boolean;
+        ctwaHandoff?: boolean;
       }
   > {
     const lead = decision.leadResolution.lead;
     const occurrence = decision.occurrence;
+    // Sale identity (seller + order + event). Only a provider that re-derives
+    // it from the preserved callback may use it (Payt, Fase 4a); otherwise the
+    // decision fails closed instead of trusting a frozen key.
+    const purchaseContext = this.verifiedPurchaseContext(execution, decision);
+    const purchaseKey = purchaseContext?.purchaseKey ?? null;
     const eventName = this.supportedEventName(occurrence.eventName);
     // The catalog decides whether the event may travel with a value at all;
     // only "required" events are refused when the frozen decision has none.
@@ -547,14 +677,68 @@ export class ProviderConversionProductionService {
       );
     }
 
-    const route = await this.routes.previewRoute({
-      workspaceId: execution.workspaceId,
-      adId: lead.adId,
+    // CTWA lead with ctwa_clid and no known ad (authorized page/pixel proof),
+    // exactly as in the SaaS: sale callbacks (Payt) may use the proof as the
+    // fallback of an ad lead; Unnichat automations only for a no-ad lead.
+    // Every other provider keeps requiring a known ad.
+    const ctwaProof =
+      occurrence.provider === "payt"
+        ? (lead.ctwaDestination ?? purchaseContext?.ctwaProof)
+        : occurrence.provider === CTWA_DESTINATION_PROVIDER && !lead.adId
+          ? lead.ctwaDestination
+          : undefined;
+    // No ctwa_clid, nothing is sent: the resolved lead always carries it and a
+    // lead without ad id is only accepted with its verified CTWA proof.
+    if (!lead.ctwaClid?.trim() || (!lead.adId && !ctwaProof))
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_paid_lead_missing",
+      );
+    const ctwaRoute = (proof: NonNullable<typeof ctwaProof>) => ({
+      status: "resolved",
+      reason: "authorized_ctwa_destination",
+      reportingAccountId: null,
+      adAccountId: null,
+      businessConnectionId: proof.businessConnectionId,
+      conversionDestinationId: proof.destinationId,
     });
+    let ctwaDestination =
+      !lead.adId || purchaseContext?.ctwaOriginOnly ? ctwaProof : undefined;
+    let route: {
+      status: string;
+      reason: string;
+      reportingAccountId: string | null;
+      adAccountId: string | null;
+      businessConnectionId: string | null;
+      conversionDestinationId: string | null;
+    };
+    if (ctwaDestination) {
+      route = ctwaRoute(ctwaDestination);
+    } else {
+      // Ad lead: the saved per-ad Meta route wins. Only when it does not
+      // resolve and the lead carries a verified CTWA entry proof, fall back to
+      // that authorized pixel+page destination (same checks as no-ad below).
+      const adRoute = purchaseKey
+        ? await this.previewPurchaseRoute(execution, lead.adId!)
+        : await this.routes.previewRoute({
+            workspaceId: execution.workspaceId,
+            adId: lead.adId!,
+          });
+      const adRouteResolved =
+        adRoute.status === "resolved" &&
+        Boolean(adRoute.reportingAccountId) &&
+        Boolean(adRoute.adAccountId) &&
+        Boolean(adRoute.businessConnectionId) &&
+        Boolean(adRoute.conversionDestinationId);
+      if (!adRouteResolved && ctwaProof) {
+        ctwaDestination = ctwaProof;
+        route = ctwaRoute(ctwaProof);
+      } else {
+        route = adRoute;
+      }
+    }
     if (
       route.status !== "resolved" ||
-      !route.reportingAccountId ||
-      !route.adAccountId ||
+      (!ctwaDestination && (!route.reportingAccountId || !route.adAccountId)) ||
       !route.businessConnectionId ||
       !route.conversionDestinationId
     ) {
@@ -566,10 +750,56 @@ export class ProviderConversionProductionService {
     const dedupePolicy = occurrence.businessDedupePolicy;
     const lock = this.lockKeys(
       execution.workspaceId,
-      dedupePolicy.scopeKey,
+      purchaseKey ?? dedupePolicy.scopeKey,
       eventName,
     );
     return this.prisma.$transaction(async (transaction) => {
+      if (ctwaDestination) {
+        await lockUnnichatMetaPolicy(transaction, execution.workspaceId);
+        const fresh =
+          await transaction.providerConversionRuleExecution.findFirst({
+            where: { id: execution.id, workspaceId: execution.workspaceId },
+            include: executionInclude,
+          });
+        if (
+          !fresh ||
+          !fresh.channelId ||
+          fresh.channel?.conversionEngineMode !== "canonical" ||
+          fresh.channelId !== ctwaDestination.channelId ||
+          !this.ctwaOriginConnectionMatches(fresh, ctwaDestination)
+        )
+          throw new ProviderConversionProductionFailure(
+            "provider_conversion_ctwa_origin_mismatch",
+          );
+        this.assertAutomationProductionContext(fresh);
+        if (purchaseKey) {
+          // A sale callback carries no click: the buyer/order/value were
+          // re-checked by the provider purchase context and the click comes
+          // only from the lead's verified entry proof below.
+          if (fresh.externalExecutionKey !== purchaseKey)
+            throw new ProviderConversionProductionFailure(
+              "provider_conversion_source_event_mismatch",
+            );
+        } else {
+          this.assertCtwaClickMatches(fresh, occurrence, lead);
+        }
+        const proof = await resolveCtwaLeadProof(transaction, {
+          workspaceId: execution.workspaceId,
+          leadId: lead.id,
+          phoneHash: lead.phoneHash,
+          ctwaClid: lead.ctwaClid,
+          channelId: ctwaDestination.channelId,
+          connectionId: ctwaDestination.connectionId,
+        });
+        if (
+          !proof ||
+          JSON.stringify(proof) !== JSON.stringify(ctwaDestination) ||
+          !(await ctwaIntentAuthorized(transaction, ctwaDestination))
+        )
+          throw new ProviderConversionProductionFailure(
+            "provider_conversion_ctwa_origin_revoked",
+          );
+      }
       await transaction.$queryRaw<Array<{ lockAcquired: string }>>`
         SELECT CAST(
           pg_advisory_xact_lock(
@@ -578,6 +808,17 @@ export class ProviderConversionProductionService {
           ) AS text
         ) AS "lockAcquired"
       `;
+
+      if (purchaseKey) {
+        // Keep the customer/event lock as well as the merchant/order lock:
+        // distinct orders count independently while customer history remains serialized.
+        const phoneLock = this.lockKeys(
+          execution.workspaceId,
+          lead.phoneHash,
+          eventName,
+        );
+        await transaction.$queryRaw`SELECT pg_advisory_xact_lock(CAST(${phoneLock.first} AS integer), CAST(${phoneLock.second} AS integer))::text`;
+      }
 
       const current =
         await transaction.providerConversionRuleExecution.findFirst({
@@ -648,15 +889,31 @@ export class ProviderConversionProductionService {
               }
             : {}),
         };
-      const duplicate =
-        await transaction.providerConversionRuleExecution.findFirst({
-          where: duplicateWhere,
-          select: { id: true },
-        });
+      // A sale with a merchant order identity has exactly one durable winner.
+      const purchaseClaim = purchaseKey
+        ? await transaction.providerPurchaseClaim.findUnique({
+            where: {
+              workspaceId_effectMode_purchaseKey: {
+                workspaceId: execution.workspaceId,
+                effectMode: "production",
+                purchaseKey,
+              },
+            },
+          })
+        : null;
+      const duplicate = purchaseKey
+        ? purchaseClaim
+          ? { id: purchaseClaim.winnerExecutionId }
+          : null
+        : await transaction.providerConversionRuleExecution.findFirst({
+            where: duplicateWhere,
+            select: { id: true },
+          });
 
       if (duplicate) {
-        const reasonCode =
-          dedupePolicy.mode === "rolling_window"
+        const reasonCode = purchaseKey
+          ? "purchase_duplicate"
+          : dedupePolicy.mode === "rolling_window"
             ? "purchase_within_24h"
             : "qualified_lead_already_materialized";
         await transaction.providerConversionRuleExecution.update({
@@ -703,11 +960,17 @@ export class ProviderConversionProductionService {
           sourceEventId,
           sourceTrigger: `inbound_webhook:${occurrence.provider}:${decision.rule.triggerType}`,
           eventName,
-          eventId: this.metaEventId(execution.id, eventName),
-          dedupeKey: `provider-conversion:${execution.id}`,
+          // A sale keeps one Meta identity per seller+order+event.
+          eventId: purchaseKey
+            ? eventName === "Purchase"
+              ? `conversion_purchase_${purchaseKey.slice(9)}`
+              : `conversion_${conversionEventMetaEventIdPrefix(eventName)}_${purchaseKey.slice(9)}`
+            : this.metaEventId(execution.id, eventName),
+          dedupeKey: purchaseKey ?? `provider-conversion:${execution.id}`,
           leadId: lead.id,
           phoneHash: lead.phoneHash,
           businessSource: "paid",
+          ...(ctwaDestination ? { ctwaDestination } : {}),
           metaAccountId: route.adAccountId,
           metaBusinessConnectionId: route.businessConnectionId,
           metaConversionDestinationId: route.conversionDestinationId,
@@ -744,6 +1007,18 @@ export class ProviderConversionProductionService {
       );
 
       const queueRequired = conversion.deliveryStatus === "ready_to_send";
+      if (purchaseKey) {
+        await transaction.providerPurchaseClaim.create({
+          data: {
+            workspaceId: execution.workspaceId,
+            purchaseKey,
+            effectMode: "production",
+            winnerExecutionId: execution.id,
+            conversionEventLogId: conversion.conversionEventLogId,
+            outboxPending: queueRequired,
+          },
+        });
+      }
       await transaction.providerConversionRuleExecution.update({
         where: { id: execution.id },
         data: {
@@ -755,7 +1030,13 @@ export class ProviderConversionProductionService {
           normalizedResult: this.withTechnicalDelivery(
             execution.normalizedResult,
             {
-              state: queueRequired ? "queued" : "sent",
+              state: queueRequired
+                ? "queued"
+                : // A CTWA page/pixel conversion that did not queue was refused
+                  // by its own checks (e.g. outside Meta's 7-day window).
+                  ctwaDestination && conversion.deliveryStatus !== "sent"
+                  ? "blocked_configuration"
+                  : "sent",
               retryable: false,
               reasonCode: null,
             },
@@ -782,6 +1063,7 @@ export class ProviderConversionProductionService {
         status: "materialized" as const,
         conversionEventLogId: conversion.conversionEventLogId,
         queueRequired,
+        ...(ctwaDestination ? { ctwaHandoff: true } : {}),
       };
     });
   }
@@ -1404,6 +1686,138 @@ export class ProviderConversionProductionService {
     }
   }
 
+  /**
+   * Sale identity of a frozen decision, re-derived from the preserved callback
+   * by the provider that owns it. No sale provider ships in this edition yet
+   * (Payt arrives in Fase 4a with its own verifier): a decision that claims a
+   * sale identity fails closed and nothing is sent.
+   */
+  private verifiedPurchaseContext(
+    _execution: ExecutionRecord,
+    decision: EligibleProviderConversionDecision,
+  ): {
+    purchaseKey: string;
+    ctwaOriginOnly: boolean;
+    ctwaProof: AuthorizedCtwaDestination | undefined;
+  } | null {
+    if (
+      !decision.occurrence.purchaseKey &&
+      decision.occurrence.provider !== "payt"
+    )
+      return null;
+    throw new ProviderConversionProductionFailure(
+      "provider_purchase_identity_missing",
+    );
+  }
+
+  /**
+   * Ad route of a sale: the scoped channel's own valid routes, or the
+   * workspace route when the channel inherits it (Unnichat) or resolves its
+   * own destination per ad (UAZAPI).
+   */
+  private async previewPurchaseRoute(execution: ExecutionRecord, adId: string) {
+    const channel = await this.prisma.inboundWebhookChannel.findFirst({
+      where: { workspaceId: execution.workspaceId, id: execution.channelId! },
+      include: {
+        routes: { where: { active: true, validationStatus: "valid" } },
+        connection: true,
+      },
+    });
+    if (
+      !channel ||
+      channel.workspaceId !== execution.workspaceId ||
+      channel.connection.workspaceId !== execution.workspaceId
+    )
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_route_not_authorized",
+      );
+    if (channel.connection.provider === "uazapi")
+      return this.routes.previewRoute({
+        workspaceId: execution.workspaceId,
+        adId,
+      });
+    if (String(channel.connection.provider) === CTWA_DESTINATION_PROVIDER) {
+      const policy = await effectiveUnnichatMetaRouting(this.prisma, channel);
+      if (policy.eligible && policy.source === "inherit_workspace")
+        return this.routes.previewRoute({
+          workspaceId: execution.workspaceId,
+          adId,
+        });
+    }
+    const previews = [];
+    for (const route of channel.routes) {
+      const preview = await this.routes.previewRoute({
+        workspaceId: execution.workspaceId,
+        adId,
+        businessConnectionId: route.metaBusinessConnectionId,
+        reportingAccountId: route.metaReportingAccountId,
+        conversionDestinationId: route.metaConversionDestinationId,
+      });
+      if (
+        preview.status === "resolved" &&
+        preview.businessConnectionId === route.metaBusinessConnectionId &&
+        (!route.metaReportingAccountId ||
+          preview.reportingAccountId === route.metaReportingAccountId) &&
+        (!route.metaConversionDestinationId ||
+          preview.conversionDestinationId === route.metaConversionDestinationId)
+      )
+        previews.push(preview);
+    }
+    if (previews.length !== 1)
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_route_missing_or_conflicting",
+      );
+    return previews[0]!;
+  }
+
+  /**
+   * Automations arrive on the entry connection itself. A sale callback (Payt)
+   * sits on its rule's endpoint, so its origin is the scoped channel, which
+   * must belong to the connection of the verified CTWA entry.
+   */
+  private ctwaOriginConnectionMatches(
+    execution: ExecutionRecord,
+    intent: { channelId: string; connectionId: string },
+  ): boolean {
+    if (String(execution.providerRule.parserRelease?.provider) === "payt")
+      return Boolean(
+        execution.channel &&
+        execution.channel.id === intent.channelId &&
+        execution.channel.connectionId === intent.connectionId &&
+        providerRuleCoversChannel(execution.providerRule, {
+          id: intent.channelId,
+          connectionId: execution.channel.connectionId,
+          provider: execution.channel.connection?.provider ?? "",
+        }),
+      );
+    return execution.sourceDelivery.connectionId === intent.connectionId;
+  }
+
+  /**
+   * The preserved automation callback must still carry the lead's click
+   * (ctwa_clid): a CTWA conversion without the click never reaches Meta.
+   * Callbacks without a click field (Umbler automation) always fail closed.
+   */
+  private assertCtwaClickMatches(
+    execution: ExecutionRecord,
+    occurrence: EligibleProviderConversionDecision["occurrence"],
+    lead: EligibleProviderConversionDecision["leadResolution"]["lead"],
+  ): void {
+    const parsed = this.reparseAutomation(execution) as ParsedUmblerAutomationV1 & {
+      ctwaClid?: string | null;
+    };
+    if (
+      parsed.externalExecutionKey !== execution.externalExecutionKey ||
+      parsed.eventName !== occurrence.eventName ||
+      !hashPhoneIdentityVariants([parsed.phone]).includes(lead.phoneHash) ||
+      !parsed.ctwaClid ||
+      parsed.ctwaClid !== lead.ctwaClid
+    )
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_ctwa_click_mismatch",
+      );
+  }
+
   private reparseAutomation(
     execution: ExecutionRecord,
   ): ParsedUmblerAutomationV1 {
@@ -1512,9 +1926,60 @@ export class ProviderConversionProductionService {
         id: execution.conversionEventLogId,
         workspaceId: execution.workspaceId,
       },
-      select: { status: true },
+      select: { status: true, sourcePayload: true },
     });
     if (conversion?.status === "ready_to_send") {
+      const payload = this.jsonObject(conversion.sourcePayload);
+      if (payload?.ctwaDestination) {
+        // CTWA page/pixel conversion: re-verify the destination and the
+        // execution before queueing; a revoked handoff stays recorded.
+        const parsed = authorizedCtwaDestinationSchema.safeParse(
+          payload.ctwaDestination,
+        );
+        if (!parsed.success) return;
+        const intent = parsed.data;
+        await this.prisma.$transaction(async (tx) => {
+          await lockUnnichatMetaPolicy(tx, execution.workspaceId);
+          const fresh = await tx.providerConversionRuleExecution.findFirst({
+            where: { id: execution.id, workspaceId: execution.workspaceId },
+            include: executionInclude,
+          });
+          let contextValid = false;
+          if (fresh) {
+            try {
+              this.assertAutomationProductionContext(fresh);
+              contextValid = true;
+            } catch {
+              contextValid = false;
+            }
+          }
+          if (
+            !fresh ||
+            !contextValid ||
+            fresh.status !== "materialized" ||
+            fresh.conversionEventLogId !== execution.conversionEventLogId ||
+            fresh.channel?.conversionEngineMode !== "canonical" ||
+            fresh.channelId !== intent.channelId ||
+            !this.ctwaOriginConnectionMatches(fresh, intent) ||
+            intent.workspaceId !== execution.workspaceId ||
+            !(await ctwaIntentAuthorized(tx, intent))
+          ) {
+            if (fresh?.status === "materialized")
+              await tx.providerConversionRuleExecution.update({
+                where: { id: fresh.id },
+                data: {
+                  reasonCode: "provider_conversion_ctwa_handoff_revoked",
+                },
+              });
+            return;
+          }
+          await this.conversionQueue.enqueueSend(
+            execution.conversionEventLogId!,
+            execution.workspaceId,
+          );
+        });
+        return;
+      }
       await this.conversionQueue.enqueueSend(
         execution.conversionEventLogId,
         execution.workspaceId,

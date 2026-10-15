@@ -11,7 +11,8 @@ export type MetaCapiPayloadInput = {
   phoneHash: string;
   ctwaClid: string;
   pageId: string;
-  adId: string;
+  /** null only on the authorized CTWA page/pixel path (no known ad). */
+  adId: string | null;
   valueCents?: number | null;
   currency?: string | null;
   contentName?: string | null;
@@ -49,13 +50,15 @@ export function buildMetaCapiPayload(
   const customData: ConversionEventCustomDataDto = {
     ...baseCustomData,
     ...catalogDefaults,
-    ad_id: input.adId,
+    ...(input.adId ? { ad_id: input.adId } : {}),
     ...(typeof input.valueCents === "number"
       ? { value: input.valueCents / 100 }
       : {}),
     ...(input.currency ? { currency: input.currency } : {}),
     ...(input.contentName ? { content_name: input.contentName } : {})
   };
+  // Never forward a caller-provided ad_id when the event has no ad.
+  if (!input.adId) delete customData.ad_id;
 
   return {
     data: [

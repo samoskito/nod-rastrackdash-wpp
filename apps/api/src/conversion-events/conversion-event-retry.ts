@@ -5,6 +5,13 @@ type ConversionEventRetryState = {
   errorCode: string | null;
 };
 
+/**
+ * errorCode kept on a ready_to_send log whose CTWA send was refused before the
+ * dispatch claim (errorMessage carries "<reason>: <texto>"). Retryable: the
+ * sender's ready_to_send -> dispatching claim remains the single-send fence.
+ */
+export const CTWA_SEND_SKIPPED_ERROR_CODE = "CtwaSendSkipped";
+
 export const BLOCKED_CONVERSION_RETRY_LIMIT = 500;
 
 const configurationErrorCodes = [
@@ -32,6 +39,8 @@ export function canRetryConversionEvent(
 ): boolean {
   return (
     (event.status === "error" && event.errorCode === "MetaCapiNetworkError") ||
-    isConfigurationBlockedConversionEvent(event)
+    isConfigurationBlockedConversionEvent(event) ||
+    (event.status === "ready_to_send" &&
+      event.errorCode === CTWA_SEND_SKIPPED_ERROR_CODE)
   );
 }

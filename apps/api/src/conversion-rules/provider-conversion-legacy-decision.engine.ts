@@ -199,17 +199,22 @@ export class ProviderConversionLegacyDecisionEngine {
       externalEventId: input.occurrence.externalEventId,
       externalMessageId: input.occurrence.externalMessageId,
       occurrenceKey: input.occurrence.occurrenceKey,
+      ...(input.occurrence.purchaseKey
+        ? { purchaseKey: input.occurrence.purchaseKey }
+        : {}),
       businessDedupePolicy:
-        input.rule.eventName === "QualifiedLead"
-          ? {
-              mode: "lifetime",
-              scopeKey,
-            }
-          : {
-              mode: "rolling_window",
-              scopeKey,
-              windowSeconds: PURCHASE_DEDUPE_WINDOW_SECONDS,
-            },
+        input.occurrence.provider === "payt" && input.occurrence.purchaseKey
+          ? { mode: "lifetime", scopeKey: input.occurrence.purchaseKey }
+          : input.rule.eventName === "QualifiedLead"
+            ? {
+                mode: "lifetime",
+                scopeKey,
+              }
+            : {
+                mode: "rolling_window",
+                scopeKey,
+                windowSeconds: PURCHASE_DEDUPE_WINDOW_SECONDS,
+              },
       eventName: input.occurrence.eventName,
       occurredAt: input.occurrence.occurredAt,
       authorType: input.occurrence.authorType,

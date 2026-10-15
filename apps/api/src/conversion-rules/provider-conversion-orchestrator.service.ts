@@ -37,6 +37,8 @@ export type ProviderConversionOrchestrationResult = {
   executionId: string | null;
   eligibleExecutionId: string | null;
   reviewId: string | null;
+  /** The sale (purchaseKey) already has an observation winner. */
+  purchaseDuplicate?: boolean;
 };
 
 type ProviderConversionPersistenceClient = Pick<
@@ -101,6 +103,15 @@ export class ProviderConversionOrchestrator {
       };
     }
 
+    const purchaseKey = persistedDecision.decision.occurrence.purchaseKey;
+    if (
+      persistedDecision.decision.occurrence.provider === "payt" &&
+      purchaseKey &&
+      input.disposition.state === "observed"
+    ) {
+      return this.persistObservedPurchase(input, purchaseKey);
+    }
+
     const execution = await this.persistExecution({
       persistedDecision,
       disposition: input.disposition,
@@ -115,10 +126,96 @@ export class ProviderConversionOrchestrator {
     };
   }
 
-  private async persistExecution(input: {
-    persistedDecision: PersistedProviderConversionDecision;
-    disposition: ProviderConversionTechnicalDisposition;
-  }): Promise<{ id: string; status: string }> {
+  /**
+   * One observation winner per sale (seller + order + event): the first
+   * delivery of the sale owns the observed execution; any other delivery of the
+   * same sale is reported as a duplicate. Serialized per purchase key.
+   */
+  private persistObservedPurchase(
+    input: {
+      persistedDecision: PersistedProviderConversionDecision;
+      disposition: ProviderConversionTechnicalDisposition;
+    },
+    purchaseKey: string,
+  ): Promise<ProviderConversionOrchestrationResult> {
+    const { persistedDecision } = input;
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${purchaseKey}, 0))::text`;
+      const existing = await transaction.providerPurchaseClaim.findUnique({
+        where: {
+          workspaceId_effectMode_purchaseKey: {
+            workspaceId: persistedDecision.workspaceId,
+            effectMode: "observation",
+            purchaseKey,
+          },
+        },
+      });
+      if (existing) {
+        // An explicit observation re-evaluation of the claim winner itself
+        // (new decision for the same rule and sale) refreshes that observed
+        // execution. Any other delivery of the sale stays a duplicate.
+        const winner =
+          await transaction.providerConversionRuleExecution.findUnique({
+            where: {
+              providerRuleId_externalExecutionKey: {
+                providerRuleId: persistedDecision.providerRuleId,
+                externalExecutionKey: persistedDecision.occurrenceKey,
+              },
+            },
+            select: { id: true, status: true, providerDecisionId: true },
+          });
+        if (
+          winner?.id === existing.winnerExecutionId &&
+          winner.status === "observed" &&
+          winner.providerDecisionId !== persistedDecision.id
+        ) {
+          const execution = await this.persistExecution(
+            { persistedDecision, disposition: input.disposition },
+            transaction,
+          );
+          return {
+            executionId: execution.id,
+            eligibleExecutionId: null,
+            reviewId: null,
+          };
+        }
+        return {
+          executionId: existing.winnerExecutionId,
+          eligibleExecutionId: null,
+          reviewId: null,
+          purchaseDuplicate: true,
+        };
+      }
+      const execution = await this.persistExecution(
+        { persistedDecision, disposition: input.disposition },
+        transaction,
+      );
+      await transaction.providerPurchaseClaim.create({
+        data: {
+          workspaceId: persistedDecision.workspaceId,
+          purchaseKey,
+          effectMode: "observation",
+          winnerExecutionId: execution.id,
+        },
+      });
+      return {
+        executionId: execution.id,
+        eligibleExecutionId: null,
+        reviewId: null,
+      };
+    });
+  }
+
+  private async persistExecution(
+    input: {
+      persistedDecision: PersistedProviderConversionDecision;
+      disposition: ProviderConversionTechnicalDisposition;
+    },
+    client: Pick<
+      Prisma.TransactionClient,
+      "providerConversionRuleExecution"
+    > = this.prisma,
+  ): Promise<{ id: string; status: string }> {
     const persisted = input.persistedDecision;
     const decision = persisted.decision;
     // The disposition state is the execution status one-to-one: only
@@ -126,7 +223,7 @@ export class ProviderConversionOrchestrator {
     // stays visible in the audit UI without any chance of reaching CAPI.
     const status = input.disposition.state;
     const existing =
-      await this.prisma.providerConversionRuleExecution.findUnique({
+      await client.providerConversionRuleExecution.findUnique({
         where: {
           providerRuleId_externalExecutionKey: {
             providerRuleId: persisted.providerRuleId,
@@ -153,7 +250,7 @@ export class ProviderConversionOrchestrator {
     const catalogVariantId = this.singleCatalogVariantId(decision);
     const normalizedResult = this.normalizedResult(persisted);
 
-    return this.prisma.providerConversionRuleExecution.upsert({
+    return client.providerConversionRuleExecution.upsert({
       where: {
         providerRuleId_externalExecutionKey: {
           providerRuleId: persisted.providerRuleId,

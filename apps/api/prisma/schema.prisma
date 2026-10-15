@@ -311,6 +311,11 @@ enum InboundWebhookChannelStatus {
   paused
 }
 
+enum InboundWebhookMetaRoutingMode {
+  inherit_workspace
+  channel_override
+}
+
 enum InboundWebhookDeliveryStatus {
   pending
   queued
@@ -456,6 +461,7 @@ model Workspace {
   providerConversionRuleChannels   ProviderConversionRuleChannel[]
   providerConversionRuleEndpoints  ProviderConversionRuleEndpoint[]
   providerRuleCreateClaims         ProviderRuleCreateClaim[]
+  providerPurchaseClaims           ProviderPurchaseClaim[]
   providerConversionExecutions     ProviderConversionRuleExecution[]
   providerConversionDecisions      ProviderConversionDecisionAudit[]
   providerConversionComparisons    ProviderConversionShadowComparison[]
@@ -733,7 +739,9 @@ model ConversionEventLog {
   metaBusinessConnection    MetaBusinessConnection?    @relation(fields: [metaBusinessConnectionId], references: [id], onDelete: SetNull)
   metaConversionDestination MetaConversionDestination? @relation(fields: [metaConversionDestinationId], references: [id], onDelete: SetNull)
   diagnosticEvents          DiagnosticEvent[]
+  purchaseClaims            ProviderPurchaseClaim[]
 
+  @@unique([workspaceId, id], map: "ConversionEventLog_workspace_id_key")
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, eventOccurredAt])
   @@index([workspaceId, eventName, eventOccurredAt])
@@ -1046,6 +1054,26 @@ model ProviderRuleCreateClaim {
   @@index([workspaceId, providerRuleId])
 }
 
+/// One durable winner per sale (seller + order + event) and effect mode.
+model ProviderPurchaseClaim {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  purchaseKey          String
+  effectMode           String
+  winnerExecutionId    String
+  conversionEventLogId String?
+  outboxPending        Boolean   @default(false)
+  outboxNextAttemptAt  DateTime?
+  createdAt            DateTime  @default(now())
+
+  workspace          Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  winnerExecution    ProviderConversionRuleExecution @relation(fields: [workspaceId, winnerExecutionId], references: [workspaceId, id], onDelete: Restrict)
+  conversionEventLog ConversionEventLog?             @relation(fields: [workspaceId, conversionEventLogId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, effectMode, purchaseKey], map: "ProviderPurchaseClaim_identity_key")
+  @@index([outboxPending, outboxNextAttemptAt, createdAt], map: "ProviderPurchaseClaim_outbox_recovery_idx")
+}
+
 model ProviderConversionRuleChannel {
   id             String   @id @default(cuid())
   workspaceId    String
@@ -1179,6 +1207,7 @@ model ProviderConversionRuleExecution {
   matchedCatalogVariant ConversionCatalogVariant?        @relation(fields: [matchedCatalogVariantWorkspaceId, matchedCatalogVariantId], references: [workspaceId, id], onDelete: SetNull, map: "ProviderConversionRuleExecution_catalogVariantId_fkey")
   providerDecision      ProviderConversionDecisionAudit? @relation(fields: [providerDecisionWorkspaceId, providerDecisionId], references: [workspaceId, id], onDelete: SetNull, map: "ProviderConversionRuleExecution_providerDecisionId_fkey")
   purchaseReview        PurchaseReview?
+  purchaseClaims        ProviderPurchaseClaim[]
 
   @@unique([workspaceId, id])
   @@unique([providerRuleId, externalExecutionKey])
@@ -1641,6 +1670,9 @@ model InboundWebhookChannel {
   channelName           String?
   status                InboundWebhookChannelStatus  @default(discovered)
   conversionEngineMode  ProviderConversionEngineMode @default(canonical)
+  /// NULL = number created before the routing mode existed (legacy: its saved
+  /// routes decide). New numbers start as inherit_workspace.
+  metaRoutingMode       InboundWebhookMetaRoutingMode? @default(inherit_workspace)
   productionActivatedAt DateTime?
   whatsappInstanceId    String?                      @unique
   firstSeenAt           DateTime                     @default(now())

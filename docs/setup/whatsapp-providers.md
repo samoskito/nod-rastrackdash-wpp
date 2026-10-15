@@ -285,10 +285,12 @@ credencial ou variável de ambiente própria neste template.
    operacionais. Mensagens sem CTWA ficam registradas como
    `ignored_no_ctwa`; gatilhos por palavra-chave, tag ou automação do
    provedor não fazem parte do parser Data Crazy v1.
-6. Após uma entrega CTWA real ser processada em observação, um
-   administrador da instalação deve certificar o parser **Data Crazy v1**
-   no backoffice. Só então configure a rota Meta do canal e ative a
-   conexão em produção, no mesmo gate usado por Gupshup e Meta Cloud.
+6. O parser **Data Crazy v1** já vem certificado pela migration
+   `20261016090300_data_crazy_parser_certification` (contrato validado com
+   CTWAs reais no SaaS). Após uma entrega CTWA real ser processada em
+   observação, configure a rota Meta do canal e ative a conexão em
+   produção, no mesmo gate usado por Gupshup e Meta Cloud; cada regra
+   continua precisando da própria ativação.
 
 ## Umbler Talk e Gupshup — conexão de webhook de entrada
 
