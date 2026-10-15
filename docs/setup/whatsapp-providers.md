@@ -337,10 +337,10 @@ Consequências práticas, confirmadas no código:
   passo que você esqueceu de clicar.
 - **NOD API** ainda não tem receiver inbound (a rota responde `501`).
 
-> ⚠️ Os cartões de status do card de provedor (aba WhatsApp) ainda trazem
-> o texto antigo *"Ingestion pendente: receiver e parser WAHA/Z-API ainda
-> nao existem"*. Esse texto está desatualizado em relação ao backend
-> (os receivers existem e estão ligados). Vale o que está na matriz acima.
+> ℹ️ No Hub, WAHA, Z-API e NOD API aparecem como **Em breve**: não é possível
+> criar conexões novas; as já existentes continuam gerenciáveis. Os receivers
+> de WAHA e Z-API existem no backend (matriz acima), mas só quem já tem a
+> conexão os usa por enquanto.
 
 ## Gatilhos de conversão exigem as envs `INBOUND_*`
 
@@ -381,6 +381,7 @@ Depois, **redeploy da API**. Detalhe de cada variável em
   `NOD_API_BROKER_URL` (já preenchida no `.env.example`); o broker
   autentica com a `LICENSE_KEY` + fingerprint da instância.
 - Status/health: pronto. **Receiver inbound: ainda não existe** (`501`).
+- **Em breve no Hub:** não é possível criar conexões novas; as já existentes continuam gerenciáveis.
 
 ### WAHA (`waha`, self-host)
 
@@ -392,6 +393,7 @@ Depois, **redeploy da API**. Detalhe de cada variável em
   Se você mudou a sessão, use **Gerar receiver** de novo (isso também
   regrava a sessão a partir da configuração salva).
 - Ainda **sem** ponte automática para a central de Gatilhos.
+- **Em breve no Hub:** não é possível criar conexões novas; as já existentes continuam gerenciáveis.
 
 ### Z-API (`zapi`)
 
@@ -401,6 +403,7 @@ Depois, **redeploy da API**. Detalhe de cada variável em
 - Receiver inbound: **pronto**, com o mesmo vínculo estrito —
   `body.instanceId` precisa bater com o Instance ID salvo.
 - Ainda **sem** ponte automática para a central de Gatilhos.
+- **Em breve no Hub:** não é possível criar conexões novas; as já existentes continuam gerenciáveis.
 
 ### Data Crazy (`data_crazy`)
 

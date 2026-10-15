@@ -221,7 +221,7 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     comingSoonDescription:
       "Em breve: a conexão com o WAHA ainda não está disponível para novas contas.",
     description:
-      "Conecte a sua instalação WAHA (WhatsApp HTTP API).",
+      "Sua instalação WAHA (WhatsApp HTTP API) já conectada.",
     gate: { kind: "whatsapp_provider", provider: "waha" },
   },
   {
@@ -235,7 +235,7 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     comingSoonDescription:
       "Em breve: a conexão com a Z-API ainda não está disponível para novas contas.",
     description:
-      "Conecte a sua instância Z-API.",
+      "Sua instância Z-API já conectada.",
     gate: { kind: "whatsapp_provider", provider: "zapi" },
   },
   {
@@ -249,7 +249,7 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     comingSoonDescription:
       "Em breve: a conexão com a NOD API ainda não está disponível para novas contas.",
     description:
-      "Conecte a instância NOD API (PalmUP) do seu WhatsApp.",
+      "Sua instância NOD API (PalmUP) já conectada.",
     gate: { kind: "whatsapp_provider", provider: "nod_api" },
   },
   {
