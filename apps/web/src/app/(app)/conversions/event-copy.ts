@@ -69,3 +69,20 @@ export function ruleEventLabelForOrigin(
     ? paytEventLabel(eventName)
     : ruleEventLabel(eventName);
 }
+
+/**
+ * Rótulo do evento no filtro da lista, que agrupa regras de várias origens
+ * pelo mesmo nome de evento. Se todas as regras com o evento são da Payt, usa
+ * o rótulo da Payt; se há mistura, mantém o genérico e avisa o da Payt.
+ */
+export function ruleEventFilterLabel(
+  eventName: string,
+  origins: ReadonlyArray<string>,
+): string {
+  const paytLabel = paytEventLabels[eventName];
+  const generic = ruleEventLabel(eventName);
+  const paytCount = origins.filter((origin) => origin === "automation_payt").length;
+  if (!paytLabel || paytCount === 0 || paytLabel === generic) return generic;
+  if (paytCount === origins.length) return paytLabel;
+  return `${generic} (Payt: ${paytLabel})`;
+}

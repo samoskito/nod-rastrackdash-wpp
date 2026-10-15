@@ -14,7 +14,12 @@ import {
   ineligibleNumbers,
   offeredRuleOrigins,
 } from "../src/app/(app)/conversions/conversion-rules-view";
-import { ruleEventLabelForOrigin } from "../src/app/(app)/conversions/event-copy";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  ruleEventFilterLabel,
+  ruleEventLabelForOrigin,
+} from "../src/app/(app)/conversions/event-copy";
 import { NewRuleFlow } from "../src/app/(app)/conversions/new-rule-flow";
 import {
   ReceivedEvents,
@@ -641,3 +646,31 @@ describe("Payt: endereço e eventos recebidos", () => {
     expect(screen.queryByText("Dados fora do padrão")).toBeNull();
   });
 });
+
+describe("rótulo do evento Payt e layout (Fase 4a)", () => {
+  it("filtro de evento: só Payt usa o rótulo da Payt; mistura não confunde", () => {
+    expect(ruleEventFilterLabel("InitiateCheckout", ["automation_payt"])).toBe(
+      "Pix/boleto gerado",
+    );
+    expect(
+      ruleEventFilterLabel("InitiateCheckout", ["message_phrase", "automation_payt"]),
+    ).toBe("Checkout iniciado (Payt: Pix/boleto gerado)");
+    expect(ruleEventFilterLabel("InitiateCheckout", ["message_phrase"])).toBe(
+      ruleEventLabelForOrigin("message_phrase", "InitiateCheckout"),
+    );
+  });
+
+  it("CSS: ações da regra quebram em colunas mínimas e o painel da Payt ocupa a largura", () => {
+    const css = readFileSync(
+      resolve(__dirname, "../src/styles/layout-system.css"),
+      "utf8",
+    );
+    expect(css).toMatch(
+      /\.conversion-rule-actions \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(1[0-9]{2}px, 1fr\)\)/,
+    );
+    expect(css).toMatch(
+      /\.conversion-webhook-url \.provider-conversion-payload-helper \{[^}]*width: 100%/,
+    );
+  });
+});
+

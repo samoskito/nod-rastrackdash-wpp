@@ -6640,8 +6640,11 @@ body {
   gap: 10px;
 }
 
-.conversion-webhook-url .conversion-field {
+.conversion-webhook-url .conversion-field,
+.conversion-webhook-url .provider-conversion-payload-helper {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .conversion-crm-pointer .button {
@@ -6840,7 +6843,7 @@ body {
   .conversion-rule-actions {
     display: grid;
     order: 2;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
     gap: 6px;
   }
 
