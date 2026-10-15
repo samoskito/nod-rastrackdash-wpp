@@ -37,6 +37,7 @@ function attachWorkspaceDeleteConsumer(
     "conversionCatalogVariant",
     "conversionCatalogAttribute",
     "conversionCatalog",
+    "providerRuleCreateClaim",
     "providerConversionRuleConfig",
     "conversionRule",
     "inboundWebhookReplayItem",
@@ -78,6 +79,9 @@ function attachWorkspaceDeleteConsumer(
     if (!h.prisma[delegate]) h.prisma[delegate] = noDelete();
   }
   h.prisma.providerConversionDecisionAudit.updateMany = vi.fn(async () => ({
+    count: 0,
+  }));
+  h.prisma.providerConversionRuleConfig.updateMany = vi.fn(async () => ({
     count: 0,
   }));
   h.prisma.authSession = { updateMany: vi.fn(async () => ({ count: 0 })) };

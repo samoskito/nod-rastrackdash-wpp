@@ -300,6 +300,7 @@ function makeHarness(initialUsers: UserState[] = []) {
     "providerConversionShadowComparison",
     "providerConversionRuleChannel",
     "providerConversionRuleEndpoint",
+    "providerRuleCreateClaim",
     "providerConversionRuleConfig",
     "conversionRule",
     "conversionCatalogVariant",
@@ -358,6 +359,10 @@ function makeHarness(initialUsers: UserState[] = []) {
   }
   prisma.providerConversionDecisionAudit.updateMany = vi.fn(async () => {
     events.push("update:providerConversionDecisionAudit");
+    return { count: 0 };
+  });
+  prisma.providerConversionRuleConfig.updateMany = vi.fn(async () => {
+    events.push("update:providerConversionRuleConfig");
     return { count: 0 };
   });
   const deleteKommo = (
@@ -1119,6 +1124,14 @@ describe("platform workspace access", () => {
     before("delete:conversionCatalogVariant", "delete:conversionCatalog");
     before("delete:conversionCatalogAttribute", "delete:conversionCatalog");
     before("delete:conversionCatalog", "delete:providerConversionRuleConfig");
+    before(
+      "delete:providerRuleCreateClaim",
+      "delete:providerConversionRuleConfig",
+    );
+    before(
+      "update:providerConversionRuleConfig",
+      "delete:providerConversionRuleConfig",
+    );
     before("delete:diagnosticEvent", "delete:conversionEventLog");
     before(
       "update:providerConversionDecisionAudit",

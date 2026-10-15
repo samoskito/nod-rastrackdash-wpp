@@ -31,6 +31,11 @@ import {
   type ProviderConversionTechnicalDisposition,
 } from "../conversion-rules/provider-conversion-orchestrator.service";
 import { ProviderConversionPaidLeadResolver } from "../conversion-rules/provider-conversion-paid-lead-resolver.service";
+import {
+  providerRuleCandidateWhere,
+  providerRuleScope,
+  resolveApplicableProviderRules,
+} from "../conversion-rules/provider-rule-scope";
 import { InboundWebhookProductionQueueService } from "./inbound-webhook-production-queue.service";
 import {
   UazapiConversionBridgeService,
@@ -54,6 +59,36 @@ const ruleInclude = {
 type Rule = Prisma.ProviderConversionRuleConfigGetPayload<{
   include: typeof ruleInclude;
 }>;
+
+/** Connection whose live state gates production (the rule's, or the bridge's). */
+type GateConnection = {
+  status: string;
+  removedAt: Date | null;
+  parserReleaseId: string;
+  parserRelease: { provider: string; version: string; status: string };
+};
+
+type GatedChannel = {
+  status: string;
+  productionActivatedAt: Date | null;
+  /** Connection of the bridged channel: gates rules spanning connections. */
+  connection?: GateConnection | null;
+};
+
+const gatedChannelSelect = {
+  status: true,
+  productionActivatedAt: true,
+  connection: {
+    select: {
+      status: true,
+      removedAt: true,
+      parserReleaseId: true,
+      parserRelease: {
+        select: { provider: true, version: true, status: true },
+      },
+    },
+  },
+} satisfies Prisma.InboundWebhookChannelSelect;
 
 export type UazapiTeamMessageInput = {
   workspaceId: string;
@@ -157,7 +192,7 @@ export class UazapiProviderConversionService {
 
     const channel = await this.prisma.inboundWebhookChannel.findFirst({
       where: { id: bridged.channelId, workspaceId: input.workspaceId },
-      select: { status: true, productionActivatedAt: true },
+      select: gatedChannelSelect,
     });
     if (!channel) {
       return { evaluated: false, eligibleExecutionId: null };
@@ -302,7 +337,7 @@ export class UazapiProviderConversionService {
             id: persistedDecision.channelId,
             workspaceId: persistedDecision.workspaceId,
           },
-          select: { status: true, productionActivatedAt: true },
+          select: gatedChannelSelect,
         })
       : null;
 
@@ -484,7 +519,7 @@ export class UazapiProviderConversionService {
 
     const channel = await this.prisma.inboundWebhookChannel.findFirst({
       where: { id: bridged.channelId, workspaceId: input.workspaceId },
-      select: { status: true, productionActivatedAt: true },
+      select: gatedChannelSelect,
     });
     if (!channel) return { evaluated: false, eligibleExecutionId: null };
 
@@ -566,7 +601,7 @@ export class UazapiProviderConversionService {
     persistedDecision: PersistedProviderConversionDecision;
     config: ReturnType<typeof parseInboundWebhooksConfig>;
     rule: Rule;
-    channel: { status: string; productionActivatedAt: Date | null } | null;
+    channel: GatedChannel | null;
     occurredAt: Date;
   }): Promise<ProviderConversionOrchestrationResult> {
     const plan = this.dispositionPlan(input);
@@ -588,7 +623,7 @@ export class UazapiProviderConversionService {
     persistedDecision: PersistedProviderConversionDecision;
     config: ReturnType<typeof parseInboundWebhooksConfig>;
     rule: Rule;
-    channel: { status: string; productionActivatedAt: Date | null } | null;
+    channel: GatedChannel | null;
     occurredAt: Date;
     manualRecovery?: boolean;
   }): {
@@ -622,28 +657,52 @@ export class UazapiProviderConversionService {
     };
   }
 
+  /**
+   * Rules bound to the bridge connection (every rule created before the
+   * workspace scope, loaded as before) or unbound; scoped to this channel or
+   * "all numbers". Precedence: a specific rule of the same origin/event
+   * replaces every global rule on this channel (and on every channel of the
+   * same phone), and a global rule runs once per phone.
+   */
   private async loadRules(
     workspaceId: string,
     connectionId: string,
     channelId: string,
     triggerType: "message_phrase" | "provider_automation" = "message_phrase",
   ): Promise<Rule[]> {
-    return this.prisma.providerConversionRuleConfig.findMany({
-      where: {
-        workspaceId,
-        connectionId,
-        removedAt: null,
-        conversionRule: {
-          active: true,
-          triggerType,
+    const candidates = (await this.prisma.providerConversionRuleConfig.findMany(
+      {
+        where: {
+          workspaceId,
+          removedAt: null,
+          conversionRule: {
+            active: true,
+            triggerType,
+          },
+          ...providerRuleCandidateWhere({
+            connectionId,
+            channelIds: [channelId],
+          }),
         },
-        channels: {
-          some: { channelId },
-        },
+        include: ruleInclude,
+        orderBy: { createdAt: "asc" },
       },
-      include: ruleInclude,
-      orderBy: { createdAt: "asc" },
-    });
+    )) as Rule[];
+    // The query already proved that every specific candidate is scoped to
+    // this channel (`channels: { some: { channelId } }`).
+    return (
+      await resolveApplicableProviderRules(this.prisma, {
+        workspaceId,
+        rules: candidates.map((rule) => ({
+          ...rule,
+          channels:
+            providerRuleScope(rule) === "specific_numbers"
+              ? [{ channelId }]
+              : [],
+        })),
+        channel: { id: channelId, connectionId, provider: "uazapi" },
+      })
+    ).applicable;
   }
 
   private async ensureDelivery(input: {
@@ -720,7 +779,7 @@ export class UazapiProviderConversionService {
     decisionMode: "observation" | "production";
     reasonCode: string;
     rule: Rule;
-    channel: { status: string; productionActivatedAt: Date | null } | null;
+    channel: GatedChannel | null;
     occurredAt: Date;
     manualRecovery: boolean;
   }): ProviderConversionTechnicalDisposition {
@@ -766,22 +825,32 @@ export class UazapiProviderConversionService {
    */
   private productionContextBlock(input: {
     rule: Rule;
-    channel: { status: string; productionActivatedAt: Date | null } | null;
+    channel: GatedChannel | null;
   }): string | null {
     const { rule, channel } = input;
-    if (!inboundParserProductionEligible(rule.parserRelease)) {
+    // A rule spanning connections has no connection/parser of its own: the
+    // bridged channel's connection is the one that produced the event.
+    const connection = rule.connection ?? channel?.connection ?? null;
+    if (!connection) {
+      return "channel_unresolved";
+    }
+    const ruleParserRelease = rule.parserRelease ?? connection.parserRelease;
+    if (!inboundParserProductionEligible(ruleParserRelease)) {
       return "rule_parser_not_certified";
     }
-    if (!inboundParserProductionEligible(rule.connection.parserRelease)) {
+    if (!inboundParserProductionEligible(connection.parserRelease)) {
       return "connection_parser_not_certified";
     }
-    if (rule.parserReleaseId !== rule.connection.parserReleaseId) {
+    if (
+      rule.parserReleaseId !== null &&
+      rule.parserReleaseId !== connection.parserReleaseId
+    ) {
       return "parser_release_mismatch";
     }
-    if (rule.connection.removedAt !== null) {
+    if (connection.removedAt !== null) {
       return "connection_removed";
     }
-    if (rule.connection.status !== "production") {
+    if (connection.status !== "production") {
       return "connection_not_production";
     }
     if (!channel) {
@@ -812,7 +881,9 @@ export class UazapiProviderConversionService {
       authorScope: rule.messageAuthorScope,
       triggerPhrases: [
         ...rule.messageTriggerPhrases,
-        ...(triggerType === "provider_automation"
+        // Label ids are local to one WhatsApp instance: a rule spanning
+        // instances (no connection binding) matches labels by name only.
+        ...(triggerType === "provider_automation" && rule.connectionId !== null
           ? this.storedLabels(rule.conversionRule.defaultItems).flatMap(
               (label) => label.matchKeys,
             )
@@ -912,29 +983,35 @@ export class UazapiProviderConversionService {
     catalog: Array<{ name: string; keys: string[] }>,
   ): { id: string; name: string; matchKeys: string[] } | null {
     const stored = this.storedLabels(rule.conversionRule.defaultItems);
+    // Label ids are local to one WhatsApp instance ("3" can be another label
+    // on another number), so a rule spanning instances matches by name only.
+    const idMatching = rule.connectionId !== null;
     for (const id of newIds) {
       const keys = this.labelKeys(id);
       const catalogName = catalog.find((label) =>
         label.keys.some((key) => keys.includes(key)),
       )?.name;
       const configured =
-        stored.find((label) =>
-          label.matchKeys.some((key) => keys.includes(key)),
-        ) ??
+        (idMatching
+          ? stored.find((label) =>
+              label.matchKeys.some((key) => keys.includes(key)),
+            )
+          : undefined) ??
         (catalogName
           ? stored.find((label) => this.sameName(label.name, catalogName))
           : undefined);
-      if (
-        configured ||
-        (catalogName &&
-          rule.messageTriggerPhrases.some((phrase) =>
-            this.sameName(phrase, catalogName),
-          ))
-      ) {
+      const phrase = catalogName
+        ? rule.messageTriggerPhrases.find((candidate) =>
+            this.sameName(candidate, catalogName),
+          )
+        : undefined;
+      if (configured || phrase) {
         return {
           id,
           name: configured?.name ?? catalogName ?? id,
-          matchKeys: keys,
+          // The engine intersects these with the rule trigger phrases: ids
+          // for a bound rule (unchanged), the configured name otherwise.
+          matchKeys: idMatching ? keys : [phrase ?? configured!.name],
         };
       }
     }

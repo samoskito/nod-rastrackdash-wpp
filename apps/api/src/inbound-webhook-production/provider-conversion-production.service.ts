@@ -52,6 +52,7 @@ import {
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
+import { providerRuleCoversChannel } from "../conversion-rules/provider-rule-scope";
 import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
@@ -82,7 +83,7 @@ const executionInclude = {
     },
   },
   sourceDelivery: true,
-  channel: true,
+  channel: { include: { connection: { select: { provider: true } } } },
   purchaseReview: {
     include: {
       items: { orderBy: { position: "asc" } },
@@ -94,6 +95,20 @@ const executionInclude = {
 type ExecutionRecord = Prisma.ProviderConversionRuleExecutionGetPayload<{
   include: typeof executionInclude;
 }>;
+
+/**
+ * The execution's channel is inside the rule scope: one of its chosen channels
+ * ("specific_numbers", exactly the historical check) or a channel whose
+ * provider supports the rule origin ("all_numbers", evaluated live).
+ */
+function executionChannelInRuleScope(execution: ExecutionRecord): boolean {
+  if (!execution.channelId) return false;
+  return providerRuleCoversChannel(execution.providerRule, {
+    id: execution.channelId,
+    connectionId: execution.channel?.connectionId ?? "",
+    provider: execution.channel?.connection?.provider ?? "",
+  });
+}
 type EligibleProviderConversionDecision = Extract<
   ProviderConversionDecisionDto,
   { decisionCode: "eligible" }
@@ -1310,11 +1325,13 @@ export class ProviderConversionProductionService {
     const delivery = execution.sourceDelivery;
     const channel = execution.channel;
     const manuallyApproved = execution.purchaseReview?.status === "approved";
-    const channelScoped = rule.channels.some(
-      (scope) => scope.channelId === execution.channelId,
-    );
+    const channelScoped = executionChannelInRuleScope(execution);
 
     if (
+      // Legacy (pre-decision) executions only exist for connection-bound
+      // rules; an unbound rule here is never materialized.
+      !rule.connection ||
+      !rule.parserRelease ||
       rule.removedAt ||
       !rule.conversionRule.active ||
       !["structured_catalog", "message_phrase"].includes(
@@ -1352,11 +1369,12 @@ export class ProviderConversionProductionService {
     const delivery = execution.sourceDelivery;
     const channel = execution.channel;
     const manuallyApproved = this.automationManualReplayApproved(execution);
-    const channelScoped = rule.channels.some(
-      (scope) => scope.channelId === execution.channelId,
-    );
+    const channelScoped = executionChannelInRuleScope(execution);
 
     if (
+      // The Umbler automation always keeps its connection binding.
+      !rule.connection ||
+      !rule.parserRelease ||
       rule.removedAt ||
       !rule.conversionRule.active ||
       rule.conversionRule.triggerType !== "provider_automation" ||
@@ -1401,11 +1419,16 @@ export class ProviderConversionProductionService {
   private reparseEvent(execution: ExecutionRecord): ParsedInboundWebhookEvent {
     const payload = this.decryptedPayload(execution);
 
-    const rule = execution.providerRule;
+    const connection = execution.providerRule.connection;
+    if (!connection) {
+      throw new ProviderConversionProductionFailure(
+        "provider_conversion_production_context_invalid",
+      );
+    }
     const parser = this.parserRegistry.resolve({
-      provider: rule.connection.provider,
-      parserVersion: rule.connection.parserRelease.version,
-      parserReleaseStatus: rule.connection.parserRelease.status,
+      provider: connection.provider,
+      parserVersion: connection.parserRelease.version,
+      parserReleaseStatus: connection.parserRelease.status,
     });
     const result = parser.parse(
       payload,
@@ -1420,7 +1443,7 @@ export class ProviderConversionProductionService {
       !parsedEvent ||
       parsedEvent.provider !== "umbler" ||
       !providerMessageAuthorAllowed(
-        rule.messageAuthorScope ?? "team",
+        execution.providerRule.messageAuthorScope ?? "team",
         parsedEvent.message.authorType,
       ) ||
       parsedEvent.message.isPrivate ||

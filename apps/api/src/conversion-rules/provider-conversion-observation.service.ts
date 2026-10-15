@@ -32,6 +32,14 @@ import {
 } from "./provider-conversion-orchestrator.service";
 import { ProviderConversionPaidLeadResolver } from "./provider-conversion-paid-lead-resolver.service";
 import type { ProviderConversionEngineMode } from "./provider-conversion-shadow-comparison.service";
+import {
+  findOverridingSpecificRuleIds,
+  PROVIDER_RULE_OVERRIDDEN_REASON,
+  providerRuleCandidateWhere,
+  providerRuleScope,
+  resolveApplicableProviderRules,
+  resolveProviderRuleScopeChannelIds,
+} from "./provider-rule-scope";
 
 const observedRuleInclude = {
   conversionRule: true,
@@ -64,6 +72,27 @@ const observedRuleInclude = {
 type ObservedRule = Prisma.ProviderConversionRuleConfigGetPayload<{
   include: typeof observedRuleInclude;
 }>;
+
+/** The Umbler automation always keeps its connection and parser binding. */
+type AutomationRule = ObservedRule & {
+  connectionId: string;
+  connection: NonNullable<ObservedRule["connection"]>;
+  parserRelease: NonNullable<ObservedRule["parserRelease"]>;
+};
+
+/** Connection + parser whose live state gates production for a decision. */
+type GateConnection = {
+  id: string;
+  status: string;
+  removedAt: Date | null;
+  parserReleaseId: string;
+  parserRelease: {
+    id: string;
+    provider: string;
+    version: string;
+    status: string;
+  };
+};
 
 type ObservedChannel = {
   id: string;
@@ -183,8 +212,13 @@ export class ProviderConversionObservationService {
       };
     }
 
-    const rule = await this.loadAutomationRule(input);
-    if (!rule) {
+    const loadedRule = await this.loadAutomationRule(input);
+    if (
+      !loadedRule ||
+      !loadedRule.connectionId ||
+      !loadedRule.connection ||
+      !loadedRule.parserRelease
+    ) {
       return {
         decisionId: null,
         decisionCode: null,
@@ -197,6 +231,7 @@ export class ProviderConversionObservationService {
         leadResolved: false,
       };
     }
+    const rule = loadedRule as AutomationRule;
     const channel = await this.resolveAutomationChannel({
       workspaceId: input.workspaceId,
       connectionId: input.connectionId,
@@ -204,6 +239,38 @@ export class ProviderConversionObservationService {
       deliveryReceivedAt: input.deliveryReceivedAt,
       rule,
     });
+    // A workspace-wide ("all numbers") automation yields to the specific rule
+    // of the same origin and event that owns the resolved number: that rule
+    // receives the same callback on its own endpoint and sends it.
+    if (channel && providerRuleScope(rule) === "all_numbers") {
+      const overriddenBy = await findOverridingSpecificRuleIds(this.prisma, {
+        workspaceId: input.workspaceId,
+        rule,
+        channelId: channel.id,
+      });
+      if (overriddenBy.length > 0) {
+        this.logger.log(
+          JSON.stringify({
+            event: "provider_conversion_rule_overridden",
+            workspaceId: input.workspaceId,
+            providerRuleId: rule.id,
+            channelId: channel.id,
+            overriddenByRuleIds: overriddenBy,
+          }),
+        );
+        return {
+          decisionId: null,
+          decisionCode: null,
+          reasonCode: PROVIDER_RULE_OVERRIDDEN_REASON,
+          disposition: "ignored",
+          executionId: null,
+          eligibleExecutionId: null,
+          reviewId: null,
+          channelId: channel.id,
+          leadResolved: false,
+        };
+      }
+    }
     const leadResolution = await this.paidLeads.resolve({
       workspaceId: input.workspaceId,
       phone: input.automation.phone,
@@ -233,6 +300,7 @@ export class ProviderConversionObservationService {
       config,
       decision: persistedDecision.decision,
       rule,
+      gateConnection: rule.connection,
       channel,
       deliveryReceivedAt: input.deliveryReceivedAt,
       manualRecovery: input.manualRecovery === true,
@@ -298,12 +366,14 @@ export class ProviderConversionObservationService {
       return this.emptyResult();
     }
     const loadedRules = await this.loadRules(input, channels);
-    const rules = target
-      ? loadedRules.filter((rule) => rule.id === target.providerRuleId)
-      : loadedRules;
-    if (rules.length === 0) {
+    if (loadedRules.length === 0) {
       return this.emptyResult();
     }
+    // Rules spanning connections carry no parser/connection of their own: the
+    // delivery connection gates them. Loaded only when such a rule exists.
+    const deliveryConnection = loadedRules.some((rule) => !rule.connection)
+      ? await this.loadGateConnection(input)
+      : null;
 
     const leadResolutionByPhone = new Map<
       string,
@@ -316,16 +386,34 @@ export class ProviderConversionObservationService {
       const channel = this.channelForEvent(channels, event);
       if (!channel) continue;
 
+      // Scope + precedence: a specific rule of the same origin/event replaces
+      // every "all numbers" rule on this channel, and a global rule runs once
+      // per phone. The target filter of a reevaluation runs after precedence,
+      // so it can never revive a global rule that a specific rule overrides.
+      const { applicable } = await resolveApplicableProviderRules(this.prisma, {
+        workspaceId: input.workspaceId,
+        rules: loadedRules,
+        channel: {
+          id: channel.id,
+          connectionId: input.connectionId,
+          provider: event.provider,
+        },
+      });
+      const rules = target
+        ? applicable.filter((rule) => rule.id === target.providerRuleId)
+        : applicable;
+
       for (const rule of rules) {
-        if (!rule.channels.some((scope) => scope.channelId === channel.id)) {
-          continue;
-        }
+        const gateConnection = rule.connection ?? deliveryConnection;
+        if (!gateConnection) continue;
 
         const persistedDecision = await this.resolveDecision({
           input,
           event,
           channel,
           rule,
+          parserVersion: (rule.parserRelease ?? gateConnection.parserRelease)
+            .version,
           leadResolutionByPhone,
           evaluationMode,
         });
@@ -335,6 +423,7 @@ export class ProviderConversionObservationService {
           config,
           decision: persistedDecision.decision,
           rule,
+          gateConnection,
           channel,
           deliveryReceivedAt: input.deliveryReceivedAt,
           manualRecovery: input.manualRecovery === true,
@@ -369,6 +458,7 @@ export class ProviderConversionObservationService {
     event: ParsedInboundWebhookEvent;
     channel: ObservedChannel;
     rule: ObservedRule;
+    parserVersion: string;
     leadResolutionByPhone: Map<
       string,
       Promise<ProviderConversionPaidLeadResolutionDto>
@@ -392,7 +482,7 @@ export class ProviderConversionObservationService {
     );
     const ruleSnapshot = this.ruleSnapshot(input.rule);
     const decisionInput: ProviderConversionDecisionInput = {
-      parserVersion: input.rule.parserRelease.version,
+      parserVersion: input.parserVersion,
       rule: ruleSnapshot,
       catalog: this.catalogSnapshot(input.rule),
       leadResolution,
@@ -447,7 +537,7 @@ export class ProviderConversionObservationService {
       externalDeliveryId?: string | null;
       automation: ParsedUmblerAutomationV1;
     };
-    rule: ObservedRule;
+    rule: AutomationRule;
     channel: ObservedChannel | null;
     leadResolution: ProviderConversionPaidLeadResolutionDto;
     evaluationMode: ProviderConversionEvaluationMode;
@@ -538,10 +628,16 @@ export class ProviderConversionObservationService {
     connectionId: string;
     phone: string;
     deliveryReceivedAt: Date;
-    rule: ObservedRule;
+    rule: AutomationRule;
   }): Promise<ObservedChannel | null> {
     const contactIdentityHash = hashPhoneIdentity(input.phone);
-    const channelIds = input.rule.channels.map((scope) => scope.channelId);
+    // Specific rules: their chosen channels (no query). "All numbers": every
+    // live channel of the rule connection (the automation is connection-bound).
+    const channelIds = await resolveProviderRuleScopeChannelIds(
+      this.prisma,
+      input.workspaceId,
+      input.rule,
+    );
     if (!contactIdentityHash || channelIds.length === 0) return null;
 
     const recentEvent = await this.prisma.inboundWebhookEvent.findFirst({
@@ -570,7 +666,11 @@ export class ProviderConversionObservationService {
     });
     if (recentEvent?.channel) return recentEvent.channel;
 
-    if (input.rule.channels.length !== 1) return null;
+    if (
+      providerRuleScope(input.rule) !== "specific_numbers" ||
+      input.rule.channels.length !== 1
+    )
+      return null;
     const fallback = input.rule.channels[0]!.channel;
     return {
       id: fallback.id,
@@ -609,6 +709,12 @@ export class ProviderConversionObservationService {
     });
   }
 
+  /**
+   * Candidate rules of the delivery: bound to its connection (every rule
+   * created before the workspace scope, loaded exactly as before) or unbound,
+   * and either scoped to one of its channels or "all numbers". Precedence and
+   * provider capability are applied per channel by the caller.
+   */
   private async loadRules(
     input: {
       workspaceId: string;
@@ -619,20 +725,36 @@ export class ProviderConversionObservationService {
     return this.prisma.providerConversionRuleConfig.findMany({
       where: {
         workspaceId: input.workspaceId,
-        connectionId: input.connectionId,
         removedAt: null,
         conversionRule: {
           active: true,
           triggerType: { in: ["structured_catalog", "message_phrase"] },
         },
-        channels: {
-          some: {
-            channelId: { in: channels.map((channel) => channel.id) },
-          },
-        },
+        ...providerRuleCandidateWhere({
+          connectionId: input.connectionId,
+          channelIds: channels.map((channel) => channel.id),
+        }),
       },
       include: observedRuleInclude,
       orderBy: { createdAt: "asc" },
+    });
+  }
+
+  private async loadGateConnection(input: {
+    workspaceId: string;
+    connectionId: string;
+  }): Promise<GateConnection | null> {
+    return this.prisma.inboundWebhookConnection.findFirst({
+      where: { id: input.connectionId, workspaceId: input.workspaceId },
+      select: {
+        id: true,
+        status: true,
+        removedAt: true,
+        parserReleaseId: true,
+        parserRelease: {
+          select: { id: true, provider: true, version: true, status: true },
+        },
+      },
     });
   }
 
@@ -660,6 +782,8 @@ export class ProviderConversionObservationService {
     config: ReturnType<typeof parseInboundWebhooksConfig>;
     decision: ProviderConversionDecisionDto;
     rule: ObservedRule;
+    /** The rule's own connection, or the delivery's for an unbound rule. */
+    gateConnection: GateConnection;
     channel: ObservedChannel | null;
     deliveryReceivedAt: Date;
     manualRecovery: boolean;
@@ -686,13 +810,18 @@ export class ProviderConversionObservationService {
         reasonCode: `${input.decision.reasonCode}_observation`,
       };
     }
+    // An unbound rule has no parser of its own: the occurrence connection's
+    // parser is the one that produced the event.
+    const ruleParserRelease =
+      input.rule.parserRelease ?? input.gateConnection.parserRelease;
     if (
-      !inboundParserProductionEligible(input.rule.parserRelease) ||
-      !inboundParserProductionEligible(input.rule.connection.parserRelease) ||
+      !inboundParserProductionEligible(ruleParserRelease) ||
+      !inboundParserProductionEligible(input.gateConnection.parserRelease) ||
       (input.decision.rule.triggerType !== "provider_automation" &&
-        input.rule.parserReleaseId !== input.rule.connection.parserReleaseId) ||
-      input.rule.connection.status !== "production" ||
-      input.rule.connection.removedAt !== null ||
+        input.rule.parserReleaseId !== null &&
+        input.rule.parserReleaseId !== input.gateConnection.parserReleaseId) ||
+      input.gateConnection.status !== "production" ||
+      input.gateConnection.removedAt !== null ||
       input.channel.status !== "active"
     ) {
       return {

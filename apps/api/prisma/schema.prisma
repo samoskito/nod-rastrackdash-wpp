@@ -169,6 +169,16 @@ enum ProviderConversionRuleMode {
   production
 }
 
+/// Alcance de uma regra de conversao por provedor. "specific_numbers" e o
+/// comportamento historico (canais escolhidos em ProviderConversionRuleChannel);
+/// "all_numbers" avalia dinamicamente todo numero do workspace que suporte a
+/// origem da regra, inclusive numeros conectados depois. Uma regra especifica
+/// do mesmo evento/origem substitui a global naquele numero.
+enum ProviderConversionRuleScope {
+  all_numbers
+  specific_numbers
+}
+
 enum ProviderConversionEngineMode {
   legacy
   shadow
@@ -445,6 +455,7 @@ model Workspace {
   providerConversionRules          ProviderConversionRuleConfig[]
   providerConversionRuleChannels   ProviderConversionRuleChannel[]
   providerConversionRuleEndpoints  ProviderConversionRuleEndpoint[]
+  providerRuleCreateClaims         ProviderRuleCreateClaim[]
   providerConversionExecutions     ProviderConversionRuleExecution[]
   providerConversionDecisions      ProviderConversionDecisionAudit[]
   providerConversionComparisons    ProviderConversionShadowComparison[]
@@ -962,40 +973,77 @@ model ConversionRule {
   @@index([workspaceId, triggerType, triggerValue])
 }
 
+/// connectionId/parserReleaseId bind the rule to one inbound connection. They
+/// are always set for endpoint automations (Umbler: the callback is stored on
+/// that connection) and for every rule created before the workspace scope
+/// (Fase 3). Both are null only for message/catalog/label rules that span
+/// connections; then parser and production gates come from the connection of
+/// each occurrence.
 model ProviderConversionRuleConfig {
-  id                    String                                @id @default(cuid())
-  workspaceId           String
-  conversionRuleId      String
-  connectionId          String
-  parserReleaseId       String
-  mode                  ProviderConversionRuleMode            @default(observation)
-  messageTriggerPhrases String[]                              @default([])
-  messageAuthorScope    ProviderConversionMessageAuthorScope?
-  productionActivatedAt DateTime?
-  removedAt             DateTime?
-  createdByUserId       String?
-  createdAt             DateTime                              @default(now())
-  updatedAt             DateTime                              @updatedAt
+  id                        String                                @id @default(cuid())
+  workspaceId               String
+  conversionRuleId          String
+  connectionId              String?
+  parserReleaseId           String?
+  scope                     ProviderConversionRuleScope           @default(specific_numbers)
+  /// Set when "Unificar" replaced this rule by a workspace-wide one; the rule
+  /// is kept (paused) with its whole history.
+  unifiedIntoProviderRuleId String?
+  mode                      ProviderConversionRuleMode            @default(observation)
+  messageTriggerPhrases     String[]                              @default([])
+  messageAuthorScope        ProviderConversionMessageAuthorScope?
+  productionActivatedAt     DateTime?
+  removedAt                 DateTime?
+  createdByUserId           String?
+  createdAt                 DateTime                              @default(now())
+  updatedAt                 DateTime                              @updatedAt
 
   workspace       Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   conversionRule  ConversionRule                       @relation(fields: [workspaceId, conversionRuleId], references: [workspaceId, id], onDelete: Restrict, map: "ProviderConversionRuleConfig_conversionRuleId_fkey")
-  connection      InboundWebhookConnection             @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Restrict, map: "ProviderConversionRuleConfig_connectionId_fkey")
-  parserRelease   InboundWebhookParserRelease          @relation(fields: [parserReleaseId], references: [id], onDelete: Restrict)
+  connection      InboundWebhookConnection?            @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Restrict, map: "ProviderConversionRuleConfig_connectionId_fkey")
+  parserRelease   InboundWebhookParserRelease?         @relation(fields: [parserReleaseId], references: [id], onDelete: Restrict)
   createdBy       User?                                @relation("ProviderConversionRuleCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  unifiedInto     ProviderConversionRuleConfig?        @relation("ProviderConversionRuleUnification", fields: [workspaceId, unifiedIntoProviderRuleId], references: [workspaceId, id], onDelete: Restrict, map: "ProviderConversionRuleConfig_unifiedIntoProviderRuleId_fkey")
+  unifiedRules    ProviderConversionRuleConfig[]       @relation("ProviderConversionRuleUnification")
   channels        ProviderConversionRuleChannel[]
   endpoint        ProviderConversionRuleEndpoint?
   catalog         ConversionCatalog?
   executions      ProviderConversionRuleExecution[]
   decisions       ProviderConversionDecisionAudit[]
   comparisons     ProviderConversionShadowComparison[]
+  createClaims    ProviderRuleCreateClaim[]
   purchaseReviews PurchaseReview[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, conversionRuleId])
   @@index([workspaceId, connectionId, mode])
   @@index([workspaceId, removedAt])
+  @@index([workspaceId, scope, removedAt], map: "ProviderConversionRuleConfig_workspaceId_scope_removedAt_idx")
+  @@index([workspaceId, unifiedIntoProviderRuleId], map: "ProviderConversionRuleConfig_workspaceId_unifiedInto_idx")
   @@index([parserReleaseId])
   @@index([createdByUserId])
+}
+
+/// Recibo duravel da criacao idempotente de regra (chave Idempotency-Key),
+/// mantido sem TTL. Nao guarda payload, URL nem segredo. connectionId nulo:
+/// regra criada sem vinculo com uma conexao (alcance do workspace).
+model ProviderRuleCreateClaim {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  requestKey       String   @db.VarChar(128)
+  requestHash      String   @db.VarChar(64)
+  connectionId     String?
+  providerRuleId   String
+  endpointRequired Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  workspace    Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  connection   InboundWebhookConnection?    @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Restrict, map: "ProviderRuleCreateClaim_connection_fkey")
+  providerRule ProviderConversionRuleConfig @relation(fields: [workspaceId, providerRuleId], references: [workspaceId, id], onDelete: Restrict, map: "ProviderRuleCreateClaim_rule_fkey")
+
+  @@unique([workspaceId, requestKey])
+  @@index([workspaceId, connectionId])
+  @@index([workspaceId, providerRuleId])
 }
 
 model ProviderConversionRuleChannel {
@@ -1574,6 +1622,7 @@ model InboundWebhookConnection {
   events                  InboundWebhookEvent[]
   replayBatches           InboundWebhookReplayBatch[]
   providerConversionRules ProviderConversionRuleConfig[]
+  ruleCreateClaims        ProviderRuleCreateClaim[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, removedAt])

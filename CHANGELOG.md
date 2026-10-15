@@ -74,6 +74,37 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   Read-only, so the license soft-lock does not block it. New API dependency
   `exceljs` 4.4.0 — run `pnpm install` on local installs (Docker builds
   already install it).
+- **Conversões — rule scope and "Unificar" (API + shared, Fase 3
+  backend)**: provider conversion rules gain a scope, **Todos os números**
+  (`all_numbers`, every compatible number of the workspace, including numbers
+  connected later) or **Números específicos** (`specific_numbers`, the
+  historical behaviour). A specific rule with the same origin and event
+  replaces the global one on its number; a global rule runs once per phone
+  when the same line is connected twice (Umbler + Uazapi). Capability matrix
+  of this edition: team phrases on Umbler and Uazapi, contact phrases and
+  structured catalog on Umbler, labels on Uazapi (matched by name across
+  instances); WAHA, Z-API and NOD API are not part of provider rules yet
+  ("Em breve"). New endpoints under `/conversion-rules`:
+  `GET providers/capabilities`, `GET providers/unify-candidates`,
+  `POST providers/unify`, `GET providers/create-receipt` (plus the
+  `Idempotency-Key` header on `POST providers`) and `GET legacy` (old
+  keyword/label rules, read-only). Kommo rules keep using the existing
+  `GET /workspaces/:id/kommo/connections`. Every new write goes through the
+  license soft-lock (HTTP 423). Old keyword/label rules can no longer be
+  edited through `PATCH /conversion-rules/:id` once they have a provider
+  configuration (409); edit those through `PATCH providers/:id`.
+  **Migration** `20261015140000_provider_rule_workspace_scope` (additive; the
+  Docker image runs `prisma migrate deploy` at API boot, local installs run it
+  by hand; back up the database first): new table
+  `ProviderRuleCreateClaim`, enum `ProviderConversionRuleScope`, columns
+  `scope` (default `specific_numbers`) and `unifiedIntoProviderRuleId`,
+  `connectionId`/`parserReleaseId` become nullable, with a data precheck
+  before the new CHECKs. Existing rules keep working exactly as before until
+  the student unifies them or creates a "Todos os números" rule. No new env
+  var, no new dependency. The Conversões screen (web) ships separately.
+  **Roll back:** pause/delete "Todos os números" rules and reactivate the
+  originals before downgrading; the previous version ignores the new columns
+  (optional rollback SQL in `docs/releases/unreleased.json`).
 
 ### Fixed
 

@@ -24,6 +24,7 @@ import {
   type PersistedProviderConversionDecision,
 } from "./provider-conversion-decision.repository";
 import { ProviderConversionOrchestrator } from "./provider-conversion-orchestrator.service";
+import { providerRuleCoversChannel } from "./provider-rule-scope";
 
 const canonicalReviewInclude = {
   providerDecision: true,
@@ -57,7 +58,8 @@ const canonicalReviewInclude = {
       },
     },
   },
-  channel: true,
+  // The channel's connection gates rules that span connections (no binding).
+  channel: { include: { connection: { include: { parserRelease: true } } } },
   items: { orderBy: { position: "asc" } },
 } satisfies Prisma.PurchaseReviewInclude;
 
@@ -277,19 +279,29 @@ export class ProviderConversionReviewApprovalService {
         "Ative o envio automatico desta regra antes de aprovar",
       );
     }
+    const connection = rule.connection ?? channel?.connection ?? null;
+    const ruleParserRelease =
+      rule.parserRelease ?? connection?.parserRelease ?? null;
     if (
       !channel ||
+      !connection ||
+      !ruleParserRelease ||
       rule.removedAt !== null ||
       !rule.conversionRule.active ||
-      !inboundParserProductionEligible(rule.parserRelease) ||
-      !inboundParserProductionEligible(rule.connection.parserRelease) ||
-      rule.parserReleaseId !== rule.connection.parserReleaseId ||
-      rule.connection.status !== "production" ||
-      rule.connection.removedAt !== null ||
+      !inboundParserProductionEligible(ruleParserRelease) ||
+      !inboundParserProductionEligible(connection.parserRelease) ||
+      (rule.parserReleaseId !== null &&
+        rule.parserReleaseId !== connection.parserReleaseId) ||
+      connection.status !== "production" ||
+      connection.removedAt !== null ||
       channel.status !== "active" ||
       !rule.productionActivatedAt ||
       !channel.productionActivatedAt ||
-      !rule.channels.some((scope) => scope.channelId === channel.id)
+      !providerRuleCoversChannel(rule, {
+        id: channel.id,
+        connectionId: channel.connectionId,
+        provider: channel.connection?.provider ?? "",
+      })
     ) {
       throw new ConflictException(
         "A conexao, o canal ou o parser nao esta pronto para envio",
@@ -323,7 +335,11 @@ export class ProviderConversionReviewApprovalService {
 
     return {
       engineVersion: PROVIDER_CONVERSION_DECISION_ENGINE_VERSION,
-      parserVersion: review.providerRule.parserRelease.version,
+      parserVersion:
+        (
+          review.providerRule.parserRelease ??
+          review.channel?.connection?.parserRelease
+        )?.version ?? previous.parserVersion,
       decisionCode: "eligible",
       reasonCode: "purchase_review_approved",
       occurrence: previous.occurrence,

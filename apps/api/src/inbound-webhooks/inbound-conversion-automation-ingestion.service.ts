@@ -90,10 +90,35 @@ const publicEndpointInclude = {
   },
 } satisfies Prisma.ProviderConversionRuleEndpointInclude;
 
-type PublicConversionEndpoint =
+type LoadedConversionEndpoint =
   Prisma.ProviderConversionRuleEndpointGetPayload<{
     include: typeof publicEndpointInclude;
   }>;
+
+/**
+ * The Umbler automation always keeps its connection binding: the callback is
+ * stored on that connection. Only workspace-scoped message/catalog/label rules
+ * may be unbound, and those never own an endpoint; one that somehow does is
+ * treated as missing (fail closed).
+ */
+type PublicConversionEndpoint = Omit<LoadedConversionEndpoint, "providerRule"> & {
+  providerRule: LoadedConversionEndpoint["providerRule"] & {
+    connectionId: string;
+    connection: NonNullable<LoadedConversionEndpoint["providerRule"]["connection"]>;
+    parserRelease: NonNullable<
+      LoadedConversionEndpoint["providerRule"]["parserRelease"]
+    >;
+  };
+};
+
+function asBoundEndpoint(
+  endpoint: LoadedConversionEndpoint | null,
+): PublicConversionEndpoint | null {
+  const rule = endpoint?.providerRule;
+  if (!endpoint || !rule?.connectionId || !rule.connection || !rule.parserRelease)
+    return null;
+  return endpoint as PublicConversionEndpoint;
+}
 
 const automationAuditDeliveryInclude = {
   providerConversionExecutions: {
@@ -651,15 +676,15 @@ export class InboundConversionAutomationIngestionService {
     providerRuleId: string,
   ): Promise<PublicConversionEndpoint> {
     this.assertFeatureEnabled();
-    const endpoint = await this.prisma.providerConversionRuleEndpoint.findFirst(
-      {
+    const endpoint = asBoundEndpoint(
+      await this.prisma.providerConversionRuleEndpoint.findFirst({
         where: {
           workspaceId,
           providerRuleId,
           removedAt: null,
         },
         include: publicEndpointInclude,
-      },
+      }),
     );
     const rule = endpoint?.providerRule;
     if (
@@ -1096,10 +1121,12 @@ export class InboundConversionAutomationIngestionService {
   ): Promise<PublicConversionEndpoint> {
     let endpoint: PublicConversionEndpoint | null;
     try {
-      endpoint = await this.prisma.providerConversionRuleEndpoint.findUnique({
-        where: { id: endpointId },
-        include: publicEndpointInclude,
-      });
+      endpoint = asBoundEndpoint(
+        await this.prisma.providerConversionRuleEndpoint.findUnique({
+          where: { id: endpointId },
+          include: publicEndpointInclude,
+        }),
+      );
     } catch {
       throw new ServiceUnavailableException(publicPersistenceFailureMessage);
     }

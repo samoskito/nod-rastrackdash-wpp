@@ -183,17 +183,40 @@ export class InboundWebhookProductionIntakeService {
       await this.prisma.providerConversionRuleExecution.findMany({
         where: {
           status: "eligible",
-          providerRule: {
-            mode: "production",
-            removedAt: null,
-            productionActivatedAt: { not: null },
-            conversionRule: { active: true },
-            parserRelease: { OR: [{ status: "certified" }, { provider: "meta_cloud", version: "v1", status: "observation_only" }] },
-            connection: {
-              status: "production",
-              removedAt: null,
+          OR: [
+            {
+              providerRule: {
+                mode: "production",
+                removedAt: null,
+                productionActivatedAt: { not: null },
+                conversionRule: { active: true },
+                parserRelease: { OR: [{ status: "certified" }, { provider: "meta_cloud", version: "v1", status: "observation_only" }] },
+                connection: {
+                  status: "production",
+                  removedAt: null,
+                },
+              },
             },
-          },
+            {
+              // A rule spanning connections (no binding, Fase 3) is gated by
+              // the connection that delivered the occurrence. The production
+              // worker re-checks the full context before sending.
+              providerRule: {
+                connectionId: null,
+                mode: "production",
+                removedAt: null,
+                productionActivatedAt: { not: null },
+                conversionRule: { active: true },
+              },
+              sourceDelivery: {
+                connection: {
+                  status: "production",
+                  removedAt: null,
+                  parserRelease: { OR: [{ status: "certified" }, { provider: "meta_cloud", version: "v1", status: "observation_only" }] },
+                },
+              },
+            },
+          ],
         },
         select: {
           id: true,

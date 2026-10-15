@@ -490,6 +490,14 @@ export class PlatformWorkspaceAccessService {
     await tx.conversionCatalogVariant.deleteMany({ where });
     await tx.conversionCatalogAttribute.deleteMany({ where });
     await tx.conversionCatalog.deleteMany({ where });
+    // Create receipts reference the rule (Restrict), and "Unificar" links a
+    // rule to another rule of the same workspace (Restrict self-reference):
+    // clear both before the rules themselves.
+    await tx.providerRuleCreateClaim.deleteMany({ where });
+    await tx.providerConversionRuleConfig.updateMany({
+      where: { workspaceId, unifiedIntoProviderRuleId: { not: null } },
+      data: { unifiedIntoProviderRuleId: null },
+    });
     await tx.providerConversionRuleConfig.deleteMany({ where });
     await tx.conversionRule.deleteMany({ where });
 
