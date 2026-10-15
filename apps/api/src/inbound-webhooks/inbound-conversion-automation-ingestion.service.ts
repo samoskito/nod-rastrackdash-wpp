@@ -24,7 +24,10 @@ import type {
   ProviderConversionAutomationReprocessBatchResultDto,
   ProviderConversionAutomationReprocessResultDto,
 } from "@wpptrack/shared";
-import { conversionEventNameSchema } from "@wpptrack/shared";
+import {
+  conversionEventNameSchema,
+  type ConversionEventNameDto,
+} from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import {
@@ -55,6 +58,11 @@ import {
   type ParsedPaytAutomationV1,
   PAYT_AUTOMATION_V1_PARSER_VERSION,
 } from "./providers/payt/payt-automation-v1.parser";
+import {
+  parseUnnichatAutomationV1,
+  type ParsedUnnichatAutomationV1,
+  UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
+} from "./providers/unnichat/unnichat-automation-v1.parser";
 
 const publicEndpointNotFoundMessage = "Webhook nao encontrado";
 const publicPersistenceFailureMessage = "Webhook temporariamente indisponivel";
@@ -207,7 +215,18 @@ type AutomationObservationStatus =
 type AutomationReprocessOutcome =
   ProviderConversionAutomationReprocessBatchItemDto;
 
-type ParsedAutomation = ParsedUmblerAutomationV1 | ParsedPaytAutomationV1;
+/** Fase 4b: the Unnichat automation (a CRM movement in an Unnichat flow). */
+type ParsedUnnichatAutomation = ParsedUnnichatAutomationV1 & {
+  provider: "unnichat";
+  automation: "crm_movement";
+  // Deliberately injected from the configured rule. The payload has
+  // event_name=Lead for every conversion type and must not decide it.
+  eventName: ConversionEventNameDto;
+};
+type ParsedAutomation =
+  | ParsedUmblerAutomationV1
+  | ParsedPaytAutomationV1
+  | ParsedUnnichatAutomation;
 type AutomationParseResult =
   | { ok: true; value: ParsedAutomation }
   | { ok: false; errorCode: string };
@@ -1433,7 +1452,9 @@ export class InboundConversionAutomationIngestionService {
       rule.removedAt !== null ||
       !rule.conversionRule.active ||
       rule.conversionRule.triggerType !== "provider_automation" ||
-      (!isPaytAutomation && rule.connection.provider !== "umbler") ||
+      (!isPaytAutomation &&
+        rule.connection.provider !== "umbler" &&
+        rule.connection.provider !== "unnichat") ||
       rule.connection.removedAt !== null ||
       !["observation", "production"].includes(rule.connection.status) ||
       rule.parserRelease.status === "retired"
@@ -1523,6 +1544,25 @@ export class InboundConversionAutomationIngestionService {
     ) {
       return parseUmblerAutomationV1(payload);
     }
+    if (
+      rule.parserRelease.provider === "unnichat" &&
+      rule.parserRelease.version === UNNICHAT_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      const parsed = parseUnnichatAutomationV1(payload);
+      if (!parsed.ok) return parsed;
+
+      return {
+        ok: true,
+        value: {
+          ...parsed.value,
+          provider: "unnichat",
+          automation: "crm_movement",
+          eventName: conversionEventNameSchema.parse(
+            rule.conversionRule.eventName,
+          ),
+        },
+      };
+    }
     return { ok: false, errorCode: "automation_parser_unavailable" };
   }
 
@@ -1533,9 +1573,14 @@ export class InboundConversionAutomationIngestionService {
   private automationIngressNamespace(
     endpoint: PublicConversionEndpoint,
   ): string {
-    return endpoint.providerRule.parserRelease.provider === "payt"
-      ? "payt-automation-v1"
-      : "umbler-automation-v1";
+    switch (endpoint.providerRule.parserRelease.provider) {
+      case "payt":
+        return "payt-automation-v1";
+      case "unnichat":
+        return "unnichat-automation-v1";
+      default:
+        return "umbler-automation-v1";
+    }
   }
 
   private parsedIngressKey(

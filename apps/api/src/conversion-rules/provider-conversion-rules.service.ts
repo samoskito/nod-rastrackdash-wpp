@@ -418,7 +418,7 @@ export class ProviderConversionRulesService {
             input.triggerType === "provider_automation" &&
             !isPaytAutomation &&
             connection &&
-            !["umbler", "uazapi"].includes(connection.provider)
+            !["umbler", "uazapi", "unnichat"].includes(connection.provider)
           ) {
             throw new BadRequestException(
               "Automacao por tag ainda so esta disponivel para este provedor",
@@ -455,10 +455,18 @@ export class ProviderConversionRulesService {
                   input.channelIds,
                 ))));
 
-          if (
-            input.triggerType === "provider_automation" &&
-            (isPaytAutomation || connection?.provider === "umbler")
-          ) {
+          // Endpoint automations (signed URL of the rule): Umbler, Payt and,
+          // since Fase 4b, Unnichat.
+          const endpointAutomationProvider =
+            input.triggerType !== "provider_automation"
+              ? null
+              : isPaytAutomation
+                ? "payt"
+                : connection?.provider === "umbler" ||
+                    connection?.provider === "unnichat"
+                  ? connection.provider
+                  : null;
+          if (endpointAutomationProvider) {
             secret = this.generateSecret();
           }
 
@@ -487,11 +495,10 @@ export class ProviderConversionRulesService {
 
           const parserRelease = !bound
             ? null
-            : input.triggerType === "provider_automation" &&
-                (isPaytAutomation || connection?.provider === "umbler")
+            : endpointAutomationProvider
               ? await transaction.inboundWebhookParserRelease.findFirst({
                   where: {
-                    provider: isPaytAutomation ? "payt" : "umbler",
+                    provider: endpointAutomationProvider,
                     version: "automation-v1",
                     status: { not: "retired" },
                   },
@@ -1992,7 +1999,8 @@ export class ProviderConversionRulesService {
         triggerType:
           rule.origin === "whatsapp_label" ||
           rule.origin === "automation_umbler" ||
-          rule.origin === "automation_payt"
+          rule.origin === "automation_payt" ||
+          rule.origin === "automation_unnichat"
             ? "provider_automation"
             : rule.origin,
         eventName: "",
@@ -2002,7 +2010,9 @@ export class ProviderConversionRulesService {
           ? { provider: "umbler" }
           : rule.origin === "automation_payt"
             ? { provider: "payt" }
-            : null,
+            : rule.origin === "automation_unnichat"
+              ? { provider: "unnichat" }
+              : null,
       connection: null,
       messageAuthorScope: rule.messageAuthorScope,
     });

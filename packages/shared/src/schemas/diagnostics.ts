@@ -17,7 +17,8 @@ export const diagnosticSources = [
   "waha",
   "zapi",
   "data_crazy",
-  "payt"
+  "payt",
+  "unnichat"
 ] as const;
 export const diagnosticSeverities = [
   "info",

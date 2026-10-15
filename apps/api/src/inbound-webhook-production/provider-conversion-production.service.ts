@@ -91,6 +91,20 @@ import {
   type ParsedUmblerAutomationV1,
   UMBLER_AUTOMATION_V1_PARSER_VERSION,
 } from "../inbound-webhooks/providers/umbler/umbler-automation-v1.parser";
+import {
+  parseUnnichatAutomationV1,
+  type ParsedUnnichatAutomationV1,
+  UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
+} from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
+
+/** Automation callbacks re-parsed at production time (Umbler, Unnichat). */
+type ParsedAutomationForProduction =
+  | ParsedUmblerAutomationV1
+  | (ParsedUnnichatAutomationV1 & {
+      provider: "unnichat";
+      automation: "crm_movement";
+      eventName: ConversionEventNameDto;
+    });
 
 const PURCHASE_DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1_000;
 const terminalStatuses = new Set(["materialized", "duplicate", "blocked"]);
@@ -1989,7 +2003,7 @@ export class ProviderConversionProductionService
     occurrence: EligibleProviderConversionDecision["occurrence"],
     lead: EligibleProviderConversionDecision["leadResolution"]["lead"],
   ): void {
-    const parsed = this.reparseAutomation(execution) as ParsedUmblerAutomationV1 & {
+    const parsed = this.reparseAutomation(execution) as ParsedAutomationForProduction & {
       ctwaClid?: string | null;
     };
     if (
@@ -2006,8 +2020,31 @@ export class ProviderConversionProductionService
 
   private reparseAutomation(
     execution: ExecutionRecord,
-  ): ParsedUmblerAutomationV1 {
-    const parsed = parseUmblerAutomationV1(this.decryptedPayload(execution));
+  ): ParsedAutomationForProduction {
+    const payload = this.decryptedPayload(execution);
+    // Fase 4b: the Unnichat automation carries the click (ctwa_clid); the
+    // event comes from the rule, never from the payload's event_name.
+    if (
+      execution.providerRule.parserRelease?.provider === "unnichat" &&
+      execution.providerRule.parserRelease.version ===
+        UNNICHAT_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      const parsed = parseUnnichatAutomationV1(payload);
+      if (!parsed.ok) {
+        throw new ProviderConversionProductionFailure(
+          "provider_conversion_payload_invalid",
+        );
+      }
+      return {
+        ...parsed.value,
+        provider: "unnichat",
+        automation: "crm_movement",
+        eventName: this.supportedEventName(
+          execution.providerRule.conversionRule.eventName,
+        ),
+      };
+    }
+    const parsed = parseUmblerAutomationV1(payload);
     if (!parsed.ok) {
       throw new ProviderConversionProductionFailure(
         "provider_conversion_payload_invalid",

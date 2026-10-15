@@ -28,6 +28,8 @@ export function inboundParserProductionEligible(
         "uazapi",
         // Fase 4a: Payt sale parsers (certified by migration).
         "payt",
+        // Fase 4b: Unnichat entry and automation parsers (certified by migration).
+        "unnichat",
       ].includes(release.provider) && release.status === "certified"
     );
   try {

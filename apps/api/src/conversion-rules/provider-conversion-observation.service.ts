@@ -24,6 +24,7 @@ import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedUmblerAutomationV1 } from "../inbound-webhooks/providers/umbler/umbler-automation-v1.parser";
 import type { ParsedPaytAutomationV1 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
+import type { ParsedUnnichatAutomationV1 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
 import {
   PAYT_LEAD_OTHER_CHANNEL_REASON,
   resolvePurchaseChannels,
@@ -114,7 +115,14 @@ type ObservedChannel = {
 };
 
 /** Endpoint automations of this edition (Umbler, Payt). */
-type ParsedProviderAutomation = ParsedUmblerAutomationV1 | ParsedPaytAutomationV1;
+type ParsedProviderAutomation =
+  | ParsedUmblerAutomationV1
+  | ParsedPaytAutomationV1
+  | (ParsedUnnichatAutomationV1 & {
+      provider: "unnichat";
+      automation: "crm_movement";
+      eventName: ConversionEventNameDto;
+    });
 
 export type ProviderConversionObservationResult = {
   executionIds: string[];
@@ -271,17 +279,26 @@ export class ProviderConversionObservationService {
       "phoneCandidates" in input.automation
         ? input.automation.phoneCandidates
         : undefined;
+    // Fase 4b (as in the SaaS): an Unnichat automation without ctwa_clid is
+    // recorded as blocked (ctwa_missing) and nothing reaches Meta.
+    if (this.isUnnichatWithoutCtwa(input.automation)) {
+      return this.recordUnnichatCtwaMissing({ input, rule });
+    }
     // A Payt sale is attributed only to a tracked CTWA lead: its verified
     // entry (on any channel of the workspace) is then bound to the rule scope.
-    const purchaseLead =
-      rule.parserRelease.provider === "payt"
-        ? await this.paidLeads.resolve({
-            workspaceId: input.workspaceId,
-            ctwaProofAnyChannel: true,
-            phone: input.automation.phone,
-            phoneCandidates,
-          })
-        : null;
+    // An Unnichat automation resolves the lead on its own entry connection.
+    const purchaseLead = ["payt", "unnichat"].includes(
+      rule.parserRelease.provider,
+    )
+      ? await this.paidLeads.resolve({
+          workspaceId: input.workspaceId,
+          ...(rule.parserRelease.provider === "unnichat"
+            ? { connectionId: input.connectionId }
+            : { ctwaProofAnyChannel: true }),
+          phone: input.automation.phone,
+          phoneCandidates,
+        })
+      : null;
     const channel = await this.resolveAutomationChannel({
       workspaceId: input.workspaceId,
       connectionId: input.connectionId,
@@ -366,12 +383,18 @@ export class ProviderConversionObservationService {
       };
     }
     const leadResolution =
-      purchaseLead ??
-      (await this.paidLeads.resolve({
-        workspaceId: input.workspaceId,
-        phone: input.automation.phone,
-        phoneCandidates,
-      }));
+      rule.parserRelease.provider === "unnichat" && !channel
+        ? {
+            status: "not_found" as const,
+            reasonCode: "paid_lead_not_found" as const,
+            candidateLeadId: null,
+          }
+        : (purchaseLead ??
+          (await this.paidLeads.resolve({
+            workspaceId: input.workspaceId,
+            phone: input.automation.phone,
+            phoneCandidates,
+          })));
     const persistedDecision = await this.resolveAutomationDecision({
       input,
       rule,
@@ -777,6 +800,36 @@ export class ProviderConversionObservationService {
     if (contactIdentityHashes.length === 0 || channelIds.length === 0)
       return null;
 
+    if (
+      input.rule.parserRelease.provider === "unnichat" &&
+      input.purchaseLead?.status === "resolved" &&
+      // An ad lead keeps its own channel selection; its CTWA proof is only
+      // the production-time fallback destination.
+      !input.purchaseLead.lead.adId &&
+      input.purchaseLead.lead.ctwaDestination
+    ) {
+      const proof = input.purchaseLead.lead.ctwaDestination;
+      if (
+        !channelIds.includes(proof.channelId) ||
+        proof.connectionId !== input.connectionId
+      )
+        return null;
+      return this.prisma.inboundWebhookChannel.findFirst({
+        where: {
+          id: proof.channelId,
+          workspaceId: input.workspaceId,
+          connectionId: input.connectionId,
+        },
+        select: {
+          id: true,
+          organizationId: true,
+          providerChannelId: true,
+          status: true,
+          productionActivatedAt: true,
+          conversionEngineMode: true,
+        },
+      });
+    }
     if (input.rule.parserRelease.provider === "payt") {
       // A Payt sale belongs to the scoped channel where the paid lead's CTWA
       // entry was verified; a phone match alone is never enough.
@@ -828,6 +881,9 @@ export class ProviderConversionObservationService {
       where: {
         workspaceId: input.workspaceId,
         connectionId: input.connectionId,
+        ...(input.rule.parserRelease.provider === "unnichat"
+          ? { hasCtwa: true }
+          : {}),
         channelId: { in: channelIds },
         contactIdentityHash:
           contactIdentityHashes.length === 1
@@ -852,6 +908,11 @@ export class ProviderConversionObservationService {
       },
     });
     if (recentEvent?.channel) return recentEvent.channel;
+
+    // An Unnichat CRM movement is only attributable when the same contact was
+    // previously observed through CTWA on a scoped channel. Do not fall back
+    // to the rule's single channel: that would turn a movement into a lead.
+    if (input.rule.parserRelease.provider === "unnichat") return null;
 
     if (
       providerRuleScope(input.rule) !== "specific_numbers" ||
@@ -1028,6 +1089,69 @@ export class ProviderConversionObservationService {
     });
     cache.set(cacheKey, resolution);
     return resolution;
+  }
+
+  private isUnnichatWithoutCtwa(
+    automation: ParsedProviderAutomation,
+  ): automation is Extract<ParsedProviderAutomation, { provider: "unnichat" }> {
+    return automation.provider === "unnichat" && !automation.hasCtwa;
+  }
+
+  /** No ctwa_clid, nothing is sent: the callback is kept as a blocked
+   * execution (ctwa_missing) for the audit, without lead or decision. */
+  private async recordUnnichatCtwaMissing(input: {
+    input: {
+      workspaceId: string;
+      connectionId: string;
+      deliveryId: string;
+      providerRuleId: string;
+      automation: ParsedProviderAutomation;
+    };
+    rule: AutomationRule;
+  }): Promise<ProviderConversionAutomationObservationResult> {
+    const execution = await this.prisma.providerConversionRuleExecution.upsert({
+      where: {
+        providerRuleId_externalExecutionKey: {
+          providerRuleId: input.rule.id,
+          externalExecutionKey: input.input.automation.externalExecutionKey,
+        },
+      },
+      create: {
+        workspaceId: input.input.workspaceId,
+        providerRuleId: input.rule.id,
+        sourceDeliveryId: input.input.deliveryId,
+        channelWorkspaceId: null,
+        channelId: null,
+        externalExecutionKey: input.input.automation.externalExecutionKey,
+        occurredAt: input.input.automation.occurredAt,
+        contactIdentityHash: hashPhoneIdentity(input.input.automation.phone),
+        status: "blocked",
+        reasonCode: "ctwa_missing",
+        normalizedResult: Prisma.JsonNull,
+        valueCents: null,
+        currency: null,
+        leadId: null,
+      },
+      update: {
+        sourceDeliveryId: input.input.deliveryId,
+        status: "blocked",
+        reasonCode: "ctwa_missing",
+        processedAt: null,
+      },
+      select: { id: true },
+    });
+
+    return {
+      decisionId: null,
+      decisionCode: null,
+      reasonCode: "ctwa_missing",
+      disposition: "blocked",
+      executionId: execution.id,
+      eligibleExecutionId: null,
+      reviewId: null,
+      channelId: null,
+      leadResolved: false,
+    };
   }
 
   private disposition(input: {

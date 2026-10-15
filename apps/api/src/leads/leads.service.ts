@@ -13,6 +13,7 @@ import {
   type LeadListQueryDto,
   type LeadStatusDto,
 } from "@wpptrack/shared";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import {
   hashPhoneIdentity,
@@ -138,6 +139,8 @@ export type UpsertWhatsappLeadInput = {
   recordMessageTimestamps?: boolean;
   preserveExistingSource?: boolean;
   preserveEarliestFirstMessageAt?: boolean;
+  /** Fill `name` only while the lead has none; never overwrite an existing one. */
+  preserveExistingName?: boolean;
 };
 
 @Injectable()
@@ -906,6 +909,7 @@ export class LeadsService {
 
   async upsertFromWhatsappWebhook(
     input: UpsertWhatsappLeadInput,
+    client: Pick<Prisma.TransactionClient, "lead"> = this.prisma,
   ): Promise<{ id: string } | null> {
     const normalizedPhone = input.phone
       ? normalizePhoneIdentity(input.phone)
@@ -921,7 +925,7 @@ export class LeadsService {
     const firstMessageAt = input.firstMessageAt ?? occurredAt;
     const lastMessageAt = input.lastMessageAt ?? occurredAt;
     const labels = this.normalizeLabels(input.labels);
-    const lead = await this.prisma.lead.upsert({
+    const lead = await client.lead.upsert({
       where: {
         workspaceId_phoneHash: {
           workspaceId: input.workspaceId,
@@ -948,7 +952,7 @@ export class LeadsService {
       },
       update: {
         whatsappInstanceId: input.whatsappInstanceId ?? undefined,
-        name: input.name ?? undefined,
+        name: input.preserveExistingName ? undefined : (input.name ?? undefined),
         phoneDisplay: this.formatPhone(input.phone) ?? undefined,
         source: input.preserveExistingSource
           ? undefined
@@ -973,12 +977,23 @@ export class LeadsService {
       },
     });
 
+    if (input.preserveExistingName && input.name) {
+      await client.lead.updateMany({
+        where: {
+          id: lead.id,
+          workspaceId: input.workspaceId,
+          OR: [{ name: null }, { name: "" }],
+        },
+        data: { name: input.name },
+      });
+    }
+
     if (
       recordMessageTimestamps &&
       input.preserveEarliestFirstMessageAt &&
       input.firstMessageAt
     ) {
-      await this.prisma.lead.updateMany({
+      await client.lead.updateMany({
         where: {
           id: lead.id,
           workspaceId: input.workspaceId,

@@ -119,6 +119,7 @@ export class MetaCapiAdapter {
 
     let response: Response | undefined;
     let payload: unknown;
+    let dispatched = false;
     try {
       const request: RequestInit = {
         method: "POST",
@@ -130,6 +131,7 @@ export class MetaCapiAdapter {
       };
       dispatch.signal?.throwIfAborted();
       dispatch.beforeDispatch?.();
+      dispatched = true;
       response = await bounded(
         this.fetcher(url.toString(), request),
         dispatch.signal,
@@ -146,6 +148,13 @@ export class MetaCapiAdapter {
       }
       payload = await bounded(response.json(), dispatch.signal);
     } catch {
+      // As in the SaaS: a CTWA page/pixel event whose final authorization
+      // (credential expiry/deadline) failed before the POST was never sent.
+      if (input.pagePixelDestination && !dispatched)
+        return notConfigured(
+          "MissingMetaDestination",
+          "CTWA authorization unavailable before dispatch",
+        );
       return {
         status: "error",
         requestPayload,

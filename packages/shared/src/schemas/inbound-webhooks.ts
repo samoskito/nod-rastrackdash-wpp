@@ -11,6 +11,9 @@ export const inboundWebhookProviders = [
   // Fase 4a: plataforma de venda. Nao e um numero de WhatsApp: so existe
   // como release de parser das regras de venda (sem conexao propria).
   "payt",
+  // Fase 4b: atendimento por WhatsApp. A conexao nasce presa ao numero do
+  // cliente (connectedPhone): o webhook de entrada nao traz id de canal.
+  "unnichat",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",
@@ -99,6 +102,7 @@ export const inboundWebhookChannelReadinessBlockers = [
   "route_not_valid",
   "ctwa_not_observed",
   "ctwa_unresolved",
+  "ctwa_ad_unavailable",
   "payload_unavailable",
   "payload_expiring_soon",
 ] as const;
@@ -167,10 +171,40 @@ export const inboundWebhookDisplayNameSchema = z
     message: "Nome de conexao invalido",
   });
 
-export const inboundWebhookConnectionCreateInputSchema = z.object({
-  provider: inboundWebhookProviderSchema,
-  displayName: inboundWebhookDisplayNameSchema,
-});
+// Numero de WhatsApp do cliente (nunca o telefone do lead de um webhook).
+const inboundWebhookConnectedPhoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(32)
+  .refine((value) => /\d{8,}/u.test(value.replace(/\D/gu, "")), {
+    message: "Informe um número de telefone válido",
+  });
+
+export const inboundWebhookConnectionCreateInputSchema = z
+  .object({
+    provider: inboundWebhookProviderSchema,
+    displayName: inboundWebhookDisplayNameSchema,
+    // Fase 4b: obrigatorio so para Unnichat, cujo webhook de entrada e por
+    // conexao/numero e nao traz id de canal.
+    connectedPhone: inboundWebhookConnectedPhoneSchema.optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.provider === "unnichat" && !input.connectedPhone) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["connectedPhone"],
+        message: "Informe o número de WhatsApp conectado ao Unnichat",
+      });
+    }
+    if (input.provider !== "unnichat" && input.connectedPhone !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["connectedPhone"],
+        message: "Este provedor cadastra o número pelo próprio webhook",
+      });
+    }
+  });
 
 export const inboundWebhookConnectionStatusUpdateInputSchema = z.object({
   status: inboundWebhookMutableConnectionStatusSchema,
@@ -202,8 +236,21 @@ export const inboundWebhookChannelRouteInputSchema = z.object({
   metaConversionDestinationId: idSchema.nullable().optional(),
 });
 
+/** Fase 4b (so Unnichat): inherit_workspace = segue a configuracao Meta do
+ * workspace (par unico pagina + pixel); channel_override = so as rotas
+ * salvas neste numero. */
+export const inboundWebhookChannelRoutingModes = [
+  "inherit_workspace",
+  "channel_override",
+] as const;
+export const inboundWebhookChannelRoutingModeSchema = z.enum(
+  inboundWebhookChannelRoutingModes,
+);
+
 export const inboundWebhookChannelRoutesUpdateInputSchema = z.object({
   routes: z.array(inboundWebhookChannelRouteInputSchema).max(100),
+  // Ausente = mantem o modo atual (Unnichat) ou rotas manuais (demais).
+  routingMode: inboundWebhookChannelRoutingModeSchema.optional(),
 });
 
 export const inboundWebhookParserReleaseSchema = z.object({
@@ -273,6 +320,15 @@ export const inboundWebhookObservationCountersSchema = z.object({
 export const inboundWebhookConnectionOverviewSchema = z.object({
   connection: inboundWebhookConnectionSchema,
   counters: inboundWebhookObservationCountersSchema,
+  // Fase 4b: release do parser de automacao (venda) do Unnichat.
+  automationParserRelease: z
+    .object({
+      id: idSchema,
+      version: z.string(),
+      status: inboundWebhookParserReleaseStatusSchema,
+    })
+    .nullable()
+    .optional(),
 });
 
 const backofficeInboundWebhookReceivedAtSchema = z
@@ -714,6 +770,20 @@ export const inboundWebhookChannelReadinessSchema = z.object({
   payloadUnavailableCtwa: z.number().int().nonnegative(),
   alreadyMaterializedCtwa: z.number().int().nonnegative(),
   nextPayloadExpiresAt: dateTimeSchema.nullable(),
+  // Fase 4b (so Unnichat): de onde vem o roteamento Meta deste numero.
+  // legacy_unknown = numero antigo sem modo salvo; precisa escolher um modo.
+  routingSource: z
+    .enum(["inherit_workspace", "channel_override", "legacy_unknown"])
+    .optional(),
+  effectiveRouteEligible: z.boolean().optional(),
+  // Par unico pagina + pixel autorizado para leads CTWA sem ID do anuncio.
+  ctwaDestinationReadiness: z
+    .object({
+      status: z.enum(["verified", "not_ready"]),
+      reason: z.string().min(1).max(120),
+    })
+    .optional(),
+  adUnavailableCtwa: z.number().int().nonnegative().optional(),
 });
 
 export const inboundWebhookChannelSchema = z.object({

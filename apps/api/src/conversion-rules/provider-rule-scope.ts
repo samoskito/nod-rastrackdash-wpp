@@ -43,7 +43,9 @@ import { phoneIdentityKey } from "../common/phone/phone-identity";
  *  - etiqueta: uazapi (por nome entre instancias);
  *  - automacao Umbler: presa a conexao que recebe o callback;
  *  - venda Payt (Fase 4a): qualquer numero de WhatsApp do workspace; a regra
- *    guarda a conexao dos numeros escolhidos so como ancora da URL.
+ *    guarda a conexao dos numeros escolhidos so como ancora da URL;
+ *  - automacao Unnichat (Fase 4b): presa a conexao Unnichat que recebe o
+ *    callback (o numero ligado a conexao), como a automacao Umbler.
  *  WAHA, Z-API e NOD API nao entram em regras de provedor (nao possuem canal
  *  de entrada); ficam "Em breve".
  */
@@ -109,6 +111,7 @@ export const WHATSAPP_CHANNEL_PROVIDERS = [
   "uazapi",
   "meta_cloud",
   "data_crazy",
+  "unnichat",
 ] as const;
 /** Payt events (Fase 4a); "Carrinho abandonado" is still beta. */
 export const PAYT_RULE_EVENT_NAMES = [...paytSaleEventNames];
@@ -148,6 +151,7 @@ export function providerRuleOrigin(
       if (provider === null || provider === "uazapi") return "whatsapp_label";
       if (provider === "payt") return "automation_payt";
       if (provider === "umbler") return "automation_umbler";
+      if (provider === "unnichat") return "automation_unnichat";
       return null;
     }
     default:
@@ -168,6 +172,8 @@ export function providerRuleOriginChannelProviders(
       return LABEL_RULE_CHANNEL_PROVIDERS;
     case "automation_umbler":
       return ["umbler"];
+    case "automation_unnichat":
+      return ["unnichat"];
     case "automation_payt":
       return WHATSAPP_CHANNEL_PROVIDERS;
   }
@@ -192,21 +198,25 @@ export function providerRuleChannelProviders(
 }
 
 /**
- * The Umbler automation resolves the contact on the connection that received
- * the callback, so even "all numbers" means all numbers of that connection.
- * Payt callbacks carry no channel and may own any WhatsApp number.
+ * Umbler/Unnichat automations resolve the contact on the connection that
+ * received the callback, so even "all numbers" means all numbers of that
+ * connection. Payt callbacks carry no channel and may own any WhatsApp number.
  */
 export function providerRuleOriginIsConnectionBound(
   origin: ProviderRuleOrigin,
 ): boolean {
-  return origin === "automation_umbler";
+  return origin === "automation_umbler" || origin === "automation_unnichat";
 }
 
 /** Origins whose rule must keep a connection binding (signed endpoint). */
 export function providerRuleOriginRequiresConnection(
   origin: ProviderRuleOrigin,
 ): boolean {
-  return origin === "automation_umbler" || origin === "automation_payt";
+  return (
+    origin === "automation_umbler" ||
+    origin === "automation_unnichat" ||
+    origin === "automation_payt"
+  );
 }
 
 /** Origins that "Unificar" may merge (never endpoint automations). */
@@ -284,6 +294,22 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       unifiable: false,
       eventNames: PAYT_RULE_EVENT_NAMES,
       betaEventNames: PAYT_RULE_BETA_EVENT_NAMES,
+    },
+    {
+      // Fase 4b (as in the SaaS): an Unnichat flow calls the rule URL. The
+      // rule is bound to the Unnichat connection (its number); the event is
+      // chosen in the rule (any catalog event), never by the payload, and a
+      // callback without ctwa_clid is never sent.
+      origin: "automation_unnichat",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: ["unnichat"],
+      authorChannelProviders: null,
+      connectionBound: true,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_unnichat",
+      ),
+      labelMatch: null,
+      unifiable: false,
     },
   ];
   return {

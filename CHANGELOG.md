@@ -61,6 +61,63 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 4b — Unnichat conversations and automations as Meta conversions (API
+  and shared)**, ported from the SaaS with the same behavior and no new env
+  var, dependency or Meta permission (the PalmUP social login does not
+  change):
+  - Unnichat connection bound to the client's WhatsApp number: creating it
+    (`POST /integrations/inbound-webhooks` with `provider: "unnichat"` and the
+    new `connectedPhone`, required only for Unnichat) also registers that
+    number as the connection's channel (normalized phone as channel identity,
+    `metaRoutingMode: inherit_workspace`). The entry webhook
+    (`POST /webhooks/inbound/:connectionId?token=`, direct JSON or n8n
+    single-item envelope) carries no channel id, so the parser receives the
+    bound number from the connection, never from the payload. Provisional
+    channels are refused for Unnichat.
+  - Parsers `unnichat/v1` (conversation entry) and `unnichat/automation-v1`
+    (flow movement), with the original-bind proof (click-scoped dedupe key,
+    only the sha256 of `ctwa_clid` kept in the summary) and the contact name
+    filling only an empty lead name.
+  - No `ctwa_clid` → nothing is sent (entry ignored, automation blocked as
+    `ctwa_missing`). A CTWA lead with `ctwa_clid` and no ad id (or an ad the
+    workspace does not know, kept only as an attribution hint) is materialized
+    and sent to the number's unique authorized page + pixel
+    (`ctwaDestinationProviderValue()` now returns `unnichat`); the SaaS WABA
+    binding is not ported. Known ads keep the canonical ad route.
+  - Per-number routing mode (Unnichat only): `routingMode`
+    (`inherit_workspace` / `channel_override`) in
+    `PUT /integrations/inbound-webhooks/channels/:channelId/routes`; other
+    providers get 409. Channel readiness gains `routingSource`,
+    `effectiveRouteEligible`, `ctwaDestinationReadiness` and
+    `adUnavailableCtwa` (Unnichat only); overview gains
+    `automationParserRelease`.
+  - Origin `automation_unnichat` in Conversões (capabilities: Unnichat
+    channels only, `connectionBound` and `requiresConnection` true, any
+    catalog event, not unifiable): the rule is bound to the Unnichat
+    connection, the event comes from the rule (never from `event_name`) and
+    the rule has its own URL (`POST /webhooks/inbound/conversions/:endpointId`).
+    A repeated callback is one occurrence. Payt rules may cover Unnichat
+    numbers, and Payt sales of no-ad leads that entered through Unnichat go to
+    the page + pixel.
+  - SaaS parity fixes on the shared CTWA path: a page/pixel event whose final
+    authorization fails before the POST is recorded as `not_configured`
+    (never sent) instead of "delivery unknown"; the legacy/shadow decision
+    engine keeps ad-only authority; a payload that no longer decrypts gets
+    `inbound_webhook_production_payload_decrypt_failed`.
+  - Migrations (additive, in order): `20261016130000_unnichat_inbound_provider`
+    (enum value `unnichat` in `InboundWebhookProvider` and `DiagnosticSource`)
+    and `20261016130100_unnichat_parser_releases` (`v1` and `automation-v1`
+    seeded as certified; nothing is activated). Back up the database first.
+    Student action: create the connection with the number, paste the entry
+    URL and the rule URLs in the Unnichat flows, choose the routing mode,
+    check and activate. Locked license: 423 on both public URLs. No recovery
+    of earlier Unnichat CTWAs (stays Meta Cloud only). Guide:
+    `docs/setup/unnichat.md`. **Roll back:** pause or delete the Unnichat
+    rules and connections; reverting the image is safe when no Unnichat
+    connection was created (see the guide otherwise).
+  - PENDENTE: web (Unnichat card in the hub with the number and the routing
+    selector, Unnichat origin in Conversões, 423 notice) comes in another
+    commit of this release.
 - **Fase 4a — Payt sales as Meta conversions (API, web and shared)**, ported from
   the SaaS with the same behavior and no new env var, dependency or Meta
   permission:
@@ -86,8 +143,8 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     CTWA lead of the rule's numbers (Brazilian phone forms); a lead that came
     through another number with its own Payt rule is left to that rule. A
     duplicated postback (or two postbacks of the same sale) is one conversion
-    (`ProviderPurchaseClaim`). Sales of leads without an ad id are not sent
-    yet: that path is used by Unnichat (Fase 4b).
+    (`ProviderPurchaseClaim`). Sales of leads without an ad id are sent only
+    for leads that entered through an Unnichat number (Fase 4b, below).
   - Rules start in observation. "Reprocessar selecionados" re-evaluates
     callbacks in observation (new item status `observed`, never sent) and, in
     production, only with the operator's explicit action; the send re-checks

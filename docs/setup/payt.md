@@ -36,7 +36,8 @@ mesma venda), só um evento é criado para aquela venda e aquele evento.
   [`environment.md`](environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
   Nenhuma variável nova para a Payt.
 - Pelo menos uma conexão de WhatsApp com os números que recebem os leads dos anúncios (Umbler,
-  Gupshup, Data Crazy, WhatsApp Cloud API ou Uazapi), com a rota Meta do número configurada.
+  Gupshup, Data Crazy, WhatsApp Cloud API, Uazapi ou Unnichat), com a rota Meta do número
+  configurada.
 - Licença utilizável. Com a licença bloqueada, a API responde `423` também aos postbacks da Payt e
   nada é gravado; depois de regularizar, reenvie os postbacks pela Payt.
 
@@ -78,9 +79,12 @@ a busca do lead é refeita com o telefone atual.
 
 ## Limitações conhecidas
 
-- **Venda de lead sem ID do anúncio** (lead com `ctwa_clid` mas sem o ID do anúncio) ainda não é
-  enviada pela Payt nesta versão. Esse caminho só passa a valer com o **Unnichat** (Fase 4b,
-  futura). Hoje o lead precisa ter `ctwa_clid` **e** o ID do anúncio.
+- **Venda de lead sem ID do anúncio** (lead com `ctwa_clid` mas sem o ID do anúncio) é enviada
+  pela Payt quando o lead entrou por um número **Unnichat** (Fase 4b, veja [Unnichat](unnichat.md)):
+  vai para o único par página + pixel autorizado daquele número, como no SaaS. Para isso, a regra
+  Payt precisa cobrir o número Unnichat (Todos os números, ou o número escolhido). Nos demais
+  provedores (Umbler, Gupshup, Data Crazy, WhatsApp Cloud API, Uazapi) o lead continua precisando
+  de `ctwa_clid` **e** do ID do anúncio.
 - Lead que chegou por **outro número** que tem a sua própria regra Payt: a venda é enviada pela regra
   daquele número, não por esta (aparece como "Venda de um lead que chegou por outro número").
 - Mais de um lead com o mesmo telefone: ambíguo, nada é enviado.

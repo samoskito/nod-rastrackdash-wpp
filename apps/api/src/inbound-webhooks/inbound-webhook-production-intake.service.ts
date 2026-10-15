@@ -59,7 +59,17 @@ export class InboundWebhookProductionIntakeService {
         deliveryId: input.deliveryId,
         classification: "eligible_route_resolved",
         hasCtwa: true,
-        adId: { not: null },
+        // Fase 4b: an Unnichat CTWA entry without ad id is materialized only
+        // through the number's unique authorized page/pixel destination
+        // (ctwa_clid stays mandatory; the worker re-checks everything).
+        OR: [
+          { adId: { not: null } },
+          {
+            provider: "unnichat",
+            adId: null,
+            classificationReason: "authorized_ctwa_destination",
+          },
+        ],
         replayItem: null,
         productionItem: null,
       },

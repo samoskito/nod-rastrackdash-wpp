@@ -16,7 +16,7 @@ qualquer provedor.
 | Modelo | Onde se cria | Escopo | Providers |
 |---|---|---|---|
 | **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi; WAHA, Z-API e NOD API aparecem como "Em breve" — conexões já existentes continuam gerenciáveis) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
-| **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → aba **Atendimento e vendas** → card Umbler Talk / Gupshup / Data Crazy; aba **WhatsApp** → card **WhatsApp Cloud API** (Meta) | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
+| **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → aba **Atendimento e vendas** → card Umbler Talk / Gupshup / Data Crazy / Unnichat; aba **WhatsApp** → card **WhatsApp Cloud API** (Meta) | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `unnichat` (conexão presa ao número; [`unnichat.md`](unnichat.md)), `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
 | **Meta Ads (conta de anúncios)** | `/integrations` → aba **Anúncios** → card **Meta Ads** (login social ou token; não recebe conversas) | Por workspace | `meta` — token de usuário do sistema, veja [`meta-manual.md`](meta-manual.md) |
 
 Os dois primeiros modelos entregam **mensagens**. O terceiro entrega
@@ -98,7 +98,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi; WAHA, 
 | `POST /webhooks/whatsapp/:id` — **WAHA** | Idem | `payload.session` precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** — Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
-| `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
+| `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy / Unnichat** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
 | `POST /webhooks/inbound/:id` — **Meta WhatsApp (Cloud API)** | `x-hub-signature-256` via `META_APP_SECRET`; **sem** `META_APP_SECRET`, só é aceito enquanto a conexão está em **observação** | — | **Pronto (CTWA)** — veja a seção Meta Cloud |
 | `GET /webhooks/inbound/:id` — handshake Meta Cloud | `hub.verify_token` comparado ao **Verify token** daquela conexão | `hub.mode=subscribe` | **Pronto** |
 | `POST /webhooks/uazapi` e `POST /webhooks/uazapi/instances/:id` (legado) | Env global `UAZAPI_WEBHOOK_AUTH_TOKEN` / hash por instância | Exigem uma linha `WhatsappInstance` com `provider = "uazapi"` (valor legado) — **o painel novo grava `uazapi_byo`**, então essas rotas não enxergam as conexões criadas pela UI | **Legado — use o receiver por conexão acima** |

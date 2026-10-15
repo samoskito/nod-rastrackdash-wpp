@@ -127,7 +127,7 @@ Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, 
 
 As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
 
-### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup, Data Crazy e Payt (e WhatsApp Cloud API na aba WhatsApp)
+### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup, Data Crazy, Unnichat e Payt (e WhatsApp Cloud API na aba WhatsApp)
 
 Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
 
@@ -161,9 +161,21 @@ conversões por uma regra em **Conversões → Nova regra → origem Payt**, uma
 regra por evento (Compra aprovada → `Purchase`, Pix/boleto gerado →
 `InitiateCheckout`, Carrinho abandonado (beta) → `CartAbandoned`). Copie o
 endereço da regra para o Postback da Payt e confira em **Eventos recebidos**;
-a regra nasce em observação. Só vendas de leads CTWA (com `ctwa_clid` e ID do
-anúncio) dos números da regra são enviadas. Passo a passo, verificação e
+a regra nasce em observação. Só vendas de leads CTWA (com `ctwa_clid`) dos
+números da regra são enviadas; sem ID do anúncio, só de leads que entraram por
+um número Unnichat (par único página + pixel). Passo a passo, verificação e
 rollback em [`setup/payt.md`](setup/payt.md).
+
+**Unnichat** é uma conexão por número: no card **Unnichat**, informe o seu
+número de WhatsApp (não o do lead) ao gerar o webhook, cole a URL de entrada
+no fluxo do Unnichat que recebe a conversa do anúncio e, para marcar
+conversões, crie em **Conversões → Nova regra → Automação da Unnichat** uma
+regra por evento e chame a URL dela no ponto do fluxo. Sem `ctwa_clid` nada é
+enviado; lead com `ctwa_clid` e sem ID do anúncio vai pelo único par página +
+pixel do número. Cada número escolhe o roteamento Meta: herdar do workspace
+(padrão) ou rotas próprias. Parsers certificados pela migration; conexão,
+número e regras nascem em observação. Passo a passo, verificação e rollback em
+[`setup/unnichat.md`](setup/unnichat.md).
 
 ### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
 

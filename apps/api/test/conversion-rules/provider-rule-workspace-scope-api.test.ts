@@ -120,12 +120,21 @@ function createWorld() {
       version: "automation-v1",
       status: "certified",
     },
+    // Fase 4b: Unnichat entry and automation releases (certified by migration).
+    { id: "release_unnichat", provider: "unnichat", version: "v1", status: "certified" },
+    {
+      id: "release_unnichat_automation",
+      provider: "unnichat",
+      version: "automation-v1",
+      status: "certified",
+    },
   ];
   const connections: Row[] = [
     { id: "connection_umbler", provider: "umbler", parserReleaseId: "release_umbler" },
     { id: "connection_qr_a", provider: "uazapi", parserReleaseId: "release_uazapi" },
     { id: "connection_qr_b", provider: "uazapi", parserReleaseId: "release_uazapi" },
     { id: "connection_gupshup", provider: "gupshup", parserReleaseId: "release_gupshup" },
+    { id: "connection_unnichat", provider: "unnichat", parserReleaseId: "release_unnichat" },
   ].map((connection) => ({
     workspaceId,
     status: "production",
@@ -142,6 +151,7 @@ function createWorld() {
     { id: "channel_qr_a", connectionId: "connection_qr_a", whatsappInstanceId: "instance_a" },
     { id: "channel_qr_b", connectionId: "connection_qr_b", whatsappInstanceId: "instance_b" },
     { id: "channel_gupshup", connectionId: "connection_gupshup", whatsappInstanceId: null },
+    { id: "channel_unnichat", connectionId: "connection_unnichat", whatsappInstanceId: null },
   ].map((channel, index) => ({
     workspaceId,
     status: "active",
@@ -629,6 +639,86 @@ describe("provider rules API: workspace scope", () => {
     expect(created.webhookUrl).toMatch(
       /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
     );
+  });
+
+  it("creates an Unnichat automation rule on its connection with its own URL (Fase 4b)", async () => {
+    const world = createWorld();
+    const automation = {
+      name: "Comprou no Unnichat",
+      triggerType: "provider_automation",
+      eventName: "Purchase",
+      defaultValueCents: 15000,
+      defaultCurrency: "BRL",
+      scope: "all_numbers",
+      channelIds: [],
+    };
+
+    // The automation is bound to the connection that receives the callback.
+    await expect(
+      world.service.createRule(
+        workspaceId,
+        providerConversionRuleCreateInputSchema.parse(automation),
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        ...automation,
+        connectionId: "connection_unnichat",
+      }),
+      "user_1",
+    );
+    expect(created.rule).toMatchObject({
+      connectionId: "connection_unnichat",
+      parserReleaseId: "release_unnichat_automation",
+      scope: "all_numbers",
+      origin: "automation_unnichat",
+      // "All numbers" of an Unnichat automation = numbers of its connection.
+      effectiveChannelIds: ["channel_unnichat"],
+      mode: "observation",
+    });
+    expect(created.webhookUrl).toMatch(
+      /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
+    );
+
+    // A number of another provider cannot be scoped to the Unnichat automation.
+    await expect(
+      world.service.createRule(
+        workspaceId,
+        providerConversionRuleCreateInputSchema.parse({
+          ...automation,
+          scope: "specific_numbers",
+          connectionId: "connection_unnichat",
+          channelIds: ["channel_umbler"],
+        }),
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("lets a Payt sale rule cover an Unnichat number (no-ad sale path, Fase 4b)", async () => {
+    const world = createWorld();
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        name: "Venda Payt no Unnichat",
+        triggerType: "provider_automation",
+        automationSource: "payt",
+        eventName: "Purchase",
+        scope: "specific_numbers",
+        connectionId: "connection_unnichat",
+        channelIds: ["channel_unnichat"],
+      }),
+      "user_1",
+    );
+    expect(created.rule).toMatchObject({
+      connectionId: "connection_unnichat",
+      parserReleaseId: "release_payt_automation",
+      origin: "automation_payt",
+      channelIds: ["channel_unnichat"],
+    });
   });
 
   it("lists the numbers where a specific rule overrides the global one, and which rule wins", async () => {
@@ -1261,8 +1351,18 @@ describe("provider rules API: Conversoes screen support", () => {
       structured_catalog: ["umbler", "uazapi"],
       whatsapp_label: ["uazapi"],
       automation_umbler: ["umbler"],
-      // Fase 4a: a Payt sale may belong to any WhatsApp number.
-      automation_payt: ["umbler", "gupshup", "uazapi", "meta_cloud", "data_crazy"],
+      // Fase 4a: a Payt sale may belong to any WhatsApp number (Unnichat
+      // numbers included since Fase 4b).
+      automation_payt: [
+        "umbler",
+        "gupshup",
+        "uazapi",
+        "meta_cloud",
+        "data_crazy",
+        "unnichat",
+      ],
+      // Fase 4b: the Unnichat automation runs on its own connection number.
+      automation_unnichat: ["unnichat"],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
@@ -1292,7 +1392,19 @@ describe("provider rules API: Conversoes screen support", () => {
       whatsapp_label: [false, false],
       automation_umbler: [true, true],
       automation_payt: [false, true],
+      automation_unnichat: [true, true],
     });
+    // Unnichat: any catalog event (the rule chooses it), never unified.
+    expect(
+      capabilities.origins.find(
+        (origin) => origin.origin === "automation_unnichat",
+      ),
+    ).toMatchObject({ unifiable: false });
+    expect(
+      capabilities.origins.find(
+        (origin) => origin.origin === "automation_unnichat",
+      )?.eventNames,
+    ).toBeUndefined();
     expect(capabilities.unsupportedWhatsappProviders).toEqual([
       "waha",
       "zapi",

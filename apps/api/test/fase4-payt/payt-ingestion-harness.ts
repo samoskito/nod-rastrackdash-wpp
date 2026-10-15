@@ -57,6 +57,8 @@ export function createHarness(options?: {
   eventName?: "QualifiedLead" | "Purchase" | "InitiateCheckout" | "CartAbandoned";
   /** Payt rule bound to a WhatsApp (UAZAPI) connection, as created in Conversoes. */
   payt?: boolean;
+  /** Fase 4b: Unnichat automation rule bound to its Unnichat connection. */
+  unnichat?: boolean;
   channelResolved?: boolean;
   paidLeadResolved?: boolean;
 }) {
@@ -118,7 +120,7 @@ export function createHarness(options?: {
         id: "connection_1",
         workspaceId: "workspace_safe",
         provider: "umbler" as
-          "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy" | "payt",
+          "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy" | "payt" | "unnichat",
         displayName: "Umbler Teste",
         parserReleaseId: "inbound_parser_umbler_v1",
         secretHash: "connection-hash",
@@ -133,7 +135,7 @@ export function createHarness(options?: {
         parserRelease: {
           id: "inbound_parser_umbler_v1",
           provider: "umbler" as
-            "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy" | "payt",
+            "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy" | "payt" | "unnichat",
           version: "v1",
           status: "certified" as const,
           certifiedByUserId: "user_1",
@@ -145,7 +147,7 @@ export function createHarness(options?: {
       parserRelease: {
         id: "inbound_parser_umbler_automation_v1",
         provider: "umbler" as
-          "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy" | "payt",
+          "umbler" | "gupshup" | "uazapi" | "meta_cloud" | "data_crazy" | "payt" | "unnichat",
         version: "automation-v1",
         status: "certified" as const,
         certifiedByUserId: "user_1",
@@ -790,6 +792,15 @@ export function createHarness(options?: {
     rule.parserReleaseId = "inbound_parser_payt_automation_v1";
     rule.parserRelease.id = "inbound_parser_payt_automation_v1";
     rule.conversionRule.name = "Venda Payt";
+  }
+  if (options?.unnichat) {
+    const rule = endpoint.providerRule;
+    rule.connection.provider = "unnichat";
+    rule.connection.parserRelease.provider = "unnichat";
+    rule.parserRelease.provider = "unnichat";
+    rule.parserReleaseId = "inbound_parser_unnichat_automation_v1";
+    rule.parserRelease.id = "inbound_parser_unnichat_automation_v1";
+    rule.conversionRule.name = "Automação Unnichat";
   }
   const service = new InboundConversionAutomationIngestionService(
     prisma as unknown as PrismaService,

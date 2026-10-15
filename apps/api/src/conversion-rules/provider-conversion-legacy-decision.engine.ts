@@ -27,7 +27,11 @@ export class ProviderConversionLegacyDecisionEngine {
     if (
       !input.rule.active ||
       input.occurrence.eventName !== input.rule.eventName ||
-      input.leadResolution.status !== "resolved"
+      input.leadResolution.status !== "resolved" ||
+      // As in the SaaS: the legacy/shadow engine keeps its ad-only
+      // authority. A CTWA lead without ad id (page/pixel proof) is decided
+      // only by the canonical engine.
+      !input.leadResolution.lead.adId
     ) {
       return null;
     }
