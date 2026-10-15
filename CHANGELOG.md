@@ -7,6 +7,36 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ## [Unreleased]
 
+### Changed
+
+- **Leads novos × leads que voltaram** across Visão Geral, Leads and
+  Relatórios: a "lead novo" is a lead whose first contact
+  (`Lead.firstMessageAt`, else `createdAt`, America/Sao_Paulo) falls in the
+  period, counted once and attributed to the campaign/ad set/ad of its first
+  paid contact. CPL and the LeadSubmitted funnel stage use leads novos only.
+  Leads that came back through an ad are reported apart (`returningLeads`,
+  `repeatConversationLeads`, `adConversationEvents`, daily `returningLeads`;
+  all optional in the shared schema) and never enter CPL. "Conversas reais"
+  is now labelled "Leads novos"; the campaign CSV gains "Leads que voltaram".
+  Leads drill-downs by campaign/ad set/ad follow the first-contact ad. No
+  migration, no new env var.
+
+### Added
+
+- **"Leads no período" block on Visão Geral** (always visible): leads novos
+  (with CPL), voltaram por anúncio, conversaram mais de uma vez and conversas
+  por anúncio, each linking to the matching Leads list when it can be
+  reproduced. The daily comparison adds a returns series.
+- **Leads base filter** (Leads novos / Voltaram / 2+ conversas, `base`
+  query param) and a paid/organic split count on the Leads page.
+- **Export leads to CSV or Excel** (`GET /leads/export?format=csv|xlsx`, web
+  proxy `/leads/export`, "Exportar" menu on Leads): every lead of the applied
+  filters and period, with entry date/time in São Paulo time; names, phones,
+  campaigns and ids are hidden when "Ocultar dados" is on; 50,000-row cap.
+  Read-only, so the license soft-lock does not block it. New API dependency
+  `exceljs` 4.4.0 — run `pnpm install` on local installs (Docker builds
+  already install it).
+
 ### Fixed
 
 - **Residual footer always visible**: on mobile (<=900px) and with the

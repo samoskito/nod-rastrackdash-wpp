@@ -1900,7 +1900,7 @@ function ReportComparisonMetrics({
           previous={previous.metaConversationsStarted}
         />
         <ComparisonMetric
-          label="Conversas reais"
+          label="Leads novos"
           current={current.realConversations}
           previous={previous.realConversations}
         />
@@ -1918,7 +1918,7 @@ function ReportComparisonMetrics({
     return (
       <>
         <ComparisonMetric
-          label="Conversas reais"
+          label="Leads novos"
           current={current.realConversations}
           previous={previous.realConversations}
         />
@@ -1997,7 +1997,7 @@ function ReportComparisonMetrics({
         previous={previous.metaConversationsStarted}
       />
       <ComparisonMetric
-        label="Conversas reais"
+        label="Leads novos"
         current={current.realConversations}
         previous={previous.realConversations}
       />
@@ -2034,8 +2034,8 @@ function reportSummaryMetrics(
         value: String(totals.metaConversationsStarted),
       },
       {
-        detail: "Identificadas no WhatsApp",
-        label: "Conversas reais",
+        detail: "1º contato no período",
+        label: "Leads novos",
         value: String(totals.realConversations),
       },
       {
@@ -2049,8 +2049,8 @@ function reportSummaryMetrics(
   if (metricGroup === "funnel") {
     return [
       {
-        detail: "Base rastreada",
-        label: "Conversas reais",
+        detail: "1º contato no período",
+        label: "Leads novos",
         value: String(totals.realConversations),
       },
       {
@@ -2108,8 +2108,8 @@ function reportSummaryMetrics(
       value: String(totals.metaConversationsStarted),
     },
     {
-      detail: "Identificadas no WhatsApp",
-      label: "Conversas reais",
+      detail: "1º contato no período",
+      label: "Leads novos",
       value: String(totals.realConversations),
     },
     {
@@ -2584,13 +2584,15 @@ export default async function ReportsPage({
               ) : null}
             </div>
             <div className="report-command-actions">
-              <Link
+              {/* Plain <a>: the target is a route handler (a CSV download),
+                  so a Next <Link> would prefetch it as a page and 404. */}
+              <a
                 className="button ghost"
                 href={reportExportHref(reportFilters, activeView)}
               >
                 <Download aria-hidden="true" size={16} />
                 Exportar CSV
-              </Link>
+              </a>
               {canSyncMetaReports ? (
                 <form action={syncMetaReports}>
                   <input type="hidden" name="view" value={activeView} />

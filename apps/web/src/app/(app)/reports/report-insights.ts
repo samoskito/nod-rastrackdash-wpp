@@ -66,7 +66,7 @@ const objectives: Record<
 > = {
   real_conversations: {
     costKey: "costPerRealConversationCents",
-    fallbackLabel: "Conversas reais",
+    fallbackLabel: "Leads novos",
     volumeKey: "realConversations",
   },
   qualified_lead: {

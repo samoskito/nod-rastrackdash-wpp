@@ -708,7 +708,10 @@ describe("MetaReportingService sort with a large deterministic fixture", () => {
     // Unsorted fast path: one page of rows plus one totals calculation.
     expect(unsorted.calculate).toHaveBeenCalledTimes(25 + 1);
     expect(sorted.calls).toEqual(unsorted.calls);
-    expect(sorted.calls).toHaveLength(6);
+    // Two of these resolve the first-contact attribution of the leads
+    // (paid LeadSubmitted in scope + the leads' first paid conversations);
+    // the count stays constant whatever the number of rows.
+    expect(sorted.calls).toHaveLength(8);
   });
 });
 
