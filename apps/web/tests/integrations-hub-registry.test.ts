@@ -34,7 +34,7 @@ function snapshot(
       connections: [],
     },
     whatsapp: { loaded: true, connections: [], legacyUazapiInstances: 0 },
-    crm: { kommo: { loadState: "empty", statuses: [] } },
+    crm: { kommo: { loadState: "empty", statuses: [] }, pipedrive: { loadState: "empty", statuses: [] } },
     meta: {
       connected: false,
       needsAttention: false,
@@ -79,13 +79,13 @@ describe("integration registry", () => {
         "gupshup",
         "data_crazy",
         "kommo",
+        "pipedrive",
         "meta",
       ].sort(),
     );
     for (const later of [
       "payt",
       "unnichat",
-      "pipedrive",
       "gohighlevel",
       "guimo",
     ]) {
@@ -155,7 +155,7 @@ describe("integration registry", () => {
     ).toEqual(["waha", "zapi", "nod_api"]);
     expect(inTab("attendance")).toEqual(["umbler", "gupshup", "data_crazy"]);
     expect(inTab("ads")).toEqual(["meta"]);
-    expect(inTab("crm")).toEqual(["kommo"]);
+    expect(inTab("crm")).toEqual(["kommo", "pipedrive"]);
     expect(integrationTabForCategory("crm")).toBe("crm");
   });
 
@@ -175,6 +175,14 @@ describe("integration registry", () => {
     expect(integrationDeepLinkFromHash("#integracao-uazapi_byo")).toEqual({
       tab: "whatsapp",
       provider: "uazapi_byo",
+    });
+    expect(integrationDeepLinkFromHash("#integracao-pipedrive")).toEqual({
+      tab: "crm",
+      provider: "pipedrive",
+    });
+    expect(integrationDeepLinkFromHash("#crm-configurado-pipedrive")).toEqual({
+      tab: "crm",
+      provider: "pipedrive",
     });
     // Old Settings anchor for the Kommo block.
     expect(integrationDeepLinkFromHash("#crm-configurado")).toEqual({
@@ -264,7 +272,7 @@ describe("buildIntegrationCards", () => {
           ],
           legacyUazapiInstances: 1,
         },
-        crm: { kommo: { loadState: "real", statuses: ["active"] } },
+        crm: { kommo: { loadState: "real", statuses: ["active"] }, pipedrive: { loadState: "empty", statuses: [] } },
         meta: {
           connected: true,
           needsAttention: false,
@@ -308,6 +316,7 @@ describe("buildIntegrationCards", () => {
 
     const crm = cardsForTab(cards, "crm");
     expect(ids(crm.active)).toEqual(["kommo"]);
+    expect(ids(crm.available)).toEqual(["pipedrive"]);
     expect(crm.active[0].status.label).toBe("Ativa");
   });
 
@@ -380,25 +389,82 @@ describe("buildIntegrationCards", () => {
 
   it("shows Kommo load failures and missing access explicitly", () => {
     const error = buildIntegrationCards(
-      snapshot({ crm: { kommo: { loadState: "error", statuses: [] } } }),
+      snapshot({ crm: { kommo: { loadState: "error", statuses: [] }, pipedrive: { loadState: "empty", statuses: [] } } }),
     );
     expect(error.find((card) => card.id === "kommo")?.status.label).toBe(
       "Não foi possível verificar",
     );
 
     const forbidden = buildIntegrationCards(
-      snapshot({ crm: { kommo: { loadState: "forbidden", statuses: [] } } }),
+      snapshot({ crm: { kommo: { loadState: "forbidden", statuses: [] }, pipedrive: { loadState: "empty", statuses: [] } } }),
     );
     expect(forbidden.find((card) => card.id === "kommo")?.status.label).toBe(
       "Sem acesso",
     );
 
     const paused = buildIntegrationCards(
-      snapshot({ crm: { kommo: { loadState: "real", statuses: ["paused"] } } }),
+      snapshot({ crm: { kommo: { loadState: "real", statuses: ["paused"] }, pipedrive: { loadState: "empty", statuses: [] } } }),
     );
     const kommo = paused.find((card) => card.id === "kommo");
     expect(kommo?.state).toBe("active");
     expect(kommo?.status).toEqual({ label: "Pausada", tone: "warn" });
+  });
+
+  it("shows Pipedrive as an always-on CRM card with its own connection state", () => {
+    const base = buildIntegrationCards(snapshot());
+    const available = base.find((card) => card.id === "pipedrive");
+    expect(available?.state).toBe("available");
+    expect(available?.status).toEqual({ label: "Disponível", tone: "neutral" });
+    expect(available?.logo).toBe("/integrations/pipedrive.svg");
+    expect(available?.logoSurface).toBe("dark");
+
+    const empty = { loadState: "empty" as const, statuses: [] as string[] };
+    const error = buildIntegrationCards(
+      snapshot({
+        crm: { kommo: empty, pipedrive: { loadState: "error", statuses: [] } },
+      }),
+    );
+    expect(error.find((card) => card.id === "pipedrive")?.status.label).toBe(
+      "Não foi possível verificar",
+    );
+
+    const forbidden = buildIntegrationCards(
+      snapshot({
+        crm: {
+          kommo: empty,
+          pipedrive: { loadState: "forbidden", statuses: [] },
+        },
+      }),
+    );
+    expect(
+      forbidden.find((card) => card.id === "pipedrive")?.status.label,
+    ).toBe("Sem acesso");
+
+    const two = buildIntegrationCards(
+      snapshot({
+        crm: {
+          kommo: empty,
+          pipedrive: { loadState: "real", statuses: ["active", "paused"] },
+        },
+      }),
+    );
+    const pipedrive = two.find((card) => card.id === "pipedrive");
+    expect(pipedrive?.state).toBe("active");
+    expect(pipedrive?.status).toEqual({ label: "Ativa", tone: "ok" });
+    expect(pipedrive?.detail).toBe("2 conexões");
+
+    const blocked = buildIntegrationCards(
+      snapshot({
+        crm: {
+          kommo: empty,
+          pipedrive: { loadState: "real", statuses: ["blocked"] },
+        },
+      }),
+    );
+    expect(blocked.find((card) => card.id === "pipedrive")?.status).toEqual({
+      label: "Bloqueada",
+      tone: "warn",
+    });
   });
 
   it("reflects the Meta connection state", () => {

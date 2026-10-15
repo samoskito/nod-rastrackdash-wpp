@@ -535,7 +535,7 @@ describe("Conversions screen", () => {
   it("tells non-owners that CRM rules are the account owner's", () => {
     render(createElement(ConversionsScreen, props({ crmVisible: false })));
 
-    expect(screen.getByText(/As regras do Kommo \(CRM\) aparecem só para o responsável da conta/)).toBeTruthy();
+    expect(screen.getByText(/As regras de CRM \(Kommo, Pipedrive\) aparecem só para o responsável da/)).toBeTruthy();
   });
 
   it("disables every write control while the license is locked", () => {

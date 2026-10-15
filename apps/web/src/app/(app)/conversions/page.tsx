@@ -39,13 +39,19 @@ export default async function ConversionsPage({
       data.connections,
       data.capabilities,
     ),
-    ...(data.crmVisible ? buildCrmRuleRows({ kommo: data.kommo }, data.numbers) : []),
+    ...(data.crmVisible ? buildCrmRuleRows(
+          { kommo: data.kommo, pipedrive: data.pipedrive },
+          data.numbers,
+        ) : []),
   ]);
   const offeredOrigins = offeredRuleOrigins({
     numbers: data.numbers,
     connections: data.connections,
     capabilities: data.capabilities,
-    crm: { kommo: data.crmVisible && data.kommo.length > 0 },
+    crm: {
+      kommo: data.crmVisible && data.kommo.length > 0,
+      pipedrive: data.crmVisible && data.pipedrive.length > 0,
+    },
   });
   const initialOrigin = isRuleOriginId(params.nova) ? params.nova : null;
 
