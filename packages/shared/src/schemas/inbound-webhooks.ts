@@ -703,6 +703,15 @@ export const inboundWebhookChannelReadinessSchema = z.object({
   blockers: z.array(inboundWebhookChannelReadinessBlockerSchema),
   routeCount: z.number().int().nonnegative(),
   validRouteCount: z.number().int().nonnegative(),
+  /** CRM-only (Kommo/Pipedrive): whether this number, of any provider, may be
+   * bound by its channel id to the verified unique workspace page/pixel. Does
+   * not describe nor change inbound entry routing. */
+  crmDestinationReadiness: z
+    .object({
+      status: z.enum(["verified", "not_ready"]),
+      reason: z.string().min(1).max(120),
+    })
+    .optional(),
   totalCtwa: z.number().int().nonnegative(),
   routedCtwa: z.number().int().nonnegative(),
   unresolvedCtwa: z.number().int().nonnegative(),

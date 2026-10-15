@@ -389,6 +389,9 @@ export class PlatformWorkspaceAccessService {
       // Lock every workspace connection here before any delete mutation so the
       // two consumers keep one lock ordering even for a multi-account tenant.
       await tx.$queryRaw`SELECT "id" FROM "KommoConnection" WHERE "workspaceId" = ${workspaceId} FOR UPDATE`;
+      // The Pipedrive sender/worker take the same advisory lock and then the
+      // connection row: keep that order before deleting its rows.
+      await tx.$queryRaw`SELECT "id" FROM "PipedriveConnection" WHERE "workspaceId" = ${workspaceId} FOR UPDATE`;
       const workspace = await tx.workspace.findUnique({
         where: { id: workspaceId },
         select: { id: true, slug: true },
@@ -514,6 +517,16 @@ export class PlatformWorkspaceAccessService {
     await tx.kommoConversionRule.deleteMany({ where });
     await tx.kommoPipelineCatalog.deleteMany({ where });
     await tx.kommoConnection.deleteMany({ where });
+
+    // Pipedrive relations are Restrict as well (Workspace, Lead and
+    // ConversionEventLog parents): the ledger and the inbox go first, then the
+    // rules, the stage catalog, the pipeline catalog and the connection.
+    await tx.pipedriveConversionDedupe.deleteMany({ where });
+    await tx.pipedriveWebhookEvent.deleteMany({ where });
+    await tx.pipedriveConversionRule.deleteMany({ where });
+    await tx.pipedriveStageCatalog.deleteMany({ where });
+    await tx.pipedrivePipelineCatalog.deleteMany({ where });
+    await tx.pipedriveConnection.deleteMany({ where });
 
     await tx.inboundWebhookReplayItem.deleteMany({ where });
     await tx.inboundWebhookReplayBatch.deleteMany({ where });

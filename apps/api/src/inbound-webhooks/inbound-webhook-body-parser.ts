@@ -46,6 +46,32 @@ export function configureInboundWebhookBodyParser(
       verify: captureRawBody,
     }),
   );
+  // Pipedrive Webhooks v2: the bounded JSON decoder runs in the service on
+  // the raw bytes; parser failures answer a constant, non-echoing error.
+  app.use(
+    "/webhooks/pipedrive",
+    raw({
+      type: (request: { method?: string }) => request.method === "POST",
+      limit: "100kb",
+      inflate: false,
+      verify: captureRawBody,
+    }),
+  );
+  app.use(
+    "/webhooks/pipedrive",
+    (
+      error: { status?: number },
+      _request: unknown,
+      response: { status: (code: number) => { json: (body: unknown) => void } },
+      _next: unknown,
+    ) => {
+      const status =
+        error.status === 413 ? 413 : error.status === 415 ? 415 : 400;
+      response
+        .status(status)
+        .json({ statusCode: status, message: "pipedrive_payload_invalid" });
+    },
+  );
   app.useBodyParser("json", {
     limit: INBOUND_WEBHOOK_BODY_LIMIT,
     strict: false,

@@ -17,6 +17,10 @@ export function matches(row: any, where: any): boolean {
       );
     if (value && typeof value === "object" && !(value instanceof Date)) {
       if ("in" in value) return value.in.includes(row[key]);
+      if ("startsWith" in value)
+        return (
+          typeof row[key] === "string" && row[key].startsWith(value.startsWith)
+        );
       if ("is" in value) return value.is === null ? row[key] == null : matches(row[key] ?? {}, value.is);
       if ("gte" in value) return row[key] != null && row[key] >= value.gte;
       if ("not" in value) return row[key] !== value.not;
@@ -73,6 +77,9 @@ export function kommoHarness(extraTables: string[] = []) {
     "inboundWebhookEvent",
     "metaAdDestinationAssignment",
     "inboundWebhookChannelRoute",
+    // Numbers bound by channel id (shared CRM channel policy); empty unless a
+    // test seeds them.
+    "inboundWebhookChannel",
     "auditLog",
     "jobAttempt",
     "integrationLog",

@@ -11,6 +11,8 @@ export * from "./schemas/conversion-events";
 export * from "./schemas/conversion-event-catalog";
 export * from "./schemas/diagnostics";
 export * from "./schemas/kommo";
+export * from "./schemas/crm-channels";
+export * from "./schemas/pipedrive";
 export * from "./schemas/conversion-rules";
 export * from "./schemas/funnel-configuration";
 export * from "./schemas/leads";

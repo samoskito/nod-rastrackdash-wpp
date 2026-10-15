@@ -37,6 +37,7 @@ import {
   requireInboundWebhookChannel,
   resourceNotFoundMessage,
 } from "./inbound-webhook-production-activation";
+import { resolveCtwaDestination } from "./authorized-ctwa-destination";
 import {
   provisionalChannelOrganizationId,
   provisionalChannelProviderChannelId,
@@ -1187,27 +1188,50 @@ export class InboundWebhookChannelRoutesService {
 
     return new Map(
       await Promise.all(
-        channels.map(
-          async (channel) =>
-            [
-              channel.id,
-              this.channelReadiness(
-                channel,
-                eventsByChannel.get(channel.id) ?? [],
-                now,
-                availableDeliveryIds,
-                (
-                  await Promise.all(
-                    channel.routes.map((route) =>
-                      inboundMetaRouteEligible(this.prisma, workspaceId, route),
-                    ),
-                  )
-                ).filter(Boolean).length,
-              ),
-            ] as const,
-        ),
+        channels.map(async (channel) => {
+          const readiness = this.channelReadiness(
+            channel,
+            eventsByChannel.get(channel.id) ?? [],
+            now,
+            availableDeliveryIds,
+            (
+              await Promise.all(
+                channel.routes.map((route) =>
+                  inboundMetaRouteEligible(this.prisma, workspaceId, route),
+                ),
+              )
+            ).filter(Boolean).length,
+          );
+          // CRM-only readiness (Kommo/Pipedrive channel binding): whether this
+          // number may use the verified unique workspace page/pixel. It never
+          // changes the entry readiness above.
+          return [
+            channel.id,
+            {
+              ...readiness,
+              crmDestinationReadiness:
+                await this.crmDestinationReadiness(channel),
+            },
+          ] as const;
+        }),
       ),
     );
+  }
+
+  private async crmDestinationReadiness(
+    channel: PersistedChannel,
+  ): Promise<{ status: "verified" | "not_ready"; reason: string }> {
+    try {
+      const destination = await resolveCtwaDestination(this.prisma, channel, {
+        crmAnyProvider: true,
+      });
+      return destination.kind === "authorized_ctwa_destination"
+        ? { status: "verified", reason: "authorized_ctwa_destination" }
+        : { status: "not_ready", reason: destination.reason };
+    } catch {
+      // Readiness is informative: a lookup failure never breaks the listing.
+      return { status: "not_ready", reason: "crm_destination_unavailable" };
+    }
   }
 
   private channelReadiness(

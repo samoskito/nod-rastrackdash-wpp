@@ -476,6 +476,12 @@ model Workspace {
   kommoConversionRules             KommoConversionRule[]
   kommoWebhookEvents               KommoWebhookEvent[]
   kommoConversionDedupes           KommoConversionDedupe[]
+  pipedriveConnections             PipedriveConnection[]
+  pipedrivePipelineCatalog         PipedrivePipelineCatalog[]
+  pipedriveStageCatalog            PipedriveStageCatalog[]
+  pipedriveConversionRules         PipedriveConversionRule[]
+  pipedriveWebhookEvents           PipedriveWebhookEvent[]
+  pipedriveConversionDedupes       PipedriveConversionDedupe[]
   opsAlertSettings                 WorkspaceOpsAlertSettings?
   opsAlertDeliveries               WorkspaceOpsAlertDelivery[]
 
@@ -740,6 +746,7 @@ model ConversionEventLog {
   metaConversionDestination MetaConversionDestination? @relation(fields: [metaConversionDestinationId], references: [id], onDelete: SetNull)
   diagnosticEvents          DiagnosticEvent[]
   purchaseClaims            ProviderPurchaseClaim[]
+  pipedriveConversionDedupes PipedriveConversionDedupe[]
 
   @@unique([workspaceId, id], map: "ConversionEventLog_workspace_id_key")
   @@index([workspaceId, status, createdAt])
@@ -1357,6 +1364,7 @@ model Lead {
   whatsappInstance            WhatsappInstance?                 @relation(fields: [whatsappInstanceId], references: [id])
   purchaseReviews             PurchaseReview[]
   providerConversionDecisions ProviderConversionDecisionAudit[]
+  pipedriveWebhookEvents      PipedriveWebhookEvent[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, phoneHash])
@@ -2324,6 +2332,200 @@ model KommoPipelineCatalog {
   @@unique([connectionId, pipelineId, statusId])
   @@index([connectionId, available])
   @@index([workspaceId, connectionId])
+}
+
+/// Dedicated Pipedrive credentials: only AEAD ciphertext, IV and tag are
+/// persisted. Identity must be verified upstream; generation fences stale
+/// credential/catalog responses.
+model PipedriveConnection {
+  id                     String    @id
+  workspaceId            String
+  displayName            String
+  status                 String    @default("blocked")
+  accountOrigin          String
+  verifiedAccountId      String?
+  accountSubdomain       String?
+  accessTokenEncrypted   String
+  accessTokenIv          String
+  accessTokenTag         String
+  credentialHealthy      Boolean   @default(false)
+  credentialGeneration   Int       @default(1)
+  allowedChannelRouteIds String[]  @default([])
+  credentialActivatedAt  DateTime  @default(now())
+  webhookSecretHash      String?   @unique
+  webhookSecretVersion   Int       @default(0)
+  webhookIssuedAt        DateTime?
+  webhookRateWindowAt    DateTime?
+  webhookRateCount       Int       @default(0)
+  webhookLastReceivedAt  DateTime?
+  mutationRevision       Int       @default(0)
+  catalogState           String    @default("empty")
+  catalogRefreshedAt     DateTime?
+  lastErrorCode          String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  workspace Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  pipelines PipedrivePipelineCatalog[]
+  rules     PipedriveConversionRule[]
+  events    PipedriveWebhookEvent[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, verifiedAccountId])
+  @@index([workspaceId, status])
+}
+
+/// One row per upstream pipeline, including pipelines with zero stages.
+model PipedrivePipelineCatalog {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  connectionId String
+  pipelineId   String
+  pipelineName String
+  pipelineSort Int?
+  available    Boolean  @default(true)
+  refreshedAt  DateTime @default(now())
+
+  workspace  Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  connection PipedriveConnection     @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict)
+  stages     PipedriveStageCatalog[]
+
+  @@unique([connectionId, pipelineId])
+  @@unique([connectionId, workspaceId, pipelineId])
+  @@index([workspaceId, connectionId])
+  @@index([connectionId, available])
+}
+
+/// Composite ownership key ties a stage to its exact connection, workspace
+/// and pipeline.
+model PipedriveStageCatalog {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  connectionId String
+  pipelineId   String
+  stageId      String
+  stageName    String
+  stageSort    Int?
+  available    Boolean  @default(true)
+  refreshedAt  DateTime @default(now())
+
+  workspace Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  pipeline  PipedrivePipelineCatalog @relation(fields: [connectionId, workspaceId, pipelineId], references: [connectionId, workspaceId, pipelineId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([connectionId, pipelineId, stageId])
+  @@index([workspaceId, connectionId])
+  @@index([connectionId, pipelineId, available])
+}
+
+/// trigger "stage_change" requires stageId; "deal_won" has no stage, always
+/// Purchase, and is unique per pipeline (partial SQL index). Production
+/// activation is fenced by productionActivatedAt.
+model PipedriveConversionRule {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  connectionId          String
+  name                  String
+  trigger               String    @default("stage_change")
+  pipelineId            String
+  stageId               String?
+  eventName             String
+  mode                  String    @default("observation")
+  productionActivatedAt DateTime?
+  valueMode             String    @default("deal")
+  fixedValueCents       Int?
+  currency              String?
+  contentName           String?
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  connection PipedriveConnection @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([connectionId, pipelineId, stageId, eventName])
+  @@index([workspaceId, connectionId, active])
+}
+
+/// Durable inbox: reduced typed facts only, never the raw webhook/person/phone.
+/// changeKind is the parser classification: stage_change, deal_won, deal_lost
+/// (recorded only, never converts) or ignored (custom field/other edits).
+model PipedriveWebhookEvent {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  connectionId         String
+  deliveryKey          String
+  verifiedAccountId    String
+  accountSubdomain     String
+  credentialGeneration Int
+  webhookSecretVersion Int
+  changeKind           String    @default("ignored")
+  dealId               String?
+  pipelineId           String?
+  stageId              String?
+  oldStageId           String?
+  dealStatus           String?
+  previousDealStatus   String?
+  personId             String?
+  occurredAt           DateTime
+  valueCents           BigInt?
+  valuePresent         Boolean   @default(false)
+  currency             String?
+  status               String    @default("received")
+  errorCode            String?
+  attempts             Int       @default(0)
+  nextAttemptAt        DateTime?
+  leaseToken           String?
+  leaseExpiresAt       DateTime?
+  matchedLeadId        String?
+  matchedRouteId       String?
+  results              Json      @default("[]")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  workspace   Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  connection  PipedriveConnection         @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict)
+  matchedLead Lead?                       @relation(fields: [workspaceId, matchedLeadId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  dedupes     PipedriveConversionDedupe[]
+
+  @@unique([connectionId, deliveryKey])
+  @@unique([id, workspaceId, verifiedAccountId, dealId])
+  @@index([status, nextAttemptAt, leaseExpiresAt])
+  @@index([workspaceId, connectionId, createdAt])
+  @@index([workspaceId, verifiedAccountId, dealId, occurredAt])
+}
+
+/// Separate observation and production fences per deal + event. Production
+/// publication is a durable outbox; sender claims never expire when remote
+/// delivery may be unknown.
+model PipedriveConversionDedupe {
+  id                        String    @id @default(cuid())
+  workspaceId               String
+  verifiedAccountId         String
+  dealId                    String
+  eventName                 String
+  mode                      String    @default("observation")
+  sourceEventId             String
+  conversionEventLogId      String?
+  publicationIntent         Json?
+  publicationStatus         String    @default("observed")
+  publicationAttempts       Int       @default(0)
+  publicationNextAttemptAt  DateTime?
+  publicationLeaseToken     String?
+  publicationLeaseExpiresAt DateTime?
+  publicationErrorCode      String?
+  senderAttempts            Int       @default(0)
+  senderRetryable           Boolean   @default(false)
+  senderLeaseToken          String?
+  createdAt                 DateTime  @default(now())
+
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sourceEvent        PipedriveWebhookEvent @relation(fields: [sourceEventId, workspaceId, verifiedAccountId, dealId], references: [id, workspaceId, verifiedAccountId, dealId], onDelete: Restrict, onUpdate: Restrict)
+  conversionEventLog ConversionEventLog?   @relation(fields: [workspaceId, conversionEventLogId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([workspaceId, verifiedAccountId, dealId, eventName, mode], map: "PipedriveConversionDedupe_semantic_mode_key")
+  @@index([workspaceId, sourceEventId])
+  @@index([publicationStatus, publicationNextAttemptAt], map: "PipedriveConversionDedupe_publication_idx")
+  @@index([workspaceId, conversionEventLogId], map: "PipedriveConversionDedupe_conversion_idx")
 }
 
 model KommoConversionRule {
