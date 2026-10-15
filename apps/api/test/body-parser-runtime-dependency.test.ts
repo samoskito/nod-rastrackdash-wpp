@@ -72,7 +72,8 @@ describe("body-parser runtime dependency", () => {
       symlinkSync(
         realpathSync(installedDependency),
         join(isolatedNodeModules, "body-parser"),
-        "dir",
+        // Junctions need no symlink privilege on Windows; ignored elsewhere.
+        process.platform === "win32" ? "junction" : "dir",
       );
       const withDependency = loadCompiledParser();
       expect(withDependency.status).toBe(0);

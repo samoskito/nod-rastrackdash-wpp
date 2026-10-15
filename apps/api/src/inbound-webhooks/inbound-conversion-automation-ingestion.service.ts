@@ -479,7 +479,7 @@ export class InboundConversionAutomationIngestionService {
     const parsed = this.parseAutomation(endpoint, payload);
     if (!parsed.ok) {
       throw new ConflictException(
-        "O payload nao corresponde ao contrato de automacao atual",
+        "O payload não corresponde ao contrato de automação atual",
       );
     }
     if (parsed.value.externalExecutionKey !== input.occurrenceKey) {
@@ -1078,7 +1078,7 @@ export class InboundConversionAutomationIngestionService {
         executionId: currentExecution?.id ?? null,
         status: "skipped",
         reasonCode: parsed.errorCode,
-        message: "O payload nao corresponde ao contrato de automacao atual",
+        message: "O payload não corresponde ao contrato de automação atual",
       };
     }
     const observed = await this.observeAutomation({
@@ -1152,7 +1152,7 @@ export class InboundConversionAutomationIngestionService {
           : ownedByAnotherRuleReasons.has(observed.reasonCode)
             ? ownedByAnotherRuleMessage(observed.reasonCode)
             : observed.reasonCode === "purchase_duplicate"
-              ? "Venda ja reconhecida em outro callback; nada novo sera enviado"
+              ? "Venda já reconhecida em outro callback; nada novo será enviado"
               : "O callback nao exige envio para a Meta",
     };
   }
@@ -1186,7 +1186,7 @@ export class InboundConversionAutomationIngestionService {
         message:
           currentExecution.status === "materialized"
             ? "Este callback ja criou um evento; acompanhe a entrega em Eventos Meta"
-            : "A regra esta em observacao; ative o envio automatico para encaminhar este callback",
+            : "A regra está em observação; ative o envio automático para encaminhar este callback",
       };
     }
     const payload = this.decryptAutomationPayload(delivery);
@@ -1197,7 +1197,7 @@ export class InboundConversionAutomationIngestionService {
         executionId: currentExecution?.id ?? null,
         status: "skipped",
         reasonCode: parsed.errorCode,
-        message: "O payload nao corresponde ao contrato de automacao atual",
+        message: "O payload não corresponde ao contrato de automação atual",
       };
     }
     const observed = await this.observeAutomation({
@@ -1226,7 +1226,7 @@ export class InboundConversionAutomationIngestionService {
         status: "skipped",
         reasonCode: observed.reasonCode,
         message:
-          "Venda ja reconhecida em outro callback; nada novo sera enviado",
+          "Venda já reconhecida em outro callback; nada novo será enviado",
       };
     }
     if (
@@ -1240,7 +1240,7 @@ export class InboundConversionAutomationIngestionService {
         status: "observed",
         reasonCode: observed.reasonCode,
         message:
-          "Reavaliado em observacao: conversao reconhecida, nada enviado a Meta",
+          "Reavaliado em observação: conversão reconhecida, nada enviado à Meta",
       };
     }
     if (

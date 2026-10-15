@@ -246,7 +246,8 @@ describe("exceljs in the compiled API", () => {
       symlinkSync(
         realpathSync(join(apiRoot, "node_modules", "exceljs")),
         join(isolatedRoot, "node_modules", "exceljs"),
-        "dir",
+        // Junctions need no symlink privilege on Windows; ignored elsewhere.
+        process.platform === "win32" ? "junction" : "dir",
       );
       const script = `
         const { PassThrough } = require("node:stream");

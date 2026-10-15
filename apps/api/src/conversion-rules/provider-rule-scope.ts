@@ -230,6 +230,7 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
         contact: [...MESSAGE_CONTACT_CHANNEL_PROVIDERS],
       },
       connectionBound: false,
+      requiresConnection: false,
       labelMatch: null,
       unifiable: true,
     },
@@ -239,6 +240,7 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       channelProviders: [...CATALOG_RULE_CHANNEL_PROVIDERS],
       authorChannelProviders: null,
       connectionBound: false,
+      requiresConnection: false,
       labelMatch: null,
       unifiable: true,
     },
@@ -248,6 +250,7 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       channelProviders: [...LABEL_RULE_CHANNEL_PROVIDERS],
       authorChannelProviders: null,
       connectionBound: false,
+      requiresConnection: false,
       labelMatch: "name_across_instances",
       unifiable: true,
     },
@@ -257,19 +260,26 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       channelProviders: ["umbler"],
       authorChannelProviders: null,
       connectionBound: true,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_umbler",
+      ),
       labelMatch: null,
       unifiable: false,
       eventNames: ["QualifiedLead", "Purchase"],
     },
     {
-      // Fase 4a: the sale event comes from each Payt postback status; the
-      // rule keeps a technical connection (its numbers' connection) for the
-      // signed URL, and its numbers may be any WhatsApp number.
+      // Fase 4a: the sale event comes from each Payt postback status. The
+      // scope is not connection-bound (its numbers may be any WhatsApp
+      // number), but creating the rule requires a WhatsApp connection (its
+      // numbers' connection) as the anchor of the signed URL, as in the SaaS.
       origin: "automation_payt",
       scopes: ["all_numbers", "specific_numbers"],
       channelProviders: [...WHATSAPP_CHANNEL_PROVIDERS],
       authorChannelProviders: null,
       connectionBound: false,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_payt",
+      ),
       labelMatch: null,
       unifiable: false,
       eventNames: PAYT_RULE_EVENT_NAMES,

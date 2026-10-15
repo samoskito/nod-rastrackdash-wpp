@@ -428,7 +428,7 @@ export class ProviderConversionRulesService {
             // A Payt connection has no WhatsApp number to activate: the rule
             // is bound to the connection of its numbers (as in the SaaS).
             throw new BadRequestException(
-              "Escolha a conexao de WhatsApp dos numeros desta regra",
+              "Escolha a conexão de WhatsApp dos números desta regra",
             );
           }
 

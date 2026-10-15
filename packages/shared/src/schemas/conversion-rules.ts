@@ -492,7 +492,7 @@ const providerAutomationCreateSchema = z
     if (input.triggerPhrases || input.triggerLabels) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "A automacao da Payt nao usa etiquetas",
+        message: "A automação da Payt não usa etiquetas",
         path: ["triggerPhrases"],
       });
     }
@@ -965,8 +965,13 @@ export const providerConversionRuleOriginCapabilitySchema = z.object({
       contact: z.array(z.string().min(1)),
     })
     .nullable(),
-  // true: a regra fica presa a conexao que recebe o callback (Umbler).
+  // Alcance: true = os números da regra ficam limitados à conexão que recebe
+  // o callback (Umbler). A Payt é false: os números podem ser de qualquer
+  // conexão de WhatsApp do workspace.
   connectionBound: z.boolean(),
+  // true: a regra precisa de uma conexão de WhatsApp ao ser criada (âncora do
+  // endereço assinado): Umbler e Payt. Ausente em respostas antigas = false.
+  requiresConnection: z.boolean().optional(),
   // whatsapp_label: "Todos os numeros" e numeros de conexoes diferentes casam
   // a etiqueta pelo nome (ids de etiqueta valem so dentro de uma instancia).
   labelMatch: z.enum(["id_or_name", "name_across_instances"]).nullable(),

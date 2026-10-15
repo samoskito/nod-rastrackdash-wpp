@@ -127,7 +127,7 @@ Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, 
 
 As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
 
-### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup e Data Crazy (e WhatsApp Cloud API na aba WhatsApp)
+### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup, Data Crazy e Payt (e WhatsApp Cloud API na aba WhatsApp)
 
 Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
 
@@ -155,6 +155,15 @@ canal é diferente:
    Depois que uma entrega CTWA real for processada em observação, configure
    a rota Meta e ative produção (a conexão e cada regra, uma a uma), no mesmo
    gate de Gupshup e Meta Cloud. Nada vai para produção sozinho.
+
+**Payt** (plataforma de venda) não tem conexão própria: as vendas viram
+conversões por uma regra em **Conversões → Nova regra → origem Payt**, uma
+regra por evento (Compra aprovada → `Purchase`, Pix/boleto gerado →
+`InitiateCheckout`, Carrinho abandonado (beta) → `CartAbandoned`). Copie o
+endereço da regra para o Postback da Payt e confira em **Eventos recebidos**;
+a regra nasce em observação. Só vendas de leads CTWA (com `ctwa_clid` e ID do
+anúncio) dos números da regra são enviadas. Passo a passo, verificação e
+rollback em [`setup/payt.md`](setup/payt.md).
 
 ### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
 

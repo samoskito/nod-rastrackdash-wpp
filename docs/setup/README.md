@@ -31,7 +31,7 @@ Os dois caminhos de instalação convergem nos mesmos passos de produto: licenç
 4. **Cliente de licença** — `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY`; a ativação acontece sozinha no boot da API → confira `/backoffice/license`.
 5. Crie o primeiro administrador e o primeiro workspace/cliente.
 6. [Meta Ads manual](meta-manual.md) (usuário do sistema) — anúncios e Pixel, não mensagens.
-7. WhatsApp, tudo em `/integrations` (o **Hub de Integrações**, com abas **WhatsApp**, **Atendimento e vendas**, **Anúncios** e **CRM**; cada card abre uma janela de conexão): aba **WhatsApp** com Uazapi BYO e WhatsApp Cloud API (Meta) — WAHA, Z-API e NOD API aparecem como **Em breve** (quem já tem conexão continua gerenciando); aba **Atendimento e vendas** com Umbler Talk, Gupshup e Data Crazy; aba **Anúncios** com a Meta Ads (login social ou token; tráfego e conversões CAPI, sem receber conversas); aba **CRM** com o Kommo. Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
+7. WhatsApp, tudo em `/integrations` (o **Hub de Integrações**, com abas **WhatsApp**, **Atendimento e vendas**, **Anúncios** e **CRM**; cada card abre uma janela de conexão): aba **WhatsApp** com Uazapi BYO e WhatsApp Cloud API (Meta) — WAHA, Z-API e NOD API aparecem como **Em breve** (quem já tem conexão continua gerenciando); aba **Atendimento e vendas** com Umbler Talk, Gupshup e Data Crazy; aba **Anúncios** com a Meta Ads (login social ou token; tráfego e conversões CAPI, sem receber conversas); aba **CRM** com o Kommo. Vendas da **Payt** viram conversões por uma regra em **Conversões** (sem conexão própria) — veja [`payt.md`](payt.md). Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
    - Precisa de **Conversões → Nova regra**? As envs `INBOUND_*` são **obrigatórias** e vêm desligadas por padrão.
 8. Personalização de marca opcional: `BRAND_*` (rodapé residual não removível).
 9. Deploy Dokploy (API) + Vercel (web) — ou permaneça local.
@@ -65,6 +65,7 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [Meta Ads manual](meta-manual.md)
 - [Provedores de WhatsApp, receivers e matriz de webhook](whatsapp-providers.md)
 - [Meta Cloud: produção e recuperação por owner](meta-cloud-recovery.md)
+- [Payt: vendas como conversões (postback por regra)](payt.md)
 - [Guia de cobrança (BYO)](billing/README.md)
 
 ## Release
