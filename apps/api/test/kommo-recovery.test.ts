@@ -965,6 +965,118 @@ describe("Kommo identity/channel isolation", () => {
     });
   });
 
+  /** Official-API lead (no WhatsApp instance) on route-a's official number. */
+  function officialApiLead(h: any) {
+    h.state.metaAdDestinationAssignment = [];
+    const lead = h.state.lead[0];
+    lead.whatsappInstanceId = null;
+    const route = h.state.inboundWebhookChannelRoute[0];
+    route.channelId = "channel-a";
+    route.channel.whatsappInstanceId = null;
+    route.channel.whatsappInstance = null;
+    route.channel.connection.provider = "gupshup";
+    return lead;
+  }
+
+  /** Inbound route resolution of the lead's ad on an official number,
+   * optionally carrying the lead's materialized entry receipt. */
+  function officialInbound(
+    h: any,
+    lead: any,
+    channelId: string,
+    destinationId: string,
+    entry: boolean,
+  ) {
+    const logId = `entry-log-${channelId}`;
+    if (entry)
+      h.state.conversionEventLog.push({
+        id: logId,
+        workspaceId: "workspace-a",
+        leadId: lead.id,
+        phoneHash: lead.phoneHash,
+        ctwaClid: lead.ctwaClid,
+        eventName: "LeadSubmitted",
+        sourceTrigger: "inbound_webhook:gupshup",
+        dedupeKey: `inbound-webhook:gupshup:${channelId}`,
+        status: "sent",
+        sourcePayload: {
+          provider: "gupshup",
+          connectionId: "gupshup-connection-a",
+          inboundEventId: `inbound-${channelId}`,
+          channelId,
+          processingMode: "live_production",
+        },
+      });
+    h.state.inboundWebhookEvent.push({
+      id: `inbound-${channelId}`,
+      workspaceId: "workspace-a",
+      channelId,
+      connectionId: "gupshup-connection-a",
+      contactIdentityHash: lead.phoneHash,
+      adId: "ad-a",
+      hasCtwa: true,
+      classification: "eligible_route_resolved",
+      resolvedReportingAccountId: "reporting-a",
+      resolvedConversionDestinationId: destinationId,
+      channel: { whatsappInstanceId: null },
+      productionItem: entry
+        ? {
+            workspaceId: "workspace-a",
+            leadId: lead.id,
+            conversionEventLogId: logId,
+            status: "materialized",
+          }
+        : null,
+    });
+  }
+
+  it("proves an official-API lead destination only from the number it arrived on", async () => {
+    const h = kommoHarness();
+    const lead = officialApiLead(h);
+    // Two official numbers resolved the same ad to different pixels; the lead
+    // entered only through channel-a.
+    officialInbound(h, lead, "channel-a", "destination-a", true);
+    officialInbound(h, lead, "channel-b", "destination-b", false);
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "queued",
+    });
+    expect(h.state.kommoConversionDedupe[0].publicationIntent).toMatchObject({
+      routeId: "route-a",
+      channelId: "channel-a",
+      whatsappInstanceId: null,
+      destinationId: "destination-a",
+    });
+  });
+
+  it("refuses an official-API lead whose arrival number has no resolved route", async () => {
+    const h = kommoHarness();
+    const lead = officialApiLead(h);
+    // The lead entered through channel-b; only channel-a (another official
+    // number) resolved the ad's route.
+    officialInbound(h, lead, "channel-a", "destination-a", false);
+    officialInbound(h, lead, "channel-b", "destination-b", true);
+    h.state.inboundWebhookEvent = h.state.inboundWebhookEvent.map((row: any) =>
+      row.channelId === "channel-b"
+        ? { ...row, classification: "entry_without_route" }
+        : row,
+    );
+
+    const event = await h.receive();
+
+    expect(await h.service.process(event.id, event.workspaceId)).toMatchObject({
+      status: "blocked",
+      errorCode: "lead_destination_unproven",
+    });
+    expect(
+      h.state.conversionEventLog.some(
+        (row: any) => row.sourceTrigger === "kommo_stage",
+      ),
+    ).toBe(false);
+  });
+
   it("keeps zero configured destinations unproven", async () => {
     const h = kommoHarness();
     h.state.metaAdDestinationAssignment = [];

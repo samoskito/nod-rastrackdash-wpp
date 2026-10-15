@@ -16,6 +16,7 @@ import {
 import {
   crmCtwaChannelBound,
   crmLeadCtwaProof,
+  crmLeadEntryChannelIds,
   crmLeadRoutes,
   inspectCrmBinding,
 } from "../crm-channels/crm-channel-policy";
@@ -2043,9 +2044,11 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     client: any,
     workspaceId: string,
     lead: {
+      id: string;
       phoneHash: string;
       whatsappInstanceId: string | null;
       adId: string;
+      ctwaClid: string;
     },
   ): Promise<LeadDestination | null> {
     const assignment = await client.metaAdDestinationAssignment.findUnique({
@@ -2054,20 +2057,43 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     });
     if (assignment) return assignment;
 
-    const inboundEvents = await client.inboundWebhookEvent.findMany({
-      where: {
+    // The inbound route must come from the number this lead arrived on:
+    // Uazapi by its WhatsApp instance; an official-API lead (no instance) only
+    // from the channels of its materialized entry receipt of the same click,
+    // never from any other official number of the workspace.
+    let channelScope: Record<string, unknown> | null = {
+      channel: { whatsappInstanceId: lead.whatsappInstanceId },
+    };
+    if (!lead.whatsappInstanceId) {
+      const entered = await crmLeadEntryChannelIds(client, {
         workspaceId,
-        contactIdentityHash: lead.phoneHash,
-        adId: lead.adId,
-        hasCtwa: true,
-        classification: "eligible_route_resolved",
-        channel: { whatsappInstanceId: lead.whatsappInstanceId },
-      },
-      select: {
-        resolvedReportingAccountId: true,
-        resolvedConversionDestinationId: true,
-      },
-    });
+        leadId: lead.id,
+        phoneHash: lead.phoneHash,
+        ctwaClid: lead.ctwaClid,
+      });
+      channelScope = entered.size
+        ? {
+            channelId: { in: [...entered] },
+            channel: { whatsappInstanceId: null },
+          }
+        : null;
+    }
+    const inboundEvents = channelScope
+      ? await client.inboundWebhookEvent.findMany({
+          where: {
+            workspaceId,
+            contactIdentityHash: lead.phoneHash,
+            adId: lead.adId,
+            hasCtwa: true,
+            classification: "eligible_route_resolved",
+            ...channelScope,
+          },
+          select: {
+            resolvedReportingAccountId: true,
+            resolvedConversionDestinationId: true,
+          },
+        })
+      : [];
     const inboundDestinations = new Map<
       string,
       {

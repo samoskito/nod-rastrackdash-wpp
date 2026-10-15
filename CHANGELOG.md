@@ -284,6 +284,16 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Fixed
 
+- **Kommo destination pinned to the official number the lead arrived on**:
+  in `resolveLeadDestination` (`apps/api/src/kommo/kommo.service.ts`), an
+  official-API lead (no WhatsApp instance) now reuses an inbound route only
+  from the channels of its materialized entry receipt of the same click
+  (`crmLeadEntryChannelIds`), instead of any official channel of the
+  workspace. With more than one official-API number, a Kommo purchase only
+  uses the destination of the number the lead arrived on. The PR #67 fallback
+  (unique destination of the ad's account) stays; Uazapi leads are unchanged;
+  no unique match still blocks with `lead_destination_unproven`. Pipedrive
+  has no inbound-route fallback and is unaffected.
 - **Workspace deletion order**: `apps/api/scripts/delete-workspace.js` now
   deletes rule-create claims, purchase claims, Kommo tables and Uazapi chat
   labels before their parents, and fixes the catalog → rule and ad
