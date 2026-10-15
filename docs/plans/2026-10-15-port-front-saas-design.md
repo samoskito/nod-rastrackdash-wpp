@@ -17,6 +17,11 @@ leads novos × que voltaram, exportar leads) **adaptando** à edição de aluno 
 | Regra de conversão global | Sempre ligada, sem variável de ambiente. O aluno escolhe o alcance da regra (todos os números ou números específicos), igual ao SaaS. |
 | Regras por número existentes | Mantidas; "Unificar" é oferecido, nunca forçado. |
 | Sidebar | Continua fixa (`position: fixed; height: 100vh`). |
+| Hub: abas (15/10) | 4 abas: **WhatsApp** (Uazapi, WAHA, WhatsApp Cloud API, Z-API e NOD API "Em breve"), **Atendimento e vendas** (Umbler, Gupshup, Data Crazy; Payt/Unnichat na Fase 4), **Anúncios** (Meta Ads), **CRM** (Kommo; Pipedrive na Fase 4). |
+| Meta: dois conceitos (15/10) | **Meta Ads** (aba Anúncios) = login social/token para trazer dados de tráfego, cruzar com leads e enviar conversões; o login social é mantido. **WhatsApp Cloud API** (aba WhatsApp, logo da Meta) = webhook direto da Meta para receber as conversas. Nunca misturar os dois. |
+| Z-API e NOD API (15/10) | "Em breve" no Hub. Parser Z-API será criado/validado quando o Samuel enviar payload real. |
+| Logos (15/10) | Cloud API usa a logo da Meta; pesquisar logos oficiais de Uazapi e WAHA. |
+| Acentuação (15/10) | Textos sem acento existentes ficam para uma revisão geral depois; texto novo já sai acentuado. |
 | Assinatura (`/subscription`) | Não vai para o aluno (cobrança Asaas/vagas do SaaS). |
 | Execução | Em fases; cada fase sai documentada para o aluno antes de seguir. |
 
