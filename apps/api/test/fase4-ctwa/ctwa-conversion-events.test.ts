@@ -235,6 +235,60 @@ describe("ConversionEvents CTWA page/pixel path", () => {
     expect(locked.fetcher).not.toHaveBeenCalled();
   });
 
+  it("initial status follows the SaaS: ad id optional only with the authorized CTWA destination", async () => {
+    const h = harness();
+    const base = {
+      workspaceId: "ws1",
+      sourceEventId: "crm-1",
+      eventName: "Purchase" as const,
+      leadId: "lead3",
+      phoneHash: "hash3",
+      businessSource: "paid" as const,
+      adId: null,
+      valueCents: 1000,
+      currency: "BRL",
+      eventOccurredAt: new Date(Date.now() - 60_000),
+    };
+    // CRM stage (Kommo/Guimoo/Pipedrive style) with ctwa_clid, no ad id and no
+    // authorized page/pixel: pending, exactly as the SaaS (nothing sent).
+    const crm = await h.service.recordExternalConversion({
+      ...base,
+      sourceTrigger: "guimo_stage",
+      eventId: "crm-evt-1",
+      dedupeKey: "crm:1",
+      ctwaClid: "clid-crm",
+    });
+    expect(crm.deliveryStatus).toBe("pending_meta_context");
+    expect(h.logs.get(crm.conversionEventLogId).errorCode).toBe("MissingAdId");
+    // Same lead with the authorized CTWA destination: ready to send, no ad id.
+    const ctwa = await h.service.recordExternalConversion({
+      ...base,
+      sourceTrigger: "inbound_webhook:unnichat:provider_automation",
+      eventId: "crm-evt-2",
+      dedupeKey: "crm:2",
+      ctwaClid: "clid-crm",
+      ctwaDestination: h.world.intent,
+    });
+    expect(ctwa.deliveryStatus).toBe("ready_to_send");
+    expect(h.logs.get(ctwa.conversionEventLogId)).toMatchObject({
+      errorCode: null,
+      adId: null,
+      attributionStatus: "ctwa_ad_unknown",
+    });
+    // Destination without ctwa_clid: refused, nothing recorded or sent.
+    await expect(
+      h.service.recordExternalConversion({
+        ...base,
+        sourceTrigger: "inbound_webhook:unnichat:provider_automation",
+        eventId: "crm-evt-3",
+        dedupeKey: "crm:3",
+        ctwaClid: null,
+        ctwaDestination: h.world.intent,
+      }),
+    ).rejects.toThrow("ctwa_destination_not_authorized");
+    expect(h.fetcher).not.toHaveBeenCalled();
+  });
+
   it("keeps non-CTWA conversions without ad id pending, never sent", async () => {
     const h = harness();
     const recorded = await h.service.recordExternalConversion({
