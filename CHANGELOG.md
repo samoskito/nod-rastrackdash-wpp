@@ -9,6 +9,10 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Fixed
 
+- **Residual footer always visible**: on mobile (<=900px) and with the
+  sidebar collapsed it now renders at the end of the main content instead of
+  only inside the off-canvas drawer; the license lock/grace banner is offset
+  past the fixed sidebar so it is fully readable. Web only, text unchanged.
 - **URGENT — fewer Meta Graph API calls** (stops exhausting the shared
   PalmUP Meta app rate limit that blocked Meta social login): saved creative
   previews are always reused regardless of the fbcdn `oe` expiry hint (only

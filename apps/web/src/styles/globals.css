@@ -1111,8 +1111,51 @@ html[data-presentation-mode="active"]
   letter-spacing: 0.02em;
 }
 
-.sidebar-collapsed .brand-footer {
+/* The residual footer must never be hidden. It lives in the sidebar on
+   desktop; where the sidebar is collapsed or an off-canvas drawer (<=900px)
+   the copy at the end of the main content takes over, so exactly one is
+   visible at any time. */
+.content-footer {
   display: none;
+  padding: 18px 26px 26px;
+  margin-top: 0;
+}
+
+.sidebar-collapsed .sidebar .brand-footer {
+  display: none;
+}
+
+.sidebar-collapsed .content-footer {
+  display: block;
+}
+
+/* License banner is a sibling of the app shell, so it is not offset by
+   .content: keep it clear of the fixed sidebar (260px, 76px collapsed). */
+.license-banner {
+  margin: 16px 26px 0 calc(260px + 26px);
+}
+
+body:has(.app-shell.sidebar-collapsed) .license-banner {
+  margin-left: calc(76px + 26px);
+}
+
+@media (max-width: 900px) {
+  .content-footer {
+    display: block;
+    padding: 18px 14px 24px;
+  }
+
+  .sidebar .brand-footer {
+    display: none;
+  }
+
+  .license-banner {
+    margin: 12px 14px 0;
+  }
+
+  body:has(.app-shell.sidebar-collapsed) .license-banner {
+    margin-left: 14px;
+  }
 }
 
 .standalone-footer {

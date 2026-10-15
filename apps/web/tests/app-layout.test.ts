@@ -413,13 +413,61 @@ describe("product app layout", () => {
     expect(redirectMock).toHaveBeenCalledWith("/overview");
   });
 
-  it("mounts the residual brand footer in the app shell sidebar", () => {
+  it("mounts the residual brand footer in the sidebar and at the end of the main content", () => {
     const source = readFileSync(
       join(process.cwd(), "src/components/app-shell.tsx"),
       "utf8",
     );
+    const mainStart = source.indexOf('<main className="content">');
+    const mainEnd = source.indexOf("</main>");
 
-    expect(source).toContain("<BrandFooter brand={brand} />");
+    expect(source).toContain(
+      '<BrandFooter brand={brand} className="sidebar-footer" />',
+    );
+    expect(mainStart).toBeGreaterThan(-1);
+    expect(
+      source
+        .slice(mainStart, mainEnd)
+        .includes('<BrandFooter brand={brand} className="content-footer" />'),
+    ).toBe(true);
+  });
+
+  it("never leaves the footer hidden: mobile and collapsed sidebar fall back to the content footer", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/styles/globals.css"),
+      "utf8",
+    );
+    const mobile = css.slice(
+      css.indexOf("@media (max-width: 900px) {\n  .content-footer"),
+    );
+
+    expect(css).toMatch(/\.content-footer\s*{[^}]*display:\s*none/s);
+    expect(css).toMatch(
+      /\.sidebar-collapsed \.content-footer\s*{[^}]*display:\s*block/s,
+    );
+    expect(mobile).toMatch(/\.content-footer\s*{[^}]*display:\s*block/s);
+    expect(mobile).toMatch(/\.sidebar \.brand-footer\s*{[^}]*display:\s*none/s);
+    // no rule may hide the content footer or a footer outside the sidebar
+    expect(css).not.toMatch(/\.sidebar-collapsed \.brand-footer\s*{/);
+  });
+
+  it("keeps the license banner clear of the fixed sidebar on desktop and full width on mobile", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/styles/globals.css"),
+      "utf8",
+    );
+
+    expect(css).toMatch(
+      /\.license-banner\s*{[^}]*margin:\s*16px 26px 0 calc\(260px \+ 26px\)/s,
+    );
+    expect(css).toContain(
+      "body:has(.app-shell.sidebar-collapsed) .license-banner",
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 900px\) {\s*\.content-footer[\s\S]*?\.license-banner\s*{[^}]*margin:\s*12px 14px 0/,
+    );
+    expect(css).toMatch(/\.sidebar\s*{[^}]*position:\s*fixed/s);
+    expect(css).toMatch(/\.sidebar\s*{[^}]*height:\s*100vh/s);
   });
 
   it("passes server-computed brand props into the client app shell instead of NEXT_PUBLIC_ env sprawl", () => {
