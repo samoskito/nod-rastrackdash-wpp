@@ -8,7 +8,7 @@ import type {
   ProviderConversionAutomationReprocessBatchResultDto,
 } from "@wpptrack/shared";
 import { Check, Eye, EyeOff, RefreshCw, RotateCcw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { ruleEventLabelForOrigin } from "./event-copy";
 import type { ProviderConversionRuleActionResult } from "./actions";
@@ -122,6 +122,9 @@ export function ReceivedEvents({
     null,
   );
   const [filter, setFilter] = useState<Filter>("recoverable");
+  // The first load picks the filter: "Todos" when nothing can be reprocessed,
+  // so a rule with only ignored events never opens on an empty list.
+  const initialFilterChosen = useRef(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [confirming, setConfirming] = useState<string[] | null>(null);
   const [reprocessing, setReprocessing] = useState(false);
@@ -143,6 +146,10 @@ export function ReceivedEvents({
           next.items.filter((item) => item.reprocessable).map((item) => item.deliveryId),
         );
         setSelected((current) => current.filter((id) => recoverable.has(id)));
+        if (!initialFilterChosen.current) {
+          initialFilterChosen.current = true;
+          if (recoverable.size === 0) setFilter("all");
+        }
       } else {
         setError(result.message);
       }
@@ -404,20 +411,22 @@ export function ReceivedEvents({
                   {" · "}
                   {executionReasonLabel(item.reasonCode)}
                 </p>
-                <p className="muted">
-                  {item.channel ? (
-                    <PresentationMask placeholder="Número oculto">
-                      {item.channel.name ?? item.channel.connectedPhone}
-                    </PresentationMask>
-                  ) : (
-                    "Número não identificado"
-                  )}
-                  {" · "}
-                  {item.leadResolved
-                    ? "Lead vindo de anúncio encontrado"
-                    : "Lead vindo de anúncio não encontrado"}
-                  {item.attemptCount > 1 ? ` · recebido ${item.attemptCount} vezes` : ""}
-                </p>
+                {item.status === "ignored" ? null : (
+                  <p className="muted">
+                    {item.channel ? (
+                      <PresentationMask placeholder="Número oculto">
+                        {item.channel.name ?? item.channel.connectedPhone}
+                      </PresentationMask>
+                    ) : (
+                      "Número não identificado"
+                    )}
+                    {" · "}
+                    {item.leadResolved
+                      ? "Lead vindo de anúncio encontrado"
+                      : "Lead vindo de anúncio não encontrado"}
+                    {item.attemptCount > 1 ? ` · recebido ${item.attemptCount} vezes` : ""}
+                  </p>
+                )}
                 <div className="conversion-received-row-actions">
                   {item.payloadAvailable ? (
                     <button
@@ -485,10 +494,12 @@ export function ReceivedEvents({
           atualize a lista para selecionar os próximos.
         </p>
       ) : null}
-      <p className="action-note">
-        Eventos sem lead vindo de anúncio podem ser reprocessados por 24 horas.
-        Depois disso ficam só para consulta, em “Bloqueados” e “Todos”.
-      </p>
+      {audit.items.some((item) => item.status !== "ignored") ? (
+        <p className="action-note">
+          Eventos sem lead vindo de anúncio podem ser reprocessados por 24 horas.
+          Depois disso ficam só para consulta, em “Bloqueados” e “Todos”.
+        </p>
+      ) : null}
     </div>
   );
 }

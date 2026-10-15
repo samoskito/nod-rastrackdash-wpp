@@ -637,13 +637,21 @@ describe("Payt: endereço e eventos recebidos", () => {
       }),
     );
 
-    await user.click(await screen.findByRole("button", { name: "Todos" }));
+    // Nothing to reprocess: opens on "Todos" without a click.
     expect(await screen.findByText(/Status da Payt não gera conversão/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Todos" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
     const chip = screen.getByText("Ignorado");
     expect(chip.className).toContain("status-chip");
     expect(chip.className).toContain("neutral");
     expect(chip.className).not.toContain("bad");
     expect(screen.queryByText("Dados fora do padrão")).toBeNull();
+    // An ignored event says nothing about number, lead or the 24h reprocess window.
+    expect(screen.queryByText(/Número não identificado/)).toBeNull();
+    expect(screen.queryByText(/Lead vindo de anúncio/)).toBeNull();
+    expect(screen.queryByText(/reprocessados por 24 horas/)).toBeNull();
+    void user;
   });
 });
 
