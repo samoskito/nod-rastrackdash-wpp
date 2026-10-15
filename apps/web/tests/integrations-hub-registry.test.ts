@@ -418,7 +418,7 @@ describe("buildIntegrationCards", () => {
     expect(available?.logo).toBe("/integrations/pipedrive.svg");
     expect(available?.logoSurface).toBe("dark");
 
-    const empty = { loadState: "empty", statuses: [] } as const;
+    const empty = { loadState: "empty" as const, statuses: [] as string[] };
     const error = buildIntegrationCards(
       snapshot({
         crm: { kommo: empty, pipedrive: { loadState: "error", statuses: [] } },

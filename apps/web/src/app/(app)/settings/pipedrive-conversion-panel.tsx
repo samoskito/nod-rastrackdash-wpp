@@ -737,11 +737,15 @@ export function PipedriveConversionPanel({
           </p>
         </div>
         <div className="provider-conversion-heading-actions">
-          <span className="event-chip neutral">
-            {loadFailed
-              ? "Indisponível"
-              : `${visibleConnections.length} conexão(ões)`}
-          </span>
+          {loadFailed || visibleConnections.length > 0 ? (
+            <span className="event-chip neutral">
+              {loadFailed
+                ? "Indisponível"
+                : visibleConnections.length === 1
+                  ? "1 conexão"
+                  : `${visibleConnections.length} conexões`}
+            </span>
+          ) : null}
           {canManage && !loadFailed ? (
             <button
               className="button"
@@ -1961,6 +1965,7 @@ function PipedriveConnectionCard({
                   setConfirmingKey((key) => (key === createProductionKey ? null : key));
                 }}
                 aria-expanded={createRuleOpen}
+                disabled={locked && !createRuleOpen}
               >
                 {createRuleOpen ? (
                   <X size={15} aria-hidden="true" />

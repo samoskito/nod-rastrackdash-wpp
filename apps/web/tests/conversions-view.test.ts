@@ -1,6 +1,7 @@
 import { providerConversionRuleIdempotentCreateInputSchema } from "@wpptrack/shared";
 import { describe, expect, it } from "vitest";
 import type { KommoConnectionDetailDto } from "../src/app/(app)/integrations/kommo-actions";
+import type { PipedriveConnectionDetailDto } from "../src/app/(app)/integrations/pipedrive-actions";
 import {
   buildCrmRuleRows,
   buildProviderRuleRows,
@@ -277,6 +278,109 @@ describe("conversions view: CRM rules, sorting and filters", () => {
       manageHref: "/integrations?abrir=kommo",
       status: "observation",
     });
+  });
+
+  const pipedrive = {
+    id: "pipedrive_1",
+    workspaceId: "workspace_1",
+    displayName: "Pipedrive Comercial",
+    status: "active",
+    verifiedAccountId: "account_1",
+    accountSubdomain: "loja",
+    accountOrigin: "https://loja.pipedrive.com",
+    allowedChannelRouteIds: ["route_ch_02"],
+    credentialHealthy: true,
+    catalogState: "fresh",
+    catalogRefreshedAt: at,
+    lastErrorCode: null,
+    createdAt: at,
+    updatedAt: at,
+    pipelines: [
+      {
+        id: "pd1",
+        name: "Vendas",
+        sort: 1,
+        stages: [{ id: "st1", name: "Proposta enviada", sort: 1 }],
+      },
+    ],
+    rules: [
+      {
+        id: "pr_1",
+        connectionId: "pipedrive_1",
+        name: "Proposta",
+        trigger: "stage_change",
+        pipelineId: "pd1",
+        stageId: "st1",
+        eventName: "InitiateCheckout",
+        mode: "production",
+        productionActivatedAt: at,
+        valueMode: "deal",
+        fixedValueCents: null,
+        currency: "BRL",
+        contentName: null,
+        active: true,
+        createdAt: at,
+        updatedAt: at,
+      },
+      {
+        id: "pr_2",
+        connectionId: "pipedrive_1",
+        name: "Negócio ganho",
+        trigger: "deal_won",
+        pipelineId: "pd1",
+        stageId: null,
+        eventName: "Purchase",
+        mode: "observation",
+        productionActivatedAt: null,
+        valueMode: "deal",
+        fixedValueCents: null,
+        currency: "BRL",
+        contentName: null,
+        active: false,
+        createdAt: at,
+        updatedAt: at,
+      },
+    ],
+  } as unknown as PipedriveConnectionDetailDto;
+
+  it("lists Pipedrive rules read-only, with the stage, the won deal and a manage link to the hub", () => {
+    const rows = buildCrmRuleRows({ kommo: [], pipedrive: [pipedrive] }, numbers);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      kind: "crm",
+      origin: "pipedrive",
+      originLabel: "Etapa no Pipedrive",
+      platformLabel: "Pipedrive Comercial",
+      triggerDetail: "Etapa “Proposta enviada” em Vendas",
+      scopeLabel: "Atendimento",
+      numberIds: ["ch_02"],
+      manageHref: "/integrations?abrir=pipedrive",
+      status: "production",
+      logo: expect.objectContaining({ src: "/integrations/pipedrive.svg" }),
+    });
+    expect(rows[1]).toMatchObject({
+      triggerDetail: "Negócio ganho",
+      status: "paused",
+      eventName: "Purchase",
+    });
+  });
+
+  it("pauses the Pipedrive rules of a paused connection", () => {
+    const rows = buildCrmRuleRows(
+      { kommo: [], pipedrive: [{ ...pipedrive, status: "paused" }] },
+      numbers,
+    );
+    expect(rows.map((row) => row.status)).toEqual(["paused", "paused"]);
+  });
+
+  it("offers Pipedrive in Nova regra only with a connection, pointing to the hub", () => {
+    expect(
+      offeredRuleOrigins({ numbers, connections, capabilities: null, crm: { kommo: false, pipedrive: true } }),
+    ).toEqual(["pipedrive"]);
+    expect(
+      offeredRuleOrigins({ numbers, connections, capabilities: null, crm: { kommo: false, pipedrive: false } }),
+    ).toEqual([]);
   });
 
   it("filters by origin, number, event and status", () => {
