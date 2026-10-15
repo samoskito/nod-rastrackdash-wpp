@@ -87,9 +87,13 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     `channel_override`; existing numbers stay `NULL` = legacy, new ones
     default to `inherit_workspace`), plus the effective Meta routing,
     purchase identity and purchase routing helpers used by Payt/Unnichat.
-  - **Brazilian phone forms** in the paid-lead resolver: exact match first,
-    then with/without `55` and the mobile 9th digit; two leads stay
-    ambiguous.
+  - **Brazilian phone forms** in the paid-lead resolver, used by **every
+    provider rule** (Umbler, Gupshup, Data Crazy, Meta Cloud, Uazapi), not
+    only purchases: exact match first, then with/without `55` and the mobile
+    9th digit; two leads stay ambiguous. Conversions that were lost because
+    of a phone-format difference may now be sent (same as the SaaS).
+  - Certification also lets an owner authorize the **controlled replay** of a
+    Gupshup/Umbler/Data Crazy connection still in observation.
   - Migrations (additive, in order): `20261016090000_conversion_event_log_workspace_id_key`
     (unique index on `ConversionEventLog(workspaceId, id)`, alone in its
     migration; blocks conversion writes while it builds, ~2.6 s for 1M rows

@@ -312,7 +312,9 @@ credencial ou variável de ambiente própria neste template.
    certificados pela migration `20261016090300_validated_parser_certification`
    (os mesmos contratos em produção no SaaS). Isso só os torna elegíveis:
    a conexão e cada regra continuam em observação até você ativar a
-   produção, uma a uma.
+   produção, uma a uma. A certificação também permite autorizar o
+   **replay controlado** de uma conexão Umbler, Gupshup ou Data Crazy
+   ainda em observação (antes ele pedia o parser certificado).
 
 Umbler Talk entrega também as mensagens do atendente, então regras de
 frase com autor "equipe" funcionam. Gupshup entrega apenas o que o

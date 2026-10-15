@@ -72,7 +72,8 @@ describe("Fase 4.0 migrations (additive)", () => {
       "\"provider\" IN ('data_crazy', 'gupshup', 'umbler')",
     );
     expect(sql).toContain("\"version\" = 'v1'");
-    expect(sql).toContain("\"status\" <> 'retired'");
+    expect(sql).toContain("\"status\" = 'observation_only'");
+    expect(sql).not.toContain("retired'");
     // Meta Cloud keeps its built-in eligibility; automation releases untouched.
     expect(sql).not.toMatch(/meta_cloud|automation-v1/);
     // No connection, channel or rule is promoted: production stays per rule.
