@@ -10,7 +10,7 @@ comportamento, sem revalidar; só se adapta à estrutura e às regras do aluno.
 | Tema | Decisão |
 |---|---|
 | Login social Meta | Não muda. Alunos usam o app da PalmUP; nenhuma permissão nova é pedida. |
-| Lead sem CTWA | Não envia nada para a Meta. O caminho do SaaS de "compra sem anúncio" (que exige `whatsapp_business_management`/`whatsapp_business_manage_events`) não é portado. Se alguma parte do fluxo com CTWA exigir essas permissões, parar e avisar o Samuel. |
+| `ctwa_clid` | Obrigatório (pixel de mensagem). Sem `ctwa_clid` não se envia nada. Lead com `ctwa_clid` mas sem ID do anúncio (ex.: Unnichat envia como CTWA ID) é enviado normalmente, igual ao SaaS — o caminho "compra sem ID do anúncio" do SaaS é portado. Se ele depender de permissões que o login social PalmUP não tem, investigar e propor sem mudar o login. |
 | Parsers validados no SaaS | Data Crazy, Payt e Unnichat semeados como certificados por migration (o aluno não tem tela de certificação). Produção continua dependendo da ativação por regra. |
 | Payt "Carrinho abandonado" | Vai junto, com selo "beta". |
 | Guimoo | Disponível para todos, igual ao SaaS. |
