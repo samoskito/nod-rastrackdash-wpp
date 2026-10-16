@@ -12,7 +12,7 @@ evento na Meta, com o valor real da venda. É o mesmo comportamento que já roda
 
 | Na Payt | Evento na Meta | Observação |
 |---|---|---|
-| Compra aprovada (pago, ou pagamento na entrega confirmado) | `Purchase` | Valor real da venda, em reais |
+| Compra aprovada (pago, ou pagamento na entrega confirmado) | `Purchase` | Valor da venda **sem os juros do parcelamento**, em reais |
 | Pix ou boleto gerado (aguardando pagamento) | `InitiateCheckout` | Valor do pedido |
 | Carrinho abandonado | `CartAbandoned` | **Beta**; o valor pode não vir |
 
@@ -76,6 +76,73 @@ Em **Eventos recebidos**, **Reprocessar selecionados** reavalia postbacks já re
 
 Um postback que chegou antes de o comprador virar um lead rastreado pode ser reprocessado depois:
 a busca do lead é refeita com o telefone atual.
+
+**Reenvio da Payt com dados diferentes.** A Payt às vezes reenvia o mesmo pedido com o corpo
+alterado (outro horário de atualização, valor, telefone). Enquanto a venda ainda não tem decisão, o
+corpo mais novo substitui o guardado e é ele que vale. Se uma venda falhou com "o callback não
+confere com a decisão" (`provider_conversion_source_event_mismatch`), ela aparece como recuperável:
+**Reprocessar** reavalia o corpo guardado, e um novo reenvio da Payt também cura a falha. Se o corpo
+guardado não identificar a compra naquele número, a tela pede para reenviar o postback pela Payt. A
+venda continua contando uma vez só.
+
+## Valor da venda: sem os juros do parcelamento
+
+O valor enviado à Meta é o da venda **sem os juros do parcelamento no cartão**
+(`price_without_installments` do postback, que já soma o produto e os order bumps). Antes, era o
+`total_price`, que inclui os juros: numa venda de R$ 247,00 em 12x de R$ 24,80, ia R$ 297,60. Se o
+postback não trouxer `price_without_installments`, vale o `total_price`. Upsells continuam sendo
+compras separadas.
+
+Uma venda que já estava decidida com o valor antigo e ainda não foi enviada sai com o valor corrigido
+(mesmo `event_id`, sem envio duplicado); o evento guarda o valor anterior em
+`sourcePayload.valueCorrection`.
+
+### Corrigir o valor das vendas já registradas (backfill)
+
+Comando único, **opcional**, para as compras Payt registradas antes desta versão com o valor com
+juros. Regras:
+
+- Só corrige o que **ainda não foi enviado à Meta** (na fila, com erro ou ignorado). O que já foi
+  enviado (ou está sendo enviado) não muda em lugar nenhum e aparece em `alreadySentToMeta`.
+- Nada é reenviado à Meta; `event_id`, `dedupeKey` e o status de entrega não mudam. Uma venda ainda
+  na fila, corrigida aqui, sai depois com o valor corrigido.
+- O valor novo é relido do corpo guardado da entrega. A retenção do corpo é de ~7 dias: depois disso
+  a venda não pode mais ser corrigida (aparece em `payloadUnavailable`). Rode logo após atualizar.
+- Só corrige quando o valor atual é exatamente o `total_price` do mesmo corpo. Valor ajustado por um
+  operador na revisão de compra (`manualAdjustment`) ou diferente dos dois (`valueNotLegacy`) fica
+  como está, para análise (ids em `samples`).
+- Quando corrige, atualiza também a execução da regra e a revisão de compra ligadas à venda, guarda
+  o valor anterior em `sourcePayload.valueCorrection` e grava auditoria
+  (`conversion_event.payt_value_corrected` por venda e `conversion_event.payt_value_backfill` por
+  execução do comando).
+
+Rode onde a API roda, com as mesmas variáveis de ambiente (banco e
+`INBOUND_WEBHOOK_ENCRYPTION_KEY`):
+
+- **VPS/Dokploy:** no terminal do container do serviço da API (a imagem já vem compilada).
+- **Local** (API rodando com `pnpm` na sua máquina, Postgres/Redis no Docker): compile antes com
+  `pnpm --filter @wpptrack/api build` e rode os comandos abaixo na raiz do projeto.
+
+1. **Simular (padrão, não grava nada):**
+
+   ```bash
+   pnpm --filter @wpptrack/api payt:value-backfill -- --limit 200
+   ```
+
+   Opcional: `--workspace <workspaceId>` para um cliente só. Confira `conversionEvents.corrected`,
+   `previousTotalCents` → `correctedTotalCents`, `alreadySentToMeta` e os `samples`.
+
+2. **Aplicar** em lote limitado (máximo 2000 por execução), informando o e-mail de um Platform Owner
+   (o administrador criado com `platform-admin:create`):
+
+   ```bash
+   pnpm --filter @wpptrack/api payt:value-backfill -- --limit 200 --apply --actor-email <email-do-platform-owner>
+   ```
+
+3. Enquanto `conversionEvents.nextCursor` não for `null`, repita com `--after <valor>`. Rodar de
+   novo do início é seguro: o que já foi corrigido aparece em `alreadyCorrected`.
+
+Sem compras Payt parceladas no cartão, o comando não tem o que corrigir.
 
 ## Limitações conhecidas
 

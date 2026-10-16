@@ -344,6 +344,31 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Fixed
 
+- **Fase 5.0 — Payt fixes (API only)**, ported from the SaaS (`d88fc6c`,
+  `f5f535b`, `6f5fcf0`, `4ca665b`, `608ec47`, `1d65161`):
+  - **Sale value without installment interest.** A Payt Purchase now uses
+    `transaction.price_without_installments` (already includes order bumps);
+    `total_price` (with card interest) is only the fallback. **Effect on the
+    next purchases:** an installment card sale is recorded and sent to Meta
+    with a lower value than before (e.g. R$ 247,00 instead of R$ 297,60 in
+    12x); Pix, boleto and one-time card sales do not change. A decision frozen
+    with the old value and not sent yet travels corrected (same `event_id`,
+    no double send, `sourcePayload.valueCorrection`).
+  - **Backfill of sales already recorded** (optional, run right after the
+    update: stored bodies expire in ~7 days):
+    `pnpm --filter @wpptrack/api payt:value-backfill -- --limit 200` (dry-run),
+    then `... --apply --actor-email <platform owner>` and `--after <nextCursor>`
+    until it is `null`. Only conversions **not yet sent to Meta** are
+    corrected; sent ones never change and nothing is resent. Steps in
+    `docs/setup/payt.md`.
+  - **Resend with a different body.** The same Payt order resent with a
+    changed body no longer fails as `provider_conversion_source_event_mismatch`;
+    a sale that failed that way is recoverable (Reprocessar, or a new Payt
+    resend). Still one conversion per sale.
+  - No migration, no new env var, no new dependency. **Roll back:** redeploy
+    the previous API image; values corrected by the backfill stay corrected
+    (previous value kept in `sourcePayload.valueCorrection` and in the audit
+    log).
 - **Kommo destination pinned to the official number the lead arrived on**:
   in `resolveLeadDestination` (`apps/api/src/kommo/kommo.service.ts`), an
   official-API lead (no WhatsApp instance) now reuses an inbound route only
