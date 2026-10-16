@@ -73,13 +73,25 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     stored now, used by the reports in Fase 5.2.
   - **Sending to Meta:** a conversion value always travels with a currency,
     resolved as sale/deal currency → rule currency → workspace currency → BRL.
-    No exchange conversion. Events already recorded or sent never change; an
-    old event with a value and no currency is sent as BRL (as before).
+    No exchange conversion. Conversions already sent never change; an unsent
+    event goes with the currency it was recorded with (an old one with a value
+    and no currency as BRL, as before; one with a code outside BRL/USD/EUR is
+    blocked by the Meta preflight with `UnsupportedCurrency`). A value that
+    arrives later on a valueless event takes that value's currency.
   - A rule may keep its own currency or none (= follow the workspace); new
     rules no longer get BRL forced by the contract, rules already stored keep
-    their currency. Payt no longer forces BRL (it uses the currency the sale
-    declares, otherwise rule/workspace). Pipedrive keeps using the deal
-    currency and checking it against the rule's (`event_currency_mismatch`).
+    their currency. **Rule currency accepts only BRL, USD or EUR** on every
+    rule contract (provider, old rules, catalog, Kommo, Pipedrive); other
+    codes answer 400 "Moeda inválida: use BRL, USD ou EUR". Rules stored before
+    with another code still load and, when sending, use the workspace currency.
+    Payt no longer forces BRL (it uses the currency the sale declares,
+    otherwise rule/workspace); a sale declaring a currency outside the list is
+    refused with `payt_currency_unsupported` and nothing reaches Meta.
+    Pipedrive uses the deal currency and checks it against the rule's
+    (`event_currency_mismatch`); a deal without currency uses the rule's or the
+    workspace's; a deal in an unsupported currency is ignored
+    (`event_currency_unsupported`). Kommo: a rule without a valid currency
+    uses the workspace currency.
   - **Screen (web):** Configurações → Moeda shows the workspace currency
     (BRL/USD/EUR, with a warning before saving that the change only affects new
     conversions; only owner/admin change it) and the ad accounts with the
