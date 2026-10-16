@@ -1,8 +1,10 @@
 import type {
+  CurrencyCode,
   ReportFunnelStepDto,
   ReportSortDto,
   ReportSortKeyDto,
 } from "@wpptrack/shared";
+import { formatReportMoney } from "../../../lib/report-currency";
 
 export type ReportInsightObjective =
   "real_conversations" | "qualified_lead" | "purchase";
@@ -18,6 +20,12 @@ type ReportInsightCostKey =
 export type ReportInsightMetrics = {
   spendCents: number;
   funnelSteps: ReportFunnelStepDto[];
+  /**
+   * Moeda dos valores em dinheiro (a da conta de anúncio, numa linha). Nos
+   * totais do filtro, `null` quer dizer que o filtro mistura moedas: o
+   * dinheiro nunca é comparado entre moedas.
+   */
+  currency?: CurrencyCode | null;
 } & Record<ReportInsightMetricKey, number> &
   Record<ReportInsightCostKey, number | null>;
 
@@ -142,11 +150,23 @@ export function reportInsightCost(
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function formatReportInsightMoney(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", {
-    currency: "BRL",
-    style: "currency",
-  });
+export function formatReportInsightMoney(
+  cents: number,
+  currency?: CurrencyCode | null,
+): string {
+  return formatReportMoney(cents, currency ?? "BRL");
+}
+
+/** O dinheiro da linha pode ser comparado com a média do filtro (mesma moeda). */
+export function reportInsightSameCurrency(
+  row: Pick<ReportInsightMetrics, "currency">,
+  totals: Pick<ReportInsightMetrics, "currency"> | undefined,
+): boolean {
+  if (!totals || totals.currency === null) {
+    return false;
+  }
+
+  return (row.currency ?? "BRL") === (totals.currency ?? "BRL");
 }
 
 function percentLabel(value: number): string {
@@ -197,8 +217,7 @@ function itemSignals({
       key: "no_spend",
       tone: "warn",
       label: "Sem investimento registrado",
-      basis:
-        "Investimento de R$ 0,00 no periodo: custo zero nao indica eficiencia. Confira a sincronizacao Meta deste periodo.",
+      basis: `Investimento de ${formatReportInsightMoney(0, row.currency)} no periodo: custo zero nao indica eficiencia. Confira a sincronizacao Meta deste periodo.`,
     });
   }
 
@@ -217,7 +236,12 @@ function itemSignals({
     }
   }
 
-  const averageCents = totals ? reportInsightCost(objective, totals) : null;
+  // Nunca compara custos de moedas diferentes (filtro misto ou conta em
+  // outra moeda que a do filtro).
+  const averageCents =
+    totals && reportInsightSameCurrency(row, totals)
+      ? reportInsightCost(objective, totals)
+      : null;
 
   if (
     !lowSample &&
@@ -233,7 +257,7 @@ function itemSignals({
         key: "cost_vs_filter",
         tone: "neutral",
         label: `Custo ${percentLabel(Math.abs(delta))} ${delta < 0 ? "abaixo" : "acima"} da media do filtro`,
-        basis: `Media do filtro: ${formatReportInsightMoney(averageCents)} por resultado (${label}). Sinal exibido a partir de ${percentLabel(REPORT_INSIGHT_COST_DELTA_THRESHOLD)} de diferenca.`,
+        basis: `Media do filtro: ${formatReportInsightMoney(averageCents, totals?.currency)} por resultado (${label}). Sinal exibido a partir de ${percentLabel(REPORT_INSIGHT_COST_DELTA_THRESHOLD)} de diferenca.`,
       });
     }
   }

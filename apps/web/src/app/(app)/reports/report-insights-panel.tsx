@@ -171,7 +171,9 @@ function InsightItem({
       <dl className="report-insight-metrics">
         <div>
           <dt>Investimento</dt>
-          <dd>{formatReportInsightMoney(item.row.spendCents)}</dd>
+          <dd>
+            {formatReportInsightMoney(item.row.spendCents, item.row.currency)}
+          </dd>
         </div>
         <div>
           <dt>{label}</dt>
@@ -183,7 +185,7 @@ function InsightItem({
             {item.costCents === null ? (
               <span title="Custo indisponivel">-</span>
             ) : (
-              formatReportInsightMoney(item.costCents)
+              formatReportInsightMoney(item.costCents, item.row.currency)
             )}
           </dd>
         </div>
@@ -312,7 +314,10 @@ function InsightTotals({
   totals: ReportInsightMetrics;
 }) {
   const copy = levelCopy[level];
-  const costCents = reportInsightCost(objective, totals);
+  // `currency: null`: o filtro mistura moedas das contas de anúncio, então não
+  // existe investimento nem custo médio únicos para mostrar.
+  const mixedCurrency = totals.currency === null;
+  const costCents = mixedCurrency ? null : reportInsightCost(objective, totals);
 
   return (
     <div
@@ -322,8 +327,14 @@ function InsightTotals({
     >
       <article>
         <span>Investimento</span>
-        <strong>{formatReportInsightMoney(totals.spendCents)}</strong>
-        <small>Total do filtro</small>
+        <strong>
+          {mixedCurrency
+            ? "Várias moedas"
+            : formatReportInsightMoney(totals.spendCents, totals.currency)}
+        </strong>
+        <small>
+          {mixedCurrency ? "Veja a tabela por moeda" : "Total do filtro"}
+        </small>
       </article>
       <article>
         <span>{label}</span>
@@ -333,10 +344,16 @@ function InsightTotals({
       <article>
         <span>Custo por resultado</span>
         <strong>
-          {costCents === null ? "-" : formatReportInsightMoney(costCents)}
+          {costCents === null
+            ? "-"
+            : formatReportInsightMoney(costCents, totals.currency)}
         </strong>
         <small>
-          {costCents === null ? "Custo indisponivel" : "Media do filtro"}
+          {mixedCurrency
+            ? "Moedas diferentes"
+            : costCents === null
+              ? "Custo indisponivel"
+              : "Media do filtro"}
         </small>
       </article>
       <article>
@@ -348,7 +365,7 @@ function InsightTotals({
   );
 }
 
-function InsightMethod() {
+function InsightMethod({ zeroSpend }: { zeroSpend: string }) {
   return (
     <details className="report-insight-method">
       <summary>Como ler estes sinais</summary>
@@ -370,7 +387,7 @@ function InsightMethod() {
           amostra insuficiente.
         </li>
         <li>
-          <strong>Sem investimento:</strong> gasto de R$ 0,00 no periodo. Custo
+          <strong>Sem investimento:</strong> gasto {zeroSpend} no periodo. Custo
           zero nao e eficiencia.
         </li>
         <li>
@@ -527,7 +544,13 @@ export function ReportInsightsPanel({
         </nav>
       </div>
       {body}
-      <InsightMethod />
+      <InsightMethod
+        zeroSpend={
+          totals?.currency === null
+            ? "zero"
+            : `de ${formatReportInsightMoney(0, totals?.currency)}`
+        }
+      />
     </section>
   );
 }

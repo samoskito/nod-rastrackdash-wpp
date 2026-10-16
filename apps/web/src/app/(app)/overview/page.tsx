@@ -1,13 +1,37 @@
 import type {
   CampaignReportRowDto,
+  CurrencyCode,
   MetaAssetsDto,
+  ReportCurrencyGroupDto,
   ReportDailyComparisonPointDto,
   ReportFunnelStepDto,
   ReportOverviewDto,
 } from "@wpptrack/shared";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import {
+  CurrencyKpiGroups,
+  ExchangeRateMissingNote,
+} from "../../../components/currency-kpi-groups";
 import { PresentationMask } from "../../../components/presentation-mask";
+import {
+  joinAdAccountIds,
+  parseAdAccountIdsParam,
+  setAdAccountParams,
+  splitAdAccountIds,
+} from "../../../lib/ad-account-params";
+import {
+  adAccountCurrencyMap,
+  getAdAccountCurrencies,
+} from "../../../lib/currency-settings";
+import {
+  currencyKpiGroup,
+  exchangeRateMissingLabel,
+  formatReportMoney,
+  mixedCurrencyGroups,
+  reportCurrency,
+  singleCurrencyRateGap,
+} from "../../../lib/report-currency";
 import { serverApiFetch } from "../../../lib/server-api";
 import { OverviewFilters } from "./overview-filters";
 import {
@@ -19,6 +43,7 @@ import { overviewLeadsHref } from "./overview-leads-links";
 
 type OverviewSearchParams = Record<string, string | string[] | undefined>;
 type OverviewFiltersInput = {
+  /** Contas de anúncio juntas por "," (`adAccountId` ou `adAccountIds` na URL). */
   adAccountId?: string;
   businessId?: string;
   since?: string;
@@ -31,15 +56,9 @@ type OverviewReportResult = {
   state: OverviewFetchState;
 };
 
-function money(cents: number | null) {
-  if (cents === null) {
-    return "-";
-  }
-
-  return (cents / 100).toLocaleString("pt-BR", {
-    currency: "BRL",
-    style: "currency",
-  });
+/** Dinheiro na moeda do recorte (BRL quando todas as contas são em real). */
+function money(cents: number | null, currency: CurrencyCode = "BRL") {
+  return formatReportMoney(cents, currency);
 }
 
 async function getOverviewReport(
@@ -60,9 +79,7 @@ async function getOverviewReport(
       params.set("businessId", filters.businessId);
     }
 
-    if (filters.adAccountId) {
-      params.set("adAccountId", filters.adAccountId);
-    }
+    setAdAccountParams(params, splitAdAccountIds(filters.adAccountId));
 
     const report = await serverApiFetch<ReportOverviewDto>(
       `/reports/campaigns?${params.toString()}`,
@@ -236,6 +253,34 @@ function aggregateFunnelSteps(
   });
 }
 
+/** "R$ 5,00 · US$ 1,00": um custo por moeda, na ordem dos blocos. */
+function perCurrencyCost(
+  groups: ReportCurrencyGroupDto[],
+  select: (group: ReportCurrencyGroupDto) => number | null | undefined,
+): string | null {
+  const parts = groups.flatMap((group) => {
+    const cents = select(group);
+
+    return typeof cents === "number" ? [money(cents, group.currency)] : [];
+  });
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** Custo de uma etapa do funil em cada moeda (os grupos têm o próprio funil). */
+function perCurrencyStageCost(
+  stage: ReportFunnelStepDto,
+  groups: ReportCurrencyGroupDto[],
+): string {
+  return (
+    perCurrencyCost(groups, (group) =>
+      stage.key === "meta_conversations"
+        ? group.costPerMetaConversationCents
+        : group.funnelSteps.find((step) => step.key === stage.key)?.costCents,
+    ) ?? "-"
+  );
+}
+
 function costPer(spendCents: number, count: number): number | null {
   return count > 0 ? Math.floor(spendCents / count) : null;
 }
@@ -345,10 +390,12 @@ function reportsHref(filters: OverviewFiltersInput): string {
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(filters)) {
-    if (value) {
+    if (value && key !== "adAccountId") {
       params.set(key, value);
     }
   }
+
+  setAdAccountParams(params, splitAdAccountIds(filters.adAccountId));
 
   const query = params.toString();
   return query ? `/reports?${query}` : "/reports";
@@ -364,17 +411,51 @@ export default async function OverviewPage({
     since: asStringParam(resolvedSearchParams.since),
     until: asStringParam(resolvedSearchParams.until),
     businessId: asStringParam(resolvedSearchParams.businessId),
-    adAccountId: asStringParam(resolvedSearchParams.adAccountId),
+    adAccountId:
+      joinAdAccountIds(
+        parseAdAccountIdsParam(
+          resolvedSearchParams.adAccountId,
+          resolvedSearchParams.adAccountIds,
+        ),
+      ) || undefined,
   };
-  const [{ report, state: reportState }, metaAssets] = await Promise.all([
-    getOverviewReport(filters),
-    getMetaAssets(),
-  ]);
+  const [{ report, state: reportState }, metaAssets, adAccountCurrencies] =
+    await Promise.all([
+      getOverviewReport(filters),
+      getMetaAssets(),
+      getAdAccountCurrencies(),
+    ]);
   const reportingAccounts = (metaAssets?.reportingAccounts ?? []).filter(
     (account) => account.active,
   );
+  const accountCurrencies = adAccountCurrencyMap(
+    reportingAccounts,
+    adAccountCurrencies,
+  );
+  const selectedAdAccountIds = splitAdAccountIds(filters.adAccountId);
   const campaigns = report.campaigns;
   const campaign = report.summary ?? sumCampaigns(campaigns);
+  // Uma moeda só: tudo igual a antes (em real, sem rótulo novo). Duas ou mais
+  // com movimento: um bloco por moeda, sem somar valores de moedas diferentes.
+  const currencyGroups = mixedCurrencyGroups(report, "summary");
+  const mixedCurrency = currencyGroups.length > 0;
+  const reportMoneyCurrency = reportCurrency(report, "summary");
+  const rateGap = mixedCurrency
+    ? { exchangeRateMissing: false, unconvertedRevenue: [] }
+    : singleCurrencyRateGap(report, "summary");
+  const fmt = (cents: number | null) => money(cents, reportMoneyCurrency);
+  const stageCostLabel = (stage: ReportFunnelStepDto): string =>
+    mixedCurrency
+      ? perCurrencyStageCost(stage, currencyGroups)
+      : fmt(stage.costCents ?? null);
+  const costPerLeadLabel = mixedCurrency
+    ? perCurrencyCost(
+        currencyGroups,
+        (group) => group.costPerRealConversationCents,
+      )
+    : campaign.costPerRealConversationCents !== null
+      ? fmt(campaign.costPerRealConversationCents)
+      : null;
   const dataAvailable = reportState !== "error";
   const trackedRate =
     dataAvailable && campaign.trackingRate !== null
@@ -412,8 +493,8 @@ export default async function OverviewPage({
       label: "Leads novos",
       value: campaign.realConversations,
       caption:
-        campaign.costPerRealConversationCents !== null
-          ? `Custo por lead novo ${money(campaign.costPerRealConversationCents)}`
+        costPerLeadLabel !== null
+          ? `Custo por lead novo ${costPerLeadLabel}`
           : "1º contato no período",
       hint: overviewLeadsHints.new,
       href: newLeadsHref,
@@ -478,7 +559,8 @@ export default async function OverviewPage({
       </header>
 
       <OverviewFilters
-        adAccountId={filters.adAccountId}
+        accountCurrencies={accountCurrencies}
+        adAccountIds={selectedAdAccountIds}
         businessId={filters.businessId}
         hasActiveFilter={Object.values(filters).some(Boolean)}
         reportingAccounts={reportingAccounts}
@@ -489,13 +571,21 @@ export default async function OverviewPage({
       <div className="metric-grid overview-primary-metrics">
         <Metric
           label="Investimento"
-          value={dataAvailable ? money(campaign.spendCents) : "-"}
+          value={
+            !dataAvailable
+              ? "-"
+              : mixedCurrency
+                ? "Por moeda"
+                : fmt(campaign.spendCents)
+          }
           delta={
             !dataAvailable
               ? "Aguardando resposta da API"
-              : reportState === "empty"
-                ? "Nenhuma campanha sincronizada"
-                : report.rangeLabel
+              : mixedCurrency
+                ? "Veja os totais por moeda abaixo"
+                : reportState === "empty"
+                  ? "Nenhuma campanha sincronizada"
+                  : report.rangeLabel
           }
           unavailable={!dataAvailable}
         />
@@ -524,11 +614,21 @@ export default async function OverviewPage({
         />
         <Metric
           label="Receita trafego"
-          value={dataAvailable ? money(campaign.trafficRevenueCents) : "-"}
+          value={
+            !dataAvailable
+              ? "-"
+              : mixedCurrency
+                ? "Por moeda"
+                : fmt(campaign.trafficRevenueCents)
+          }
           delta={
-            dataAvailable
-              ? `ROAS ${ratioLabel(campaign.roasAcquisition)}`
-              : "Aguardando resposta da API"
+            !dataAvailable
+              ? "Aguardando resposta da API"
+              : mixedCurrency
+                ? "ROAS em cada moeda, abaixo"
+                : rateGap.exchangeRateMissing
+                  ? `ROAS ${exchangeRateMissingLabel}`
+                  : `ROAS ${ratioLabel(campaign.roasAcquisition)}`
           }
           unavailable={!dataAvailable}
         />
@@ -561,6 +661,16 @@ export default async function OverviewPage({
         />
       </div>
 
+      {dataAvailable && mixedCurrency ? (
+        <CurrencyKpiGroups groups={currencyGroups.map(currencyKpiGroup)} />
+      ) : null}
+
+      {dataAvailable && rateGap.exchangeRateMissing ? (
+        <ExchangeRateMissingNote
+          unconvertedRevenue={rateGap.unconvertedRevenue}
+        />
+      ) : null}
+
       <OverviewLeadsBlock
         available={dataAvailable}
         items={leadsBlockItems}
@@ -572,7 +682,11 @@ export default async function OverviewPage({
         aria-label="Funil integrado"
       >
         {dataAvailable ? (
-          <ConversionFunnel description={funnelSummary} stages={funnelStages} />
+          <ConversionFunnel
+            description={funnelSummary}
+            stageCost={stageCostLabel}
+            stages={funnelStages}
+          />
         ) : (
           <>
             <div className="overview-section-heading">
@@ -855,9 +969,12 @@ function Metric({
 
 function ConversionFunnel({
   description,
+  stageCost,
   stages,
 }: {
   description: string;
+  /** Custo da etapa já formatado, na moeda (ou moedas) do recorte. */
+  stageCost: (stage: ReportFunnelStepDto) => string;
   stages: ReportFunnelStepDto[];
 }) {
   const palette = [
@@ -964,7 +1081,7 @@ function ConversionFunnel({
               </small>
               <div className="conversion-funnel-stage-cost">
                 <span>{funnelStageCostLabel(stage)}</span>
-                <strong>{money(stage.costCents ?? null)}</strong>
+                <strong>{stageCost(stage)}</strong>
               </div>
             </div>
           );
@@ -1016,7 +1133,7 @@ function ConversionFunnel({
               </small>
               <div className="conversion-funnel-mobile-cost">
                 <span>{funnelStageCostLabel(stage)}</span>
-                <strong>{money(stage.costCents ?? null)}</strong>
+                <strong>{stageCost(stage)}</strong>
               </div>
               <span
                 className="conversion-funnel-mobile-band"

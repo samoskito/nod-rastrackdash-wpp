@@ -1,6 +1,9 @@
-import type {
-  AdAccountCurrencyListDto,
-  WorkspaceCurrencySettingsDto,
+import {
+  effectiveAccountCurrency,
+  type AdAccountCurrencyListDto,
+  type CurrencyCode,
+  type MetaReportingAccountDto,
+  type WorkspaceCurrencySettingsDto,
 } from "@wpptrack/shared";
 import { serverApiFetch } from "./server-api";
 
@@ -30,4 +33,26 @@ export async function getAdAccountCurrencies(): Promise<AdAccountCurrencyListDto
   } catch {
     return null;
   }
+}
+
+/**
+ * Moeda efetiva por conta de anúncio da Meta (correção manual, depois a moeda
+ * da Meta, depois BRL). Usa as configurações de moeda quando carregaram; senão,
+ * a moeda que a Meta informou nas contas.
+ */
+export function adAccountCurrencyMap(
+  reportingAccounts: Pick<MetaReportingAccountDto, "adAccountId" | "currency">[],
+  currencies: AdAccountCurrencyListDto | null,
+): Record<string, CurrencyCode> {
+  const map: Record<string, CurrencyCode> = {};
+
+  for (const account of reportingAccounts) {
+    map[account.adAccountId] = effectiveAccountCurrency(account);
+  }
+
+  for (const account of currencies?.accounts ?? []) {
+    map[account.adAccountId] = account.effectiveCurrency;
+  }
+
+  return map;
 }

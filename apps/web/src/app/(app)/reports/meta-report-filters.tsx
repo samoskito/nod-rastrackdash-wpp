@@ -1,12 +1,17 @@
 "use client";
 
-import type { MetaAssetsDto } from "@wpptrack/shared";
+import type { CurrencyCode, MetaAssetsDto } from "@wpptrack/shared";
 import { Filter, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AdAccountFilter } from "../../../components/ad-account-filter";
 import { usePresentationMode } from "../../../components/presentation-mode-toggle";
+import { splitAdAccountIds } from "../../../lib/ad-account-params";
 
 type MetaReportFiltersProps = {
+  /** Moeda efetiva por conta (correção manual, Meta, BRL). */
+  accountCurrencies?: Record<string, CurrencyCode>;
+  /** Contas de anúncio juntas por "," (uma ou várias). */
   adAccountId?: string;
   adId?: string;
   adSetId?: string;
@@ -70,13 +75,6 @@ function accountsForBusiness(
     : reportingAccounts;
 }
 
-function validAdAccountId(accounts: ReportingAccount[], adAccountId?: string) {
-  return adAccountId &&
-    accounts.some((account) => account.adAccountId === adAccountId)
-    ? adAccountId
-    : "";
-}
-
 function businessesFromReportingAccounts(
   reportingAccounts: ReportingAccount[],
 ): ReportingBusiness[] {
@@ -92,6 +90,7 @@ function businessesFromReportingAccounts(
 }
 
 export function MetaReportFilters({
+  accountCurrencies,
   adAccountId,
   adId,
   adSetId,
@@ -130,24 +129,21 @@ export function MetaReportFilters({
     () => accountsForBusiness(reportingAccounts, selectedBusinessId),
     [reportingAccounts, selectedBusinessId],
   );
-  const [selectedAdAccountId, setSelectedAdAccountId] = useState(() =>
-    validAdAccountId(
-      accountsForBusiness(reportingAccounts, businessId ?? ""),
-      adAccountId,
-    ),
+  const appliedAdAccountIds = useMemo(
+    () => splitAdAccountIds(adAccountId),
+    [adAccountId],
   );
+  const [selectedAdAccountIds, setSelectedAdAccountIds] =
+    useState<string[]>(appliedAdAccountIds);
 
   useEffect(() => {
-    const nextBusinessId = businessId ?? "";
-    const nextAccounts = accountsForBusiness(reportingAccounts, nextBusinessId);
-
-    setSelectedBusinessId(nextBusinessId);
-    setSelectedAdAccountId(validAdAccountId(nextAccounts, adAccountId));
-  }, [adAccountId, businessId, reportingAccounts]);
+    setSelectedBusinessId(businessId ?? "");
+    setSelectedAdAccountIds(appliedAdAccountIds);
+  }, [appliedAdAccountIds, businessId]);
 
   function handleBusinessChange(nextBusinessId: string) {
     setSelectedBusinessId(nextBusinessId);
-    setSelectedAdAccountId("");
+    setSelectedAdAccountIds([]);
   }
 
   const clearParams = new URLSearchParams();
@@ -202,7 +198,7 @@ export function MetaReportFilters({
   ].filter(Boolean).length;
   const hasFilters = Boolean(
     selectedBusinessId ||
-    selectedAdAccountId ||
+    selectedAdAccountIds.length > 0 ||
     nameContains ||
     status !== "all" ||
     delivery !== "all" ||
@@ -239,10 +235,7 @@ export function MetaReportFilters({
         </>
       ) : null}
       {presentationMode ? (
-        <>
-          <input type="hidden" name="businessId" value={selectedBusinessId} />
-          <input type="hidden" name="adAccountId" value={selectedAdAccountId} />
-        </>
+        <input type="hidden" name="businessId" value={selectedBusinessId} />
       ) : null}
       <div className="report-filter-primary">
         {presentationMode ? (
@@ -267,28 +260,17 @@ export function MetaReportFilters({
             ))}
           </select>
         )}
-        {presentationMode ? (
-          <span className="filter-control presentation-filter-placeholder">
-            Conta oculta
-          </span>
-        ) : (
-          <select
-            className="filter-control"
-            name="adAccountId"
-            value={selectedAdAccountId}
-            onChange={(event) =>
-              setSelectedAdAccountId(event.currentTarget.value)
-            }
-            aria-label="Filtrar por conta de anuncio"
-          >
-            <option value="">Todas as contas</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.adAccountId}>
-                {account.adAccountName}
-              </option>
-            ))}
-          </select>
-        )}
+        <AdAccountFilter
+          accounts={accounts}
+          appliedValue={appliedAdAccountIds}
+          className="report-ad-account-filter"
+          currencies={accountCurrencies}
+          label="Filtrar por conta de anúncio"
+          onChange={setSelectedAdAccountIds}
+          presentationMode={presentationMode}
+          value={selectedAdAccountIds}
+          variant="control"
+        />
         <input
           className="filter-control"
           name="nameContains"
