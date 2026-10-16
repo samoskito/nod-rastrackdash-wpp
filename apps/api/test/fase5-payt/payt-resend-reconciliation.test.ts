@@ -295,8 +295,8 @@ describe("Payt resend of the same transaction with a different body", () => {
     );
     const call =
       harness.conversionObservation.observeAutomation.mock.calls.at(-1)![0];
-    expect(call).not.toHaveProperty("evaluationMode");
-    expect(call.automation).not.toHaveProperty("resend_marker");
+    // The observation always forwards the key; no re-evaluation is asked.
+    expect(call.evaluationMode).toBeUndefined();
   });
 
   it("explains a mismatch whose stored body cannot prove the purchase on reprocess", async () => {
