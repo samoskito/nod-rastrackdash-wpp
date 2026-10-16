@@ -54,6 +54,7 @@ type ReportDeliveryFilter = "all" | "had_delivery";
 type ReportFilters = {
   businessId?: string;
   adAccountId?: string;
+  adAccountIds?: string[];
   campaignId?: string;
   adSetId?: string;
   adId?: string;
@@ -104,6 +105,7 @@ export class ReportingController {
     @Query("pageSize") pageSize?: string | string[],
     @Query("sort") sort?: unknown,
     @Query("dir") dir?: unknown,
+    @Query("adAccountIds") adAccountIds?: string | string[],
   ) {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
@@ -116,6 +118,7 @@ export class ReportingController {
     const filters = this.parseReportFilters({
       businessId,
       adAccountId,
+      adAccountIds,
       campaignId,
       adSetId,
       adId,
@@ -159,12 +162,14 @@ export class ReportingController {
     @Query("delivery") delivery?: string | string[],
     @Query("selectedIds") selectedIds?: string | string[],
     @Query("whatsappClassification") whatsappClassification?: string | string[],
+    @Query("adAccountIds") adAccountIds?: string | string[],
   ) {
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
     const period = this.parseReportPeriod(since, until);
     const filters = this.parseReportFilters({
       businessId,
       adAccountId,
+      adAccountIds,
       campaignId,
       adSetId,
       adId,
@@ -210,12 +215,14 @@ export class ReportingController {
     @Query("pageSize") pageSize?: string | string[],
     @Query("sort") sort?: unknown,
     @Query("dir") dir?: unknown,
+    @Query("adAccountIds") adAccountIds?: string | string[],
   ) {
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
     const period = this.parseReportPeriod(since, until);
     const filters = this.parseReportFilters({
       businessId,
       adAccountId,
+      adAccountIds,
       campaignId,
       adSetId,
       adId,
@@ -258,12 +265,14 @@ export class ReportingController {
     @Query("pageSize") pageSize?: string | string[],
     @Query("sort") sort?: unknown,
     @Query("dir") dir?: unknown,
+    @Query("adAccountIds") adAccountIds?: string | string[],
   ) {
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
     const period = this.parseReportPeriod(since, until);
     const filters = this.parseReportFilters({
       businessId,
       adAccountId,
+      adAccountIds,
       campaignId,
       adSetId,
       adId,
@@ -746,6 +755,7 @@ export class ReportingController {
   private parseReportFilters(input: {
     businessId?: string | string[];
     adAccountId?: string | string[];
+    adAccountIds?: string | string[];
     campaignId?: string | string[];
     adSetId?: string | string[];
     adId?: string | string[];
@@ -759,6 +769,7 @@ export class ReportingController {
     const filters: ReportFilters = {};
     const businessId = this.trimOptional(input.businessId);
     const adAccountId = this.trimOptional(input.adAccountId);
+    const adAccountIds = this.parseAdAccountIds(input.adAccountIds);
     const campaignId = this.trimOptional(input.campaignId);
     const adSetId = this.trimOptional(input.adSetId);
     const adId = this.trimOptional(input.adId);
@@ -777,6 +788,10 @@ export class ReportingController {
 
     if (adAccountId) {
       filters.adAccountId = adAccountId;
+    }
+
+    if (adAccountIds.length > 0) {
+      filters.adAccountIds = adAccountIds;
     }
 
     if (campaignId) {
@@ -813,6 +828,27 @@ export class ReportingController {
     }
 
     return filters;
+  }
+
+  /**
+   * `adAccountIds=act_1,act_2` (or the parameter repeated): several ad
+   * accounts. Combined with `adAccountId` when both are sent.
+   */
+  private parseAdAccountIds(value: string | string[] | undefined): string[] {
+    const ids = [
+      ...new Set(
+        (Array.isArray(value) ? value : value === undefined ? [] : [value])
+          .flatMap((item) => String(item).split(","))
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (ids.length > 50 || ids.some((id) => id.length > 120)) {
+      throw new BadRequestException("Filtro adAccountIds invalido");
+    }
+
+    return ids;
   }
 
   private trimOptional(value?: string | string[]): string | undefined {

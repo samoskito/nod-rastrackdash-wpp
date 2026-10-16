@@ -23,13 +23,15 @@ export async function loadWorkspaceConversionCurrency(
   workspaceId: string | null | undefined,
 ): Promise<CurrencyCode> {
   if (!workspaceId) return DEFAULT_CURRENCY_CODE;
-  const reader = prisma as WorkspaceCurrencyReader | null | undefined;
-  const findUnique = reader?.workspace?.findUnique;
-  if (typeof findUnique !== "function") {
-    return DEFAULT_CURRENCY_CODE;
-  }
 
   try {
+    // Inside the try: a test double may even throw on the property access.
+    const reader = prisma as WorkspaceCurrencyReader | null | undefined;
+    const findUnique = reader?.workspace?.findUnique;
+    if (typeof findUnique !== "function") {
+      return DEFAULT_CURRENCY_CODE;
+    }
+
     const workspace = await findUnique.call(reader!.workspace, {
       where: { id: workspaceId },
       select: { conversionCurrency: true },

@@ -30,7 +30,32 @@ import type {
   ReportOverviewDto,
   ReportPaginationDto,
   ReportSortDto,
+  ReportTotalsDto,
 } from "@wpptrack/shared";
+import {
+  DEFAULT_CURRENCY_CODE,
+  effectiveAccountCurrency,
+  type CurrencyCode,
+  type ReportCurrencyGroupDto,
+  type UnconvertedRevenueDto,
+} from "@wpptrack/shared";
+import {
+  ExchangeRateService,
+  ExchangeRateTable,
+  type ExchangeRateRequest,
+} from "../currency/exchange-rate.service";
+import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
+import {
+  buildCurrencyBreakdown,
+  convertEventValues,
+  exchangeRateRequests,
+  reportCurrencies,
+  rowExchangeRateFields,
+  type AttributionCurrencyResolver,
+  type CurrencyBreakdown,
+  type CurrencyConvertedEvent,
+  type CurrencyEntity,
+} from "./reporting-currency";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { isSupportedConversionEventName } from "../conversion-events/conversion-event-registry";
 import {
@@ -114,6 +139,8 @@ type ReportDeliveryFilter = "all" | "had_delivery";
 type ReportFilterInput = {
   businessId?: string;
   adAccountId?: string;
+  /** Several ad accounts (Visão Geral / Relatórios filter). */
+  adAccountIds?: string[];
   campaignId?: string;
   adSetId?: string;
   adId?: string;
@@ -150,6 +177,18 @@ type MetaSnapshotWhere = {
   adId?: StringFilter;
   whatsappClassification?:
     WhatsappClassification | { in: WhatsappClassification[] };
+};
+
+type ReportCurrencyContext = {
+  accountCurrency(adAccountId: string | null | undefined): CurrencyCode;
+  attributionCurrency: AttributionCurrencyResolver;
+  /** Effective currencies of the active accounts in the filter scope. */
+  scopeCurrencies: CurrencyCode[];
+};
+
+type MetaHierarchyScope = {
+  where: Omit<MetaSnapshotWhere, "whatsappClassification">;
+  accountCurrencies: Map<string, CurrencyCode>;
 };
 
 type MetaIntegrationRecord = {
@@ -422,6 +461,9 @@ export class MetaReportingService {
     private readonly connectionResolver?: MetaConnectionResolverService,
     @Optional()
     private readonly inboundRoutes?: InboundWebhookChannelRoutesService,
+    @Optional()
+    @Inject(ExchangeRateService)
+    private readonly exchangeRates?: ExchangeRateService,
   ) {}
 
   async syncWorkspaceMetaStructure(
@@ -1847,7 +1889,11 @@ export class MetaReportingService {
     } & ReportFilterInput,
   ): Promise<ReportOverviewDto> {
     const startedAt = Date.now();
-    const campaignWhere = await this.metaSnapshotWhere(input);
+    const hierarchyScope = await this.metaHierarchyScope(input);
+    const campaignWhere = this.metaSnapshotWhereFromHierarchy(
+      hierarchyScope.where,
+      input,
+    );
     const usesWhatsappDefault =
       (input.whatsappClassification ?? "whatsapp") === "whatsapp";
     const needsChildNameFilter = this.needsCampaignChildNameFilter(input);
@@ -1894,9 +1940,9 @@ export class MetaReportingService {
     const summaryScope = this.summaryMetricScope(input, campaignIds);
     const needsWorkspaceMetrics = input.includeSummary || input.includeDaily;
     const [
-      conversionLogs,
+      rawConversionLogs,
       leads,
-      workspaceConversionLogs,
+      rawWorkspaceConversionLogs,
       workspaceLeads,
       dailyInsights,
       returningEvents,
@@ -1930,6 +1976,18 @@ export class MetaReportingService {
         ? this.getReturningLeadEvents(input, summaryScope)
         : Promise.resolve([]),
     ]);
+    // Revenue attributed to an ad is converted to its account currency.
+    const currencyContext = this.reportCurrencyContext({
+      accountCurrencies: hierarchyScope.accountCurrencies,
+      campaigns,
+      adSets: whatsappAdSets,
+      ads: whatsappAds,
+    });
+    const [conversionLogs, workspaceConversionLogs] =
+      await this.convertReportEvents(currencyContext, [
+        rawConversionLogs,
+        rawWorkspaceConversionLogs,
+      ]);
     // "Conversaram mais de uma vez": conversations without a lead id count
     // for every lead of their phone, resolved from the database like the
     // Leads page does (shared helper).
@@ -1986,8 +2044,8 @@ export class MetaReportingService {
     const paginated = this.paginateReportRows(
       filteredCampaigns,
       input,
-      (campaign) =>
-        this.toReportRow(
+      (campaign) => ({
+        ...this.toReportRow(
           campaign,
           conversionLogsByCampaign.get(campaign.campaignId) ?? [],
           leadsByCampaign.get(campaign.campaignId) ?? [],
@@ -1996,6 +2054,11 @@ export class MetaReportingService {
           returningEventsByCampaign.get(campaign.campaignId) ?? [],
           leadIdsByPhoneHash,
         ),
+        currency: currencyContext.accountCurrency(campaign.adAccountId),
+        ...rowExchangeRateFields(
+          conversionLogsByCampaign.get(campaign.campaignId) ?? [],
+        ),
+      }),
     );
     const rows = paginated.items;
     const workspaceMeta = filteredCampaigns.reduce(
@@ -2042,6 +2105,105 @@ export class MetaReportingService {
           }),
         }
       : undefined;
+    // Never sum different currencies: one group per currency with activity.
+    const campaignCurrencyEntities: CurrencyEntity[] = filteredCampaigns.map(
+      (campaign) => {
+        const metricOverride = metricByCampaign.get(campaign.campaignId);
+
+        return {
+          currency: currencyContext.accountCurrency(campaign.adAccountId),
+          adAccountId: campaign.adAccountId ?? null,
+          spendCents: metricOverride?.spendCents ?? campaign.spendCents,
+          metaConversationsStarted:
+            metricOverride?.metaConversationsStarted ??
+            campaign.metaConversationsStarted,
+        };
+      },
+    );
+    const totalsCurrency = await this.currencyBreakdown({
+      workspaceId: input.workspaceId,
+      context: currencyContext,
+      funnelStages,
+      entities: campaignCurrencyEntities,
+      events: conversionLogs,
+      leads,
+      returningEvents,
+      leadIdsByPhoneHash,
+    });
+    const summaryCurrency = summary
+      ? await this.currencyBreakdown({
+          workspaceId: input.workspaceId,
+          context: currencyContext,
+          funnelStages,
+          entities: campaignCurrencyEntities,
+          events: workspaceConversionLogs,
+          leads: workspaceLeads,
+          returningEvents: workspaceReturningEvents,
+          leadIdsByPhoneHash,
+        })
+      : null;
+    const reportCurrency =
+      totalsCurrency.currency &&
+      (!summaryCurrency || summaryCurrency.currency === totalsCurrency.currency)
+        ? totalsCurrency.currency
+        : null;
+    // `currency: null` always comes with `byCurrency`: when only the summary
+    // mixes currencies (e.g. an organic sale in USD), the single-currency
+    // totals become their one group.
+    const totalsByCurrency =
+      totalsCurrency.byCurrency ??
+      (reportCurrency === null && totalsCurrency.currency
+        ? [
+            {
+              ...totals,
+              currency: totalsCurrency.currency,
+              adAccountIds: [
+                ...new Set(
+                  campaignCurrencyEntities
+                    .filter(
+                      (entity) => entity.currency === totalsCurrency.currency,
+                    )
+                    .map((entity) => entity.adAccountId)
+                    .filter((id): id is string => Boolean(id)),
+                ),
+              ],
+              exchangeRateMissing: totalsCurrency.exchangeRateMissing,
+              unconvertedRevenue: totalsCurrency.unconvertedRevenue,
+            },
+          ]
+        : undefined);
+    const summaryByCurrency =
+      summaryCurrency?.byCurrency ??
+      (reportCurrency === null && summary && summaryCurrency?.currency
+        ? (() => {
+            const {
+              id: _id,
+              name: _name,
+              status: _status,
+              ...summaryMetrics
+            } = summary;
+
+            return [
+              {
+                ...summaryMetrics,
+                currency: summaryCurrency.currency,
+                adAccountIds: [
+                  ...new Set(
+                    campaignCurrencyEntities
+                      .filter(
+                        (entity) =>
+                          entity.currency === summaryCurrency.currency,
+                      )
+                      .map((entity) => entity.adAccountId)
+                      .filter((id): id is string => Boolean(id)),
+                  ),
+                ],
+                exchangeRateMissing: summaryCurrency.exchangeRateMissing,
+                unconvertedRevenue: summaryCurrency.unconvertedRevenue,
+              },
+            ];
+          })()
+        : undefined);
     const dailyComparison =
       input.includeDaily && input.since && input.until
         ? this.dailyComparison({
@@ -2064,8 +2226,29 @@ export class MetaReportingService {
       since: input.since ?? null,
       until: input.until ?? null,
       campaigns: rows,
-      ...(summary ? { summary } : {}),
+      ...(summary
+        ? {
+            summary: {
+              ...summary,
+              ...(summaryCurrency?.currency
+                ? { currency: summaryCurrency.currency }
+                : {}),
+              ...(summaryCurrency?.exchangeRateMissing
+                ? {
+                    exchangeRateMissing: true,
+                    unconvertedRevenue: summaryCurrency.unconvertedRevenue,
+                  }
+                : {}),
+            },
+          }
+        : {}),
       totals,
+      ...this.currencyFields({
+        ...totalsCurrency,
+        currency: reportCurrency,
+        ...(totalsByCurrency ? { byCurrency: totalsByCurrency } : {}),
+      }),
+      ...(summaryByCurrency ? { summaryByCurrency } : {}),
       ...(dailyComparison ? { dailyComparison } : {}),
       ...(input.includeDaily ? { dailyComparisonAvailable } : {}),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
@@ -2804,6 +2987,8 @@ export class MetaReportingService {
         "Receita total",
         "ROAS aquisicao",
         "ROAS com recompra",
+        // Last column, so spreadsheets built on the old layout keep working.
+        "Moeda",
       ],
       ...report.campaigns.map((campaign) => [
         campaign.name,
@@ -2826,6 +3011,7 @@ export class MetaReportingService {
         campaign.roasWithRepurchase === null
           ? ""
           : String(campaign.roasWithRepurchase),
+        campaign.currency ?? report.currency ?? DEFAULT_CURRENCY_CODE,
       ]),
     ];
 
@@ -2844,7 +3030,8 @@ export class MetaReportingService {
     } & ReportFilterInput,
   ): Promise<AdSetReportOverviewDto> {
     const startedAt = Date.now();
-    const hierarchyWhere = await this.metaHierarchyWhere(input);
+    const hierarchyScope = await this.metaHierarchyScope(input);
+    const hierarchyWhere = hierarchyScope.where;
     const snapshotWhere = this.metaSnapshotWhereFromHierarchy(
       hierarchyWhere,
       input,
@@ -2887,7 +3074,7 @@ export class MetaReportingService {
       deliveredIds,
     );
     const adSetIds = filteredAdSets.map((adSet) => adSet.adSetId);
-    const [conversionLogs, leads, dailyInsights, returningEvents] =
+    const [rawConversionLogs, leads, dailyInsights, returningEvents] =
       await Promise.all([
         this.getMetricConversionEvents(input, { adSetIds }),
         this.getLeads(input, { adSetIds }),
@@ -2908,6 +3095,22 @@ export class MetaReportingService {
           : Promise.resolve([] as MetaAdSetDailyInsightRecord[]),
         this.getReturningLeadEvents(input, { adSetIds }),
       ]);
+    // Revenue attributed to an ad set is converted to its account currency.
+    const adSetCurrencyContext = this.reportCurrencyContext({
+      accountCurrencies: hierarchyScope.accountCurrencies,
+      campaigns,
+      adSets,
+    });
+    const [conversionLogs] = await this.convertReportEvents(
+      adSetCurrencyContext,
+      [rawConversionLogs],
+    );
+    const adSetCurrency = (adSet: MetaAdSetRecord) =>
+      adSetCurrencyContext.attributionCurrency({
+        campaignId: adSet.campaignId,
+        adSetId: adSet.adSetId,
+        adId: null,
+      }) ?? DEFAULT_CURRENCY_CODE;
     const conversionLogsByAdSet = this.groupByOptionalKey(
       conversionLogs,
       "adSetId",
@@ -2924,17 +3127,25 @@ export class MetaReportingService {
       since: input.since,
       until: input.until,
     });
-    const paginated = this.paginateReportRows(filteredAdSets, input, (adSet) =>
-      this.toAdSetReportRow({
-        adSet,
-        campaignName:
-          campaignNames.get(adSet.campaignId) ?? "Campanha nao resolvida",
-        parentCampaign: campaignById.get(adSet.campaignId),
-        conversionLogs: conversionLogsByAdSet.get(adSet.adSetId) ?? [],
-        funnelStages,
-        leads: leadsByAdSet.get(adSet.adSetId) ?? [],
-        returningEvents: returningEventsByAdSet.get(adSet.adSetId) ?? [],
-        metricOverride: dailyMetricByAdSet?.get(adSet.adSetId),
+    const paginated = this.paginateReportRows(
+      filteredAdSets,
+      input,
+      (adSet) => ({
+        ...this.toAdSetReportRow({
+          adSet,
+          campaignName:
+            campaignNames.get(adSet.campaignId) ?? "Campanha nao resolvida",
+          parentCampaign: campaignById.get(adSet.campaignId),
+          conversionLogs: conversionLogsByAdSet.get(adSet.adSetId) ?? [],
+          funnelStages,
+          leads: leadsByAdSet.get(adSet.adSetId) ?? [],
+          returningEvents: returningEventsByAdSet.get(adSet.adSetId) ?? [],
+          metricOverride: dailyMetricByAdSet?.get(adSet.adSetId),
+        }),
+        currency: adSetCurrency(adSet),
+        ...rowExchangeRateFields(
+          conversionLogsByAdSet.get(adSet.adSetId) ?? [],
+        ),
       }),
     );
     const rows = paginated.items;
@@ -2960,6 +3171,27 @@ export class MetaReportingService {
       returningEvents,
       scope: {},
     });
+    const adSetTotalsCurrency = await this.currencyBreakdown({
+      workspaceId: input.workspaceId,
+      context: adSetCurrencyContext,
+      funnelStages,
+      entities: filteredAdSets.map((adSet) => ({
+        currency: adSetCurrency(adSet),
+        adAccountId:
+          adSet.adAccountId ??
+          campaignById.get(adSet.campaignId)?.adAccountId ??
+          null,
+        spendCents:
+          dailyMetricByAdSet?.get(adSet.adSetId)?.spendCents ??
+          adSet.spendCents,
+        metaConversationsStarted:
+          dailyMetricByAdSet?.get(adSet.adSetId)?.metaConversationsStarted ??
+          adSet.metaConversationsStarted,
+      })),
+      events: conversionLogs,
+      leads,
+      returningEvents,
+    });
 
     this.logReportRead("adsets", startedAt, {
       returned: rows.length,
@@ -2973,6 +3205,7 @@ export class MetaReportingService {
       until: input.until ?? null,
       adSets: rows,
       totals,
+      ...this.currencyFields(adSetTotalsCurrency),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
     };
   }
@@ -2986,7 +3219,8 @@ export class MetaReportingService {
     } & ReportFilterInput,
   ): Promise<AdReportOverviewDto> {
     const startedAt = Date.now();
-    const hierarchyWhere = await this.metaHierarchyWhere(input);
+    const hierarchyScope = await this.metaHierarchyScope(input);
+    const hierarchyWhere = hierarchyScope.where;
     const snapshotWhere = this.metaSnapshotWhereFromHierarchy(
       hierarchyWhere,
       input,
@@ -3030,7 +3264,7 @@ export class MetaReportingService {
       deliveredIds,
     );
     const adIds = filteredAds.map((ad) => ad.adId);
-    const [conversionLogs, leads, dailyInsights, returningEvents] =
+    const [rawConversionLogs, leads, dailyInsights, returningEvents] =
       await Promise.all([
         this.getMetricConversionEvents(input, { adIds }),
         this.getLeads(input, { adIds }),
@@ -3051,6 +3285,23 @@ export class MetaReportingService {
           : Promise.resolve([] as MetaAdDailyInsightRecord[]),
         this.getReturningLeadEvents(input, { adIds }),
       ]);
+    // Revenue attributed to an ad is converted to its account currency.
+    const adCurrencyContext = this.reportCurrencyContext({
+      accountCurrencies: hierarchyScope.accountCurrencies,
+      campaigns,
+      adSets,
+      ads,
+    });
+    const [conversionLogs] = await this.convertReportEvents(
+      adCurrencyContext,
+      [rawConversionLogs],
+    );
+    const adCurrency = (ad: MetaAdRecord) =>
+      adCurrencyContext.attributionCurrency({
+        campaignId: ad.campaignId,
+        adSetId: ad.adSetId,
+        adId: ad.adId,
+      }) ?? DEFAULT_CURRENCY_CODE;
     const conversionLogsByAd = this.groupByOptionalKey(conversionLogs, "adId");
     const leadsByAd = this.groupByOptionalKey(leads, "adId");
     const returningEventsByAd = this.groupByOptionalKey(
@@ -3064,8 +3315,8 @@ export class MetaReportingService {
       since: input.since,
       until: input.until,
     });
-    const paginated = this.paginateReportRows(filteredAds, input, (ad) =>
-      this.toAdReportRow({
+    const paginated = this.paginateReportRows(filteredAds, input, (ad) => ({
+      ...this.toAdReportRow({
         ad,
         campaignName:
           campaignNames.get(ad.campaignId) ?? "Campanha nao resolvida",
@@ -3076,7 +3327,9 @@ export class MetaReportingService {
         returningEvents: returningEventsByAd.get(ad.adId) ?? [],
         metricOverride: dailyMetricByAd?.get(ad.adId),
       }),
-    );
+      currency: adCurrency(ad),
+      ...rowExchangeRateFields(conversionLogsByAd.get(ad.adId) ?? []),
+    }));
     const rows = paginated.items;
     const totalsMeta = filteredAds.reduce(
       (totals, ad) => ({
@@ -3099,6 +3352,22 @@ export class MetaReportingService {
       returningEvents,
       scope: {},
     });
+    const adTotalsCurrency = await this.currencyBreakdown({
+      workspaceId: input.workspaceId,
+      context: adCurrencyContext,
+      funnelStages,
+      entities: filteredAds.map((ad) => ({
+        currency: adCurrency(ad),
+        adAccountId: ad.adAccountId ?? null,
+        spendCents: dailyMetricByAd?.get(ad.adId)?.spendCents ?? ad.spendCents,
+        metaConversationsStarted:
+          dailyMetricByAd?.get(ad.adId)?.metaConversationsStarted ??
+          ad.metaConversationsStarted,
+      })),
+      events: conversionLogs,
+      leads,
+      returningEvents,
+    });
 
     this.logReportRead("ads", startedAt, {
       returned: rows.length,
@@ -3112,6 +3381,7 @@ export class MetaReportingService {
       until: input.until ?? null,
       ads: rows,
       totals,
+      ...this.currencyFields(adTotalsCurrency),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
     };
   }
@@ -4513,7 +4783,9 @@ export class MetaReportingService {
     input: ReportFilterInput,
     campaignIds: string[],
   ): ReportMetricScopeFilter {
-    return input.businessId || input.adAccountId ? { campaignIds } : {};
+    return input.businessId || input.adAccountId || input.adAccountIds?.length
+      ? { campaignIds }
+      : {};
   }
 
   private dailyComparison(input: {
@@ -5193,16 +5465,6 @@ export class MetaReportingService {
     return eventName;
   }
 
-  private async metaSnapshotWhere(
-    input: {
-      workspaceId: string;
-    } & ReportFilterInput,
-  ): Promise<MetaSnapshotWhere> {
-    const hierarchyWhere = await this.metaHierarchyWhere(input);
-
-    return this.metaSnapshotWhereFromHierarchy(hierarchyWhere, input);
-  }
-
   private metaSnapshotWhereFromHierarchy(
     hierarchyWhere: Omit<MetaSnapshotWhere, "whatsappClassification">,
     input: ReportFilterInput,
@@ -5234,21 +5496,66 @@ export class MetaReportingService {
       workspaceId: string;
     } & ReportFilterInput,
   ): Promise<Omit<MetaSnapshotWhere, "whatsappClassification">> {
+    return (await this.metaHierarchyScope(input)).where;
+  }
+
+  /**
+   * Hierarchy filter of the active reporting accounts (business / one ad
+   * account / several ad accounts / campaign) plus the effective spend
+   * currency of each of those accounts, read by the same query.
+   */
+  private async metaHierarchyScope(
+    input: {
+      workspaceId: string;
+    } & ReportFilterInput,
+  ): Promise<MetaHierarchyScope> {
     const where: Omit<MetaSnapshotWhere, "whatsappClassification"> = {
       workspaceId: input.workspaceId,
     };
-    const activeAccounts = (await this.prisma.metaReportingAccount.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        active: true,
-        ...(input.businessId ? { businessId: input.businessId } : {}),
-        ...(input.adAccountId ? { adAccountId: input.adAccountId } : {}),
+    const requestedAccountIds = [
+      ...new Set(
+        [input.adAccountId, ...(input.adAccountIds ?? [])].filter(
+          (id): id is string => Boolean(id),
+        ),
+      ),
+    ];
+    const singleAccount =
+      input.adAccountId && !input.adAccountIds?.length
+        ? input.adAccountId
+        : null;
+    const allActiveAccounts = (await this.prisma.metaReportingAccount.findMany(
+      {
+        where: {
+          workspaceId: input.workspaceId,
+          active: true,
+          ...(input.businessId ? { businessId: input.businessId } : {}),
+          ...(singleAccount ? { adAccountId: singleAccount } : {}),
+        },
+        select: {
+          businessId: true,
+          adAccountId: true,
+          currency: true,
+          currencyOverride: true,
+        },
       },
-      select: {
-        businessId: true,
-        adAccountId: true,
-      },
-    })) as Array<{ businessId: string; adAccountId: string }>;
+    )) as Array<{
+      businessId: string;
+      adAccountId: string;
+      currency?: string | null;
+      currencyOverride?: string | null;
+    }>;
+    const activeAccounts = requestedAccountIds.length
+      ? allActiveAccounts.filter((account) =>
+          requestedAccountIds.includes(account.adAccountId),
+        )
+      : allActiveAccounts;
+    const accountCurrencies = new Map(
+      activeAccounts.map((account) => [
+        account.adAccountId,
+        effectiveAccountCurrency(account),
+      ]),
+    );
+    const scope = (): MetaHierarchyScope => ({ where, accountCurrencies });
 
     if (input.businessId) {
       where.businessId = input.businessId;
@@ -5258,13 +5565,13 @@ export class MetaReportingService {
       where.campaignId = input.campaignId;
     }
 
-    if (input.adAccountId) {
+    if (singleAccount) {
       where.adAccountId = activeAccounts.some(
-        (account) => account.adAccountId === input.adAccountId,
+        (account) => account.adAccountId === singleAccount,
       )
-        ? input.adAccountId
+        ? singleAccount
         : { in: [] };
-      return where;
+      return scope();
     }
 
     where.adAccountId = {
@@ -5277,7 +5584,167 @@ export class MetaReportingService {
       };
     }
 
-    return where;
+    return scope();
+  }
+
+  /**
+   * Currency of every campaign / ad set / ad of the report: the effective
+   * currency of its ad account. Revenue attributed to them is converted to it.
+   */
+  private reportCurrencyContext(input: {
+    accountCurrencies: Map<string, CurrencyCode>;
+    campaigns: Array<{ campaignId: string; adAccountId?: string | null }>;
+    adSets?: Array<{
+      adSetId: string;
+      campaignId: string;
+      adAccountId?: string | null;
+    }>;
+    ads?: Array<{
+      adId: string;
+      adSetId: string;
+      campaignId: string;
+      adAccountId?: string | null;
+    }>;
+  }): ReportCurrencyContext {
+    const accountCurrency = (adAccountId: string | null | undefined) =>
+      (adAccountId ? input.accountCurrencies.get(adAccountId) : undefined) ??
+      DEFAULT_CURRENCY_CODE;
+    const campaignCurrency = new Map(
+      input.campaigns.map((campaign) => [
+        campaign.campaignId,
+        accountCurrency(campaign.adAccountId),
+      ]),
+    );
+    const adSetCurrency = new Map(
+      (input.adSets ?? []).map((adSet) => [
+        adSet.adSetId,
+        adSet.adAccountId
+          ? accountCurrency(adSet.adAccountId)
+          : (campaignCurrency.get(adSet.campaignId) ?? DEFAULT_CURRENCY_CODE),
+      ]),
+    );
+    const adCurrency = new Map(
+      (input.ads ?? []).map((ad) => [
+        ad.adId,
+        ad.adAccountId
+          ? accountCurrency(ad.adAccountId)
+          : (campaignCurrency.get(ad.campaignId) ??
+            adSetCurrency.get(ad.adSetId) ??
+            DEFAULT_CURRENCY_CODE),
+      ]),
+    );
+
+    return {
+      accountCurrency,
+      attributionCurrency: (item) =>
+        (item.adId ? adCurrency.get(item.adId) : undefined) ??
+        (item.adSetId ? adSetCurrency.get(item.adSetId) : undefined) ??
+        (item.campaignId ? campaignCurrency.get(item.campaignId) : undefined) ??
+        null,
+      scopeCurrencies: [...new Set(input.accountCurrencies.values())],
+    };
+  }
+
+  /** Revenue of each event in the currency of the account of its ad (PTAX). */
+  private async convertReportEvents<E extends ReportingMetricEvent>(
+    context: ReportCurrencyContext,
+    eventLists: E[][],
+  ): Promise<Array<Array<E & CurrencyConvertedEvent>>> {
+    const requests = exchangeRateRequests(
+      eventLists.flat(),
+      context.attributionCurrency,
+    );
+    // BRL-only workspaces never get here with requests: no lookup at all.
+    const table = requests.length
+      ? await this.loadExchangeRates(requests)
+      : null;
+
+    return eventLists.map((events) =>
+      convertEventValues(events, context.attributionCurrency, table),
+    );
+  }
+
+  private async loadExchangeRates(
+    requests: ExchangeRateRequest[],
+  ): Promise<ExchangeRateTable> {
+    if (!this.exchangeRates) return new ExchangeRateTable();
+
+    try {
+      return await this.exchangeRates.loadRateTable(requests);
+    } catch {
+      return new ExchangeRateTable();
+    }
+  }
+
+  /**
+   * `currency` (single) or `byCurrency` (mixed) for a report scope. Only
+   * currencies with spend or revenue in the period count: one -> single
+   * report in it; none -> the currency of the filtered accounts (when they
+   * agree) or the workspace conversion currency.
+   */
+  private async currencyBreakdown<
+    E extends CurrencyConvertedEvent,
+    L extends LeadRecord,
+  >(input: {
+    workspaceId: string;
+    context: ReportCurrencyContext;
+    funnelStages: FunnelStageConfigurationDto[];
+    entities: CurrencyEntity[];
+    events: E[];
+    leads: L[];
+    returningEvents: E[];
+    leadIdsByPhoneHash?: ReadonlyMap<string, readonly string[]>;
+  }): Promise<CurrencyBreakdown> {
+    const currencies = reportCurrencies(input);
+    const fallbackCurrency =
+      currencies.length === 1
+        ? currencies[0]!
+        : currencies.length === 0 && input.context.scopeCurrencies.length === 1
+          ? input.context.scopeCurrencies[0]!
+          : await loadWorkspaceConversionCurrency(
+              this.prisma,
+              input.workspaceId,
+            );
+
+    return buildCurrencyBreakdown({
+      entities: input.entities,
+      events: input.events,
+      leads: input.leads,
+      returningEvents: input.returningEvents,
+      attributionCurrency: input.context.attributionCurrency,
+      fallbackCurrency,
+      calculate: (group) =>
+        this.calculateMetrics({
+          funnelStages: input.funnelStages,
+          spendCents: group.spendCents,
+          metaConversationsStarted: group.metaConversationsStarted,
+          events: group.events,
+          leads: group.leads,
+          returningEvents: group.returningEvents,
+          ...(input.leadIdsByPhoneHash
+            ? { leadIdsByPhoneHash: input.leadIdsByPhoneHash }
+            : {}),
+          scope: {},
+        }) as ReportTotalsDto,
+    });
+  }
+
+  private currencyFields(breakdown: CurrencyBreakdown): {
+    currency: CurrencyCode | null;
+    byCurrency?: ReportCurrencyGroupDto[];
+    exchangeRateMissing?: boolean;
+    unconvertedRevenue?: UnconvertedRevenueDto[];
+  } {
+    return {
+      currency: breakdown.currency,
+      ...(breakdown.byCurrency ? { byCurrency: breakdown.byCurrency } : {}),
+      ...(breakdown.exchangeRateMissing
+        ? {
+            exchangeRateMissing: true,
+            unconvertedRevenue: breakdown.unconvertedRevenue,
+          }
+        : {}),
+    };
   }
 
   private centsToDecimal(cents: number): string {
