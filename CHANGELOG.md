@@ -61,6 +61,39 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 5.2 — Reports per currency and PTAX (API and shared)**, ported from
+  the SaaS (`996e7c1`, `5b4fdd4`, `c9428b1` env part, and the PTAX /
+  `ExchangeRate` / report-contract parts of `0bf5ebf` and `5981c7c`); the
+  student's `meta-reporting.service.ts` (leads novos × que voltaram, CPL) was
+  merged by hand, not replaced:
+  - **Spend currency per ad account:** manual correction (Configurações →
+    Moeda) → Meta currency → BRL. Campaign, ad set and ad rows carry
+    `currency`; revenue attributed to an ad is converted to its account
+    currency.
+  - **Currencies are never summed.** `/reports/campaigns`, `/reports/adsets`
+    and `/reports/ads` return `currency` (single currency) or `currency: null`
+    plus `byCurrency` (and `summaryByCurrency` for the Overview summary): one
+    group per currency with spend or revenue in the period, never an empty
+    group. A workspace all in BRL gets the same numbers as before plus
+    `currency: "BRL"` (checked by a test against the pre-5.2 output).
+  - **Ad account filter:** `adAccountIds` (comma separated or repeated, up to
+    50) on the three reports and `campaigns/export.csv`, alongside the existing
+    `adAccountId`. The CSV gains a **Moeda** column at the end (other columns
+    keep their place).
+  - **PTAX** (`PTAX_SYNC_ENABLED`, **off by default**; not the SaaS
+    `WPPTRACK_PTAX_SYNC_ENABLED`). Off: no external call; a sale in another
+    currency stays in its original currency, out of the revenue, flagged
+    `exchangeRateMissing` with `unconvertedRevenue` ("sem cotação"). On: every
+    6 h the API fetches the BCB PTAX (`olinda.bcb.gov.br`, closing sell rate)
+    into `ExchangeRate` and fills missing days on demand; revenue is converted
+    by the rate of the sale day (America/Sao_Paulo), or the last previous
+    business day. A sale with no ad account keeps its own currency. BCB down:
+    last stored rate or "sem cotação"; reports never fail and nothing is sent
+    to Meta because of it.
+  - Migration `20261016180000_exchange_rates` (additive: new table
+    `ExchangeRate` only). No new dependency. The screen (account selector,
+    totals side by side) comes in a later delivery.
+
 - **Fase 5.1 — Conversion currency (API, shared and web)**, ported from the
   SaaS (`0bf5ebf`, `5981c7c` settings part, `ffd0bae`, `e510840`, `c4c0375`
   audit part, `2f79c3c` settings screen, `5ce8393` rule currency):

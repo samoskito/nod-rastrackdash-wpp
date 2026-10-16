@@ -254,6 +254,7 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `META_VIDEO_THUMBNAILS_ENABLED` | Não (padrão desligado) | Só `true` liga a busca extra de miniaturas de vídeo (`/{video}/thumbnails`). Deixe desligado ao usar o login social PalmUP: o limite de chamadas do app Meta é compartilhado | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
+| `PTAX_SYNC_ENABLED` | Não (padrão **desligado**) | Só ligue (`true`) se anuncia ou vende em USD/EUR: busca a cotação PTAX do Banco Central para os relatórios por moeda — veja [Cotação PTAX](#cotação-ptax-relatórios-por-moeda-opcional) | `.env` da API | Não |
 | `PALMUP_META_BROKER_URL` | Só para o botão **Conectar Meta (PalmUP)** — sem ela, fica só o token permanente | Fornecido pela PalmUP (já vem preenchido no `.env.example`: `https://wpptrack-api.rastrack.app`) | `.env` da API / env do serviço da API. O web **não** precisa dela | **Não** — é uma URL pública, não é App Secret |
 
 ### `PALMUP_META_BROKER_URL` — login social Meta pela PalmUP
@@ -349,6 +350,31 @@ e a chave existente. A flag não envia histórico nem promove a conexão.
 `INBOUND_WEBHOOK_PRODUCTION_ENABLED` é necessária para novos envios e não
 substitui a habilitação explícita de replay. Consulte o
 [fluxo completo e estados de entrega](meta-cloud-recovery.md).
+
+### Cotação PTAX (relatórios por moeda, opcional)
+
+`PTAX_SYNC_ENABLED` fica **desligada por padrão** (variável ausente, vazia ou
+`false`). Os relatórios mostram o gasto de cada conta de anúncio na moeda dela
+e nunca somam moedas diferentes; a cotação só serve para converter a receita
+de uma venda feita em outra moeda.
+
+- **Desligada:** a API não faz nenhuma chamada externa. Uma venda em outra
+  moeda aparece na moeda original, fora da receita da conta, e o ROAS dessa
+  parte fica "sem cotação". Quem tem tudo em real não precisa ligar.
+- **Ligada** (`PTAX_SYNC_ENABLED=true`, só na API): a cada 6 horas (a primeira
+  1 a 2 minutos depois de a API subir) a API busca a PTAX de USD e EUR no Banco
+  Central e guarda na tabela `ExchangeRate`; dias que faltam são buscados na
+  hora em que um relatório precisa. A receita atribuída a um anúncio é
+  convertida para a moeda da conta pela cotação do dia da venda (horário de
+  Brasília); sem boletim nesse dia (fim de semana, feriado), vale a do último
+  dia útil anterior. Venda sem conta de anúncio atribuída fica na moeda
+  original.
+- **Rede:** ligada, a API precisa de saída HTTPS para `olinda.bcb.gov.br`
+  (API pública do Banco Central, sem chave nem cadastro). Se o Banco Central
+  estiver fora ou bloqueado, vale a última cotação guardada ou "sem cotação":
+  nenhum relatório quebra e nada é enviado à Meta por causa disso.
+- Não confunda com `WPPTRACK_PTAX_SYNC_ENABLED` (nome usado no SaaS): aqui ela
+  não tem efeito. Reinicie a API depois de mudar a variável.
 
 ## URLs, cookie e primeiro administrador
 
