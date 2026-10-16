@@ -310,7 +310,7 @@ export function InboundWebhookPanel({
       <div className="inbound-webhook-heading">
         {scopedProvider ? (
           <div>
-            <span className="eyebrow">Conexoes</span>
+            <span className="eyebrow">Conexões</span>
             <h2>
               {connections.length > 0
                 ? `Suas conexões ${inboundWebhookProviderLabel(scopedProvider)}`
