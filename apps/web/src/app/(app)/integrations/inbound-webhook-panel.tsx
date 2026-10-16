@@ -34,7 +34,15 @@ import type {
   InboundWebhookOneTimeSecret,
 } from "./inbound-webhook-actions";
 import { InboundWebhookRouteEditor } from "./inbound-webhook-route-editor";
+import { InboundWebhookRoutingMode } from "./inbound-webhook-routing-mode";
 import { InboundRecoveryPanel } from "./inbound-recovery-panel";
+import {
+  adUnavailableLabel,
+  ctwaDestinationReasonLabel,
+  unnichatRouteNotConfiguredLabel,
+  unnichatRoutingSourceLabel,
+} from "./inbound-webhook-labels";
+import { UnnichatEntrySetupPanel } from "./unnichat-setup";
 
 type InboundWebhookAction = (
   formData: FormData,
@@ -90,6 +98,7 @@ export function inboundWebhookProviderLabel(provider: string): string {
     gupshup: "Gupshup",
     meta_cloud: "Meta WhatsApp (Cloud API)",
     umbler: "Umbler Talk",
+    unnichat: "Unnichat",
     uazapi: "Uazapi",
   };
 
@@ -103,6 +112,8 @@ const inboundPasteInstructions: Record<string, string> = {
   meta_cloud:
     "Cole URL e token em App Meta → Configurar webhooks → Verificar e salvar.",
   umbler: "Cole esta URL no painel/webhook da Umbler Talk.",
+  unnichat:
+    "Cole esta URL na chamada HTTP do fluxo do Unnichat que recebe a conversa do anúncio.",
 };
 
 export function inboundPasteInstruction(provider: string): string {
@@ -114,8 +125,22 @@ export function inboundPasteInstruction(provider: string): string {
 
 // Data Crazy nao aceita cadastro manual de numero: o canal nasce do primeiro
 // webhook recebido (a API bloqueia o canal provisorio para esse provider).
+// Unnichat tambem nao: o numero do cliente e informado ao criar a conexao.
 function allowsManualChannelRegistration(provider: string): boolean {
-  return provider !== "uazapi" && provider !== "data_crazy";
+  return (
+    provider !== "uazapi" && provider !== "data_crazy" && provider !== "unnichat"
+  );
+}
+
+// Texto do formulário de criação da conexão, por provedor.
+function createDescription(provider: string, allowCreate: boolean): string {
+  if (provider === "unnichat") {
+    return "Dê um nome e informe o número de WhatsApp atendido pelo Unnichat. A conexão já nasce presa a esse número; só conversas vindas de anúncio (CTWA) viram lead.";
+  }
+
+  return allowCreate
+    ? "De um nome e gere a URL desta conexao. So mensagens vindas de anuncio (CTWA) viram lead."
+    : "Confira as conexoes e escolha quais canais enviam conversoes.";
 }
 
 export function InboundWebhookPanel({
@@ -153,6 +178,7 @@ export function InboundWebhookPanel({
   const [oneTimeSecret, setOneTimeSecret] =
     useState<InboundWebhookOneTimeSecret | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pickedProvider, setPickedProvider] = useState<string | null>(null);
   const creatableProviders = allowCreate
     ? capabilities.providers.filter(
         (provider) =>
@@ -162,6 +188,11 @@ export function InboundWebhookPanel({
     : [];
   const canCreate =
     canManage && capabilities.enabled && creatableProviders.length > 0;
+  const selectedCreateProvider =
+    scopedProvider ??
+    (creatableProviders.some((item) => item.provider === pickedProvider)
+      ? pickedProvider
+      : (creatableProviders[0]?.provider ?? null));
   // Inside a hub modal the form is the main content while nothing exists
   // yet: no inner "close" next to the modal's own X.
   const showCreateToggle =
@@ -219,6 +250,13 @@ export function InboundWebhookPanel({
     }
 
     setPendingAction(null);
+  }
+
+  function onRoutesUpdated(result: InboundWebhookActionResult) {
+    applyResult(result);
+    if (result.ok) {
+      router.refresh();
+    }
   }
 
   function applyResult(result: InboundWebhookActionResult) {
@@ -280,9 +318,7 @@ export function InboundWebhookPanel({
             </h2>
             <p className="muted">
               {scopeDescription ??
-                (allowCreate
-                  ? "De um nome e gere a URL desta conexao. So mensagens vindas de anuncio (CTWA) viram lead."
-                  : "Confira as conexoes e escolha quais canais enviam conversoes.")}
+                createDescription(scopedProvider, allowCreate)}
             </p>
           </div>
         ) : (
@@ -333,7 +369,10 @@ export function InboundWebhookPanel({
         </p>
       ) : null}
       {createOpen && canCreate ? (
-        <form className="inbound-webhook-create" onSubmit={handleCreate}>
+        <form
+          className={`inbound-webhook-create${selectedCreateProvider === "unnichat" ? " has-phone" : ""}`}
+          onSubmit={handleCreate}
+        >
           {scopedProvider ? (
             <input type="hidden" name="provider" value={scopedProvider} />
           ) : (
@@ -341,7 +380,8 @@ export function InboundWebhookPanel({
               <span className="field-label">Plataforma</span>
               <select
                 name="provider"
-                defaultValue={creatableProviders[0]?.provider ?? ""}
+                value={selectedCreateProvider ?? ""}
+                onChange={(event) => setPickedProvider(event.target.value)}
                 disabled={
                   pendingAction === "create" || creatableProviders.length === 0
                 }
@@ -365,6 +405,27 @@ export function InboundWebhookPanel({
               disabled={pendingAction === "create"}
             />
           </label>
+          {selectedCreateProvider === "unnichat" ? (
+            <label>
+              <span className="field-label">Número de WhatsApp do cliente</span>
+              <input
+                name="connectedPhone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                minLength={8}
+                maxLength={32}
+                placeholder="Ex.: +55 11 99999-0001"
+                required
+                aria-describedby="unnichat-whatsapp-help"
+                disabled={pendingAction === "create"}
+              />
+              <span id="unnichat-whatsapp-help" className="field-help muted">
+                É o número atendido pelo Unnichat (o seu), com DDI e DDD. Nunca
+                o telefone do lead. Para dois números, crie duas conexões.
+              </span>
+            </label>
+          ) : null}
           <button
             className="button primary"
             type="submit"
@@ -386,6 +447,9 @@ export function InboundWebhookPanel({
           onCopyVerifyToken={copyVerifyToken}
           onDismiss={() => setOneTimeSecret(null)}
         />
+      ) : null}
+      {oneTimeSecret?.provider === "unnichat" ? (
+        <UnnichatEntrySetupPanel />
       ) : null}
 
       {notice ? (
@@ -646,7 +710,9 @@ export function InboundWebhookPanel({
                       <p className="muted inbound-channel-empty">
                         {connection.provider === "data_crazy"
                           ? "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar. Envie uma mensagem de teste para liberar as regras."
-                          : "Nenhum canal cadastrado ainda. Cadastre o numero conectado para liberar as regras de conversao antes do primeiro lead chegar."}
+                          : connection.provider === "unnichat"
+                            ? "Esta conexão ainda não tem o número do cliente. Remova-a e crie de novo informando o número de WhatsApp atendido pelo Unnichat."
+                            : "Nenhum canal cadastrado ainda. Cadastre o numero conectado para liberar as regras de conversao antes do primeiro lead chegar."}
                       </p>
                     ) : (
                       channels.map((channel) => {
@@ -726,18 +792,23 @@ export function InboundWebhookPanel({
                                 </div>
                               ) : null}
                               {canRecover && connection.provider === "meta_cloud" ? <InboundRecoveryPanel connectionId={connection.id} channelId={channel.id} connectionName={connection.displayName} /> : null}
-                              <InboundWebhookRouteEditor
-                                channel={channel}
-                                metaConfiguration={metaConfiguration}
-                                canManage={canManage}
-                                saveAction={saveRoutesAction}
-                                onUpdated={(result) => {
-                                  applyResult(result);
-                                  if (result.ok) {
-                                    router.refresh();
-                                  }
-                                }}
-                              />
+                              {connection.provider === "unnichat" ? (
+                                <InboundWebhookRoutingMode
+                                  channel={channel}
+                                  metaConfiguration={metaConfiguration}
+                                  canManage={canManage}
+                                  saveAction={saveRoutesAction}
+                                  onUpdated={onRoutesUpdated}
+                                />
+                              ) : (
+                                <InboundWebhookRouteEditor
+                                  channel={channel}
+                                  metaConfiguration={metaConfiguration}
+                                  canManage={canManage}
+                                  saveAction={saveRoutesAction}
+                                  onUpdated={onRoutesUpdated}
+                                />
+                              )}
                             </div>
                           </details>
                         );
@@ -745,7 +816,8 @@ export function InboundWebhookPanel({
                     )}
                   </div>
 
-                  {connection.provider === "umbler" ? (
+                  {connection.provider === "umbler" ||
+                  connection.provider === "unnichat" ? (
                     <section className="provider-conversion-summary">
                       <div className="provider-conversion-summary-icon">
                         <Settings2 size={18} aria-hidden="true" />
@@ -984,6 +1056,9 @@ function ChannelReadiness({
   readiness: InboundWebhookChannelDto["readiness"];
 }) {
   const ready = readiness.state === "ready" || readiness.state === "complete";
+  const destination = readiness.routingSource
+    ? readiness.ctwaDestinationReadiness
+    : undefined;
 
   return (
     <section
@@ -1027,6 +1102,26 @@ function ChannelReadiness({
           tone={readiness.unresolvedCtwa > 0 ? "warn" : ""}
         />
       </div>
+
+      {readiness.routingSource ? (
+        <p className="muted inbound-readiness-routing">
+          Roteamento Meta:{" "}
+          <strong>
+            {unnichatRoutingSourceLabel(readiness.routingSource)}
+          </strong>
+        </p>
+      ) : null}
+      {destination?.status === "verified" ? (
+        <p className="inbound-readiness-clear inbound-readiness-destination">
+          <Check size={14} aria-hidden="true" /> Destino Meta verificado: um
+          único par de página e pixel para a conversa sem ID do anúncio.
+        </p>
+      ) : null}
+      {destination?.status === "not_ready" ? (
+        <p className="action-note warn inbound-readiness-destination">
+          {ctwaDestinationReasonLabel(destination.reason)}
+        </p>
+      ) : null}
 
       {readiness.blockers.length > 0 ? (
         <ul className="inbound-readiness-blockers">
@@ -1102,10 +1197,13 @@ function readinessBlockerLabel(
   const labels = {
     connection_paused: "A conexao de webhook esta pausada.",
     channel_paused: "Este canal esta pausado.",
-    route_not_configured: "Configure ao menos uma rota Meta para este canal.",
+    route_not_configured: readiness.routingSource
+      ? unnichatRouteNotConfiguredLabel(readiness)
+      : "Configure ao menos uma rota Meta para este canal.",
     route_not_valid: "Existe uma rota Meta que precisa ser validada novamente.",
     ctwa_not_observed: "Nenhum CTWA foi observado neste canal.",
     ctwa_unresolved: `${readiness.unresolvedCtwa} CTWA aguardam uma rota Meta exata.`,
+    ctwa_ad_unavailable: adUnavailableLabel(readiness.adUnavailableCtwa ?? 0),
     payload_unavailable: `${readiness.payloadUnavailableCtwa} CTWA nao possuem mais payload disponivel.`,
     payload_expiring_soon:
       "O payload preservado mais proximo expira em menos de 48 horas.",

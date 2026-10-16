@@ -42,7 +42,11 @@ const connectionStatusOperationalErrors = new Set([
   "Todo canal ativo precisa de uma rota Meta valida",
   "Workspace sem contrato com acesso ativo",
 ]);
+const connectionCreateOperationalErrors = new Set([
+  "Conexões Unnichat exigem o número de WhatsApp do cliente",
+]);
 const channelStatusOperationalErrors = new Set([
+  "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal",
   "Configure uma rota Meta valida antes de ativar o canal",
   "Controle de vagas dos canais externos indisponivel",
   "Todas as vagas do pacote estao ocupadas",
@@ -69,13 +73,25 @@ function oneTimeSecretForProvider(input: {
 export async function createInboundWebhookConnectionAction(
   formData: FormData,
 ): Promise<InboundWebhookActionResult> {
-  const input = inboundWebhookConnectionCreateInputSchema.safeParse({
-    provider: formText(formData, "provider"),
-    displayName: formText(formData, "displayName"),
-  });
+  const provider = formText(formData, "provider");
+  // Unnichat: o webhook de entrada não traz o canal, então a conexão nasce
+  // com o número de WhatsApp do cliente (nunca o telefone do lead).
+  const input = inboundWebhookConnectionCreateInputSchema.safeParse(
+    provider === "unnichat"
+      ? {
+          provider,
+          displayName: formText(formData, "displayName"),
+          connectedPhone: formText(formData, "connectedPhone"),
+        }
+      : { provider, displayName: formText(formData, "displayName") },
+  );
 
   if (!input.success) {
-    return failure(invalidFormMessage);
+    return failure(
+      provider === "unnichat" && formText(formData, "displayName")
+        ? "Informe o número de WhatsApp do cliente atendido pelo Unnichat, com DDI e DDD."
+        : invalidFormMessage,
+    );
   }
 
   try {
@@ -106,7 +122,10 @@ export async function createInboundWebhookConnectionAction(
       }),
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel criar a conexao de webhook.");
+    return failure(
+      knownOperationalError(error, connectionCreateOperationalErrors) ??
+        "Nao foi possivel criar a conexao de webhook.",
+    );
   }
 }
 
@@ -309,7 +328,9 @@ export async function saveInboundWebhookChannelRoutesAction(
       message: "Rotas do canal salvas e validadas.",
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel salvar as rotas deste canal.");
+    return failure(
+      knownRouteError(error) ?? "Nao foi possivel salvar as rotas deste canal.",
+    );
   }
 }
 
@@ -358,20 +379,71 @@ function channelRoutesInput(
   formData: FormData,
 ): InboundWebhookChannelRoutesUpdateInputDto | null {
   const value = formText(formData, "routes");
+  const routingMode = formText(formData, "routingMode");
 
   if (!value || value.length > 100_000) {
     return null;
   }
 
   try {
+    // O modo só existe para o Unnichat: os demais provedores não o enviam
+    // (a API recusa o campo).
     const input = inboundWebhookChannelRoutesUpdateInputSchema.safeParse({
       routes: JSON.parse(value),
+      ...(routingMode ? { routingMode } : {}),
     });
 
-    return input.success ? input.data : null;
+    if (
+      !input.success ||
+      (input.data.routingMode === "inherit_workspace" &&
+        input.data.routes.length > 0)
+    ) {
+      return null;
+    }
+
+    return input.data;
   } catch {
     return null;
   }
+}
+
+// Recusas 409 do modo de roteamento (Unnichat) em português claro.
+const routeConflictMessages: ReadonlyArray<readonly [string, string]> = [
+  [
+    "Modo de herança disponível apenas para Unnichat",
+    "O modo “Herdar do workspace” existe só para números do Unnichat.",
+  ],
+  [
+    "Informe o modo de roteamento",
+    "Escolha o modo de roteamento deste número (Herdar do workspace ou Configurar neste número) e salve.",
+  ],
+  [
+    "Herança não aceita rotas locais",
+    "No modo “Herdar do workspace” o número não tem rotas próprias. Remova as rotas ou escolha “Configurar neste número”.",
+  ],
+  [
+    "Informe routingMode channel_override",
+    "Para salvar rotas próprias, escolha “Configurar neste número”.",
+  ],
+];
+
+function knownRouteError(error: unknown): string | null {
+  const licenseMessage = licenseLockedMessageFor(error);
+
+  if (licenseMessage) {
+    return licenseMessage;
+  }
+
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const message = error.message.trim();
+
+  return (
+    routeConflictMessages.find(([prefix]) => message.startsWith(prefix))?.[1] ??
+    null
+  );
 }
 
 async function deleteApiResource(path: string): Promise<void> {
