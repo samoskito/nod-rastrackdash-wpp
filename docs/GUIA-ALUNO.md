@@ -166,14 +166,14 @@ números da regra são enviadas; sem ID do anúncio, só de leads que entraram p
 um número Unnichat (par único página + pixel). Passo a passo, verificação e
 rollback em [`setup/payt.md`](setup/payt.md).
 
-**Unnichat** é uma conexão por número: no card **Unnichat**, informe o seu
-número de WhatsApp (não o do lead) ao gerar o webhook, cole a URL de entrada
+**Unnichat** é uma conexão por número: no card **Unnichat**, informe o
+número de WhatsApp do cliente (não o do lead) ao gerar o webhook, cole a URL de entrada
 no fluxo do Unnichat que recebe a conversa do anúncio e, para marcar
-conversões, crie em **Conversões → Nova regra → Automação da Unnichat** uma
+conversões, crie em **Conversões → Nova regra → Automação do Unnichat** uma
 regra por evento e chame a URL dela no ponto do fluxo. Sem `ctwa_clid` nada é
 enviado; lead com `ctwa_clid` e sem ID do anúncio vai pelo único par página +
-pixel do número. Cada número escolhe o roteamento Meta: herdar do workspace
-(padrão) ou rotas próprias. Parsers certificados pela migration; conexão,
+pixel do número. Cada número escolhe o roteamento Meta: **Herdar do workspace**
+(padrão) ou **Configurar neste número**, com a prontidão e o motivo. Parsers certificados pela migration; conexão,
 número e regras nascem em observação. Passo a passo, verificação e rollback em
 [`setup/unnichat.md`](setup/unnichat.md).
 

@@ -18,7 +18,7 @@ São dois endereços (URLs) diferentes:
 | Endereço | Onde é criado | Para que serve no Unnichat |
 |---|---|---|
 | **URL de entrada da conexão** | Hub de Integrações → aba **Atendimento e vendas** → card **Unnichat** | Webhook de entrada da conversa: registra o lead que chegou pelo anúncio e envia `LeadSubmitted` |
-| **URL da regra de automação** | **Conversões → Nova regra → origem Automação da Unnichat** | Chamada no ponto do fluxo que marca a conversão (ex.: `Purchase`, `QualifiedLead`) |
+| **URL da regra de automação** | **Conversões → Nova regra → origem Automação do Unnichat** | Chamada no ponto do fluxo que marca a conversão (ex.: `Purchase`, `QualifiedLead`) |
 
 - **A conexão é presa ao número.** O webhook de entrada do Unnichat não traz o identificador do
   canal, então a conexão é criada já com o **seu número de WhatsApp** (o número atendido pelo
@@ -51,7 +51,8 @@ São dois endereços (URLs) diferentes:
 ### 1. Criar a conexão com o número
 
 1. `/integrations` → aba **Atendimento e vendas** → card **Unnichat** → **Gerar webhook**.
-2. Informe um nome e o **seu número de WhatsApp** (com DDI e DDD, ex.: `+55 11 99999-0001`).
+2. Informe um nome e o **número de WhatsApp do cliente** atendido pelo Unnichat (com DDI e DDD,
+   ex.: `+55 11 99999-0001`).
 3. Copie a **URL de entrada** completa, com `?token=` — ela aparece uma única vez. Se perder, use
    **Gerar nova URL** na conexão (a anterior para de funcionar na hora).
 
@@ -85,7 +86,7 @@ Também é aceito o envelope do n8n com um único item (`[{ "body": { ... } }]`)
 
 ### 3. URL da regra de automação
 
-1. **Conversões → Nova regra → origem Automação da Unnichat**. Escolha a conexão Unnichat, o evento
+1. **Conversões → Nova regra → origem Automação do Unnichat**. Escolha a conexão Unnichat, o evento
    (qualquer evento do catálogo, ex.: `Purchase` com o valor fixo, `QualifiedLead`) e o alcance
    (**Todos os números** = todos os números daquela conexão, ou **Números específicos**).
 2. Copie a **URL da regra** (aparece uma única vez; **Gerar novo endereço** troca por outra).
@@ -96,13 +97,14 @@ Também é aceito o envelope do n8n com um único item (`[{ "body": { ... } }]`)
 
 ### 4. Escolher o modo de roteamento do número
 
-No card **Unnichat** do Hub, em cada número da conexão (na API:
+No card **Unnichat** do Hub, cada número da conexão tem o seletor **Herdar do workspace** /
+**Configurar neste número**, com a prontidão do número e o motivo quando não está pronto (na API:
 `PUT /integrations/inbound-webhooks/channels/:channelId/routes` com `routingMode`):
 
 | Modo | Quando usar | Comportamento |
 |---|---|---|
-| **Automático (herdar do workspace)** — padrão | Um único par página + pixel no workspace | Lead com ID do anúncio conhecido usa a rota do anúncio; lead sem ID do anúncio (ou com anúncio que o workspace não conhece) vai para o **único** par página + pixel autorizado. Se houver mais de um par possível, nada é enviado (ambíguo). |
-| **Rotas manuais deste número** | Mais de uma página/pixel, ou um número que deve usar só uma BM/conta/destino | Só as rotas salvas no número valem, inclusive para leads sem ID do anúncio (o par página + pixel precisa ser único dentro dessas rotas). |
+| **Herdar do workspace** — padrão | Um único par página + pixel no workspace | Lead com ID do anúncio conhecido usa a rota do anúncio; lead sem ID do anúncio (ou com anúncio que o workspace não conhece) vai para o **único** par página + pixel autorizado. Se houver mais de um par possível, nada é enviado (ambíguo). |
+| **Configurar neste número** | Mais de uma página/pixel, ou um número que deve usar só uma BM/conta/destino | Só as rotas salvas no número valem, inclusive para leads sem ID do anúncio (o par página + pixel precisa ser único dentro dessas rotas). |
 
 O modo existe **só para o Unnichat**. Números antigos sem modo salvo precisam escolher um antes de
 salvar rotas.
@@ -124,9 +126,7 @@ salvar rotas.
 - Eventos recebidos **antes** de ativar a produção não são enviados depois (não há recuperação de
   CTWAs anteriores para o Unnichat nesta versão; ela segue só para o WhatsApp Cloud API).
 - O Unnichat não manda horário do evento: vale o horário em que a API recebeu.
-- Mais de um par página + pixel possível no modo automático: nada é enviado; use rotas manuais.
-- A tela do Unnichat no Hub (criar conexão com o número, seletor de roteamento) chega na mesma
-  versão em outra entrega. PENDENTE: tela do Unnichat.
+- Mais de um par página + pixel possível no modo automático: nada é enviado; use **Configurar neste número**.
 
 ## Verificação
 

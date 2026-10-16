@@ -61,8 +61,8 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
-- **Fase 4b — Unnichat conversations and automations as Meta conversions (API
-  and shared)**, ported from the SaaS with the same behavior and no new env
+- **Fase 4b — Unnichat conversations and automations as Meta conversions (API,
+  shared and web)**, ported from the SaaS with the same behavior and no new env
   var, dependency or Meta permission (the PalmUP social login does not
   change):
   - Unnichat connection bound to the client's WhatsApp number: creating it
@@ -115,9 +115,12 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     `docs/setup/unnichat.md`. **Roll back:** pause or delete the Unnichat
     rules and connections; reverting the image is safe when no Unnichat
     connection was created (see the guide otherwise).
-  - PENDENTE: web (Unnichat card in the hub with the number and the routing
-    selector, Unnichat origin in Conversões, 423 notice) comes in another
-    commit of this release.
+  - Web: Unnichat card in the Integrations Hub (Atendimento e vendas); create
+    a connection with a name and the client's number (entry URL shown once);
+    per-number selector "Herdar do workspace" / "Configurar neste número" with
+    readiness and reasons; origin "Automação do Unnichat" in Conversões → Nova
+    regra (bound to the connection, any catalog event) with Eventos recebidos;
+    locked license (423) notice. Publish the web of this release.
 - **Fase 4a — Payt sales as Meta conversions (API, web and shared)**, ported from
   the SaaS with the same behavior and no new env var, dependency or Meta
   permission:

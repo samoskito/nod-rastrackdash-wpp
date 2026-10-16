@@ -100,7 +100,7 @@ export const providerConversionRuleScopeSchema = z.enum(
  * Origem normalizada de uma regra (usada na precedencia e no "Unificar").
  * whatsapp_label = etiqueta do WhatsApp (Uazapi); automation_umbler = callback
  * assinado da automacao Umbler; automation_payt = postback de venda da Payt;
- * automation_unnichat = fluxo da Unnichat chamando a URL da regra (Fase 4b).
+ * automation_unnichat = fluxo do Unnichat chamando a URL da regra (Fase 4b).
  * As automacoes por URL ficam sempre ligadas a uma conexao.
  */
 export const providerConversionRuleOrigins = [
