@@ -11,11 +11,14 @@ import type { ProviderConversionRuleActionResult } from "./actions";
 import { originBetaEvents } from "./conversion-origins";
 import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
+import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
+import { ruleEventLabel } from "./event-copy";
 
 type RuleAction = (formData: FormData) => Promise<ProviderConversionRuleActionResult>;
 
 const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = {
   automation_umbler: "Umbler Talk",
+  automation_unnichat: "Unnichat",
   automation_payt: "Payt",
 };
 
@@ -87,6 +90,13 @@ function SetupSteps({
         </ol>
         <UmblerAutomationPayloadPanel eventName={rule.conversionRule.eventName} />
       </>
+    );
+  }
+  if (origin === "automation_unnichat") {
+    return (
+      <UnnichatAutomationSetupPanel
+        eventLabel={ruleEventLabel(rule.conversionRule.eventName)}
+      />
     );
   }
   return null;

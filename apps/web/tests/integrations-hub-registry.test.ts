@@ -79,13 +79,13 @@ describe("integration registry", () => {
         "umbler",
         "gupshup",
         "data_crazy",
+        "unnichat",
         "payt",
         "kommo",
         "meta",
       ].sort(),
     );
     for (const later of [
-      "unnichat",
       "pipedrive",
       "gohighlevel",
       "guimo",
@@ -158,6 +158,7 @@ describe("integration registry", () => {
       "umbler",
       "gupshup",
       "data_crazy",
+      "unnichat",
       "payt",
     ]);
     expect(inTab("ads")).toEqual(["meta"]);
