@@ -204,6 +204,12 @@ type AutomationAuditDelivery = Prisma.InboundWebhookDeliveryGetPayload<{
   include: typeof automationAuditDeliveryInclude;
 }>;
 
+/**
+ * Production failure of an execution whose frozen decision does not match
+ * the stored callback. Recoverable by an explicit reprocess (fresh decision).
+ */
+const sourceEventMismatchReason = "provider_conversion_source_event_mismatch";
+
 type AutomationObservationStatus =
   | "observed"
   | "eligible"
@@ -294,11 +300,25 @@ export class InboundConversionAutomationIngestionService {
         receivedAt,
       );
       if (parsed.ok) {
+        // The decision and the production check must read the SAME body:
+        // production re-parses the stored payload, so the resend is observed
+        // from what is stored (replaced by this resend only while no decision
+        // has been frozen for the occurrence).
+        const effective = await this.reconcileResentPayload({
+          endpoint,
+          deliveryId: existing.id,
+          rawBody,
+          receivedAt,
+          parsed: parsed.value,
+        });
         const observed = await this.observeAutomation({
           endpoint,
           deliveryId: existing.id,
           deliveryReceivedAt: existing.firstReceivedAt,
-          parsed: parsed.value,
+          parsed: effective.parsed,
+          ...(effective.evaluationMode
+            ? { evaluationMode: effective.evaluationMode }
+            : {}),
         });
         await this.enqueueEligibleObservation(endpoint.workspaceId, observed);
       }
@@ -597,6 +617,7 @@ export class InboundConversionAutomationIngestionService {
                 equals: true,
               },
             },
+            { status: "failed", reasonCode: sourceEventMismatchReason },
           ],
           sourceDelivery: {
             AND: [visibleAutomationDeliveryWhere],
@@ -1022,7 +1043,8 @@ export class InboundConversionAutomationIngestionService {
         (execution
           ? ["observed", "eligible", "blocked"].includes(execution.status) ||
             (execution.status === "failed" &&
-              this.retryableTechnicalFailure(execution.normalizedResult))
+              (this.retryableTechnicalFailure(execution.normalizedResult) ||
+                this.sourceEventMismatchFailure(execution)))
           : decision?.decisionCode === "eligible" || leadMatchingBlock),
     };
   }
@@ -1081,9 +1103,16 @@ export class InboundConversionAutomationIngestionService {
         retryingFailure: false,
       });
     }
+    // A decision frozen from a body that is not the stored one (a provider
+    // resend before the payload reconciliation existed) fails production
+    // forever; reusing it would repeat the failure. Only for this reason the
+    // reprocess re-evaluates the stored body into a fresh decision. Every
+    // other failure keeps its frozen decision.
+    const sourceMismatch = this.sourceEventMismatchFailure(currentExecution);
     if (
       currentExecution?.status === "failed" &&
-      currentExecution.providerDecisionId
+      currentExecution.providerDecisionId &&
+      !sourceMismatch
     ) {
       if (!this.retryableTechnicalFailure(currentExecution.normalizedResult)) {
         return {
@@ -1122,6 +1151,15 @@ export class InboundConversionAutomationIngestionService {
       deliveryReceivedAt: delivery.firstReceivedAt,
       parsed: parsed.value,
       manualRecovery: true,
+      ...(sourceMismatch && currentExecution
+        ? {
+            evaluationMode: {
+              type: "reevaluate" as const,
+              requestKey: `source-mismatch-reprocess:${currentExecution.id}:${randomUUID()}`,
+              recordInitialWhenMissing: true,
+            },
+          }
+        : {}),
       // Production-mode explicit replay by an authorized manager: the
       // resulting eligible execution carries the approval (audited in the
       // same transaction) that lets the worker accept a callback received
@@ -1163,7 +1201,9 @@ export class InboundConversionAutomationIngestionService {
         executionId: observed.executionId,
         status: "blocked",
         reasonCode: observed.reasonCode,
-        message: this.manualReprocessBlockMessage(observed.reasonCode),
+        message: sourceMismatch
+          ? "Os dados salvos deste callback não identificam a compra neste número; reenvie o postback na plataforma para atualizar"
+          : this.manualReprocessBlockMessage(observed.reasonCode),
       };
     }
     if (observed.disposition === "observed") {
@@ -1337,6 +1377,15 @@ export class InboundConversionAutomationIngestionService {
             : "Callback encaminhado para a fila da Meta"
           : "Callback já estava na fila da Meta",
     };
+  }
+
+  private sourceEventMismatchFailure(
+    execution: { status: string; reasonCode: string | null } | null,
+  ): boolean {
+    return (
+      execution?.status === "failed" &&
+      execution.reasonCode === sourceEventMismatchReason
+    );
   }
 
   private retryableTechnicalFailure(
@@ -1758,6 +1807,285 @@ export class InboundConversionAutomationIngestionService {
     } catch {
       throw new ServiceUnavailableException(publicPersistenceFailureMessage);
     }
+  }
+
+  /**
+   * A provider may deliver the same occurrence more than once with a
+   * different body (Payt resends the transaction with a new updated_at,
+   * value, phone...). Only one delivery exists per occurrence, and production
+   * re-reads ITS stored payload to verify the frozen decision, so a decision
+   * built from a body that is not the stored one fails forever with
+   * provider_conversion_source_event_mismatch.
+   *
+   * - identical body: nothing changes;
+   * - different body, no decision frozen for the occurrence (e.g. the first
+   *   callback stopped at channel selection) and no observation in flight:
+   *   the latest body replaces the stored one (compare-and-swap on the
+   *   ciphertext) and is the one observed;
+   * - different body whose occurrence already FAILED production with
+   *   provider_conversion_source_event_mismatch (its frozen decision is
+   *   proven inconsistent with the stored body and nothing was sent): the
+   *   resend body replaces the stored one and is re-evaluated into a fresh
+   *   decision, so the resend heals the failure;
+   * - otherwise the stored body is observed, never the resend's.
+   *
+   * Dedupe is untouched: same delivery, same occurrence key, same purchase
+   * key, so a resend can never produce a second send.
+   */
+  private async reconcileResentPayload(input: {
+    endpoint: PublicConversionEndpoint;
+    deliveryId: string;
+    rawBody: Buffer;
+    receivedAt: Date;
+    parsed: ParsedAutomation;
+  }): Promise<{
+    parsed: ParsedAutomation;
+    evaluationMode?: ProviderConversionEvaluationMode;
+  }> {
+    const stored = await this.readStoredAutomation(
+      input.endpoint,
+      input.deliveryId,
+    );
+    // Payload expired/unavailable: production cannot run anyway.
+    if (!stored) return { parsed: input.parsed };
+    if (this.sameJsonBody(stored.rawBody, input.rawBody)) {
+      return { parsed: input.parsed };
+    }
+    if (stored.decisionPending) {
+      return { parsed: stored.parsed ?? input.parsed };
+    }
+
+    // Only Payt resends may cure a source mismatch; other providers keep the
+    // stored body once a decision exists.
+    const mismatchExecutionId =
+      input.endpoint.providerRule.parserRelease?.provider === "payt"
+        ? await this.sourceMismatchExecutionId(
+            input.endpoint,
+            input.parsed.externalExecutionKey,
+          )
+        : null;
+    const replaceable =
+      mismatchExecutionId !== null ||
+      !(await this.occurrenceHasDecision(
+        input.endpoint,
+        input.parsed.externalExecutionKey,
+      ));
+    if (replaceable) {
+      const replaced = await this.replaceStoredPayload({
+        endpoint: input.endpoint,
+        deliveryId: input.deliveryId,
+        expectedEncryptedPayload: stored.encryptedPayload,
+        rawBody: input.rawBody,
+        receivedAt: input.receivedAt,
+        parsed: input.parsed,
+      });
+      if (replaced) {
+        return mismatchExecutionId
+          ? {
+              parsed: input.parsed,
+              evaluationMode: {
+                type: "reevaluate",
+                requestKey: `source-mismatch-resend:${mismatchExecutionId}:${randomUUID()}`,
+                recordInitialWhenMissing: true,
+              },
+            }
+          : { parsed: input.parsed };
+      }
+      // A concurrent resend swapped it first: observe what it stored.
+      const latest = await this.readStoredAutomation(
+        input.endpoint,
+        input.deliveryId,
+      );
+      return { parsed: latest?.parsed ?? stored.parsed ?? input.parsed };
+    }
+
+    return { parsed: stored.parsed ?? input.parsed };
+  }
+
+  /** The occurrence's execution failed production because its frozen
+   * decision does not match the stored callback (nothing was sent). */
+  private async sourceMismatchExecutionId(
+    endpoint: PublicConversionEndpoint,
+    occurrenceKey: string,
+  ): Promise<string | null> {
+    const execution =
+      await this.prisma.providerConversionRuleExecution.findUnique({
+        where: {
+          providerRuleId_externalExecutionKey: {
+            providerRuleId: endpoint.providerRule.id,
+            externalExecutionKey: occurrenceKey,
+          },
+        },
+        select: { id: true, status: true, reasonCode: true },
+      });
+    return execution && this.sourceEventMismatchFailure(execution)
+      ? execution.id
+      : null;
+  }
+
+  private async readStoredAutomation(
+    endpoint: PublicConversionEndpoint,
+    deliveryId: string,
+  ): Promise<{
+    rawBody: Buffer;
+    encryptedPayload: string;
+    parsed: ParsedAutomation | null;
+    decisionPending: boolean;
+  } | null> {
+    const delivery = await this.prisma.inboundWebhookDelivery.findFirst({
+      where: {
+        id: deliveryId,
+        workspaceId: endpoint.workspaceId,
+        connectionId: endpoint.providerRule.connectionId,
+        providerRuleEndpointId: endpoint.id,
+        purpose: "conversion_automation",
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        connectionId: true,
+        encryptedPayload: true,
+        payloadIv: true,
+        payloadTag: true,
+        encryptionKeyVersion: true,
+        payloadExpiresAt: true,
+        normalizedSummary: true,
+      },
+    });
+    if (
+      !delivery ||
+      delivery.payloadExpiresAt <= new Date() ||
+      !delivery.encryptedPayload ||
+      !delivery.payloadIv ||
+      !delivery.payloadTag ||
+      !delivery.encryptionKeyVersion
+    ) {
+      return null;
+    }
+
+    try {
+      const rawBody = this.encryption.decrypt(
+        {
+          encryptedPayload: delivery.encryptedPayload,
+          payloadIv: delivery.payloadIv,
+          payloadTag: delivery.payloadTag,
+          encryptionKeyVersion: delivery.encryptionKeyVersion,
+        },
+        {
+          workspaceId: delivery.workspaceId,
+          connectionId: delivery.connectionId,
+          deliveryId: delivery.id,
+        },
+      );
+      const parsed = this.parseAutomation(
+        endpoint,
+        JSON.parse(rawBody.toString("utf8")) as unknown,
+      );
+      return {
+        rawBody,
+        encryptedPayload: delivery.encryptedPayload,
+        parsed: parsed.ok ? parsed.value : null,
+        // The first observation of this delivery has not finished yet: it
+        // may be freezing a decision from the stored body right now.
+        decisionPending:
+          this.jsonRecord(delivery.normalizedSummary)?.executionStatus ===
+          "decision_pending",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private sameJsonBody(left: Buffer, right: Buffer): boolean {
+    if (left.equals(right)) return true;
+    try {
+      return (
+        JSON.stringify(JSON.parse(left.toString("utf8"))) ===
+        JSON.stringify(JSON.parse(right.toString("utf8")))
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private async occurrenceHasDecision(
+    endpoint: PublicConversionEndpoint,
+    occurrenceKey: string,
+  ): Promise<boolean> {
+    const decision =
+      await this.prisma.providerConversionDecisionAudit.findFirst({
+        where: {
+          workspaceId: endpoint.workspaceId,
+          providerRuleId: endpoint.providerRule.id,
+          occurrenceKey,
+        },
+        select: { id: true },
+      });
+    return Boolean(decision);
+  }
+
+  private async replaceStoredPayload(input: {
+    endpoint: PublicConversionEndpoint;
+    deliveryId: string;
+    expectedEncryptedPayload: string;
+    rawBody: Buffer;
+    receivedAt: Date;
+    parsed: ParsedAutomation;
+  }): Promise<boolean> {
+    const { endpoint } = input;
+    const encrypted = this.encryption.encrypt(input.rawBody, {
+      workspaceId: endpoint.workspaceId,
+      connectionId: endpoint.providerRule.connectionId,
+      deliveryId: input.deliveryId,
+    });
+    let replaced: boolean;
+    try {
+      const updated = await this.prisma.inboundWebhookDelivery.updateMany({
+        where: {
+          id: input.deliveryId,
+          workspaceId: endpoint.workspaceId,
+          connectionId: endpoint.providerRule.connectionId,
+          providerRuleEndpointId: endpoint.id,
+          purpose: "conversion_automation",
+          encryptedPayload: input.expectedEncryptedPayload,
+        },
+        data: {
+          ...encrypted,
+          payloadExpiresAt: new Date(
+            input.receivedAt.getTime() +
+              INBOUND_WEBHOOK_RAW_RETENTION_DAYS * 24 * 60 * 60 * 1_000,
+          ),
+          // Marks the observation of the new body as in flight, so another
+          // concurrent resend observes this body instead of swapping again.
+          normalizedSummary: this.toJson({
+            purpose: "conversion_automation",
+            parserStatus: "parsed",
+            automation: input.parsed.automation,
+            eventName: input.parsed.eventName,
+            executionStatus: "decision_pending",
+            reasonCode: "decision_pending",
+            channelResolved: false,
+            paidLeadResolved: false,
+            rawBodyLength: input.rawBody.length,
+            payloadReplacedByResendAt: input.receivedAt.toISOString(),
+          }),
+        },
+      });
+      replaced = updated.count === 1;
+    } catch {
+      throw new ServiceUnavailableException(publicPersistenceFailureMessage);
+    }
+    if (replaced) {
+      this.logger.log(
+        JSON.stringify({
+          event: "provider_conversion_automation_payload_replaced",
+          workspaceId: endpoint.workspaceId,
+          providerRuleId: endpoint.providerRule.id,
+          deliveryId: input.deliveryId,
+        }),
+      );
+    }
+    return replaced;
   }
 
   private async persistDelivery(input: {

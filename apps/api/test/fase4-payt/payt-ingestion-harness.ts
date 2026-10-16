@@ -398,7 +398,10 @@ export function createHarness(options?: {
           candidate.id === where.id &&
           candidate.workspaceId === where.workspaceId &&
           candidate.connectionId === where.connectionId &&
-          candidate.providerRuleEndpointId === where.providerRuleEndpointId,
+          candidate.providerRuleEndpointId === where.providerRuleEndpointId &&
+          // Fase 5.0: compare-and-swap of a Payt resend on the ciphertext.
+          (where.encryptedPayload === undefined ||
+            candidate.encryptedPayload === where.encryptedPayload),
       );
       if (!delivery) return { count: 0 };
       if (data.attemptCount?.increment) {
@@ -487,6 +490,12 @@ export function createHarness(options?: {
                 if (condition.status && execution.status !== condition.status) {
                   return false;
                 }
+                if (
+                  condition.reasonCode &&
+                  execution.reasonCode !== condition.reasonCode
+                ) {
+                  return false;
+                }
                 if (condition.normalizedResult) {
                   return (
                     execution.normalizedResult?.technicalDelivery?.retryable ===
@@ -535,7 +544,8 @@ export function createHarness(options?: {
       (where.workspaceId && decision.workspaceId !== where.workspaceId) ||
       (where.providerRuleId &&
         decision.providerRuleId !== where.providerRuleId) ||
-      (where.decisionCode && decision.decisionCode !== where.decisionCode)
+      (where.decisionCode && decision.decisionCode !== where.decisionCode) ||
+      (where.occurrenceKey && decision.occurrenceKey !== where.occurrenceKey)
     ) {
       return false;
     }
