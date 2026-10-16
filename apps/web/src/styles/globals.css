@@ -15424,3 +15424,143 @@ button.meta-manual-entry[aria-expanded="true"] {
     flex-wrap: wrap;
   }
 }
+
+/* Pipedrive CRM panel inside the Integrations hub modal */
+.provider-conversion-inline-confirm {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--mint);
+  background: rgba(18, 184, 132, 0.06);
+}
+
+.provider-conversion-inline-confirm > span {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.pipedrive-delivery {
+  overflow-wrap: anywhere;
+}
+
+.provider-conversion-rule-title.pipedrive-title-row {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.pipedrive-production-gate {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 6px;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(142, 173, 164, 0.4);
+  background: rgba(142, 173, 164, 0.05);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pipedrive-readiness {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pipedrive-readiness li {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+/* Long badges ("Conferido a cada movimento") wrap inside their column
+   instead of overlapping the requirement text. */
+.pipedrive-readiness li > .event-chip {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.pipedrive-readiness-label {
+  min-width: 0;
+  padding-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.pipedrive-conversion-panel .pipedrive-connection-card > .provider-conversion-rule-list {
+  grid-column: 1 / -1;
+}
+
+/* The edit form sits inside the rule's <details>, whose generic
+   `> form` padding would otherwise flatten the builder card: keep the
+   same inner spacing as the Nova regra form on desktop (mobile unchanged). */
+@media (min-width: 701px) {
+  .pipedrive-conversion-panel .provider-conversion-rule-scope > form.provider-conversion-builder {
+    gap: 18px;
+    margin-bottom: 12px;
+    padding: 18px 16px;
+  }
+}
+
+@media (min-width: 981px) {
+  .pipedrive-conversion-panel .pipedrive-rule-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) minmax(0, 1fr);
+  }
+}
+
+.pipedrive-conversion-panel .provider-conversion-rule-title,
+.pipedrive-conversion-panel .provider-conversion-heading,
+.pipedrive-conversion-panel .provider-conversion-heading-actions {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.pipedrive-conversion-panel .provider-conversion-rule-title > strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.pipedrive-conversion-panel .event-chip {
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 14px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.pipedrive-conversion-panel .event-chip::before {
+  flex: none;
+}
+
+.pipedrive-conversion-panel .provider-conversion-secret input {
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .pipedrive-readiness li {
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+  }
+
+  .pipedrive-conversion-panel .provider-conversion-heading-actions {
+    width: 100%;
+  }
+
+  .pipedrive-conversion-panel .provider-conversion-rule-actions {
+    flex-wrap: wrap;
+  }
+
+  .pipedrive-conversion-panel .provider-conversion-inline-confirm {
+    flex-wrap: wrap;
+  }
+}

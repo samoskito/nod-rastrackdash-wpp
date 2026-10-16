@@ -25,6 +25,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { OpsAlertsModule } from "./ops-alerts/ops-alerts.module";
 import { KommoModule } from "./kommo/kommo.module";
+import { PipedriveModule } from "./pipedrive/pipedrive.module";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { KommoModule } from "./kommo/kommo.module";
     OnboardingModule,
     TemplateVersionModule,
     KommoModule,
+    PipedriveModule,
   ],
   controllers: [HealthController],
   providers: [

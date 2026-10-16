@@ -12,14 +12,14 @@ import {
 /**
  * Origens de uma regra de conversão na tela Conversões. As origens de
  * provedor espelham a API (`providerConversionRuleOrigins`); a etapa do CRM
- * (Kommo) é listada só para leitura e editada na janela do Kommo no Hub.
+ * (Kommo, Pipedrive) é listada só para leitura e editada na janela do CRM no Hub.
  *
  * Em quais números cada origem roda NÃO é decidido aqui: vem de
  * GET /conversion-rules/providers/capabilities (`channelProviders`). A tabela
  * `fallbackChannelProviders` só existe para rotular regras já criadas quando a
  * API de capacidades não respondeu.
  */
-export type CrmRuleOrigin = "kommo";
+export type CrmRuleOrigin = "kommo" | "pipedrive";
 export type RuleOriginId = ProviderConversionRuleOriginDto | CrmRuleOrigin;
 
 export type RuleOriginDefinition = {
@@ -119,6 +119,15 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     label: "Etapa no Kommo",
     description: "Quando o lead muda de etapa no funil do Kommo.",
     logoProvider: "kommo",
+    fallbackChannelProviders: [],
+    connection: "none",
+  },
+  {
+    id: "pipedrive",
+    kind: "crm",
+    label: "Etapa ou negócio ganho no Pipedrive",
+    description: "Quando o negócio avança de etapa ou é ganho no Pipedrive.",
+    logoProvider: "pipedrive",
     fallbackChannelProviders: [],
     connection: "none",
   },
@@ -250,7 +259,7 @@ export function providerDisplayName(provider: string): string {
   }
 }
 
-/** Onde as regras do CRM são editadas: janela do Kommo no Hub (aba CRM). */
+/** Onde as regras do CRM são editadas: janela do CRM no Hub (aba CRM). */
 export function crmManageHref(origin: CrmRuleOrigin): string {
   return `/integrations?abrir=${origin}`;
 }

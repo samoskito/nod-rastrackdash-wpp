@@ -7,6 +7,7 @@ import type {
   ProviderConversionRuleOriginDto,
 } from "@wpptrack/shared";
 import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
+import type { PipedriveConnectionDetailDto } from "../integrations/pipedrive-actions";
 import { ruleEventLabel, ruleEventLabelForOrigin } from "./event-copy";
 import {
   crmManageHref,
@@ -451,11 +452,12 @@ export function buildProviderRuleRows(
 }
 
 // ---------------------------------------------------------------------------
-// Regras do CRM (só leitura aqui; editadas na janela do Kommo no Hub)
+// Regras do CRM (só leitura aqui; editadas na janela do CRM no Hub)
 // ---------------------------------------------------------------------------
 
 export type CrmRulesInput = {
   kommo: KommoConnectionDetailDto[];
+  pipedrive: PipedriveConnectionDetailDto[];
 };
 
 function authorizedNumberIds(
@@ -566,6 +568,40 @@ export function buildCrmRuleRows(
           triggerDetail: stage
             ? `Etapa “${stage.status.name}” em ${stage.name}`
             : null,
+          status: crmStatus({
+            active: rule.active,
+            mode: rule.mode,
+            connectionActive: connection.status === "active",
+          }),
+          mode: rule.mode,
+          active: rule.active,
+          ...scope,
+          appliesToAllNumbers: false,
+          connectionName: connection.displayName,
+        }),
+      );
+    }
+  }
+
+  for (const connection of crm.pipedrive) {
+    const scope = crmScope(connection.allowedChannelRouteIds, numbers);
+    for (const rule of connection.rules) {
+      const pipeline = connection.pipelines.find(
+        (item) => item.id === rule.pipelineId,
+      );
+      const stage = pipeline?.stages.find((item) => item.id === rule.stageId);
+      rows.push(
+        crmRow({
+          origin: "pipedrive",
+          id: rule.id,
+          name: rule.name,
+          eventName: rule.eventName,
+          triggerDetail:
+            rule.trigger === "deal_won"
+              ? "Negócio ganho"
+              : stage
+                ? `Etapa “${stage.name}”${pipeline ? ` em ${pipeline.name}` : ""}`
+                : null,
           status: crmStatus({
             active: rule.active,
             mode: rule.mode,

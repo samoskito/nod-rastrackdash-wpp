@@ -501,12 +501,12 @@ export function ConversionsScreen({
         ) : null}
         {!crmVisible ? (
           <p className="action-note">
-            As regras do Kommo (CRM) aparecem só para o responsável da conta,
-            que também as edita em Integrações, na aba CRM.
+            As regras de CRM (Kommo, Pipedrive) aparecem só para o responsável da
+            conta, que também as edita em Integrações, na aba CRM.
           </p>
         ) : crmError ? (
           <p className="action-note warn">
-            Não deu para ler as regras do Kommo agora.
+            Não deu para ler as regras de algum CRM agora.
           </p>
         ) : null}
       </section>

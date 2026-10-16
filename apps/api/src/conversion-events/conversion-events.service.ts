@@ -2,11 +2,27 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
+  KOMMO_CTWA_PROCESSING_MODE,
+  kommoCtwaConversionAuthorized,
   kommoPublicationAuthorized,
   type KommoPublicationIntent,
 } from "../kommo/kommo-publication-policy";
+import {
+  PIPEDRIVE_DELIVERY_UNKNOWN,
+  PIPEDRIVE_STAGE_TRIGGER,
+  lockPipedriveConnection,
+  pipedriveDispatchAuthorized,
+  pipedriveRouteIntent,
+  settlePipedriveSenderOutcome,
+} from "./crm-dispatch-context";
+import {
+  PIPEDRIVE_CTWA_PROCESSING_MODE,
+  pipedriveCtwaConversionAuthorized,
+} from "../pipedrive/pipedrive-production-policy";
+import { isCrmCtwaContext } from "../crm-channels/crm-ctwa-context";
 import {
   settleKommoSenderOutcome,
   KOMMO_DELIVERY_UNKNOWN,
@@ -267,6 +283,8 @@ const CTWA_SEND_SKIP_REASONS: Record<string, string> = {
   ctwa_entry_receipt_invalid: "recibo da entrada CTWA inválido",
   ctwa_replay_not_authorized: "reprocessamento CTWA não autorizado",
   ctwa_entry_not_in_production: "entrada CTWA anterior à ativação",
+  pipedrive_ctwa_context_invalid: "contexto Pipedrive CTWA inválido",
+  kommo_ctwa_context_invalid: "contexto Kommo CTWA inválido",
   ctwa_processing_mode_unsupported: "modo de processamento não suportado",
   ctwa_provider_conversion_with_ad: "conversão de provedor CTWA com anúncio",
   provider_conversion_production_disabled:
@@ -738,7 +756,10 @@ export class ConversionEventsService {
     if (existing) {
       if (existing.workspaceId !== input.workspaceId)
         throw new ConversionRecordError("conversion_workspace_mismatch");
-      if (input.sourceTrigger === "kommo_stage")
+      if (
+        input.sourceTrigger === "kommo_stage" ||
+        input.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER
+      )
         await this.assertKommoLicenseAllows();
       return this.reconcileExistingExternalConversion(existing, input, client);
     }
@@ -752,6 +773,9 @@ export class ConversionEventsService {
         !(await ctwaIntentAuthorized(
           client as Prisma.TransactionClient,
           input.ctwaDestination,
+          // Only a Kommo/Pipedrive page/pixel conversion may authorize a
+          // non-Unnichat number (CRM mode); every other source is unchanged.
+          { crmContext: isCrmCtwaContext(input.sourcePayload) },
         )))
     )
       throw new ConversionRecordError("ctwa_destination_not_authorized");
@@ -767,9 +791,12 @@ export class ConversionEventsService {
     );
 
     // The Purchase-kind lookup is the final awaited read before the canonical
-    // log write. Restrict this barrier to the Kommo consumer so other
-    // providers retain their existing behavior.
-    if (input.sourceTrigger === "kommo_stage")
+    // log write. Restrict this barrier to the CRM consumers (Kommo,
+    // Pipedrive) so other providers retain their existing behavior.
+    if (
+      input.sourceTrigger === "kommo_stage" ||
+      input.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER
+    )
       await this.assertKommoLicenseAllows();
 
     try {
@@ -1082,6 +1109,318 @@ export class ConversionEventsService {
     });
   }
 
+  /** Pipedrive counterpart of prepareKommoSenderRetry (own ledger table). */
+  async preparePipedriveSenderRetry(
+    logId: string,
+    workspaceId: string,
+  ): Promise<string> {
+    if (!(await this.kommoLicenseAllows())) return "license_locked";
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await lockKommoDispatch(tx, workspaceId);
+        const snapshot = await tx.pipedriveConversionDedupe.findFirst({
+          where: { workspaceId, conversionEventLogId: logId },
+        });
+        const target = pipedriveRouteIntent(snapshot?.publicationIntent);
+        if (!snapshot || !target) return "error";
+        await lockPipedriveConnection(tx, workspaceId, target.connectionId);
+        const intent = await tx.pipedriveConversionDedupe.findFirst({
+          where: { id: snapshot.id, workspaceId },
+        });
+        const log = await tx.conversionEventLog.findFirst({
+          where: {
+            id: logId,
+            workspaceId,
+            sourceTrigger: PIPEDRIVE_STAGE_TRIGGER,
+          },
+        });
+        if (!intent || !log || log.eventId !== target.eventId) return "error";
+        const outcome = await settlePipedriveSenderOutcome(tx, intent, log);
+        if (outcome === "sent" || outcome === "delivery_unknown")
+          return outcome;
+        if (!(await pipedriveDispatchAuthorized(tx, workspaceId, target)))
+          return "revoked";
+        // senderAttempts is 0 or 1 (SQL CHECK): one dispatch only, no counter.
+        return outcome;
+      });
+    } catch {
+      throw new ServiceUnavailableException("pipedrive_sender_failed");
+    }
+  }
+
+  /**
+   * Ad-attributed Pipedrive conversion: same single-dispatch contract as the
+   * Kommo branch of sendReadyEvent, on the Pipedrive ledger. (A CTWA destination
+   * Pipedrive conversion never gets here: it follows sendCtwaEvent.)
+   */
+  private async sendPipedriveStageEvent(
+    log: ConversionEventLogRecord,
+    eventId: string,
+    options: SendReadyEventOptions,
+  ): Promise<SendReadyEventResult> {
+    const skipped = {
+      conversionEventLogId: log.id,
+      workspaceId: log.workspaceId,
+      status: "skipped" as const,
+    };
+    const workspaceId = log.workspaceId;
+    if (!workspaceId) return { ...skipped, workspaceId: null };
+    // No HTTP guard in the background sender: a locked license sends nothing.
+    if (!(await this.kommoLicenseAllows())) return skipped;
+    const ledger = await this.prisma.pipedriveConversionDedupe.findFirst({
+      where: { workspaceId, conversionEventLogId: log.id },
+    });
+    const target = pipedriveRouteIntent(ledger?.publicationIntent);
+    if (!(await pipedriveDispatchAuthorized(this.prisma, workspaceId, target))) {
+      await this.prisma.conversionEventLog.updateMany({
+        where: { id: log.id, status: "ready_to_send" },
+        data: {
+          errorCode: "pipedrive_publication_revoked",
+          errorMessage: "Autorização de publicação indisponível",
+        },
+      });
+      return skipped;
+    }
+    const intent = target!;
+    const startedAt = new Date();
+    const resolvedDestination = await this.resolveDeliveryRoute(log);
+    if (
+      resolvedDestination.pixelId !== intent.pixelId ||
+      resolvedDestination.pageId !== intent.pageId ||
+      resolvedDestination.businessConnectionId !==
+        intent.businessConnectionId ||
+      resolvedDestination.conversionDestinationId !== intent.destinationId ||
+      !resolvedDestination.accessToken?.trim() ||
+      !(await pipedriveDispatchAuthorized(this.prisma, workspaceId, intent))
+    )
+      resolvedDestination.routeError = "Rota Pipedrive autorizada indisponivel";
+    const senderToken = randomUUID();
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      if (!(await this.kommoLicenseAllows(tx))) return null;
+      await lockPipedriveConnection(tx, workspaceId, intent.connectionId);
+      if (!(await pipedriveDispatchAuthorized(tx, workspaceId, intent)))
+        return null;
+      const current = await tx.conversionEventLog.findFirst({
+        where: {
+          id: log.id,
+          workspaceId,
+          sourceTrigger: PIPEDRIVE_STAGE_TRIGGER,
+          status: "ready_to_send",
+          eventId: intent.eventId,
+        },
+      });
+      if (!current) return null;
+      const claim = await tx.pipedriveConversionDedupe.updateMany({
+        where: {
+          workspaceId,
+          conversionEventLogId: log.id,
+          senderLeaseToken: null,
+          senderAttempts: 0,
+          publicationStatus: { not: "delivery_unknown" },
+        },
+        data: {
+          senderLeaseToken: senderToken,
+          senderRetryable: false,
+          senderAttempts: { increment: 1 },
+        },
+      });
+      return claim.count === 1 ? senderToken : null;
+    });
+    if (!claimed) return skipped;
+    const adapterInput = {
+      accessToken: resolvedDestination.accessToken,
+      pixelId: resolvedDestination.pixelId,
+      pageId: resolvedDestination.pageId,
+      eventName: log.eventName,
+      dedupeKey: eventId,
+      phoneHash: log.phoneHash,
+      adId: log.adId,
+      ctwaClid: log.ctwaClid,
+      valueCents: log.valueCents,
+      currency: log.currency,
+      contentName: log.contentName,
+      customData: log.customData as ConversionEventCustomDataDto | null,
+      eventTime: log.eventOccurredAt,
+      testEventCode: options.testEventCode ?? null,
+    };
+    const dispatch = async () => {
+      const deadline = performance.now() + KOMMO_DISPATCH_START_MS;
+      const started = await this.prisma.$transaction(
+        async (tx) => {
+          await lockKommoDispatch(tx, workspaceId);
+          await lockPipedriveConnection(tx, workspaceId, intent.connectionId);
+          const owned = await tx.pipedriveConversionDedupe.findFirst({
+            where: {
+              workspaceId,
+              conversionEventLogId: log.id,
+              senderLeaseToken: senderToken,
+              senderAttempts: 1,
+              senderRetryable: false,
+              publicationStatus: { not: "delivery_unknown" },
+            },
+          });
+          const current = await tx.conversionEventLog.findFirst({
+            where: {
+              id: log.id,
+              workspaceId,
+              sourceTrigger: PIPEDRIVE_STAGE_TRIGGER,
+              status: "ready_to_send",
+              eventId,
+            },
+          });
+          if (
+            !owned ||
+            !current ||
+            !Object.entries(intent).every(
+              ([key, value]) =>
+                (owned.publicationIntent as Record<string, unknown> | null)?.[
+                  key
+                ] === value,
+            ) ||
+            !(await pipedriveDispatchAuthorized(tx, workspaceId, intent))
+          )
+            throw new Error("pipedrive_dispatch_revoked");
+          // Final authorization point before the synchronous provider start.
+          if (!(await this.kommoLicenseAllows(tx)))
+            throw new Error("pipedrive_license_locked");
+          const delivery = this.metaCapiAdapter.sendEvent(adapterInput, {
+            beforeDispatch: () => {
+              if (performance.now() >= deadline)
+                throw new Error("pipedrive_dispatch_deadline");
+            },
+            signal: AbortSignal.timeout(KOMMO_NETWORK_MS),
+          });
+          void delivery.catch(() => undefined);
+          return { delivery };
+        },
+        {
+          maxWait: KOMMO_DISPATCH_START_MS,
+          timeout: KOMMO_DISPATCH_TRANSACTION_MS,
+        },
+      );
+      return started.delivery;
+    };
+    let adapterResult;
+    try {
+      adapterResult = resolvedDestination.routeError
+        ? {
+            status: "not_configured" as const,
+            requestPayload: null,
+            responseSummary: { routeResolution: "blocked" },
+            errorMessage: resolvedDestination.routeError,
+            errorCode: "MissingMetaDestination" as const,
+          }
+        : await dispatch();
+    } catch (error) {
+      // A pre-dispatch license lock proves no provider request occurred:
+      // release only this claim so the conversion can go out once unlocked.
+      if (error instanceof Error && error.message === "pipedrive_license_locked") {
+        await this.prisma.pipedriveConversionDedupe.updateMany({
+          where: {
+            workspaceId,
+            conversionEventLogId: log.id,
+            senderLeaseToken: senderToken,
+            senderAttempts: 1,
+          },
+          data: {
+            senderLeaseToken: null,
+            senderRetryable: false,
+            senderAttempts: 0,
+          },
+        });
+        return skipped;
+      }
+      throw error;
+    }
+    const unknownOutcome =
+      adapterResult.errorCode === "MetaCapiNetworkError" ||
+      adapterResult.errorCode === "MetaCapiDeliveryUnknown";
+    const result = unknownOutcome
+      ? {
+          ...adapterResult,
+          errorCode: "MetaCapiDeliveryUnknown" as const,
+          errorMessage: KOMMO_DELIVERY_UNKNOWN_MESSAGE,
+        }
+      : adapterResult;
+    const integrationLogId = await this.recordMetaCapiIntegrationLog(
+      log,
+      startedAt,
+      result,
+      resolvedDestination,
+    );
+    await this.prisma.$transaction(async (tx) => {
+      await lockKommoDispatch(tx, workspaceId);
+      const owned = await tx.pipedriveConversionDedupe.findFirst({
+        where: {
+          workspaceId,
+          conversionEventLogId: log.id,
+          senderLeaseToken: senderToken,
+        },
+      });
+      if (!owned) throw new Error("pipedrive_sender_lease_lost");
+      const written = await tx.conversionEventLog.updateMany({
+        where: { id: log.id, workspaceId, status: "ready_to_send", eventId },
+        data: {
+          status: result.status,
+          sentAt: result.status === "sent" ? new Date() : null,
+          pixelId: resolvedDestination.pixelId,
+          pageId: resolvedDestination.pageId,
+          ...(resolvedDestination.source === "manual"
+            ? {
+                metaAccountId: resolvedDestination.adAccountId,
+                metaBusinessConnectionId:
+                  resolvedDestination.businessConnectionId,
+                metaConversionDestinationId:
+                  resolvedDestination.conversionDestinationId,
+              }
+            : {}),
+          providerRequestPayload: result.requestPayload
+            ? (result.requestPayload as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          providerResponseSummary: result.responseSummary
+            ? (result.responseSummary as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage,
+        },
+      });
+      if (!written.count) throw new Error("pipedrive_sender_state_changed");
+      await tx.pipedriveConversionDedupe.updateMany({
+        where: { id: owned.id, senderLeaseToken: senderToken },
+        data: {
+          senderLeaseToken: unknownOutcome ? senderToken : null,
+          senderRetryable: false,
+          ...(unknownOutcome
+            ? {
+                publicationStatus: "delivery_unknown",
+                publicationErrorCode: PIPEDRIVE_DELIVERY_UNKNOWN,
+              }
+            : {
+                publicationStatus:
+                  result.status === "sent" ? "sent" : "publication_failed",
+                publicationErrorCode:
+                  result.status === "sent" ? null : "sender_not_ready",
+              }),
+        },
+      });
+    });
+    await this.syncProviderConversionDelivery(log, result);
+    await this.recordMetaCapiDiagnosticEvent(
+      log,
+      result,
+      integrationLogId,
+      resolvedDestination,
+    );
+    return {
+      conversionEventLogId: log.id,
+      workspaceId,
+      status: result.status,
+      ...(unknownOutcome
+        ? { errorCode: result.errorCode, errorMessage: result.errorMessage }
+        : {}),
+    };
+  }
+
   async sendReadyEvent(
     logId: string,
     options: SendReadyEventOptions = {},
@@ -1100,7 +1439,8 @@ export class ConversionEventsService {
     }
 
     if (
-      log?.sourceTrigger === "kommo_stage" &&
+      (log?.sourceTrigger === "kommo_stage" ||
+        log?.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER) &&
       !(await this.kommoLicenseAllows())
     ) {
       return {
@@ -1113,9 +1453,22 @@ export class ConversionEventsService {
     if (
       log?.sourceTrigger === "kommo_stage" &&
       log.workspaceId &&
-      log.status === "error"
+      log.status === "error" &&
+      // A Kommo page/pixel (CTWA) conversion has no route sender ledger.
+      !this.ctwaIntent(log)
     ) {
       await this.prepareKommoSenderRetry(logId, log.workspaceId);
+      log = (await this.prisma.conversionEventLog.findUnique({
+        where: { id: logId, workspaceId: log.workspaceId },
+      })) as ConversionEventLogRecord | null;
+    }
+    if (
+      log?.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER &&
+      log.workspaceId &&
+      log.status === "error" &&
+      !this.ctwaIntent(log)
+    ) {
+      await this.preparePipedriveSenderRetry(logId, log.workspaceId);
       log = (await this.prisma.conversionEventLog.findUnique({
         where: { id: logId, workspaceId: log.workspaceId },
       })) as ConversionEventLogRecord | null;
@@ -1159,6 +1512,11 @@ export class ConversionEventsService {
       "ctwaDestination" in log.sourcePayload
     )
       return this.recordCtwaSendSkip(log, "ctwa_destination_malformed");
+    if (log.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER)
+      // Constant public error: never leak provider/database text upward.
+      return this.sendPipedriveStageEvent(log, eventId, options).catch(() => {
+        throw new ServiceUnavailableException("pipedrive_sender_failed");
+      });
 
     if (
       log.sourceTrigger === "inbound_webhook:meta_cloud" &&
@@ -1906,6 +2264,17 @@ export class ConversionEventsService {
         ? null
         : "ctwa_entry_not_in_production";
     }
+    // CRM page/pixel conversions (Kommo, Pipedrive): the immutable ledger
+    // intent of this exact log and an active connection still bound to the
+    // number. The destination itself was re-verified above in CRM mode.
+    if (p.processingMode === PIPEDRIVE_CTWA_PROCESSING_MODE)
+      return (await pipedriveCtwaConversionAuthorized(tx, log, intent))
+        ? null
+        : "pipedrive_ctwa_context_invalid";
+    if (p.processingMode === KOMMO_CTWA_PROCESSING_MODE)
+      return (await kommoCtwaConversionAuthorized(tx, log, intent))
+        ? null
+        : "kommo_ctwa_context_invalid";
     if (p.processingMode !== "frozen_provider_conversion")
       return "ctwa_processing_mode_unsupported";
     if (log.adId) return "ctwa_provider_conversion_with_ad";
@@ -2058,13 +2427,18 @@ export class ConversionEventsService {
       return this.recordCtwaSendSkip(log, "ctwa_click_missing");
     if (!this.connectionResolver)
       return this.recordCtwaSendSkip(log, "ctwa_sender_unavailable");
+    // Only a Kommo/Pipedrive page/pixel conversion may re-authorize a
+    // non-Unnichat number (CRM mode); every other source stays unchanged.
+    const crmAuthorization = {
+      crmContext: isCrmCtwaContext(log.sourcePayload),
+    };
     // Claim commits BEFORE any provider effect. dispatching is a permanent fence:
     // an unknown outcome, a crash, and queue retry cannot automatically resend.
     const claim = await this.prisma.$transaction(async (tx) => {
       if (!(await this.kommoLicenseAllows(tx)))
         return { claimed: false, denial: "ctwa_license_locked" };
       await lockUnnichatMetaPolicy(tx, intent.workspaceId);
-      if (!(await ctwaIntentAuthorized(tx, intent)))
+      if (!(await ctwaIntentAuthorized(tx, intent, crmAuthorization)))
         return { claimed: false, denial: "ctwa_destination_not_authorized" };
       const denial = await this.ctwaConversionContextDenial(tx, log, intent);
       if (denial) return { claimed: false, denial };
@@ -2103,7 +2477,7 @@ export class ConversionEventsService {
         channel.connection.removedAt ||
         channel.connection.parserRelease.status !== "certified" ||
         !(await this.kommoLicenseAllows(tx)) ||
-        !(await ctwaIntentAuthorized(tx, intent)) ||
+        !(await ctwaIntentAuthorized(tx, intent, crmAuthorization)) ||
         (await this.ctwaConversionContextDenial(tx, log, intent))
       )
         return null;
@@ -2111,6 +2485,7 @@ export class ConversionEventsService {
         await this.connectionResolver!.resolveAuthorizedCtwaDestination(
           intent,
           tx,
+          crmAuthorization,
         );
       const deadline = performance.now() + KOMMO_DISPATCH_START_MS;
       const delivery = this.metaCapiAdapter.sendEvent(
@@ -2218,7 +2593,8 @@ export class ConversionEventsService {
       try {
         const route = await resolver.resolveCapiRoute({
           workspaceId: log.workspaceId,
-          ...(log.sourceTrigger === "kommo_stage"
+          ...(log.sourceTrigger === "kommo_stage" ||
+          log.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER
             ? { requireNormalized: true }
             : {}),
           metaAccountId: log.metaAccountId,
@@ -2256,6 +2632,7 @@ export class ConversionEventsService {
 
     if (
       log.sourceTrigger === "kommo_stage" ||
+      log.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER ||
       log.sourceTrigger === "inbound_webhook:meta_cloud" ||
       log.metaBusinessConnectionId ||
       log.metaConversionDestinationId
@@ -2272,7 +2649,9 @@ export class ConversionEventsService {
         routeError:
           log.sourceTrigger === "kommo_stage"
             ? "Rota Kommo autorizada indisponivel"
-            : "Rota Meta normalizada indisponivel",
+            : log.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER
+              ? "Rota Pipedrive autorizada indisponivel"
+              : "Rota Meta normalizada indisponivel",
         legacyShadowParity: null,
       };
     }

@@ -312,6 +312,12 @@ function makeHarness(initialUsers: UserState[] = []) {
     "kommoConversionRule",
     "kommoPipelineCatalog",
     "kommoConnection",
+    "pipedriveConversionDedupe",
+    "pipedriveWebhookEvent",
+    "pipedriveConversionRule",
+    "pipedriveStageCatalog",
+    "pipedrivePipelineCatalog",
+    "pipedriveConnection",
     "inboundWebhookReplayItem",
     "inboundWebhookReplayBatch",
     "inboundWebhookProductionItem",
@@ -1151,6 +1157,14 @@ describe("platform workspace access", () => {
     before("delete:kommoConnection", "delete:inboundWebhookChannelRoute");
     before("delete:kommoConnection", "delete:lead");
     before("delete:kommoConnection", "delete:metaConversionDestination");
+    // Pipedrive Restrict children before their parents.
+    before("delete:pipedriveConversionDedupe", "delete:pipedriveWebhookEvent");
+    before("delete:pipedriveConversionDedupe", "delete:conversionEventLog");
+    before("delete:pipedriveWebhookEvent", "delete:pipedriveConnection");
+    before("delete:pipedriveWebhookEvent", "delete:lead");
+    before("delete:pipedriveConversionRule", "delete:pipedriveConnection");
+    before("delete:pipedriveStageCatalog", "delete:pipedrivePipelineCatalog");
+    before("delete:pipedrivePipelineCatalog", "delete:pipedriveConnection");
   });
 
   it("removes populated Kommo Restrict rows once, scoped to the confirmed workspace", async () => {
@@ -1281,13 +1295,12 @@ describe("platform workspace access", () => {
     ).rejects.toThrow("synthetic child wipe failure");
 
     expect(harness.events[0]).toBe("lock:kommo-dispatch");
-    expect(harness.prisma.$queryRaw).toHaveBeenCalledTimes(2);
-    expect(
-      harness.prisma.$queryRaw.mock.invocationCallOrder[0],
-    ).toBeLessThan(harness.prisma.workspace.findUnique.mock.invocationCallOrder[0]);
-    expect(
-      harness.prisma.$queryRaw.mock.invocationCallOrder[1],
-    ).toBeLessThan(harness.prisma.workspace.findUnique.mock.invocationCallOrder[0]);
+    // Kommo and Pipedrive connection row locks, both before any read.
+    expect(harness.prisma.$queryRaw).toHaveBeenCalledTimes(3);
+    for (const order of harness.prisma.$queryRaw.mock.invocationCallOrder)
+      expect(order).toBeLessThan(
+        harness.prisma.workspace.findUnique.mock.invocationCallOrder[0],
+      );
     expect(harness.state.workspaces).toHaveLength(1);
     expect(harness.state.kommo.connection).toEqual([
       { id: "connection-delete", workspaceId: "workspace-delete" },

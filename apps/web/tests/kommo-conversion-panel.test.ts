@@ -387,7 +387,7 @@ describe("Kommo panel: credentials-only connection", () => {
     renderPanel({ connections: [conn({ allowedChannelRouteIds: [] })], allChannels: [] });
     expect(screen.getByText("Nenhum canal autorizado")).toBeTruthy();
     expect(
-      screen.getByText("Nenhum canal com rota de conversão válida foi encontrado ainda."),
+      screen.getByText("Nenhum número de WhatsApp foi encontrado neste workspace ainda."),
     ).toBeTruthy();
   });
 
@@ -1014,6 +1014,60 @@ describe("Kommo panel: unknown operations and ordering", () => {
         (screen.getByRole("button", { name: "Pausar conexão Kommo principal" }) as HTMLButtonElement).disabled,
       ).toBe(false),
     );
+  });
+
+  it("lists numbers of any provider, authorizes an inheriting number by its channel id and explains the blocked ones", async () => {
+    const number = (id: string, patch: Record<string, unknown>) => ({
+      ...channel,
+      id,
+      providerChannelId: `provider_${id}`,
+      routes: [],
+      ...patch,
+      readiness: {
+        ...channel.readiness,
+        routeCount: 0,
+        validRouteCount: 0,
+        ...((patch.readiness as object) ?? {}),
+      },
+    });
+    const setChannelBindingsAction = vi
+      .fn()
+      .mockResolvedValue(ok(conn({ allowedChannelRouteIds: ["channel_inherit"] })));
+    renderPanel({
+      connections: [conn({ allowedChannelRouteIds: [] })],
+      setChannelBindingsAction,
+      allChannels: [
+        channel,
+        number("channel_inherit", {
+          channelName: "Cloud API",
+          readiness: {
+            crmDestinationReadiness: {
+              status: "verified",
+              reason: "verified_workspace_destination",
+            },
+          },
+        }),
+        number("channel_paused", { channelName: "Pausado", status: "paused" }),
+        number("channel_no_meta", { channelName: "Sem Meta" }),
+      ] as never,
+    });
+
+    const box = (name: RegExp) => screen.getByRole("checkbox", { name }) as HTMLInputElement;
+    expect(box(/Comercial/).disabled).toBe(false);
+    expect(box(/Cloud API/).disabled).toBe(false);
+    expect(box(/Pausado/).disabled).toBe(true);
+    expect(box(/Sem Meta/).disabled).toBe(true);
+    expect(screen.getByText(/Número de WhatsApp pausado/)).toBeTruthy();
+    expect(screen.getByText(/ainda não tem destino Meta verificado/)).toBeTruthy();
+
+    fireEvent.click(box(/Cloud API/));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Salvar canais" }));
+    });
+    const formData = (setChannelBindingsAction.mock.calls[0] as [FormData])[0];
+    expect(JSON.parse(String(formData.get("payload")))).toEqual({
+      allowedChannelRouteIds: ["channel_inherit"],
+    });
   });
 
   it("channel bindings save only with a confirmed state", async () => {

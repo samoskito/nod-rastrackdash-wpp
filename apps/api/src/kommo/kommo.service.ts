@@ -7,10 +7,19 @@ import {
   OnModuleDestroy,
 } from "@nestjs/common";
 import {
-  authorizedKommoRoute,
+  KOMMO_CTWA_PROCESSING_MODE,
+  kommoCtwaIntent,
   kommoPublicationAuthorized,
+  type KommoCtwaPublicationIntent,
   type KommoPublicationIntent,
 } from "./kommo-publication-policy";
+import {
+  crmCtwaChannelBound,
+  crmLeadCtwaProof,
+  crmLeadRoutes,
+  inspectCrmBinding,
+} from "../crm-channels/crm-channel-policy";
+import type { AuthorizedCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
 import { Prisma } from "@prisma/client";
 import {
   createCipheriv,
@@ -23,6 +32,7 @@ import {
 import {
   conversionEventCarriesValue,
   conversionEventRequiresValue,
+  kommoChannelBindingMessages,
   kommoConversionRuleCreateInputSchema,
   type ConversionEventNameDto,
   type KommoConnectionCreateInputDto,
@@ -50,7 +60,8 @@ type AuditActorType = "user" | "platform_admin";
 type ProvenKommoLead = {
   id: string;
   phoneHash: string;
-  whatsappInstanceId: string;
+  /** Uazapi lead: its WhatsApp instance; official-API number lead: null. */
+  whatsappInstanceId: string | null;
   campaignId: string | null;
   adSetId: string | null;
   adId: string;
@@ -1098,16 +1109,25 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
               result.status = "blocked";
               result.errorCode = value.error;
             } else {
-              const conversion = await this.materialize(
-                event,
-                event.connection,
-                rule,
-                resolved.lead,
-                resolved.route,
-                resolved.destination,
-                value,
-                tx,
-              );
+              const conversion = resolved.ctwa
+                ? await this.materializeCtwa(
+                    tx,
+                    event,
+                    rule,
+                    resolved.lead,
+                    resolved.ctwa,
+                    value,
+                  )
+                : await this.materialize(
+                    event,
+                    event.connection,
+                    rule,
+                    resolved.lead,
+                    resolved.route,
+                    resolved.destination,
+                    value,
+                    tx,
+                  );
               if (conversion.status === "license_locked")
                 throw new Error("kommo_license_locked");
               const recorded = conversion as {
@@ -1280,7 +1300,9 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
           connectionId: live.id,
           routeId: route.id,
           channelId: route.channel.id,
-          whatsappInstanceId: lead.whatsappInstanceId,
+          // Uazapi: the lead's instance (matched by the channel policy);
+          // official-API numbers have none.
+          whatsappInstanceId: route.channel.whatsappInstanceId ?? null,
           destinationId: route.metaConversionDestinationId,
           pixelId: route.metaConversionDestination.pixelId,
           pageId: route.metaConversionDestination.pageId,
@@ -1293,7 +1315,9 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
             id: lead.id,
             workspaceId: event.workspaceId,
             phoneHash: lead.phoneHash,
-            whatsappInstanceId: intent.whatsappInstanceId,
+            ...(intent.whatsappInstanceId
+              ? { whatsappInstanceId: intent.whatsappInstanceId }
+              : {}),
           },
         });
         const currentDestination = await this.resolveLeadDestination(
@@ -1433,10 +1457,289 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * CTWA lead: canonical conversion carrying the proven page/pixel destination
+   * of its number (Meta CAPI needs only pixel + page + ctwa_clid); the
+   * canonical CTWA sender delivers it. Runs inside the process transaction,
+   * under the same fences as the route path.
+   */
+  private async materializeCtwa(
+    tx: any,
+    event: any,
+    rule: any,
+    lead: any,
+    proof: AuthorizedCtwaDestination,
+    value: { cents: number | null; currency: string | null },
+  ) {
+    if (!(await this.licenseAllows()))
+      return { status: "license_locked" as const };
+    const dedupeKey = `kommo:${event.workspaceId}:${event.verifiedAccountId}:${event.dealId}:${rule.eventName}`;
+    const live = await this.lockConnection(
+      tx,
+      event.workspaceId,
+      event.connectionId,
+    );
+    await tx.$queryRaw`SELECT "id" FROM "KommoWebhookEvent" WHERE "id" = ${event.id} AND "workspaceId" = ${event.workspaceId} FOR UPDATE`;
+    const active = await tx.kommoWebhookEvent.findFirst({
+      where: this.leaseWhere(event),
+    });
+    if (!active) throw new Error("kommo_processing_lease_lost");
+    if (
+      !this.eventMatchesConnection(event, live) ||
+      live.status !== "active" ||
+      !live.credentialHealthy
+    )
+      throw new Error("credential_generation_mismatch");
+    const stage = await tx.kommoPipelineCatalog.findUnique({
+      where: {
+        connectionId_pipelineId_statusId: {
+          connectionId: live.id,
+          pipelineId: event.pipelineId,
+          statusId: event.statusId,
+        },
+      },
+    });
+    const liveRule = await tx.kommoConversionRule.findFirst({
+      where: {
+        id: rule.id,
+        workspaceId: event.workspaceId,
+        connectionId: live.id,
+        active: true,
+        mode: "production",
+        updatedAt: rule.updatedAt,
+      },
+    });
+    if (!this.catalogFresh(live) || !stage?.available || !liveRule)
+      throw new Error("trigger_authorization_changed");
+    const captured = await tx.lead.findFirst({
+      where: {
+        id: lead.id,
+        workspaceId: event.workspaceId,
+        phoneHash: lead.phoneHash,
+      },
+    });
+    if (!captured || !lead.ctwaClid || captured.ctwaClid !== lead.ctwaClid)
+      throw new Error("lead_authorization_changed");
+    // Re-checked on the locked connection row: an unbind committed after the
+    // lead was resolved must prevent the conversion, as on the route path.
+    if (
+      proof.workspaceId !== event.workspaceId ||
+      !(await crmCtwaChannelBound(
+        tx,
+        event.workspaceId,
+        live.allowedChannelRouteIds ?? [],
+        proof.channelId,
+      ))
+    )
+      throw new Error("channel_authorization_changed");
+    const existing = await tx.kommoConversionDedupe.findUnique({
+      where: {
+        workspaceId_verifiedAccountId_dealId_eventName: {
+          workspaceId: event.workspaceId,
+          verifiedAccountId: event.verifiedAccountId,
+          dealId: event.dealId,
+          eventName: rule.eventName,
+        },
+      },
+    });
+    if (existing?.conversionEventLogId)
+      return {
+        conversionEventLogId: existing.conversionEventLogId,
+        status: "duplicate",
+        deliveryStatus: existing.publicationStatus,
+      };
+    // All transactional authorization reads have completed: last decision
+    // before the first Kommo materialization write (same as the route path).
+    await this.assertLicenseAllows();
+    const fence = await tx.kommoConversionDedupe.create({
+      data: {
+        workspaceId: event.workspaceId,
+        verifiedAccountId: event.verifiedAccountId,
+        dealId: event.dealId,
+        eventName: rule.eventName,
+        sourceEventId: event.id,
+      },
+    });
+    const priorLog = await tx.conversionEventLog.findUnique({
+      where: { dedupeKey },
+    });
+    if (priorLog) throw new Error("semantic_identity_conflict");
+    // recordExternalConversion re-verifies the destination (ctwaIntentAuthorized).
+    const recorded = await this.conversions.recordExternalConversion(
+      {
+        ctwaDestination: proof,
+        workspaceId: event.workspaceId,
+        sourceEventId: event.id,
+        sourceTrigger: "kommo_stage",
+        eventName: rule.eventName as ConversionEventNameDto,
+        eventId: dedupeKey,
+        dedupeKey,
+        leadId: lead.id,
+        phoneHash: lead.phoneHash,
+        businessSource: "paid",
+        adId: null,
+        ctwaClid: lead.ctwaClid,
+        valueCents: value.cents,
+        valueSource: value.cents === null ? null : "actual",
+        currency: value.currency,
+        contentName: rule.contentName,
+        eventOccurredAt: event.eventOccurredAt,
+        sourcePayload: {
+          provider: "kommo",
+          processingMode: KOMMO_CTWA_PROCESSING_MODE,
+          channelId: proof.channelId,
+          connectionId: proof.connectionId,
+          kommoConnectionId: live.id,
+          verifiedAccountId: event.verifiedAccountId,
+          dealId: event.dealId,
+          pipelineId: event.pipelineId,
+          statusId: event.statusId,
+          oldStatusId: event.oldStatusId,
+          eventPriceCents: event.eventPriceCents,
+          eventPricePresent: event.eventPricePresent,
+        },
+      },
+      tx,
+    );
+    // recordExternalConversion has its own pre-log barrier. Recheck once more
+    // before publishing the intent; a failure rolls the transaction back.
+    await this.assertLicenseAllows();
+    const intent: KommoCtwaPublicationIntent = {
+      kind: "ctwa_destination",
+      connectionId: live.id,
+      channelId: proof.channelId,
+      inboundConnectionId: proof.connectionId,
+      destinationId: proof.destinationId,
+      eventId: dedupeKey,
+    };
+    await tx.kommoConversionDedupe.update({
+      where: { id: fence.id },
+      data: {
+        conversionEventLogId: recorded.conversionEventLogId,
+        publicationIntent: intent,
+        publicationStatus:
+          recorded.deliveryStatus === "ready_to_send"
+            ? "publication_pending"
+            : "materialized",
+        publicationNextAttemptAt: this.now(),
+      },
+    });
+    return recorded;
+  }
+
+  /**
+   * Page/pixel conversions are delivered by the canonical CTWA sender, whose
+   * own ready_to_send -> dispatching claim is the single-send fence. The
+   * outbox only enqueues and mirrors the conversion log state.
+   */
+  private async publishCtwaIntent(
+    intent: any,
+    leaseWhere: () => Record<string, unknown>,
+    now: Date,
+  ): Promise<string> {
+    const settle = async (status: string, data: Record<string, unknown>) => {
+      const written = await this.prisma.kommoConversionDedupe.updateMany({
+        where: {
+          ...leaseWhere(),
+          publicationStatus: { in: ["publication_pending", "queued"] },
+        },
+        data: {
+          publicationStatus: status,
+          publicationLeaseToken: null,
+          publicationLeaseExpiresAt: null,
+          ...data,
+        },
+      });
+      if (written.count) return status;
+      const current = await this.prisma.kommoConversionDedupe.findFirst({
+        where: { id: intent.id, workspaceId: intent.workspaceId },
+      });
+      return current?.publicationStatus ?? status;
+    };
+    try {
+      const log = await this.prisma.conversionEventLog.findFirst({
+        where: {
+          id: intent.conversionEventLogId,
+          workspaceId: intent.workspaceId,
+          sourceTrigger: "kommo_stage",
+        },
+        select: { status: true },
+      });
+      let status: string;
+      if (log?.status === "sent") status = "sent";
+      else if (log?.status === "ready_to_send") {
+        if (!(await this.licenseAllows())) {
+          await this.releasePublicationLease(
+            intent,
+            String(leaseWhere().publicationLeaseToken),
+          );
+          return intent.publicationStatus;
+        }
+        await this.conversionQueue.retrySend(
+          intent.conversionEventLogId,
+          intent.workspaceId,
+        );
+        status = "queued";
+      } else if (
+        log?.status === "dispatching" ||
+        log?.status === "delivery_unknown"
+      )
+        status = "delivery_unknown";
+      else status = "publication_failed";
+      return await settle(status, {
+        publicationErrorCode:
+          status === "delivery_unknown"
+            ? KOMMO_DELIVERY_UNKNOWN
+            : status === "publication_failed"
+              ? "sender_not_ready"
+              : null,
+        publicationNextAttemptAt: new Date(now.getTime() + 30_000),
+      });
+    } catch {
+      const attempts = intent.publicationAttempts + 1;
+      return settle(
+        attempts >= this.maxAttempts
+          ? "publication_failed"
+          : "publication_pending",
+        {
+          publicationAttempts: attempts,
+          publicationErrorCode: "conversion_enqueue_failed",
+          publicationNextAttemptAt: new Date(
+            now.getTime() + Math.min(30_000 * 2 ** attempts, 900_000),
+          ),
+        },
+      );
+    }
+  }
+
   private async publishIntent(intent: any): Promise<string> {
     if (!intent?.publicationIntent || !intent.conversionEventLogId)
       throw new Error("publication_intent_missing");
     if (!(await this.licenseAllows())) return intent.publicationStatus;
+    if (
+      kommoCtwaIntent(intent.publicationIntent) &&
+      intent.publicationStatus === "delivery_unknown"
+    ) {
+      // Only the canonical CTWA sender's confirmed delivery lifts the fence.
+      const log = await this.prisma.conversionEventLog.findFirst({
+        where: {
+          id: intent.conversionEventLogId,
+          workspaceId: intent.workspaceId,
+          sourceTrigger: "kommo_stage",
+        },
+        select: { status: true },
+      });
+      if (log?.status !== "sent") return "delivery_unknown";
+      await this.prisma.kommoConversionDedupe.updateMany({
+        where: {
+          id: intent.id,
+          workspaceId: intent.workspaceId,
+          publicationStatus: "delivery_unknown",
+        },
+        data: { publicationStatus: "sent", publicationErrorCode: null },
+      });
+      return "sent";
+    }
     if (intent.publicationStatus === "delivery_unknown") {
       const outcome = await this.conversions.prepareKommoSenderRetry(
         intent.conversionEventLogId,
@@ -1495,6 +1798,8 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       publicationLeaseToken: token,
       publicationLeaseExpiresAt: { gt: this.now() },
     });
+    if (kommoCtwaIntent(intent.publicationIntent))
+      return this.publishCtwaIntent(intent, leaseWhere, now);
     try {
       const senderStatus = await this.conversions.prepareKommoSenderRetry(
         intent.conversionEventLogId,
@@ -1616,7 +1921,13 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     dealId: string,
     workspaceId: string,
   ): Promise<
-    | { lead: ProvenKommoLead; route: any; destination: LeadDestination }
+    | {
+        lead: ProvenKommoLead;
+        route: any;
+        destination: LeadDestination;
+        ctwa?: undefined;
+      }
+    | { lead: any; ctwa: AuthorizedCtwaDestination; route?: undefined }
     | { error: string }
   > {
     let token: string;
@@ -1684,43 +1995,48 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!lead) return { error: "workspace_lead_not_found" };
-    if (!lead.whatsappInstanceId || !lead.adId || !lead.ctwaClid)
-      return { error: "lead_channel_or_attribution_unproven" };
-    const provenLead: ProvenKommoLead = {
-      ...lead,
-      whatsappInstanceId: lead.whatsappInstanceId,
-      adId: lead.adId,
-      ctwaClid: lead.ctwaClid,
-    };
-    const destination = await this.resolveLeadDestination(
-      this.prisma,
-      workspaceId,
-      provenLead,
-    );
-    if (!destination) return { error: "lead_destination_unproven" };
-    const routes = [];
-    for (const routeId of connection.allowedChannelRouteIds ?? []) {
-      const route = await authorizedKommoRoute(
+    const bindingIds: string[] = connection.allowedChannelRouteIds ?? [];
+    const crmLead = { ...lead, workspaceId };
+    // Ad-attributed path (unchanged for Uazapi leads): a route binding of the
+    // lead's number (Uazapi by its WhatsApp instance, official-API numbers by
+    // the materialized entry receipt) whose Meta destination is the ad's.
+    let adError = "lead_channel_or_attribution_unproven";
+    if (lead.adId && lead.ctwaClid) {
+      const provenLead: ProvenKommoLead = {
+        ...lead,
+        adId: lead.adId,
+        ctwaClid: lead.ctwaClid,
+      };
+      const destination = await this.resolveLeadDestination(
         this.prisma,
         workspaceId,
-        routeId,
+        provenLead,
       );
-      if (
-        route &&
-        route.channel.whatsappInstanceId === provenLead.whatsappInstanceId &&
-        route.metaReportingAccountId === destination.reportingAccountId &&
-        route.metaConversionDestinationId ===
-          destination.conversionDestinationId
-      )
-        routes.push(route);
+      if (destination) {
+        const routes = (
+          await crmLeadRoutes(this.prisma, crmLead, bindingIds)
+        ).filter(
+          (route: any) =>
+            route.metaReportingAccountId === destination.reportingAccountId &&
+            route.metaConversionDestinationId ===
+              destination.conversionDestinationId,
+        );
+        if (routes.length > 1) return { error: "lead_channel_route_ambiguous" };
+        if (routes.length === 1)
+          return { lead: provenLead, route: routes[0], destination };
+      }
+      // Same refusal codes as the SaaS for an ad lead without a matching
+      // route (any provider: UAZAPI by instance, official API by receipt).
+      adError = destination
+        ? "lead_channel_route_unauthorized"
+        : "lead_destination_unproven";
     }
-    if (routes.length !== 1)
-      return {
-        error: routes.length
-          ? "lead_channel_route_ambiguous"
-          : "lead_channel_route_unauthorized",
-      };
-    return { lead: provenLead, route: routes[0], destination };
+    // CTWA path (as the SaaS): Meta CAPI needs only pixel + page + ctwa_clid.
+    // Without ctwa_clid there is no proof and nothing is sent. A number bound
+    // by its channel id proves the verified unique workspace page/pixel.
+    const ctwa = await crmLeadCtwaProof(this.prisma, crmLead, bindingIds);
+    if (ctwa) return { lead: crmLead, ctwa };
+    return { error: adError };
   }
 
   private async resolveLeadDestination(
@@ -1728,7 +2044,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     workspaceId: string,
     lead: {
       phoneHash: string;
-      whatsappInstanceId: string;
+      whatsappInstanceId: string | null;
       adId: string;
     },
   ): Promise<LeadDestination | null> {
@@ -2131,9 +2447,18 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     workspaceId: string,
     routeIds: string[],
   ) {
-    for (const routeId of routeIds)
-      if (!(await authorizedKommoRoute(client, workspaceId, routeId)))
-        throw new BadRequestException("Canal ou rota indisponivel");
+    // Any production WhatsApp number of the workspace (any provider) with a
+    // verified Meta destination (shared CRM channel policy, as the SaaS); the
+    // first failing requirement is reported in plain language.
+    for (const bindingId of routeIds) {
+      const binding = await inspectCrmBinding(client, workspaceId, bindingId);
+      if (!binding.ok)
+        throw new BadRequestException({
+          statusCode: 400,
+          code: `kommo_channel_${binding.reason}`,
+          message: kommoChannelBindingMessages[binding.reason],
+        });
+    }
   }
   async setChannelBindings(
     workspaceId: string,

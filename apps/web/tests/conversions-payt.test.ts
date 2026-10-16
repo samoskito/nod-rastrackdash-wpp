@@ -80,7 +80,7 @@ describe("Payt: origem e eventos", () => {
         numbers,
         connections,
         capabilities: capabilitiesWithPayt,
-        crm: { kommo: false },
+        crm: { kommo: false, pipedrive: false },
       }),
     ).toContain("automation_payt");
     // Um número Gupshup basta: a venda da Payt roda em qualquer WhatsApp.
@@ -89,19 +89,19 @@ describe("Payt: origem e eventos", () => {
         numbers: numbers.filter((item) => item.provider === "gupshup"),
         connections: connections.filter((item) => item.provider === "gupshup"),
         capabilities: capabilitiesWithPayt,
-        crm: { kommo: false },
+        crm: { kommo: false, pipedrive: false },
       }),
     ).toEqual(["automation_payt"]);
     // Sem a origem nas capacidades (ou sem número), nada de Payt.
     expect(
-      offeredRuleOrigins({ numbers, connections, capabilities, crm: { kommo: false } }),
+      offeredRuleOrigins({ numbers, connections, capabilities, crm: { kommo: false, pipedrive: false } }),
     ).not.toContain("automation_payt");
     expect(
       offeredRuleOrigins({
         numbers: [],
         connections: [],
         capabilities: capabilitiesWithPayt,
-        crm: { kommo: false },
+        crm: { kommo: false, pipedrive: false },
       }),
     ).toEqual([]);
   });

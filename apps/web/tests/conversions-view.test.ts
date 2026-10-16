@@ -1,6 +1,7 @@
 import { providerConversionRuleIdempotentCreateInputSchema } from "@wpptrack/shared";
 import { describe, expect, it } from "vitest";
 import type { KommoConnectionDetailDto } from "../src/app/(app)/integrations/kommo-actions";
+import type { PipedriveConnectionDetailDto } from "../src/app/(app)/integrations/pipedrive-actions";
 import {
   buildCrmRuleRows,
   buildProviderRuleRows,
@@ -265,7 +266,7 @@ describe("conversions view: CRM rules, sorting and filters", () => {
       },
     ],
   } as unknown as KommoConnectionDetailDto;
-  const crmRows = buildCrmRuleRows({ kommo: [kommo] }, numbers);
+  const crmRows = buildCrmRuleRows({ kommo: [kommo], pipedrive: [] }, numbers);
 
   it("lists CRM rules read-only, with authorized numbers and a manage link", () => {
     expect(crmRows[0]).toMatchObject({
@@ -277,6 +278,109 @@ describe("conversions view: CRM rules, sorting and filters", () => {
       manageHref: "/integrations?abrir=kommo",
       status: "observation",
     });
+  });
+
+  const pipedrive = {
+    id: "pipedrive_1",
+    workspaceId: "workspace_1",
+    displayName: "Pipedrive Comercial",
+    status: "active",
+    verifiedAccountId: "account_1",
+    accountSubdomain: "loja",
+    accountOrigin: "https://loja.pipedrive.com",
+    allowedChannelRouteIds: ["route_ch_02"],
+    credentialHealthy: true,
+    catalogState: "fresh",
+    catalogRefreshedAt: at,
+    lastErrorCode: null,
+    createdAt: at,
+    updatedAt: at,
+    pipelines: [
+      {
+        id: "pd1",
+        name: "Vendas",
+        sort: 1,
+        stages: [{ id: "st1", name: "Proposta enviada", sort: 1 }],
+      },
+    ],
+    rules: [
+      {
+        id: "pr_1",
+        connectionId: "pipedrive_1",
+        name: "Proposta",
+        trigger: "stage_change",
+        pipelineId: "pd1",
+        stageId: "st1",
+        eventName: "InitiateCheckout",
+        mode: "production",
+        productionActivatedAt: at,
+        valueMode: "deal",
+        fixedValueCents: null,
+        currency: "BRL",
+        contentName: null,
+        active: true,
+        createdAt: at,
+        updatedAt: at,
+      },
+      {
+        id: "pr_2",
+        connectionId: "pipedrive_1",
+        name: "Negócio ganho",
+        trigger: "deal_won",
+        pipelineId: "pd1",
+        stageId: null,
+        eventName: "Purchase",
+        mode: "observation",
+        productionActivatedAt: null,
+        valueMode: "deal",
+        fixedValueCents: null,
+        currency: "BRL",
+        contentName: null,
+        active: false,
+        createdAt: at,
+        updatedAt: at,
+      },
+    ],
+  } as unknown as PipedriveConnectionDetailDto;
+
+  it("lists Pipedrive rules read-only, with the stage, the won deal and a manage link to the hub", () => {
+    const rows = buildCrmRuleRows({ kommo: [], pipedrive: [pipedrive] }, numbers);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      kind: "crm",
+      origin: "pipedrive",
+      originLabel: "Etapa ou negócio ganho no Pipedrive",
+      platformLabel: "Pipedrive Comercial",
+      triggerDetail: "Etapa “Proposta enviada” em Vendas",
+      scopeLabel: "Atendimento",
+      numberIds: ["ch_02"],
+      manageHref: "/integrations?abrir=pipedrive",
+      status: "production",
+      logo: expect.objectContaining({ src: "/integrations/pipedrive.svg" }),
+    });
+    expect(rows[1]).toMatchObject({
+      triggerDetail: "Negócio ganho",
+      status: "paused",
+      eventName: "Purchase",
+    });
+  });
+
+  it("pauses the Pipedrive rules of a paused connection", () => {
+    const rows = buildCrmRuleRows(
+      { kommo: [], pipedrive: [{ ...pipedrive, status: "paused" }] },
+      numbers,
+    );
+    expect(rows.map((row) => row.status)).toEqual(["paused", "paused"]);
+  });
+
+  it("offers Pipedrive in Nova regra only with a connection, pointing to the hub", () => {
+    expect(
+      offeredRuleOrigins({ numbers, connections, capabilities: null, crm: { kommo: false, pipedrive: true } }),
+    ).toEqual(["pipedrive"]);
+    expect(
+      offeredRuleOrigins({ numbers, connections, capabilities: null, crm: { kommo: false, pipedrive: false } }),
+    ).toEqual([]);
   });
 
   it("filters by origin, number, event and status", () => {
@@ -330,7 +434,7 @@ describe("conversions view: CRM rules, sorting and filters", () => {
 describe("conversions view: origins offered in Nova regra", () => {
   it("offers only origins the capabilities endpoint supports and an active integration backs", () => {
     expect(
-      offeredRuleOrigins({ numbers, connections, capabilities, crm: { kommo: true } }),
+      offeredRuleOrigins({ numbers, connections, capabilities, crm: { kommo: true, pipedrive: false } }),
     ).toEqual([
       "message_phrase",
       "whatsapp_label",
@@ -345,11 +449,11 @@ describe("conversions view: origins offered in Nova regra", () => {
         numbers: numbers.filter((item) => item.provider === "gupshup"),
         connections: connections.filter((item) => item.provider === "gupshup"),
         capabilities,
-        crm: { kommo: false },
+        crm: { kommo: false, pipedrive: false },
       }),
     ).toEqual([]);
     expect(
-      offeredRuleOrigins({ numbers: [], connections: [], capabilities, crm: { kommo: true } }),
+      offeredRuleOrigins({ numbers: [], connections: [], capabilities, crm: { kommo: true, pipedrive: false } }),
     ).toEqual(["kommo"]);
   });
 
@@ -372,7 +476,7 @@ describe("conversions view: origins offered in Nova regra", () => {
         numbers: uazapiNumbers,
         connections: uazapiConnections,
         capabilities: narrowed,
-        crm: { kommo: false },
+        crm: { kommo: false, pipedrive: false },
       }),
     ).not.toContain("structured_catalog");
     expect(
@@ -380,7 +484,7 @@ describe("conversions view: origins offered in Nova regra", () => {
         numbers: uazapiNumbers,
         connections: uazapiConnections,
         capabilities,
-        crm: { kommo: false },
+        crm: { kommo: false, pipedrive: false },
       }),
     ).toContain("structured_catalog");
     expect(
@@ -393,7 +497,7 @@ describe("conversions view: origins offered in Nova regra", () => {
 
   it("offers only the CRM pointer without the capabilities answer", () => {
     expect(
-      offeredRuleOrigins({ numbers, connections, capabilities: null, crm: { kommo: true } }),
+      offeredRuleOrigins({ numbers, connections, capabilities: null, crm: { kommo: true, pipedrive: false } }),
     ).toEqual(["kommo"]);
   });
 

@@ -9,6 +9,11 @@ import {
 } from "../src/app/(app)/integrations/meta-assets-form";
 import { resolveMetaStatus } from "../src/app/(app)/integrations/meta-connection-state";
 import { metaReportingAccountsForBusiness } from "../src/app/(app)/integrations/meta-reporting-accounts-form";
+import {
+  baseConnection,
+  baseRule,
+  snapshotOf,
+} from "./support/pipedrive-fixtures";
 
 vi.mock("next/navigation", () => ({
   redirect: () => undefined,
@@ -167,6 +172,7 @@ describe("integrations route", () => {
         "meta",
         "nod_api",
         "payt",
+        "pipedrive",
         "umbler",
         "uazapi_byo",
         "waha",
@@ -175,7 +181,6 @@ describe("integrations route", () => {
     );
     for (const absent of [
       "unnichat",
-      "pipedrive",
       "gohighlevel",
       "guimo",
       "whatsapp-qr",
@@ -902,6 +907,148 @@ describe("integrations route", () => {
     expect(html).toContain('aria-label="Conectar Kommo"');
     expect(html).not.toContain("Somente o dono da conta conecta CRMs");
     expect(html).not.toContain("Licença bloqueada: criar, editar");
+  });
+
+  const activeLicense = {
+    status: "active",
+    softLock: false,
+    hardLock: false,
+    usable: true,
+    expiresAt: null,
+    validUntil: null,
+    source: "cache",
+  };
+  const blockedLicense = {
+    status: "blocked",
+    softLock: true,
+    hardLock: true,
+    usable: false,
+    expiresAt: null,
+    validUntil: null,
+    source: "cache",
+    locked: true,
+    lockReason: "revoked",
+  };
+
+  it("offers Pipedrive in the hub CRM tab for the owner, always available (no pilot gate)", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/auth/me": { user: { id: "user_owner" } },
+        "/workspaces/workspace_current/kommo/connections": [],
+        "/workspaces/workspace_current/pipedrive/connections": [],
+        "/license-client/status": activeLicense,
+      },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html.match(/data-testid="pipedrive-crm-manager"/g)).toHaveLength(1);
+    expect(html).toContain('id="crm-configurado-pipedrive"');
+    expect(html).toContain('data-integration="pipedrive" data-state="available"');
+    expect(html).toContain('aria-label="Conectar Pipedrive"');
+    expect(html).toContain('src="/integrations/pipedrive.svg"');
+    expect(html).toContain("Nova conexão");
+    expect(html).not.toContain("0 conexão(ões)");
+    expect(html).not.toContain("Somente o dono da conta conecta CRMs");
+    expect(html).not.toContain("Licença bloqueada: criar, editar, pausar, gerar URL");
+  });
+
+  it("lists an existing Pipedrive connection with its rule and never renders the token", async () => {
+    const snapshot = snapshotOf(baseConnection);
+    const base = "/workspaces/workspace_current/pipedrive/connections";
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/auth/me": { user: { id: "user_owner" } },
+        "/workspaces/workspace_current/kommo/connections": [],
+        [base]: [{ ...snapshot, workspaceId: "workspace_current" }],
+        [`${base}/${baseConnection.id}`]: {
+          ...snapshot,
+          workspaceId: "workspace_current",
+        },
+        [`${base}/${baseConnection.id}/rules`]: [baseRule],
+        "/license-client/status": activeLicense,
+      },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('data-integration="pipedrive" data-state="active"');
+    expect(html).toContain("Pipedrive principal");
+    expect(html).toContain("Ganho do negócio");
+    expect(html).toContain("Subdomínio verificado: suaempresa");
+    // The token field is write-only: it never comes back with a value.
+    expect(html).not.toMatch(/name="apiToken"[^>]*value=/);
+    expect(html).not.toMatch(/value="[^"]*"[^>]*name="apiToken"/);
+  });
+
+  it("shows a load failure of the Pipedrive connections instead of an empty CRM", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/auth/me": { user: { id: "user_owner" } },
+        "/workspaces/workspace_current/kommo/connections": [],
+        "/license-client/status": activeLicense,
+      },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Não foi possível carregar as conexões Pipedrive");
+    expect(html).not.toContain("Nenhuma conexão Pipedrive.");
+  });
+
+  it("shows the license lock inside the Pipedrive modal when the license is blocked", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/auth/me": { user: { id: "user_owner" } },
+        "/workspaces/workspace_current/kommo/connections": [],
+        "/workspaces/workspace_current/pipedrive/connections": [],
+        "/license-client/status": blockedLicense,
+      },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Licença bloqueada: criar, editar, pausar, gerar URL");
+  });
+
+  it("opens the Pipedrive modal from ?abrir=pipedrive and shows members the owner-only note", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/auth/me": { user: { id: "user_owner" } },
+        "/workspaces/workspace_current/kommo/connections": [],
+        "/workspaces/workspace_current/pipedrive/connections": [],
+      },
+    });
+
+    const element = await IntegrationsPage({
+      searchParams: Promise.resolve({ abrir: "pipedrive" }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toMatch(
+      /<div class="app-modal-layer" data-state="open"><div class="app-modal-backdrop"[^>]*><\/div><div class="app-modal app-modal-wide"[^>]*id="integration-modal-pipedrive"/,
+    );
+    expect(html).toMatch(/id="integrations-tab-crm"[^>]*aria-selected="true"/);
+
+    vi.restoreAllMocks();
+    mockWave7IntegrationsFetch({
+      canManage: false,
+      extraResponses: { "/auth/me": { user: { id: "user_member" } } },
+    });
+    const memberHtml = renderToStaticMarkup(
+      createElement("div", null, await IntegrationsPage({})),
+    );
+    expect(memberHtml).toContain("Somente o dono da conta conecta CRMs");
+    expect(memberHtml).not.toContain('data-testid="pipedrive-crm-manager"');
   });
 
   it("shows the license lock inside the Kommo modal when the license is blocked", async () => {

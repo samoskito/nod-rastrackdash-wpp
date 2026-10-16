@@ -249,7 +249,7 @@ describe("ConversionEvents CTWA page/pixel path", () => {
       currency: "BRL",
       eventOccurredAt: new Date(Date.now() - 60_000),
     };
-    // CRM stage (Kommo/Guimoo/Pipedrive style) with ctwa_clid, no ad id and no
+    // CRM stage (Kommo/Pipedrive style) with ctwa_clid, no ad id and no
     // authorized page/pixel: pending, exactly as the SaaS (nothing sent).
     const crm = await h.service.recordExternalConversion({
       ...base,

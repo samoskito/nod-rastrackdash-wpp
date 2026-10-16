@@ -42,7 +42,7 @@ const snapshot: IntegrationHubSnapshot = {
   },
   whatsapp: { loaded: true, connections: [], legacyUazapiInstances: 0 },
   payt: { loaded: true, ruleCount: 0, activeRuleCount: 0 },
-  crm: { kommo: { loadState: "real", statuses: ["active"] } },
+  crm: { kommo: { loadState: "real", statuses: ["active"] }, pipedrive: { loadState: "empty", statuses: [] } },
   meta: { connected: true, needsAttention: false, statusLabel: "Conectada" },
 };
 
