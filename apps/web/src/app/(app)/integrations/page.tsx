@@ -1683,6 +1683,7 @@ export default async function IntegrationsPage({
     umbler: inboundPanel("umbler"),
     gupshup: inboundPanel("gupshup"),
     data_crazy: inboundPanel("data_crazy"),
+    unnichat: inboundPanel("unnichat"),
     payt: paytPanel,
     meta: metaPanel,
     kommo:
@@ -1879,6 +1880,7 @@ export default async function IntegrationsPage({
           umbler: [rulesLink],
           gupshup: [rulesLink],
           data_crazy: [rulesLink],
+          unnichat: [rulesLink],
           payt: [rulesLink],
         }}
         tabIntro={{

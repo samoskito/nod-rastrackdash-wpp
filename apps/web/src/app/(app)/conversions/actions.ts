@@ -169,6 +169,10 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado.",
   "Escolha a conexao de WhatsApp dos numeros desta regra":
     "Escolha números de uma conexão de WhatsApp para esta regra.",
+  "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal":
+    "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal.",
+  "Conexões Unnichat exigem o número de WhatsApp do cliente":
+    "As conexões do Unnichat precisam do número de WhatsApp do cliente.",
   "Sem permissao para gerenciar integracoes": noPermissionMessage,
   "Este workspace tem canais demais para unificar regras com segurança; mantenha as regras por número":
     "Este workspace tem canais demais para unificar regras com segurança. Mantenha as regras por número.",

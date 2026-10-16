@@ -28,6 +28,7 @@ import { NumbersWithoutRules } from "./numbers-without-rules";
 import { MessagePhraseFields } from "./message-phrase-fields";
 import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
+import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
 import type { ConversionScreenActionResult } from "./actions";
 import {
@@ -333,7 +334,9 @@ export function NewRuleFlow({
               <span className="field-label">
                 {draft?.origin === "automation_payt"
                   ? "URL de postback da Payt (exibida uma única vez)"
-                  : "Endereço da automação (exibido uma única vez)"}
+                  : draft?.origin === "automation_unnichat"
+                    ? "URL da regra no Unnichat (exibida uma única vez)"
+                    : "Endereço da automação (exibido uma única vez)"}
               </span>
               <input
                 readOnly
@@ -347,6 +350,13 @@ export function NewRuleFlow({
               <PaytSetupPanel
                 eventName={draft.eventName}
                 beta={originBetaEvents(draft.origin, capabilities).includes(
+                  draft.eventName,
+                )}
+              />
+            ) : draft?.origin === "automation_unnichat" ? (
+              <UnnichatAutomationSetupPanel
+                eventLabel={ruleEventLabelForOrigin(
+                  draft.origin,
                   draft.eventName,
                 )}
               />
@@ -705,6 +715,13 @@ function EventStep({
       {draft.origin === "automation_umbler" ? (
         <p className="action-note">
           A automação da Umbler reconhece Lead qualificado e Compra realizada.
+        </p>
+      ) : null}
+      {draft.origin === "automation_unnichat" ? (
+        <p className="action-note">
+          Aqui vale qualquer evento do catálogo. O Unnichat só avisa que o
+          fluxo chegou naquela etapa; o evento enviado à Meta é o escolhido
+          nesta regra. Crie uma regra por evento.
         </p>
       ) : null}
     </fieldset>
@@ -1252,6 +1269,17 @@ function DetailsStep({
           <p className="action-note">
             Depois de criar, você recebe o endereço para colar na automação do
             Umbler Talk.
+          </p>
+        </>
+      ) : null}
+
+      {draft.origin === "automation_unnichat" ? (
+        <>
+          <ValueFields draft={draft} onChange={onChange} />
+          <p className="action-note">
+            Depois de criar, você recebe a URL desta regra para colar no fluxo
+            do Unnichat, na etapa que marca a conversão. A URL só aparece
+            uma vez.
           </p>
         </>
       ) : null}

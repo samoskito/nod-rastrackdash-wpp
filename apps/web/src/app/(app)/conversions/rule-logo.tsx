@@ -14,6 +14,7 @@ const originIcons: Record<RuleOriginId, LucideIcon> = {
   structured_catalog: ShoppingBag,
   whatsapp_label: Tag,
   automation_umbler: Webhook,
+  automation_unnichat: Webhook,
   automation_payt: CreditCard,
   kommo: KanbanSquare,
   pipedrive: KanbanSquare,

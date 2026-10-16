@@ -200,6 +200,43 @@ describe("integrations route", () => {
     expect(html).not.toContain("/billing/package");
   });
 
+  it("shows the Unnichat card when the API offers it, with the number field in its modal", async () => {
+    mockWave7IntegrationsFetch({
+      canManage: true,
+      extraResponses: {
+        "/integrations/inbound-webhooks/capabilities": {
+          enabled: true,
+          providers: [
+            {
+              provider: "umbler",
+              parserVersion: "umbler/v1",
+              parserReleaseStatus: "observation_only",
+              creationEnabled: true,
+            },
+            {
+              provider: "unnichat",
+              parserVersion: "unnichat/v1",
+              parserReleaseStatus: "certified",
+              creationEnabled: true,
+            },
+          ],
+        },
+      },
+    });
+
+    const element = await IntegrationsPage({});
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('data-integration="unnichat" data-state="available"');
+    expect(html).toContain('src="/integrations/unnichat.png"');
+    expect(html).toContain("Conectar Unnichat");
+    expect(html).toContain('name="connectedPhone"');
+    expect(html).toContain("Número de WhatsApp do cliente");
+    expect(html).toContain('<input type="hidden" name="provider" value="unnichat"/>');
+    // The other providers' forms do not ask for a number.
+    expect(html.match(/name="connectedPhone"/g)).toHaveLength(1);
+  });
+
   it("shows the Payt card as active once a sale rule exists and links to Conversões", async () => {
     mockWave7IntegrationsFetch({
       canManage: true,

@@ -146,6 +146,7 @@ export function providerRuleOrigin(
         ? connectionsById.get(rule.connectionId)?.provider
         : null;
       if (provider === "umbler") return "automation_umbler";
+      if (provider === "unnichat") return "automation_unnichat";
       return "whatsapp_label";
     }
   }
@@ -261,6 +262,8 @@ function triggerDetailForProviderRule(
       return rule.endpoint ? "Endereço da automação criado" : null;
     case "automation_payt":
       return rule.endpoint ? "URL de postback criada" : null;
+    case "automation_unnichat":
+      return rule.endpoint ? "URL da regra criada" : null;
   }
 }
 

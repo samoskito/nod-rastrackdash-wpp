@@ -62,7 +62,9 @@ export function ruleEditCapabilities(
     // Catálogos precificam cada opção; as demais origens têm valor médio.
     value:
       carriesValue &&
-      (origin === "whatsapp_label" || origin === "automation_umbler"),
+      (origin === "whatsapp_label" ||
+        origin === "automation_umbler" ||
+        origin === "automation_unnichat"),
     catalogAliases: origin === "structured_catalog" && Boolean(rule.catalog),
   };
 }

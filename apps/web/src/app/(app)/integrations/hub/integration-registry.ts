@@ -2,7 +2,7 @@
  * Catalog of the integrations shown in the Integrations hub.
  *
  * Only providers the student backend implements end to end appear here.
- * Adding a provider later (Unnichat, Go High Level, ...) is one entry:
+ * Adding a provider later (Go High Level, ...) is one entry:
  *   1. add its id to `integrationProviderIds`;
  *   2. add a logo file in `public/integrations/` and a row in `logoAssets`
  *      (and in SOURCES.md);
@@ -111,6 +111,7 @@ export const integrationProviderIds = [
   "umbler",
   "gupshup",
   "data_crazy",
+  "unnichat",
   "payt",
   "kommo",
   "pipedrive",
@@ -125,7 +126,7 @@ export type WhatsappIntegrationProvider =
 
 /** Inbound webhook providers (`InboundWebhookPanel`, scoped to one). */
 export type InboundIntegrationProvider =
-  "meta_cloud" | "umbler" | "gupshup" | "data_crazy";
+  "meta_cloud" | "umbler" | "gupshup" | "data_crazy" | "unnichat";
 
 export type CrmIntegrationProvider = "kommo" | "pipedrive";
 
@@ -183,6 +184,7 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   umbler: { file: "umbler.svg", surface: "light" },
   gupshup: { file: "gupshup.svg", surface: "light" },
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
+  unnichat: { file: "unnichat.png", surface: "light" },
   payt: { file: "payt.svg", surface: "dark" },
   kommo: { file: "kommo.png", surface: "light" },
   pipedrive: { file: "pipedrive.svg", surface: "dark" },
@@ -294,6 +296,17 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Receba as conversas de anúncio que chegam na Data Crazy.",
     gate: { kind: "inbound_provider", provider: "data_crazy" },
+  },
+  {
+    id: "unnichat",
+    name: "Unnichat",
+    category: "attendance",
+    logo: integrationLogoPath("unnichat"),
+    initials: "Un",
+    logoSurface: logoSurface("unnichat"),
+    description:
+      "Receba as conversas de anúncio que chegam no Unnichat e envie as conversões dos seus fluxos de atendimento.",
+    gate: { kind: "inbound_provider", provider: "unnichat" },
   },
   {
     id: "payt",

@@ -395,7 +395,8 @@ export function buildRulePayload(
           automationSource: "payt",
         },
       };
-    case "automation_umbler": {
+    case "automation_umbler":
+    case "automation_unnichat": {
       const values = valueFields({ ...draft, eventName }, false);
       if (!values.ok) return values;
       return {

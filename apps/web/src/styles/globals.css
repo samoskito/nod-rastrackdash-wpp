@@ -15562,5 +15562,87 @@ button.meta-manual-entry[aria-expanded="true"] {
 
   .pipedrive-conversion-panel .provider-conversion-inline-confirm {
     flex-wrap: wrap;
+/* Fase 4b: Unnichat (número do cliente, modo de roteamento, passo a passo). */
+.inbound-webhook-create.has-phone {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inbound-webhook-create.has-phone > .button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.inbound-webhook-create .field-help {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.inbound-readiness-destination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.inbound-readiness-routing {
+  margin: 0;
+  font-size: 12px;
+}
+
+.inbound-routing-mode {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.inbound-routing-mode-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.inbound-routing-mode-options legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.inbound-routing-mode-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.inbound-routing-mode p {
+  margin: 0;
+}
+
+.inbound-routing-mode-inherit {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.unnichat-setup {
+  min-width: 0;
+}
+
+.unnichat-setup .payload-block {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 700px) {
+  .inbound-webhook-create.has-phone {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inbound-routing-mode-options {
+    flex-direction: column;
   }
 }

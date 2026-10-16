@@ -95,6 +95,18 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     allowedEvents: ["QualifiedLead", "Purchase"],
   },
   {
+    id: "automation_unnichat",
+    kind: "provider",
+    label: "Automação do Unnichat",
+    description:
+      "Quando um fluxo do Unnichat chama a URL da regra (vale para os números da conexão). Qualquer evento do catálogo.",
+    logoProvider: "unnichat",
+    fallbackChannelProviders: ["unnichat"],
+    connection: "same_provider",
+    // O evento vem da regra, nunca do corpo enviado pelo Unnichat: sem
+    // lista de eventos, vale todo o catálogo.
+  },
+  {
     id: "automation_payt",
     kind: "provider",
     label: "Venda na Payt",
@@ -107,6 +119,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "uazapi",
       "meta_cloud",
       "data_crazy",
+      "unnichat",
     ],
     connection: "any",
     // O evento vem do status de cada venda; o valor vem da própria venda.
@@ -227,6 +240,7 @@ export function hubProviderForInbound(
     case "umbler":
     case "gupshup":
     case "data_crazy":
+    case "unnichat":
     case "meta_cloud":
       return provider;
     default:
@@ -254,6 +268,8 @@ export function providerDisplayName(provider: string): string {
       return "Gupshup";
     case "data_crazy":
       return "Data Crazy";
+    case "unnichat":
+      return "Unnichat";
     default:
       return provider;
   }

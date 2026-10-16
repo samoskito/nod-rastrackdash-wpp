@@ -41,6 +41,7 @@ export type RuleManageTab = "edit" | "endpoint" | "received" | "catalog-test";
 
 const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_umbler",
+  "automation_unnichat",
   "automation_payt",
 ];
 
