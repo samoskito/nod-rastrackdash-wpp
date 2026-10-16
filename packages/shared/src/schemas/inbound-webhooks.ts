@@ -177,9 +177,16 @@ const inboundWebhookConnectedPhoneSchema = z
   .trim()
   .min(1)
   .max(32)
-  .refine((value) => /\d{8,}/u.test(value.replace(/\D/gu, "")), {
-    message: "Informe um número de telefone válido",
-  });
+  // Same 10-15 digit range the API uses to normalize the phone identity.
+  .refine(
+    (value) => {
+      const digits = value.replace(/\D/gu, "").length;
+      return digits >= 10 && digits <= 15;
+    },
+    {
+      message: "Informe o número com DDD (10 a 15 dígitos)",
+    },
+  );
 
 export const inboundWebhookConnectionCreateInputSchema = z
   .object({

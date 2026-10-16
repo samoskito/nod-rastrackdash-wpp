@@ -85,6 +85,16 @@ describe("Unnichat connection (Fase 4b)", () => {
         connectedPhone: "abc",
       }).success,
     ).toBe(false);
+    // Same 10-15 digit range the API normalizes: 9 or 16 digits is a 400, not a 409.
+    for (const connectedPhone of ["99999-0000", "+55 11 99999-0000 1234"]) {
+      expect(
+        inboundWebhookConnectionCreateInputSchema.safeParse({
+          provider: "unnichat",
+          displayName: "Unnichat Comercial",
+          connectedPhone,
+        }).success,
+      ).toBe(false);
+    }
     expect(
       inboundWebhookConnectionCreateInputSchema.parse({
         provider: "unnichat",
