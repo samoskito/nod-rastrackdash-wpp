@@ -45,6 +45,14 @@ const connectionStatusOperationalErrors = new Set([
 const connectionCreateOperationalErrors = new Set([
   "Conexões Unnichat exigem o número de WhatsApp do cliente",
 ]);
+const providerObservationUnavailableApiMessage =
+  "Versao de observacao do provedor indisponivel";
+
+function providerObservationUnavailableMessage(provider: string): string {
+  const name = provider === "unnichat" ? "O Unnichat" : "Este provedor";
+
+  return `${name} ainda não está liberado nesta instalação: rode as migrations da API e tente de novo.`;
+}
 const channelStatusOperationalErrors = new Set([
   "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal",
   "Configure uma rota Meta valida antes de ativar o canal",
@@ -106,7 +114,7 @@ export async function createInboundWebhookConnectionAction(
       inboundWebhookConnectionCreateResultSchema.safeParse(response);
 
     if (!result.success) {
-      return failure("Nao foi possivel criar a conexao de webhook.");
+      return failure("Não foi possível criar a conexão de webhook.");
     }
 
     revalidatePath(integrationsPath);
@@ -122,9 +130,19 @@ export async function createInboundWebhookConnectionAction(
       }),
     };
   } catch (error) {
+    if (
+      !licenseLockedMessageFor(error) &&
+      error instanceof Error &&
+      error.message.trim() === providerObservationUnavailableApiMessage
+    ) {
+      return failure(
+        providerObservationUnavailableMessage(String(input.data.provider)),
+      );
+    }
+
     return failure(
       knownOperationalError(error, connectionCreateOperationalErrors) ??
-        "Nao foi possivel criar a conexao de webhook.",
+        "Não foi possível criar a conexão de webhook.",
     );
   }
 }

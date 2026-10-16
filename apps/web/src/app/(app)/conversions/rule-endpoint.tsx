@@ -22,6 +22,17 @@ const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = 
   automation_payt: "Payt",
 };
 
+// Artigo por plataforma: "na Umbler Talk", "na Payt", mas "no Unnichat".
+const platformLocatives: Partial<Record<ProviderConversionRuleOriginDto, string>> = {
+  automation_unnichat: "no Unnichat",
+};
+
+function inPlatform(origin: ProviderConversionRuleOriginDto): string {
+  return (
+    platformLocatives[origin] ?? `na ${platformNames[origin] ?? "plataforma"}`
+  );
+}
+
 function formatDateTime(value: string | null): string {
   if (!value) return "nunca";
   return new Date(value).toLocaleString("pt-BR", {
@@ -32,8 +43,7 @@ function formatDateTime(value: string | null): string {
 }
 
 export function rotateConfirmText(origin: ProviderConversionRuleOriginDto): string {
-  const platform = platformNames[origin] ?? "plataforma";
-  return `O endereço atual para de funcionar na hora. Depois, cole o novo endereço na ${platform}: até lá, nenhum evento desta regra é recebido.`;
+  return `O endereço atual para de funcionar na hora. Depois, cole o novo endereço ${inPlatform(origin)}: até lá, nenhum evento desta regra é recebido.`;
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -132,7 +142,7 @@ export function RuleEndpoint({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const newUrl = freshUrl;
-  const platform = platformNames[origin] ?? "plataforma";
+  const where = inPlatform(origin);
   const endpoint = rule.endpoint;
 
   async function rotate() {
@@ -175,7 +185,7 @@ export function RuleEndpoint({
         <div className="conversion-fresh-url" role="status">
           <p className="action-note warn">
             Novo endereço gerado: o anterior já parou de funcionar. Ele só
-            aparece agora; copie e cole na {platform}.
+            aparece agora; copie e cole {where}.
           </p>
           <div className="conversion-webhook-url">
             <label className="conversion-field">
@@ -197,7 +207,7 @@ export function RuleEndpoint({
       ) : (
         <p className="action-note">
           Por segurança, o endereço só aparece uma vez, quando é criado. Se você
-          perdeu, gere um novo e cole de novo na {platform}.
+          perdeu, gere um novo e cole de novo {where}.
         </p>
       )}
 
@@ -242,8 +252,8 @@ export function RuleEndpoint({
         <p className="action-note warn">Esta regra não tem um endereço ativo.</p>
       ) : null}
 
-      <section className="conversion-endpoint-setup" aria-label={`Como configurar na ${platform}`}>
-        <h3>Como configurar na {platform}</h3>
+      <section className="conversion-endpoint-setup" aria-label={`Como configurar ${where}`}>
+        <h3>Como configurar {where}</h3>
         <SetupSteps origin={origin} rule={rule} capabilities={capabilities} />
       </section>
     </div>

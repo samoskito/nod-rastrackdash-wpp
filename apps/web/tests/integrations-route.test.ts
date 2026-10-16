@@ -878,7 +878,7 @@ describe("integrations route", () => {
       expect(requestedPaths).toContain(
         "/integrations/inbound-webhooks/connection_wave7/channels",
       );
-      expect(html).toContain("Suas conexoes Umbler Talk");
+      expect(html).toContain("Suas conexões Umbler Talk");
       expect(html).toContain("Gatilhos de conversao");
       expect(html).toContain("Regras disponíveis");
       expect(html).toContain('href="/conversions"');
@@ -900,7 +900,7 @@ describe("integrations route", () => {
       expect(html).not.toContain("Conta Foreign");
 
       if (canManage) {
-        expect(html).toContain("Adicionar conexao");
+        expect(html).toContain("Adicionar conexão");
         expect(html).toContain("Gerar nova URL");
         expect(html).toContain("Pausar envio");
         expect(html).toContain("Adicionar rota");

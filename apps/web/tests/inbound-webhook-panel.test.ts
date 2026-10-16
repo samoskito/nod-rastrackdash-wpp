@@ -482,7 +482,7 @@ describe("inbound webhook panel", () => {
     const analystHtml = renderPanel({ canManage: false });
 
     for (const command of [
-      "Adicionar conexao",
+      "Adicionar conexão",
       "Ativar envios automaticos",
       "Pausar conexao",
       "Gerar nova URL",
@@ -500,7 +500,7 @@ describe("inbound webhook panel", () => {
     expect(analystHtml).toContain("BM Vendas Atual");
     expect(analystHtml).toContain("Conta Suporte Atual");
     expect(analystHtml).toContain('aria-readonly="true"');
-    expect(analystHtml).not.toContain("Adicionar conexao");
+    expect(analystHtml).not.toContain("Adicionar conexão");
     expect(analystHtml).not.toContain("Gerar nova URL");
     expect(analystHtml).not.toContain("Pausar envio");
     expect(analystHtml).not.toContain("Adicionar rota");

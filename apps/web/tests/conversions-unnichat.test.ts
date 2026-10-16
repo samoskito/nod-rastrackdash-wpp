@@ -482,12 +482,12 @@ describe("Unnichat: endereço da regra", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Como configurar na Unnichat" }),
+      screen.getByRole("heading", { name: "Como configurar no Unnichat" }),
     ).toBeTruthy();
     expect(screen.getByText(/Automação que marca “Compra realizada”/)).toBeTruthy();
     expect(screen.getByText(/Contato sem/).textContent).toContain("nada é enviado");
     await user.click(screen.getByRole("button", { name: "Gerar novo endereço" }));
-    expect(screen.getByText(/cole o novo endereço na Unnichat/)).toBeTruthy();
+    expect(screen.getByText(/cole o novo endereço no Unnichat/)).toBeTruthy();
     expect(rotate).not.toHaveBeenCalled();
   });
 });

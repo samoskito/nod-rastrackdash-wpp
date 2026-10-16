@@ -224,6 +224,32 @@ function openChannel() {
 }
 
 describe("Unnichat connection creation", () => {
+  it("disables Gerar webhook while the license is locked", () => {
+    renderPanel({ connections: [] });
+    expect(
+      screen.getByRole("button", { name: "Gerar webhook" }).hasAttribute("disabled"),
+    ).toBe(false);
+    cleanup();
+    render(
+      React.createElement(InboundWebhookPanel, {
+        capabilities,
+        connections: [],
+        providerRules: [],
+        providerRulesEnabled: true,
+        metaConfiguration,
+        canManage: true,
+        licenseLocked: true,
+        createAction: vi.fn() as never,
+        rotateSecretAction: vi.fn() as never,
+        setConnectionStatusAction: vi.fn() as never,
+        scopedProvider: "unnichat",
+      } as never),
+    );
+    expect(
+      screen.getByRole("button", { name: "Gerar webhook" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("asks for the client's number next to the name and explains it", () => {
     renderPanel({ connections: [] });
 
@@ -234,7 +260,7 @@ describe("Unnichat connection creation", () => {
     expect(
       screen.getByText(/Nunca o telefone do lead/, { exact: false }),
     ).toBeTruthy();
-    expect(screen.getByLabelText(/Nome da conexao/)).toBeTruthy();
+    expect(screen.getByLabelText(/Nome da conexão/)).toBeTruthy();
     expect(
       screen.getByText(/A conexão já nasce presa a esse número/),
     ).toBeTruthy();
@@ -272,7 +298,7 @@ describe("Unnichat connection creation", () => {
     });
     renderPanel({ connections: [], create });
 
-    fireEvent.change(screen.getByLabelText(/Nome da conexao/), {
+    fireEvent.change(screen.getByLabelText(/Nome da conexão/), {
       target: { value: "Unnichat Loja" },
     });
     fireEvent.change(screen.getByLabelText(/Número de WhatsApp do cliente/), {

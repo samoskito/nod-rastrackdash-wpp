@@ -59,7 +59,7 @@ function renderHub(props: Partial<Parameters<typeof IntegrationsHub>[0]> = {}) {
           createElement(
             "label",
             null,
-            "Nome da conexao",
+            "Nome da conexão",
             createElement("input"),
           ),
           createElement("button", { type: "button" }, "Gerar URL"),

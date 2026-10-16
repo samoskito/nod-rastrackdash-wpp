@@ -139,8 +139,8 @@ function createDescription(provider: string, allowCreate: boolean): string {
   }
 
   return allowCreate
-    ? "De um nome e gere a URL desta conexao. So mensagens vindas de anuncio (CTWA) viram lead."
-    : "Confira as conexoes e escolha quais canais enviam conversoes.";
+    ? "Dê um nome e gere a URL desta conexão. Só mensagens vindas de anúncio (CTWA) viram lead."
+    : "Confira as conexões e escolha quais canais enviam conversões.";
 }
 
 export function InboundWebhookPanel({
@@ -313,7 +313,7 @@ export function InboundWebhookPanel({
             <span className="eyebrow">Conexoes</span>
             <h2>
               {connections.length > 0
-                ? `Suas conexoes ${inboundWebhookProviderLabel(scopedProvider)}`
+                ? `Suas conexões ${inboundWebhookProviderLabel(scopedProvider)}`
                 : `Conectar ${inboundWebhookProviderLabel(scopedProvider)}`}
             </h2>
             <p className="muted">
@@ -348,7 +348,7 @@ export function InboundWebhookPanel({
               ? scopedProvider
                 ? "Cancelar"
                 : "Fechar"
-              : "Adicionar conexao"}
+              : "Adicionar conexão"}
           </button>
         ) : canCreate ? null : (
           <span className="status-chip">
@@ -395,7 +395,7 @@ export function InboundWebhookPanel({
             </label>
           )}
           <label>
-            <span className="field-label">Nome da conexao</span>
+            <span className="field-label">Nome da conexão</span>
             <input
               name="displayName"
               minLength={2}
@@ -430,7 +430,9 @@ export function InboundWebhookPanel({
             className="button primary"
             type="submit"
             disabled={
-              pendingAction === "create" || creatableProviders.length === 0
+              licenseLocked ||
+              pendingAction === "create" ||
+              creatableProviders.length === 0
             }
           >
             <Webhook size={16} aria-hidden="true" />
@@ -508,7 +510,7 @@ export function InboundWebhookPanel({
                     ) : null}
                     <span>{channels.length} canal(is)</span>
                     <span>
-                      Ultima entrega:{" "}
+                      Última entrega:{" "}
                       {formatDateTime(connection.lastDeliveryAt)}
                     </span>
                   </div>
@@ -712,7 +714,7 @@ export function InboundWebhookPanel({
                           ? "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar. Envie uma mensagem de teste para liberar as regras."
                           : connection.provider === "unnichat"
                             ? "Esta conexão ainda não tem o número do cliente. Remova-a e crie de novo informando o número de WhatsApp atendido pelo Unnichat."
-                            : "Nenhum canal cadastrado ainda. Cadastre o numero conectado para liberar as regras de conversao antes do primeiro lead chegar."}
+                            : "Nenhum canal cadastrado ainda. Cadastre o número conectado para liberar as regras de conversão antes do primeiro lead chegar."}
                       </p>
                     ) : (
                       channels.map((channel) => {
@@ -1073,7 +1075,7 @@ function ChannelReadiness({
             <AlertTriangle className="warn" size={18} aria-hidden="true" />
           )}
           <div>
-            <span className="micro-label">Prontidao do canal</span>
+            <span className="micro-label">Prontidão do canal</span>
             <strong>{readinessStateLabel(readiness.state)}</strong>
           </div>
         </div>
@@ -1202,9 +1204,11 @@ function readinessBlockerLabel(
       : "Configure ao menos uma rota Meta para este canal.",
     route_not_valid: "Existe uma rota Meta que precisa ser validada novamente.",
     ctwa_not_observed: "Nenhum CTWA foi observado neste canal.",
-    ctwa_unresolved: `${readiness.unresolvedCtwa} CTWA aguardam uma rota Meta exata.`,
+    ctwa_unresolved: readiness.unresolvedCtwa === 1
+      ? "1 CTWA aguarda uma rota Meta exata."
+      : `${readiness.unresolvedCtwa} CTWA aguardam uma rota Meta exata.`,
     ctwa_ad_unavailable: adUnavailableLabel(readiness.adUnavailableCtwa ?? 0),
-    payload_unavailable: `${readiness.payloadUnavailableCtwa} CTWA nao possuem mais payload disponivel.`,
+    payload_unavailable: `${readiness.payloadUnavailableCtwa} CTWA não possuem mais payload disponível.`,
     payload_expiring_soon:
       "O payload preservado mais proximo expira em menos de 48 horas.",
   } as const;

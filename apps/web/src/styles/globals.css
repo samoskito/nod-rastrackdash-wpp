@@ -15568,6 +15568,12 @@ button.meta-manual-entry[aria-expanded="true"] {
 /* Fase 4b: Unnichat (número do cliente, modo de roteamento, passo a passo). */
 .inbound-webhook-create.has-phone {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.inbound-webhook-create .button,
+.unnichat-setup .button {
+  gap: 8px;
 }
 
 .inbound-webhook-create.has-phone > .button {

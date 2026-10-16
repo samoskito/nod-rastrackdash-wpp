@@ -376,7 +376,9 @@ export function ConversionsScreen({
             <option value="all">Todos</option>
             {numbers.map((number) => (
               <option key={number.id} value={number.id}>
-                {number.label} ({number.connectionName})
+                {number.label === number.connectionName
+                  ? number.label
+                  : `${number.label} (${number.connectionName})`}
               </option>
             ))}
           </select>

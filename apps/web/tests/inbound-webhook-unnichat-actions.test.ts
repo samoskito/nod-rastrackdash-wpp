@@ -131,6 +131,26 @@ describe("Unnichat connection creation", () => {
     });
   });
 
+  it("explains the unavailable observation version for Unnichat", async () => {
+    serverApiFetch.mockRejectedValueOnce(
+      new Error("Versao de observacao do provedor indisponivel"),
+    );
+
+    const result = await createInboundWebhookConnectionAction(
+      form({
+        provider: "unnichat",
+        displayName: "Unnichat Loja",
+        connectedPhone: "+5511999990001",
+      }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message:
+        "O Unnichat ainda não está liberado nesta instalação: rode as migrations da API e tente de novo.",
+    });
+  });
+
   it("shows the API's refusal about the number in accented Portuguese", async () => {
     serverApiFetch.mockRejectedValueOnce(
       new Error("Conexões Unnichat exigem o número de WhatsApp do cliente"),
