@@ -61,6 +61,33 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 5.1 — Conversion currency (API and shared; the screen comes in a
+  later delivery)**, ported from the SaaS (`0bf5ebf`, `5981c7c` settings part,
+  `ffd0bae`, `e510840`, `c4c0375` audit part):
+  - **Moeda das conversões** per workspace: BRL, USD or EUR, **default BRL**.
+    Any member reads it (`GET /workspaces/current/currency`); owner/admin
+    changes it (`PATCH`, audited `workspace.conversion_currency_updated`,
+    423 with a locked license).
+  - Optional **currency correction per ad account**
+    (`GET /workspaces/current/currency/ad-accounts`, `PATCH .../:id`, audited);
+    stored now, used by the reports in Fase 5.2.
+  - **Sending to Meta:** a conversion value always travels with a currency,
+    resolved as sale/deal currency → rule currency → workspace currency → BRL.
+    No exchange conversion. Events already recorded or sent never change; an
+    old event with a value and no currency is sent as BRL (as before).
+  - A rule may keep its own currency or none (= follow the workspace); new
+    rules no longer get BRL forced by the contract, rules already stored keep
+    their currency. Payt no longer forces BRL (it uses the currency the sale
+    declares, otherwise rule/workspace). Pipedrive keeps using the deal
+    currency and checking it against the rule's (`event_currency_mismatch`).
+  - **Default behavior:** a workspace that never changes the currency keeps
+    sending BRL exactly as before.
+  - Migration `20261016140000_conversion_currency` (additive: enum
+    `CurrencyCode`, `Workspace.conversionCurrency` default `BRL`,
+    `MetaReportingAccount.currencyOverride` nullable). No new env var or
+    dependency. Zod contracts in `packages/shared` (`currency.ts`,
+    `schemas/currency-settings.ts`).
+
 - **Fase 4b — Unnichat conversations and automations as Meta conversions (API,
   shared and web)**, ported from the SaaS with the same behavior and no new env
   var, dependency or Meta permission (the PalmUP social login does not
