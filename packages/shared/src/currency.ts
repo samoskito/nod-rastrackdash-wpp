@@ -103,6 +103,16 @@ export function formatMoney(
   return `${negative ? "-" : ""}${symbol} ${number}`;
 }
 
+/**
+ * Receita que ficou fora de um total por falta de cotação PTAX (cotação
+ * desligada, BCB fora do ar ou dia sem boletim), na moeda original da venda.
+ */
+export const unconvertedRevenueSchema = z.object({
+  currency: currencyCodeSchema,
+  valueCents: z.number().int().nonnegative(),
+});
+export type UnconvertedRevenueDto = z.infer<typeof unconvertedRevenueSchema>;
+
 /** Mensagem do 400 quando a regra recebe uma moeda fora de BRL/USD/EUR. */
 export const RULE_CURRENCY_INVALID_MESSAGE =
   "Moeda inválida: use BRL, USD ou EUR";

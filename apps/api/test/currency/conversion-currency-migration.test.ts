@@ -47,9 +47,8 @@ describe("Fase 5.1 migration: moeda das conversões (texto, sem PostgreSQL)", ()
     expect(statements).not.toMatch(/ALTER COLUMN/u);
   });
 
-  it("leaves PTAX (ExchangeRate) for Fase 5.2", () => {
+  it("leaves PTAX (ExchangeRate) for its own Fase 5.2 migration", () => {
     expect(statements).not.toContain("ExchangeRate");
-    expect(schema).not.toMatch(/model ExchangeRate/u);
   });
 
   it("matches the Prisma schema", () => {

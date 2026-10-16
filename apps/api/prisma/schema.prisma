@@ -1584,6 +1584,25 @@ model MetaReportingAccount {
   @@index([businessId])
 }
 
+/// Cotação PTAX do Banco Central (venda, boletim de fechamento do dia):
+/// 1 baseCurrency = rate quoteCurrency. Hoje só USD e EUR contra BRL; USD<->EUR
+/// passa por BRL. Só é preenchida com PTAX_SYNC_ENABLED ligada (Fase 5.2).
+model ExchangeRate {
+  id            String       @id @default(cuid())
+  /// Dia do boletim (dia útil, horário de Brasília).
+  date          DateTime     @db.Date
+  baseCurrency  CurrencyCode
+  quoteCurrency CurrencyCode
+  rate          Decimal      @db.Decimal(18, 8)
+  source        String       @default("bcb_ptax")
+  bulletinAt    DateTime?
+  fetchedAt     DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+
+  @@unique([date, baseCurrency, quoteCurrency])
+  @@index([baseCurrency, quoteCurrency, date])
+}
+
 model MetaReportingAccountDestination {
   id                      String   @id @default(cuid())
   workspaceId             String
