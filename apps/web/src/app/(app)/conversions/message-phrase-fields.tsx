@@ -4,7 +4,10 @@ import type { ConversionEventNameDto } from "@wpptrack/shared";
 import {
   conversionEventCarriesValue,
   conversionEventRequiresValue,
+  formatMoney,
+  normalizeCurrencyCode,
 } from "@wpptrack/shared";
+import { useWorkspaceCurrency } from "../../../components/workspace-currency";
 
 type MessageAuthorScope = "team" | "contact" | "both";
 
@@ -43,13 +46,18 @@ export function MessagePhraseFields({
   valueMode,
   messageAuthorScope,
   contactAvailable = true,
+  currency,
   onChange,
 }: MessagePhraseValues & {
   eventName: ConversionEventNameDto;
   /** Algum número conectado lê mensagens do contato (hoje só a Umbler). */
   contactAvailable?: boolean;
+  /** Moeda da regra ("" / null = padrão do workspace) para a prévia do valor. */
+  currency?: string | null;
   onChange: (patch: Partial<MessagePhraseValues>) => void;
 }) {
+  const workspaceCurrency = useWorkspaceCurrency();
+  const previewCurrency = normalizeCurrencyCode(currency) ?? workspaceCurrency;
   const carriesValue = conversionEventCarriesValue(eventName);
   const extracting = carriesValue && valueMode === "message_extracted";
   const preview = previewMessagePhrase({
@@ -199,7 +207,7 @@ export function MessagePhraseFields({
         </strong>
         <small>
           {carriesValue
-            ? previewValueLabel(preview, extracting, eventName)
+            ? previewValueLabel(preview, extracting, eventName, previewCurrency)
             : "Este evento não envia valor monetário."}
         </small>
       </div>
@@ -214,7 +222,7 @@ function averageValueLabel(
   if (extracting) return "Valor médio (fallback, opcional)";
 
   return conversionEventRequiresValue(eventName)
-    ? "Valor médio (R$)"
+    ? "Valor médio"
     : "Valor médio (opcional)";
 }
 
@@ -222,6 +230,7 @@ function previewValueLabel(
   preview: MessagePhrasePreview,
   extracting: boolean,
   eventName: ConversionEventNameDto,
+  currency: string = "BRL",
 ): string {
   if (preview.ambiguousValue) {
     return "O exemplo tem mais de um valor. A regra vai pedir revisão manual.";
@@ -238,7 +247,7 @@ function previewValueLabel(
       : "Sem valor médio: este evento seria enviado sem valor.";
   }
 
-  const money = formatMoney(preview.valueCents, "BRL");
+  const money = formatMoney(preview.valueCents, currency);
   if (preview.valueSource === "message") {
     return `Valor extraído do exemplo: ${money}`;
   }
@@ -398,11 +407,4 @@ export function parseMoneyToCents(value: string): number | null {
 
   const cents = Math.round(amount * 100);
   return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
-}
-
-function formatMoney(valueCents: number, currency: string): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency,
-  }).format(valueCents / 100);
 }

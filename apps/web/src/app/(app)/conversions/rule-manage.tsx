@@ -5,8 +5,13 @@ import type {
   ProviderConversionRuleDto,
   ProviderConversionRuleOriginDto,
 } from "@wpptrack/shared";
+import { formatMoney } from "@wpptrack/shared";
 import { Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  RuleCurrencySelect,
+  useWorkspaceCurrency,
+} from "../../../components/workspace-currency";
 import { ProviderCatalogTestConsole } from "../settings/provider-catalog-test-console";
 import { ruleEventLabelForOrigin } from "./event-copy";
 import type { ProviderConversionRuleActionResult } from "./actions";
@@ -15,7 +20,7 @@ import type { ConversionConnection, ConversionNumber } from "./conversion-rules-
 import type { ComingSoonNumber } from "./conversions-data";
 import { conversionsLicenseLockedNote } from "./license-lock";
 import { MessagePhraseFields } from "./message-phrase-fields";
-import { ScopeStep, ValueFields } from "./new-rule-flow";
+import { ruleCurrencyHint, ScopeStep, ValueFields } from "./new-rule-flow";
 import { ReceivedEvents } from "./received-events";
 import {
   buildRuleUpdatePayload,
@@ -74,12 +79,6 @@ export function deleteConfirmText(origin: ProviderConversionRuleOriginDto): stri
   return automationOrigins.includes(origin)
     ? "A regra para de reconhecer conversões na hora e o endereço dela deixa de funcionar. O histórico continua salvo. Não dá para desfazer."
     : "A regra para de reconhecer conversões na hora. O histórico continua salvo. Não dá para desfazer.";
-}
-
-function formatMoney(valueCents: number, currency: string): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(
-    valueCents / 100,
-  );
 }
 
 /**
@@ -378,7 +377,8 @@ function RuleEditForm({
   const [pending, setPending] = useState(false);
   const editCaps = ruleEditCapabilities(rule, origin);
   const definition = ruleOriginDefinition(origin);
-  const context = { numbers, connections, capabilities };
+  const workspaceCurrency = useWorkspaceCurrency();
+  const context = { numbers, connections, capabilities, workspaceCurrency };
   const disabled = !canManage || pending || licenseLocked;
 
   function patch(update: Partial<RuleEditDraft>) {
@@ -477,6 +477,7 @@ function RuleEditForm({
             contactAvailable={numbers.some((number) =>
               contactMessageProviders(capabilities).includes(number.provider),
             )}
+            currency={draft.currency}
             onChange={(update) => patch(update)}
           />
         </fieldset>
@@ -555,6 +556,17 @@ function RuleEditForm({
         <fieldset className="conversion-flow-fieldset" disabled={disabled}>
           <legend>Valor enviado à Meta</legend>
           <ValueFields draft={draft} onChange={patch} />
+        </fieldset>
+      ) : null}
+
+      {editCaps.currency ? (
+        <fieldset className="conversion-flow-fieldset" disabled={disabled}>
+          <legend>Moeda</legend>
+          <RuleCurrencySelect
+            value={draft.currency}
+            onChange={(currency) => patch({ currency })}
+            hint={ruleCurrencyHint(origin)}
+          />
         </fieldset>
       ) : null}
 

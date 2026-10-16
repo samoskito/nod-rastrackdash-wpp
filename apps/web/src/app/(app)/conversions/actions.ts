@@ -498,7 +498,8 @@ export async function updateLegacyRuleAction(
   } else {
     const productName = formText(formData, "productName") ?? "";
     const rawValue = formText(formData, "defaultValue");
-    const currency = (formText(formData, "defaultCurrency") ?? "BRL").toUpperCase();
+    // "" = "Padrão do workspace" (null: herda a Moeda das conversões).
+    const currency = (formText(formData, "defaultCurrency") ?? "").toUpperCase();
     let valueCents: number | null = null;
     if (rawValue) {
       const normalized = rawValue.includes(",")
@@ -510,12 +511,15 @@ export async function updateLegacyRuleAction(
       }
       valueCents = Math.round(amount * 100);
     }
-    if (!legacyCurrencies.has(currency) || productName.length > 180) {
+    if (
+      (currency && !legacyCurrencies.has(currency)) ||
+      productName.length > 180
+    ) {
       return { ok: false, message: invalidMessage };
     }
     body = {
       defaultValueCents: valueCents,
-      defaultCurrency: valueCents === null ? null : currency,
+      defaultCurrency: valueCents === null ? null : currency || null,
       defaultContentName: productName || null,
       defaultItems: legacyProductItems(productName, valueCents),
     };

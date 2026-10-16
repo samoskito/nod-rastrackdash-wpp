@@ -9,6 +9,7 @@ import {
   conversionEventDisplayLabels,
   conversionEventNameSchema,
   conversionEventValuePolicy,
+  formatMoney,
   pipedriveChannelBindingMessages,
   pipedriveConnectionCreateInputSchema,
   pipedriveConversionRuleCreateInputSchema,
@@ -32,6 +33,10 @@ import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
+import {
+  CrmCurrencySelect,
+  useWorkspaceCurrency,
+} from "../../../components/workspace-currency";
 import {
   crmChannelOptionsFor,
   type CrmChannelOption,
@@ -462,14 +467,7 @@ function moneyLabel(valueCents: number | null, currency: string | null): string 
     return `${(valueCents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (moeda não informada)`;
   }
 
-  try {
-    return (valueCents / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: currency.toUpperCase(),
-    });
-  } catch {
-    return `${(valueCents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ${currency}`;
-  }
+  return formatMoney(valueCents, currency);
 }
 
 function formatDateTime(value: string | null): string {
@@ -2784,10 +2782,18 @@ function PipedriveRuleForm({
       ? (initial.fixedValueCents / 100).toFixed(2).replace(".", ",")
       : "",
   );
-  const [currency, setCurrency] = useState(initial?.currency ?? "");
+  const workspaceCurrency = useWorkspaceCurrency();
+  // Regra nova começa na "Moeda das conversões" do workspace; ao editar, a
+  // moeda gravada continua. null = regra nova ainda sem escolha: usa a moeda
+  // do workspace, menos em "Negócio ganho", que traz a moeda do próprio
+  // negócio (uma moeda na regra só adicionaria a conferência de divergência).
+  const [currencyChoice, setCurrency] = useState<string | null>(
+    initial ? (initial.currency ?? "") : null,
+  );
   const [contentName, setContentName] = useState(initial?.contentName ?? "");
   const [mode, setMode] = useState<"observation" | "production">("observation");
   const wonSelected = stage.endsWith(`::${WON_STAGE_VALUE}`);
+  const currency = currencyChoice ?? (wonSelected ? "" : workspaceCurrency);
   const effectiveEvent: ConversionEventNameDto = wonSelected
     ? "Purchase"
     : eventName;
@@ -2802,7 +2808,7 @@ function PipedriveRuleForm({
     if (!conversionEventCarriesValue(next)) {
       setValueMode("deal");
       setFixedValueAmount("");
-      setCurrency("");
+      setCurrency(null);
       setContentName("");
     }
   }
@@ -2983,21 +2989,16 @@ function PipedriveRuleForm({
           ) : null}
 
           <div className="provider-conversion-base-fields">
-            <label>
-              <span className="field-label">
-                Moeda (ex.: BRL)
-                {currencyRequired ? " - obrigatória" : wonSelected ? " - opcional, usa a do negócio" : ""}
-              </span>
-              <input
-                name="currency"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                maxLength={3}
-                placeholder="BRL"
-                disabled={inert}
-                required={currencyRequired}
-              />
-            </label>
+            <CrmCurrencySelect
+              label={`Moeda${currencyRequired ? " - obrigatória" : wonSelected ? " - opcional, usa a do negócio" : ""}`}
+              value={currency}
+              onChange={setCurrency}
+              required={currencyRequired}
+              emptyLabel={
+                wonSelected ? "Usar a moeda do negócio" : "Sem moeda"
+              }
+              disabled={inert}
+            />
             <label>
               <span className="field-label">Produto (opcional)</span>
               <input

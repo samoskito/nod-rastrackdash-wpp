@@ -17,6 +17,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import {
+  RuleCurrencySelect,
+  useWorkspaceCurrency,
+} from "../../../components/workspace-currency";
+import {
   accentEventCopy,
   paytBetaBadge,
   paytEventExplanations,
@@ -145,9 +149,10 @@ export function NewRuleFlow({
   const [result, setResult] = useState<ConversionScreenActionResult | null>(null);
   const [urlVisible, setUrlVisible] = useState(true);
 
+  const workspaceCurrency = useWorkspaceCurrency();
   const context = useMemo(
-    () => ({ numbers, connections, capabilities }),
-    [numbers, connections, capabilities],
+    () => ({ numbers, connections, capabilities, workspaceCurrency }),
+    [numbers, connections, capabilities, workspaceCurrency],
   );
   const definition = origin ? ruleOriginDefinition(origin) : null;
   const locked = inFlight !== null;
@@ -961,7 +966,7 @@ export function ValueFields({
     <div className="conversion-field-row">
       <label className="conversion-field">
         <span className="field-label">
-          {required ? "Valor médio (R$)" : "Valor médio (opcional)"}
+          {required ? "Valor médio" : "Valor médio (opcional)"}
         </span>
         <input
           value={draft.averageValue}
@@ -1226,6 +1231,7 @@ function DetailsStep({
           valueMode={draft.valueMode}
           messageAuthorScope={draft.messageAuthorScope}
           contactAvailable={contactAvailable}
+          currency={draft.currency}
           onChange={(update) => onChange(update)}
         />
       ) : null}
@@ -1291,6 +1297,15 @@ function DetailsStep({
         </p>
       ) : null}
 
+      {conversionEventCarriesValue(definition.lockedEvent ?? draft.eventName) ? (
+        <RuleCurrencySelect
+          value={draft.currency}
+          onChange={(currency) => onChange({ currency })}
+          disabled={disabled}
+          hint={ruleCurrencyHint(draft.origin)}
+        />
+      ) : null}
+
       <dl className="conversion-flow-summary">
         <div>
           <dt>Origem</dt>
@@ -1316,6 +1331,17 @@ function DetailsStep({
       </dl>
     </fieldset>
   );
+}
+
+/** O que a moeda da regra significa em cada origem. */
+export function ruleCurrencyHint(origin: string): string {
+  if (origin === "automation_payt") {
+    return "A moeda da venda vence; esta só vale quando a venda não informa a moeda.";
+  }
+  if (origin === "structured_catalog") {
+    return "Moeda dos preços do catálogo.";
+  }
+  return "Moeda do valor enviado à Meta.";
 }
 
 function CopyUrlButton({ url }: { url: string }) {

@@ -24,6 +24,7 @@ import {
   ruleEditDraft,
 } from "../src/app/(app)/conversions/rule-edit";
 import { deleteConfirmText, ruleManageTabs } from "../src/app/(app)/conversions/rule-manage";
+import { WorkspaceCurrencyProvider } from "../src/components/workspace-currency";
 import { at, capabilities, connections, numbers, providerRule } from "./conversions-fixtures";
 
 const refresh = vi.fn();
@@ -811,5 +812,88 @@ describe("Regras antigas", () => {
   it("hides the section when there are no old rules", () => {
     render(createElement(ConversionsScreen, screenProps()));
     expect(screen.queryByRole("region", { name: "Regras antigas" })).toBeNull();
+  });
+});
+
+describe("Gerenciar regra: moeda", () => {
+  function inCurrency(currency: "BRL" | "USD" | "EUR", children: ReturnType<typeof createElement>) {
+    return createElement(WorkspaceCurrencyProvider, { currency }, children);
+  }
+
+  // Compra carrega valor; QualifiedLead (o evento da regra Umbler de base) não.
+  const purchaseRule: ProviderConversionRuleDto = {
+    ...umblerRule,
+    conversionRule: {
+      ...umblerRule.conversionRule,
+      eventName: "Purchase",
+      defaultValueCents: 9_900,
+    },
+  };
+
+  it("shows 'Padrão do workspace' and saves a currency of its own", async () => {
+    const user = setupUser();
+    const props = screenProps({
+      providerRules: [purchaseRule],
+      rows: buildProviderRuleRows([purchaseRule], numbers, connections, capabilities),
+    });
+    render(inCurrency("USD", createElement(ConversionsScreen, props)));
+
+    await user.click(screen.getByRole("button", { name: "Gerenciar Automação Umbler" }));
+    const dialog = screen.getByRole("dialog", { name: "Gerenciar “Automação Umbler”" });
+    const currency = within(dialog).getByLabelText(/^Moeda/) as HTMLSelectElement;
+    expect(currency.value).toBe("");
+    expect(
+      within(currency).getByRole("option", { name: "Padrão do workspace (USD)" }),
+    ).toBeTruthy();
+
+    await user.selectOptions(currency, "EUR");
+    await user.click(within(dialog).getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(props.updateRuleAction).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(formOf(props.updateRuleAction).get("payload")))).toEqual({
+      defaultCurrency: "EUR",
+    });
+  });
+
+  it("goes back to inheriting the workspace currency by sending null", async () => {
+    const user = setupUser();
+    const pinned: ProviderConversionRuleDto = {
+      ...purchaseRule,
+      conversionRule: {
+        ...purchaseRule.conversionRule,
+        defaultValueCents: 9_900,
+        defaultCurrency: "USD",
+      },
+    };
+    const props = screenProps({
+      providerRules: [pinned],
+      rows: buildProviderRuleRows([pinned], numbers, connections, capabilities),
+    });
+    render(inCurrency("BRL", createElement(ConversionsScreen, props)));
+
+    await user.click(screen.getByRole("button", { name: "Gerenciar Automação Umbler" }));
+    const dialog = screen.getByRole("dialog", { name: "Gerenciar “Automação Umbler”" });
+    const currency = within(dialog).getByLabelText(/^Moeda/) as HTMLSelectElement;
+    expect(currency.value).toBe("USD");
+    await user.selectOptions(currency, "");
+    await user.click(within(dialog).getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(props.updateRuleAction).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(formOf(props.updateRuleAction).get("payload")))).toEqual({
+      defaultCurrency: null,
+    });
+  });
+
+  it("offers no currency on a rule whose event carries no value", async () => {
+    const user = setupUser();
+    const props = screenProps({
+      providerRules: [messageRule],
+      rows: buildProviderRuleRows([messageRule], numbers, connections, capabilities),
+    });
+    render(inCurrency("BRL", createElement(ConversionsScreen, props)));
+
+    await user.click(screen.getByRole("button", { name: "Gerenciar Orçamento enviado" }));
+    const dialog = screen.getByRole("dialog", { name: "Gerenciar “Orçamento enviado”" });
+    expect(within(dialog).queryByLabelText(/^Moeda/)).toBeNull();
   });
 });

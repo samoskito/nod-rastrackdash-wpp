@@ -1,5 +1,6 @@
 import type {
   ConversionEventNameDto,
+  CurrencyCode,
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleOriginDto,
 } from "@wpptrack/shared";
@@ -58,6 +59,11 @@ export type RuleDraft = {
   labelNames: string;
   triggerLabels: TriggerLabel[];
   catalog: CatalogDraft;
+  /**
+   * Moeda da regra: "" = "Padrão do workspace" (null na API, herda a Moeda
+   * das conversões); a moeda da venda, quando vier, sempre vence.
+   */
+  currency: "" | CurrencyCode;
 };
 
 export type DraftContext = {
@@ -65,6 +71,8 @@ export type DraftContext = {
   connections: readonly ConversionConnection[];
   /** O que a API aceita (provedores por origem e por autor). */
   capabilities: ProviderConversionRuleCapabilitiesDto | null;
+  /** "Moeda das conversões" (catálogo precisa de moeda concreta). */
+  workspaceCurrency?: CurrencyCode;
 };
 
 export function emptyRuleDraft(
@@ -90,6 +98,7 @@ export function emptyRuleDraft(
     contentName: "",
     labelNames: "",
     triggerLabels: [],
+    currency: "",
     catalog: {
       name: "",
       productName: "",
@@ -227,9 +236,15 @@ export function parseLines(value: string): string[] {
   ];
 }
 
-/** "1.397,00", "R$ 250" and "250.5" to cents; null when not a positive amount. */
+/**
+ * "1.397,00", "R$ 250", "US$ 250", "€ 99" e "250.5" para centavos; null quando
+ * não é um valor positivo.
+ */
 export function moneyToCents(value: string): number | null {
-  let normalized = value.trim().replace(/R\$/giu, "").replace(/\s/gu, "");
+  let normalized = value
+    .trim()
+    .replace(/(US\$|R\$|\$|€)/giu, "")
+    .replace(/\s/gu, "");
   if (!normalized) return null;
 
   if (normalized.includes(",")) {
@@ -267,7 +282,9 @@ function valueFields(
   return {
     ok: true,
     value: {
-      ...(cents ? { defaultValueCents: cents, defaultCurrency: "BRL" } : {}),
+      ...(cents ? { defaultValueCents: cents } : {}),
+      // Sem moeda = herdar a "Moeda das conversões" do workspace.
+      ...(draft.currency ? { defaultCurrency: draft.currency } : {}),
       ...(draft.contentName.trim()
         ? { defaultContentName: draft.contentName.trim() }
         : {}),
@@ -287,7 +304,10 @@ function catalogAttributeKey(label: string, index: number): string {
   return /^[a-z]/u.test(normalized) ? normalized : `atributo_${index + 1}`;
 }
 
-function catalogPayload(draft: RuleDraft): Result<Record<string, unknown>> {
+function catalogPayload(
+  draft: RuleDraft,
+  workspaceCurrency: CurrencyCode = "BRL",
+): Result<Record<string, unknown>> {
   const catalog = draft.catalog;
   const labels = catalog.attributes.map((label) => label.trim());
 
@@ -336,7 +356,8 @@ function catalogPayload(draft: RuleDraft): Result<Record<string, unknown>> {
     value: {
       name: catalog.name.trim(),
       productName: catalog.productName.trim(),
-      currency: "BRL",
+      // Preços de catálogo precisam de moeda concreta.
+      currency: draft.currency || workspaceCurrency,
       attributes: labels.map((label, index) => ({ key: keys[index], label })),
       variants,
     },
@@ -393,6 +414,10 @@ export function buildRulePayload(
           triggerType: "provider_automation",
           eventName,
           automationSource: "payt",
+          // Moeda da venda -> da regra -> do workspace.
+          ...(conversionEventCarriesValue(eventName) && draft.currency
+            ? { defaultCurrency: draft.currency }
+            : {}),
         },
       };
     case "automation_umbler":
@@ -490,7 +515,7 @@ export function buildRulePayload(
           message: "Informe a frase que abre o pedido (ex.: “Resumo do pedido”).",
         };
       }
-      const catalog = catalogPayload(draft);
+      const catalog = catalogPayload(draft, context.workspaceCurrency);
       if (!catalog.ok) return catalog;
       return {
         ok: true,

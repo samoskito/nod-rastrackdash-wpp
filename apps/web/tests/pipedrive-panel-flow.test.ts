@@ -5,7 +5,8 @@ import {
   conversionEventNameSchema,
   conversionEventValuePolicy,
 } from "@wpptrack/shared";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   baseConnection,
@@ -14,7 +15,14 @@ import {
   ruleWith,
   snapshotOf,
 } from "./support/pipedrive-fixtures";
-import { formValues, renderPanel, sentForm } from "./support/pipedrive-panel-harness";
+import {
+  buildPanelElement,
+  formValues,
+  makeActions,
+  renderPanel,
+  sentForm,
+} from "./support/pipedrive-panel-harness";
+import { WorkspaceCurrencyProvider } from "../src/components/workspace-currency";
 
 const { routerRefresh } = vi.hoisted(() => ({ routerRefresh: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -421,7 +429,7 @@ describe("Pipedrive rule CRUD", () => {
     const event = screen.getByLabelText("Evento da conversão") as HTMLSelectElement;
     expect(event.disabled).toBe(true);
     expect(event.value).toBe("Purchase");
-    expect((screen.getByLabelText(/^Moeda/) as HTMLInputElement).required).toBe(false);
+    expect((screen.getByLabelText(/^Moeda/) as HTMLSelectElement).required).toBe(false);
     expect(screen.getByText(/marcado como ganho, envia Compra/)).toBeTruthy();
     submitRule();
 
@@ -440,6 +448,48 @@ describe("Pipedrive rule CRUD", () => {
     });
     expect(payload).not.toHaveProperty("currency");
     expect(await screen.findByText("Vendas / Negócio ganho")).toBeTruthy();
+  });
+
+  describe("workspace currency", () => {
+    function renderWithWorkspaceCurrency(currency: "BRL" | "USD" | "EUR") {
+      const actions = makeActions();
+      render(
+        createElement(
+          WorkspaceCurrencyProvider,
+          { currency },
+          buildPanelElement(actions),
+        ),
+      );
+      return actions;
+    }
+
+    it.each(["BRL", "USD", "EUR"] as const)(
+      "starts a new valued rule on the workspace currency %s and sends it",
+      async (workspaceCurrency) => {
+        const actions = renderWithWorkspaceCurrency(workspaceCurrency);
+        fillNewRule({ eventName: "Purchase" });
+        const currency = screen.getByLabelText(/^Moeda/) as HTMLSelectElement;
+        expect(currency.tagName).toBe("SELECT");
+        expect(currency.value).toBe(workspaceCurrency);
+        submitRule();
+
+        await waitFor(() => expect(actions.createRuleAction).toHaveBeenCalledTimes(1));
+        const payload = JSON.parse(
+          formValues(actions.createRuleAction.mock.calls[0]![0] as FormData).payload,
+        );
+        expect(payload.currency).toBe(workspaceCurrency);
+      },
+    );
+
+    it("lets a won deal keep the currency of the deal unless a currency is picked", () => {
+      renderWithWorkspaceCurrency("USD");
+      fillNewRule({ name: "Venda fechada", stage: "pipeline_1::__deal_won__" });
+      const currency = screen.getByLabelText(/^Moeda/) as HTMLSelectElement;
+      expect(currency.value).toBe("");
+      expect(
+        within(currency).getByRole("option", { name: "Usar a moeda do negócio" }),
+      ).toBeTruthy();
+    });
   });
 
   it("never shows internal jargon to the customer", () => {
@@ -487,7 +537,7 @@ describe("Pipedrive rule CRUD", () => {
       renderPanel({ createRuleAction });
       fillNewRule({ eventName });
       if (policy === "required") {
-        fireEvent.change(screen.getByLabelText(/^Moeda/), { target: { value: "brl" } });
+        fireEvent.change(screen.getByLabelText(/^Moeda/), { target: { value: "BRL" } });
       }
       submitRule();
 
@@ -515,12 +565,16 @@ describe("Pipedrive rule CRUD", () => {
     fillNewRule({ eventName: "Purchase" });
     fireEvent.click(screen.getByRole("radio", { name: "Valor fixo" }));
     fireEvent.change(screen.getByLabelText("Valor fixo (positivo)"), { target: { value: "199,90" } });
-    // The currency field is `required` for fixed values: the browser blocks the submit.
-    expect((screen.getByLabelText(/^Moeda/) as HTMLInputElement).required).toBe(true);
+    // A moeda começa na do workspace (BRL sem provider) e continua obrigatória
+    // para valor fixo: sem moeda o navegador bloqueia o envio.
+    const currency = screen.getByLabelText(/^Moeda/) as HTMLSelectElement;
+    expect(currency.value).toBe("BRL");
+    expect(currency.required).toBe(true);
+    fireEvent.change(currency, { target: { value: "" } });
     submitRule();
     expect(createRuleAction).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText(/^Moeda/), { target: { value: "brl" } });
+    fireEvent.change(screen.getByLabelText(/^Moeda/), { target: { value: "BRL" } });
     fireEvent.change(screen.getByLabelText("Produto (opcional)"), { target: { value: "Plano anual" } });
     submitRule();
 

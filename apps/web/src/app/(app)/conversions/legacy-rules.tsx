@@ -5,10 +5,15 @@ import type {
   LegacyConversionRuleDto,
   ProviderConversionRuleCapabilitiesDto,
 } from "@wpptrack/shared";
+import { formatMoney } from "@wpptrack/shared";
 import { Link2, Pause, Pencil, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Modal } from "../../../components/modal";
+import {
+  RuleCurrencySelect,
+  ruleCurrencyChoice,
+} from "../../../components/workspace-currency";
 import { PresentationMask } from "../../../components/presentation-mask";
 import type {
   ConversionScreenActionResult,
@@ -55,15 +60,12 @@ export const legacyBlockedReasonCopy: Record<
 > = {
   not_keyword_purchase:
     "Só regras de compra por palavra podem ser conectadas aos números.",
-  missing_value: "Informe produto, valor e moeda para poder conectar aos números.",
+  missing_value: "Informe produto e valor para poder conectar aos números.",
 };
 
 function moneyLabel(valueCents: number | null | undefined, currency?: string | null): string {
   if (valueCents == null) return "Sem valor";
-  return (valueCents / 100).toLocaleString("pt-BR", {
-    currency: currency ?? "BRL",
-    style: "currency",
-  });
+  return formatMoney(valueCents, currency);
 }
 
 function moneyInput(valueCents: number | null | undefined): string {
@@ -348,14 +350,10 @@ function LegacyValueForm({
           />
         </label>
       </div>
-      <label className="conversion-field">
-        <span className="field-label">Moeda</span>
-        <select name="defaultCurrency" defaultValue={rule.defaultCurrency ?? "BRL"}>
-          <option value="BRL">Real (BRL)</option>
-          <option value="USD">Dólar (USD)</option>
-          <option value="EUR">Euro (EUR)</option>
-        </select>
-      </label>
+      <RuleCurrencySelect
+        name="defaultCurrency"
+        value={ruleCurrencyChoice(rule.defaultCurrency)}
+      />
       {error ? (
         <p className="action-note warn" role="alert">
           {error}

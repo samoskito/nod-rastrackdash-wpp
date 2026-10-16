@@ -15655,3 +15655,151 @@ button.meta-manual-entry[aria-expanded="true"] {
     flex-direction: column;
   }
 }
+
+.currency-badge {
+  min-height: 22px;
+  padding: 3px 7px;
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+}
+
+.settings-currency-domain .currency-settings-panel {
+  display: grid;
+  gap: 22px;
+  padding: 18px;
+}
+
+.currency-settings-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(220px, 320px);
+  align-items: start;
+  gap: 14px;
+}
+
+.currency-settings-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.currency-settings-copy small {
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.currency-settings-form {
+  display: grid;
+  gap: 10px;
+}
+
+.currency-settings-form .action-note {
+  margin-top: 0;
+  line-height: 1.45;
+}
+
+.currency-settings-readonly {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.currency-settings-readonly small {
+  color: var(--ink-muted);
+}
+
+.currency-settings-accounts {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.currency-accounts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.currency-accounts-table th,
+.currency-accounts-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.currency-accounts-table td small {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.currency-accounts-table tr.inactive td {
+  opacity: 0.6;
+}
+
+.currency-unsupported {
+  margin-left: 8px;
+}
+
+.currency-account-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.currency-account-form select {
+  min-width: 180px;
+}
+
+@media (max-width: 760px) {
+  .currency-settings-block {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .currency-settings-block .settings-automation-icon {
+    display: none;
+  }
+
+  .currency-accounts-table {
+    min-width: 0;
+  }
+
+  .currency-accounts-table thead {
+    display: none;
+  }
+
+  .currency-accounts-table,
+  .currency-accounts-table tbody,
+  .currency-accounts-table tr,
+  .currency-accounts-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .currency-accounts-table tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .currency-accounts-table td {
+    padding: 6px 4px;
+    border-bottom: 0;
+  }
+
+  .currency-accounts-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .currency-account-form select {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

@@ -22,6 +22,8 @@ import {
 } from "./conversion-rules-view";
 import { loadConversionsData } from "./conversions-data";
 import { ConversionsScreen } from "./conversions-screen";
+import { WorkspaceCurrencyProvider } from "../../../components/workspace-currency";
+import { getWorkspaceCurrencySettings } from "../../../lib/currency-settings";
 
 type ConversionsPageProps = {
   searchParams?: Promise<{ nova?: string }>;
@@ -31,7 +33,10 @@ export default async function ConversionsPage({
   searchParams,
 }: ConversionsPageProps) {
   const params = searchParams ? await searchParams : {};
-  const data = await loadConversionsData();
+  const [data, currencySettings] = await Promise.all([
+    loadConversionsData(),
+    getWorkspaceCurrencySettings(),
+  ]);
   const rows = sortRuleRows([
     ...buildProviderRuleRows(
       data.providerRules,
@@ -70,6 +75,7 @@ export default async function ConversionsPage({
         </div>
       </header>
 
+      <WorkspaceCurrencyProvider currency={currencySettings?.conversionCurrency}>
       <ConversionsScreen
         rows={rows}
         numbers={data.numbers}
@@ -107,6 +113,7 @@ export default async function ConversionsPage({
           adapt: adaptProviderConversionRuleAction,
         }}
       />
+      </WorkspaceCurrencyProvider>
     </section>
   );
 }
