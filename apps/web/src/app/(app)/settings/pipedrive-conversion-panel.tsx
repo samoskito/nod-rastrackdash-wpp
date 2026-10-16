@@ -375,6 +375,8 @@ const errorCodeText: Record<string, string> = {
     "Valor do negócio ausente ou não positivo para este evento.",
   event_currency_not_configured: "Regra sem moeda configurada.",
   event_currency_mismatch: "Moeda do negócio diferente da moeda da regra.",
+  event_currency_unsupported:
+    "Negócio em moeda fora de BRL, USD ou EUR: nada foi enviado à Meta.",
   connection_fence_changed:
     "A conexão mudou durante o processamento (credencial ou URL do webhook).",
   attempts_exhausted:
@@ -3014,7 +3016,9 @@ function PipedriveRuleForm({
           {valueMode === "deal" ? (
             <p className="action-note">
               Se a moeda do negócio for diferente da configurada, o movimento é
-              ignorado: não há conversão cambial.
+              ignorado: não há conversão cambial. Negócio sem moeda usa a da
+              regra ou a do workspace; negócio em moeda fora de BRL, USD ou EUR
+              é ignorado.
             </p>
           ) : null}
         </>

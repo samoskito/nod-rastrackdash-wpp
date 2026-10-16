@@ -5,6 +5,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { ConversionEventsService } from "../../src/conversion-events/conversion-events.service";
 import { buildMetaCapiPayload } from "../../src/conversion-events/meta-capi-payload.builder";
+import { preflightMetaCapiEvent } from "../../src/conversion-events/meta-capi.adapter";
 import { ProviderConversionLegacyDecisionEngine } from "../../src/conversion-rules/provider-conversion-legacy-decision.engine";
 import { ProviderConversionDecisionEngine } from "../../src/conversion-rules/provider-conversion-decision.engine";
 import type { ProviderConversionDecisionInput } from "../../src/conversion-rules/provider-conversion-decision.types";
@@ -294,7 +295,7 @@ describe("Meta CAPI payload currency", () => {
   });
 });
 
-describe("Pipedrive deal currency (aluno: igual ao SaaS)", () => {
+describe("Pipedrive deal currency (negócio -> regra -> workspace)", () => {
   const service = new PipedriveWebhookService(
     {} as never,
     {} as never,
@@ -306,7 +307,7 @@ describe("Pipedrive deal currency (aluno: igual ao SaaS)", () => {
   ) =>
     (
       service as unknown as {
-        valueFor: (rule: unknown, event: unknown) => unknown;
+        valueFor: (rule: unknown, event: unknown, ws: string) => unknown;
       }
     ).valueFor(
       {
@@ -324,6 +325,7 @@ describe("Pipedrive deal currency (aluno: igual ao SaaS)", () => {
         ...rule,
       },
       { valueCents: 19_700, valuePresent: true, currency: null, ...event },
+      "EUR",
     );
 
   it("uses the deal currency when the rule names none", () => {
@@ -347,9 +349,39 @@ describe("Pipedrive deal currency (aluno: igual ao SaaS)", () => {
     });
   });
 
-  it("never sends a deal value without a currency", () => {
+  it("never sends a deal value without a currency: falls back to the workspace", () => {
     expect(valueFor({}, { currency: null })).toEqual({
-      error: "event_currency_not_configured",
+      cents: 19_700,
+      currency: "EUR",
+    });
+  });
+
+  it("treats a stored rule code outside the list as no currency", () => {
+    expect(valueFor({ currency: "GBP" }, { currency: null })).toEqual({
+      cents: 19_700,
+      currency: "EUR",
+    });
+    expect(valueFor({ currency: "GBP" }, { currency: "USD" })).toEqual({
+      cents: 19_700,
+      currency: "USD",
+    });
+    expect(
+      valueFor(
+        {
+          currency: "GBP",
+          trigger: "stage_change",
+          stageId: "10",
+          valueMode: "fixed",
+          fixedValueCents: 5_000,
+        },
+        { currency: null },
+      ),
+    ).toEqual({ cents: 5_000, currency: "EUR" });
+  });
+
+  it("blocks a deal in a currency outside BRL/USD/EUR", () => {
+    expect(valueFor({}, { currency: "GBP" })).toEqual({
+      error: "event_currency_unsupported",
     });
   });
 });
@@ -379,8 +411,9 @@ describe("duplicate external conversion (aluno)", () => {
       } as never,
       {},
     );
-    const record = () =>
+    const record = (currency?: string) =>
       service.recordExternalConversion({
+        ...(currency ? { currency } : {}),
         workspaceId: "workspace_1",
         sourceTrigger: "inbound_webhook:payt",
         eventName: "Purchase",
@@ -416,6 +449,33 @@ describe("duplicate external conversion (aluno)", () => {
     });
   });
 
+  it("M2: imported event with a value and no currency keeps null even when the input says USD", async () => {
+    const { record, update } = reconcileHarness({
+      ...base,
+      status: "imported",
+      valueCents: 10_000,
+      currency: null,
+    });
+    await record("USD");
+    expect(update.mock.calls[0]?.[0].data).toMatchObject({
+      valueCents: 10_000,
+      currency: null,
+    });
+  });
+
+  it("M2: a value arriving with USD on a valueless event takes USD (the value's own currency)", async () => {
+    const { record, update } = reconcileHarness({
+      ...base,
+      valueCents: null,
+      currency: "BRL",
+    });
+    await record("USD");
+    expect(update.mock.calls[0]?.[0].data).toMatchObject({
+      valueCents: 19_700,
+      currency: "USD",
+    });
+  });
+
   it("an older event that already had a value keeps its currency", async () => {
     const { record, update } = reconcileHarness({
       ...base,
@@ -427,5 +487,153 @@ describe("duplicate external conversion (aluno)", () => {
       valueCents: 10_000,
       currency: null,
     });
+  });
+});
+
+describe("M1: rule currency outside BRL/USD/EUR is read as no currency", () => {
+  it("rule conversions inherit the workspace currency instead of BRL", async () => {
+    const usd = harness("USD");
+    await usd.service.recordRuleMatches({
+      workspaceId: "workspace_1",
+      rules: [rule({ defaultCurrency: "GBP" })],
+      phoneHash: "hash_a",
+    });
+    await usd.service.recordRuleMatches({
+      workspaceId: "workspace_1",
+      rules: [
+        rule({ id: "rule_2", eventName: "QualifiedLead", defaultValueCents: null, defaultCurrency: "GBP" }),
+      ],
+      phoneHash: "hash_b",
+    });
+    expect(usd.logs.map((log) => log.currency)).toEqual(["USD", null]);
+  });
+
+  it("external conversions never store a code outside the list", async () => {
+    const { service, logs } = harness("EUR");
+    await service.recordExternalConversion({
+      workspaceId: "workspace_1",
+      sourceTrigger: "external",
+      eventName: "Purchase",
+      phoneHash: "hash_a",
+      businessSource: "organic",
+      eventOccurredAt: new Date("2026-10-14T12:00:00.000Z"),
+      sourceEventId: "s1",
+      eventId: "e1",
+      dedupeKey: "d1",
+      valueCents: 19_700,
+      currency: "GBP",
+    });
+    expect(logs[0]?.currency).toBe("EUR");
+  });
+
+  it("decision engines (new and legacy) inherit the workspace for a GBP rule", () => {
+    const base = {
+      parserVersion: "automation-v1",
+      catalog: null,
+      leadResolution: {
+        status: "resolved",
+        lead: {
+          id: "lead_1",
+          phoneHash: "hash_1",
+          customerIdentityKey: "hash_1",
+          campaignId: "c",
+          adSetId: "s",
+          adId: "a",
+          ctwaClid: "clid",
+          ctwaClidSource: "lead",
+          metaAccountId: "act_1",
+        },
+      },
+      contactIdentityHash: "hash_1",
+      rule: {
+        providerRuleId: "provider_rule_1",
+        conversionRuleId: "conversion_rule_1",
+        version: "v1",
+        triggerType: "provider_automation",
+        eventName: "Purchase",
+        mode: "production",
+        active: true,
+        authorScope: null,
+        triggerPhrases: [],
+        defaultValueCents: 25_000,
+        defaultCurrency: "GBP",
+        defaultContentName: null,
+        valueMode: "fixed",
+        exampleMessage: null,
+      },
+      occurrence: {
+        source: "automation",
+        provider: "umbler",
+        workspaceId: "workspace_1",
+        connectionId: "connection_1",
+        channelId: null,
+        externalDeliveryId: "delivery_1",
+        externalEventId: "order_1",
+        externalMessageId: null,
+        occurrenceKey: "order_1",
+        purchaseKey: `purchase:${"a".repeat(64)}`,
+        eventName: "Purchase",
+        occurredAt: "2026-10-14T12:00:00.000Z",
+        authorType: null,
+        automation: "purchase_paid",
+        fallbackCurrency: "USD",
+      },
+    } as unknown as ProviderConversionDecisionInput;
+    const currencyOf = (decision: unknown) =>
+      (decision as { conversion?: { currency?: string | null } } | null)
+        ?.conversion?.currency;
+    expect(
+      currencyOf(new ProviderConversionLegacyDecisionEngine().evaluate(base)),
+    ).toBe("USD");
+    expect(
+      currencyOf(new ProviderConversionDecisionEngine().evaluate(base)),
+    ).toBe("USD");
+  });
+
+  it("the Meta preflight blocks a stored value in a code outside the list", () => {
+    const blocked = preflightMetaCapiEvent({
+      accessToken: "token",
+      pixelId: "pixel",
+      pageId: "page",
+      eventName: "Purchase",
+      dedupeKey: "event_1",
+      phoneHash: "hash",
+      ctwaClid: "clid",
+      adId: "123",
+      valueCents: 1999,
+      currency: "GBP",
+    } as never);
+    expect(blocked).toMatchObject({
+      status: "not_configured",
+      errorCode: "UnsupportedCurrency",
+    });
+    expect(
+      preflightMetaCapiEvent({
+        accessToken: "token",
+        pixelId: "pixel",
+        pageId: "page",
+        eventName: "Purchase",
+        dedupeKey: "event_1",
+        phoneHash: "hash",
+        ctwaClid: "clid",
+        adId: "123",
+        valueCents: 1999,
+        currency: "usd",
+      } as never),
+    ).toBeNull();
+  });
+
+  it("the payload builder only ever writes BRL, USD or EUR", () => {
+    const payload = buildMetaCapiPayload({
+      eventName: "LeadSubmitted",
+      eventTime: new Date("2026-10-14T12:00:00.000Z"),
+      eventId: "event_1",
+      phoneHash: "hash",
+      ctwaClid: "clid",
+      pageId: "page",
+      adId: "123",
+      currency: "GBP",
+    });
+    expect(payload.data[0]?.custom_data).not.toHaveProperty("currency");
   });
 });

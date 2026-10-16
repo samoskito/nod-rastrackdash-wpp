@@ -27,6 +27,8 @@ import {
   providerConversionRuleUpdateInputSchema,
   providerRuleCreateRequestKeySchema,
   structuredCatalogTestMessageInputSchema,
+  RULE_CURRENCY_INVALID_MESSAGE,
+  hasRuleCurrencyIssue,
 } from "@wpptrack/shared";
 import { AuthToken } from "../auth/auth-user.decorator";
 import { AuthService } from "../auth/auth.service";
@@ -102,7 +104,11 @@ export class ConversionRulesController {
     ).safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
+      throw new BadRequestException(
+        hasRuleCurrencyIssue(parsed.error)
+          ? RULE_CURRENCY_INVALID_MESSAGE
+          : parsed.error.flatten(),
+      );
     }
 
     if (requestKey !== undefined) {
@@ -174,7 +180,11 @@ export class ConversionRulesController {
     const parsed = providerConversionRuleUnifyInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
+      throw new BadRequestException(
+        hasRuleCurrencyIssue(parsed.error)
+          ? RULE_CURRENCY_INVALID_MESSAGE
+          : parsed.error.flatten(),
+      );
     }
 
     return this.providerConversionRulesService.unifyRules(
@@ -207,7 +217,11 @@ export class ConversionRulesController {
     const parsed = providerConversionRuleAdaptInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
+      throw new BadRequestException(
+        hasRuleCurrencyIssue(parsed.error)
+          ? RULE_CURRENCY_INVALID_MESSAGE
+          : parsed.error.flatten(),
+      );
     }
 
     return this.providerConversionRulesService.adaptLegacyMessageRule(
@@ -228,7 +242,11 @@ export class ConversionRulesController {
     const parsed = providerConversionRuleUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
+      throw new BadRequestException(
+        hasRuleCurrencyIssue(parsed.error)
+          ? RULE_CURRENCY_INVALID_MESSAGE
+          : parsed.error.flatten(),
+      );
     }
 
     return this.providerConversionRulesService.updateRule(
@@ -264,7 +282,11 @@ export class ConversionRulesController {
     const parsed = structuredCatalogTestMessageInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
+      throw new BadRequestException(
+        hasRuleCurrencyIssue(parsed.error)
+          ? RULE_CURRENCY_INVALID_MESSAGE
+          : parsed.error.flatten(),
+      );
     }
 
     return this.conversionCatalogService.testMessage(
@@ -284,7 +306,11 @@ export class ConversionRulesController {
     const parsed = providerConversionRuleExecutionAuditQuerySchema.safeParse(query);
 
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten());
+      throw new BadRequestException(
+        hasRuleCurrencyIssue(parsed.error)
+          ? RULE_CURRENCY_INVALID_MESSAGE
+          : parsed.error.flatten(),
+      );
     }
 
     return this.providerConversionRulesService.listRuleExecutions(
@@ -338,7 +364,7 @@ export class ConversionRulesController {
     const parsed = conversionRuleCreateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -364,7 +390,7 @@ export class ConversionRulesController {
     const parsed = conversionRuleUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);

@@ -30,6 +30,7 @@ import {
 } from "../kommo/kommo-sender-policy";
 import {
   authorizedCtwaDestinationSchema,
+  normalizeCurrencyCode,
   resolveConversionCurrency,
 } from "@wpptrack/shared";
 import {
@@ -598,10 +599,12 @@ export class ConversionEventsService {
         eventName: rule.eventName,
         customerIdentityKey,
       });
+      // Só BRL/USD/EUR contam: código fora da lista (regra gravada antes da
+      // Fase 5.1) é tratado como sem moeda e herda a do workspace.
       const explicitCurrency =
-        input.currency ??
-        rule.defaultCurrency ??
-        eventDefaults?.defaultCurrency ??
+        normalizeCurrencyCode(input.currency) ??
+        normalizeCurrencyCode(rule.defaultCurrency) ??
+        normalizeCurrencyCode(eventDefaults?.defaultCurrency) ??
         null;
       // A value always travels with a currency: venda -> regra -> workspace
       // -> BRL. Valueless events keep the historical (possibly null) currency.
@@ -932,15 +935,14 @@ export class ConversionEventsService {
     // sem ela, a "Moeda das conversões" do workspace. Evento que já tinha
     // valor guarda a moeda que tinha (eventos antigos não mudam).
     const currency =
-      existing.currency ??
-      (existing.valueCents == null
-        ? await this.valueCurrency({
+      existing.valueCents != null
+        ? existing.currency
+        : await this.valueCurrency({
             workspaceId: input.workspaceId,
             valueCents: input.valueCents,
             currency: input.currency,
             client,
-          })
-        : (input.currency ?? null));
+          });
     const updated = (await client.conversionEventLog.update({
       where: { id: existing.id },
       data: {
@@ -1010,7 +1012,8 @@ export class ConversionEventsService {
     currency?: string | null;
     client?: unknown;
   }): Promise<string | null> {
-    const explicit = input.currency?.trim().toUpperCase() || null;
+    // Nunca grava código fora de BRL/USD/EUR: sem moeda válida, a do workspace.
+    const explicit = normalizeCurrencyCode(input.currency);
     if (input.valueCents == null || explicit) return explicit;
     const client = input.client as { workspace?: unknown } | undefined;
 

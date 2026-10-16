@@ -19,6 +19,8 @@ import {
   pipedriveConnectionCredentialReplaceInputSchema,
   pipedriveConnectionChannelBindingsInputSchema,
   pipedriveConnectionStatusUpdateInputSchema,
+  RULE_CURRENCY_INVALID_MESSAGE,
+  hasRuleCurrencyIssue,
 } from "@wpptrack/shared";
 import { WorkspaceOwnerGuard } from "../workspaces/guards/workspace-owner.guard";
 import { PipedriveService, type PipedriveActor } from "./pipedrive.service";
@@ -204,7 +206,7 @@ export class PipedriveController {
     @Req() request: AuthorizedRequest,
   ) {
     const parsed = pipedriveConversionRuleCreateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload inválido");
+    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     return this.webhooks.createRule(
       workspaceId,
       connectionId,
@@ -221,7 +223,7 @@ export class PipedriveController {
     @Req() request: AuthorizedRequest,
   ) {
     const parsed = pipedriveConversionRuleUpdateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload inválido");
+    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     return this.webhooks.updateRule(
       workspaceId,
       connectionId,

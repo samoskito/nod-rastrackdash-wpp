@@ -317,6 +317,12 @@ describe("campos de moeda", () => {
       "GBP",
     ]);
     expect(within(select).getByRole("option", { name: "Sem moeda" })).toBeTruthy();
+    // A API recusa salvar um código fora da lista (Fase 5.1).
+    expect(
+      within(select).getByRole("option", {
+        name: "GBP (não aceita mais: escolha BRL, USD ou EUR)",
+      }),
+    ).toBeTruthy();
   });
 
   it("previews the fixed value in the currency of the rule, else the workspace's", () => {

@@ -74,29 +74,29 @@ export class CurrencySettingsService {
     input: WorkspaceCurrencyUpdateInputDto,
   ): Promise<WorkspaceCurrencySettingsDto> {
     this.requireManager(workspace);
-    const before = await loadWorkspaceConversionCurrency(
-      this.prisma,
-      workspace.id,
-    );
 
-    if (before !== input.conversionCurrency) {
-      await this.prisma.$transaction(async (transaction) => {
-        await transaction.workspace.update({
-          where: { id: workspace.id },
-          data: { conversionCurrency: input.conversionCurrency },
-          select: { id: true },
-        });
-        await this.audit(transaction, {
-          authenticated,
-          workspace,
-          action: "workspace.conversion_currency_updated",
-          targetType: "Workspace",
-          targetId: workspace.id,
-          beforeSummary: { conversionCurrency: before },
-          afterSummary: { conversionCurrency: input.conversionCurrency },
-        });
+    await this.prisma.$transaction(async (transaction) => {
+      // O "antes" da auditoria é lido dentro da mesma transação da troca.
+      const before = await loadWorkspaceConversionCurrency(
+        transaction,
+        workspace.id,
+      );
+      if (before === input.conversionCurrency) return;
+      await transaction.workspace.update({
+        where: { id: workspace.id },
+        data: { conversionCurrency: input.conversionCurrency },
+        select: { id: true },
       });
-    }
+      await this.audit(transaction, {
+        authenticated,
+        workspace,
+        action: "workspace.conversion_currency_updated",
+        targetType: "Workspace",
+        targetId: workspace.id,
+        beforeSummary: { conversionCurrency: before },
+        afterSummary: { conversionCurrency: input.conversionCurrency },
+      });
+    });
 
     return this.getSettings(workspace);
   }

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { normalizeCurrencyCode } from "@wpptrack/shared";
 import type {
   ProviderConversionDecisionConversionDto,
   ProviderConversionDecisionDto,
@@ -133,7 +134,7 @@ export class ProviderConversionLegacyDecisionEngine {
           // Moeda da venda -> da regra -> do workspace -> BRL.
           currency:
             input.occurrence.observedCurrency ??
-            input.rule.defaultCurrency ??
+            normalizeCurrencyCode(input.rule.defaultCurrency) ??
             input.occurrence.fallbackCurrency ??
             "BRL",
         },
@@ -276,7 +277,7 @@ export class ProviderConversionLegacyDecisionEngine {
       contentName: input.rule.defaultContentName,
       // Regra -> workspace -> BRL (null na regra = herdar).
       currency:
-        input.rule.defaultCurrency ??
+        normalizeCurrencyCode(input.rule.defaultCurrency) ??
         input.occurrence.fallbackCurrency ??
         "BRL",
     };

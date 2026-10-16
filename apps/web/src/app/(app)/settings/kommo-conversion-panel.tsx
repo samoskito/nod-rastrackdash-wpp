@@ -2334,8 +2334,8 @@ function KommoRuleForm({
           ) : null}
 
           <div className="provider-conversion-base-fields">
-            {/* Sempre enviada: sem moeda, "preço do lead" falha com
-                event_currency_not_configured. */}
+            {/* Sempre enviada. Regra sem moeda válida usa, no envio, a
+                "Moeda das conversões" do workspace. */}
             <CrmCurrencySelect
               label={`Moeda${currencyRequired ? " — obrigatória" : ""}`}
               value={currency}

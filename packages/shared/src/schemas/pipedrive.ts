@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ruleCurrencyInputSchema } from "../currency";
 import {
   crmChannelBindingFailures,
   crmChannelBindingMessagesFor,
@@ -11,11 +12,8 @@ import {
 import { conversionEventNameSchema } from "./conversion-events";
 
 const idSchema = z.string().trim().min(1).max(255);
-const currencySchema = z
-  .string()
-  .trim()
-  .regex(/^[A-Za-z]{3}$/)
-  .transform((value) => value.toUpperCase());
+// Moeda da regra: só BRL/USD/EUR (Fase 5.1).
+const currencySchema = ruleCurrencyInputSchema;
 const originSchema = z
   .string()
   .trim()

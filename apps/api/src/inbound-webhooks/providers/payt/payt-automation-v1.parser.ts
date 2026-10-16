@@ -64,7 +64,8 @@ export type PaytAutomationV1ParseResult =
       errorCode:
         | "payt_automation_v1_not_purchase"
         | "payt_automation_v1_invalid_payload"
-        | "payt_purchase_identity_missing";
+        | "payt_purchase_identity_missing"
+        | "payt_currency_unsupported";
     };
 
 export type PaytSaleEventV1ParseResult =
@@ -74,7 +75,8 @@ export type PaytSaleEventV1ParseResult =
       errorCode:
         | "payt_sale_v1_status_not_supported"
         | "payt_automation_v1_invalid_payload"
-        | "payt_purchase_identity_missing";
+        | "payt_purchase_identity_missing"
+        | "payt_currency_unsupported";
       providerStatus?: string | null;
     };
 
@@ -126,16 +128,21 @@ function lower(value: unknown, max: number): string | null {
 }
 
 /**
- * Sale currency when the postback declares one we support. Unknown or
- * unsupported codes are ignored (the historical behavior assumed BRL).
+ * Moeda que a venda declara (a da transação vale antes da do pedido). null =
+ * a venda não declara moeda (o normal na Payt): decide a regra ou o
+ * workspace. Moeda declarada fora de BRL/USD/EUR vira "unsupported": a venda
+ * é recusada com motivo (payt_currency_unsupported), porque o valor nunca
+ * pode sair à Meta numa moeda que não é a dele.
  */
 function paytCurrency(
   order: Record<string, unknown>,
   transaction: Record<string, unknown> | null,
-): CurrencyCode | null {
+): CurrencyCode | null | "unsupported" {
   for (const value of [transaction?.currency, order.currency]) {
-    const currency = normalizeCurrencyCode(boundedString(value, 10));
-    if (currency) return currency;
+    const declared =
+      typeof value === "string" && value.trim() ? value.trim() : null;
+    if (!declared) continue;
+    return normalizeCurrencyCode(boundedString(declared, 10)) ?? "unsupported";
   }
   return null;
 }
@@ -355,6 +362,11 @@ export function parsePaytSaleEventV1(
       return { ok: false, errorCode: "payt_automation_v1_invalid_payload" };
     }
 
+    const currency = paytCurrency(order, transaction);
+    if (currency === "unsupported") {
+      return { ok: false, errorCode: "payt_currency_unsupported" };
+    }
+
     const offer = offerOf(asRecord(order.link));
     const itemCodes = Array.isArray(productRecord?.items)
       ? productRecord.items
@@ -383,7 +395,7 @@ export function parsePaytSaleEventV1(
         orderRef,
         accountRef,
         valueCents,
-        currency: paytCurrency(order, transaction),
+        currency,
         test: order.test === true,
         product,
         offer,

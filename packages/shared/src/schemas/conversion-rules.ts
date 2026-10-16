@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ruleCurrencyInputSchema } from "../currency";
 import {
   conversionEventCarriesValue,
   conversionEventRequiresValue,
@@ -194,7 +195,8 @@ export const conversionRuleCreateInputSchema = z.object({
   // Legacy field. New conversion sending uses the workspace MetaConversionDestination.
   pixelId: z.string().trim().min(1).max(80).nullable().optional(),
   defaultValueCents: z.number().int().positive().nullable().optional(),
-  defaultCurrency: z.string().trim().min(3).max(3).nullable().optional(),
+  // Só BRL/USD/EUR; null = herdar a "Moeda das conversões" do workspace.
+  defaultCurrency: ruleCurrencyInputSchema.nullable().optional(),
   defaultContentName: z.string().trim().min(1).max(180).nullable().optional(),
   defaultItems: z.array(conversionEventItemSchema).nullable().optional(),
   active: z.boolean().default(true),
@@ -246,7 +248,7 @@ export const providerConversionCatalogInputSchema = z
   .object({
     name: z.string().trim().min(2).max(120),
     productName: catalogTextSchema,
-    currency: currencySchema.default("BRL"),
+    currency: ruleCurrencyInputSchema.default("BRL"),
     attributes: z
       .array(providerConversionCatalogAttributeInputSchema)
       .min(1)
@@ -445,8 +447,8 @@ function normalizeEventValueFields<Input extends ValuedRuleInput>(
 const eventValueShape = {
   // Required when valueMode is "fixed"; optional fallback when extracting.
   defaultValueCents: z.number().int().positive().nullable().optional(),
-  // null/ausente = herdar a "Moeda das conversoes" do workspace.
-  defaultCurrency: currencySchema.nullable().optional(),
+  // Só BRL/USD/EUR; null/ausente = herdar a "Moeda das conversões" do workspace.
+  defaultCurrency: ruleCurrencyInputSchema.nullable().optional(),
   defaultContentName: catalogTextSchema.nullable().optional(),
 };
 
@@ -626,7 +628,7 @@ export const providerConversionRuleUpdateInputSchema = z
       .optional(),
     mode: providerConversionRuleModeSchema.optional(),
     defaultValueCents: z.number().int().positive().nullable().optional(),
-    defaultCurrency: currencySchema.nullable().optional(),
+    defaultCurrency: ruleCurrencyInputSchema.nullable().optional(),
     defaultContentName: catalogTextSchema.nullable().optional(),
     valueMode: messagePhraseValueModeSchema.optional(),
     exampleMessage: messagePhraseExampleSchema.nullable().optional(),

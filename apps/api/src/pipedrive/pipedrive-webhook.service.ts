@@ -29,11 +29,17 @@ import {
   pipedriveConversionRuleUpdateInputSchema,
   type PipedriveConversionRuleCreateInputDto,
   type PipedriveConversionRuleUpdateInputDto,
+  RULE_CURRENCY_INVALID_MESSAGE,
+  hasRuleCurrencyIssue,
+  normalizeCurrencyCode,
+  type ConversionEventNameDto,
+  type CurrencyCode,
 } from "@wpptrack/shared";
 import { nextMutationTime } from "../inbound-webhooks/inbound-webhook-production-activation";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { lockKommoDispatch } from "../conversion-events/kommo-dispatch-coordination";
+import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { pipedrivePersonPhoneHashes } from "./pipedrive-phone-match";
 import { LicenseClientService } from "../licensing-client/license-client.service";
@@ -821,9 +827,14 @@ export class PipedriveWebhookService {
           },
           orderBy: { id: "asc" },
         });
+        // Regra sem moeda válida e negócio sem moeda: "Moeda das conversões".
+        const workspaceCurrency = await loadWorkspaceConversionCurrency(
+          tx,
+          workspaceId,
+        );
         const results: Result[] = [];
         for (const rule of rules) {
-          const value = this.valueFor(rule, event);
+          const value = this.valueFor(rule, event, workspaceCurrency);
           if ("error" in value) {
             results.push({
               ruleId: rule.id,
@@ -1736,30 +1747,43 @@ export class PipedriveWebhookService {
   private valueFor(
     rule: PipedriveConversionRule,
     event: PipedriveWebhookEvent,
+    workspaceCurrency: CurrencyCode,
   ): { cents: number | null; currency: string | null } | { error: string } {
-    const parsed = pipedriveConversionRuleCreateInputSchema.safeParse(
-      this.ruleInput(rule),
+    // Só BRL/USD/EUR vão à Meta. Regra gravada antes da Fase 5.1 com outro
+    // código conta como regra sem moeda (herda o workspace).
+    const ruleCurrency = normalizeCurrencyCode(rule.currency);
+    const carries = conversionEventCarriesValue(
+      rule.eventName as ConversionEventNameDto,
     );
+    const parsed = pipedriveConversionRuleCreateInputSchema.safeParse({
+      ...this.ruleInput(rule),
+      currency: carries ? (ruleCurrency ?? workspaceCurrency) : ruleCurrency,
+    });
     if (!parsed.success) return { error: "rule_value_invalid" };
     const input = parsed.data;
     if (!conversionEventCarriesValue(input.eventName))
       return { cents: null, currency: null };
     if (input.valueMode === "fixed")
-      return { cents: input.fixedValueCents!, currency: input.currency! };
+      return {
+        cents: input.fixedValueCents!,
+        currency: ruleCurrency ?? workspaceCurrency,
+      };
     const cents = event.valueCents === null ? null : Number(event.valueCents);
     if (cents !== null && (!Number.isSafeInteger(cents) || cents > 2147483647))
       return { error: "event_value_out_of_range" };
     if (!event.valuePresent || cents === null || cents <= 0)
       return conversionEventRequiresValue(input.eventName)
         ? { error: "event_price_missing_or_nonpositive" }
-        : { cents: null, currency: input.currency ?? null };
-    // The deal currency is used when the rule names none (won-deal rules); a
-    // rule currency, when set, must match the deal's.
-    const currency = input.currency ?? event.currency;
-    if (!currency) return { error: "event_currency_not_configured" };
-    if (event.currency && event.currency !== currency)
+        : { cents: null, currency: ruleCurrency };
+    // Moeda do negócio -> da regra -> do workspace. Negócio em moeda fora de
+    // BRL/USD/EUR nunca vai à Meta (o valor sairia na moeda errada); moeda da
+    // regra, quando existe, precisa bater com a do negócio.
+    const dealCurrency = normalizeCurrencyCode(event.currency);
+    if (event.currency && !dealCurrency)
+      return { error: "event_currency_unsupported" };
+    if (dealCurrency && ruleCurrency && dealCurrency !== ruleCurrency)
       return { error: "event_currency_mismatch" };
-    return { cents, currency };
+    return { cents, currency: dealCurrency ?? ruleCurrency ?? workspaceCurrency };
   }
 
   private async ignore(
@@ -2002,7 +2026,7 @@ export class PipedriveWebhookService {
         (!Number.isSafeInteger(parsed.data.fixedValueCents) ||
           parsed.data.fixedValueCents > 2147483647))
     )
-      throw new BadRequestException("Payload inválido");
+      throw new BadRequestException(!parsed.success && hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     return parsed.data;
   }
   private ruleInput(r: PipedriveConversionRule) {

@@ -8,6 +8,7 @@ import { Injectable } from "@nestjs/common";
 import {
   conversionEventDedupeMode,
   conversionEventValuePolicy,
+  normalizeCurrencyCode,
 } from "@wpptrack/shared";
 import {
   extractSingleMoneyValueCents,
@@ -296,7 +297,8 @@ export class ProviderConversionDecisionEngine {
       (input.occurrence.source === "automation"
         ? (input.occurrence.observedCurrency ?? null)
         : null) ??
-      input.rule.defaultCurrency ??
+      // Código fora de BRL/USD/EUR na regra conta como regra sem moeda.
+      normalizeCurrencyCode(input.rule.defaultCurrency) ??
       (valueCents ? (input.occurrence.fallbackCurrency ?? "BRL") : null);
     const matched = Boolean(valueCents && currency);
 
@@ -314,7 +316,9 @@ export class ProviderConversionDecisionEngine {
       observedPaymentValueCents: matched ? extractedValueCents : null,
       catalogVariantId: null,
       contentName: input.rule.defaultContentName,
-      currency: matched ? currency : input.rule.defaultCurrency,
+      currency: matched
+        ? currency
+        : normalizeCurrencyCode(input.rule.defaultCurrency),
     };
   }
 

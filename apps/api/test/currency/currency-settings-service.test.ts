@@ -225,4 +225,43 @@ describe("CurrencySettingsService", () => {
     ).rejects.toThrow("audit down");
     expect(state.accounts[1]!.currencyOverride).toBeNull();
   });
+
+  it("B3: reads the previous currency inside the same transaction as the change", async () => {
+    const tx = {
+      workspace: {
+        findUnique: vi.fn(async () => ({ conversionCurrency: "EUR" })),
+        update: vi.fn(async () => ({ id: "workspace_1" })),
+      },
+      auditLog: { create: vi.fn(async () => ({})) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) =>
+        callback(tx),
+      ),
+      workspace: {
+        // Fora da transação a leitura estaria velha (BRL).
+        findUnique: vi.fn(async () => ({ conversionCurrency: "BRL" })),
+      },
+    };
+    const service = new CurrencySettingsService(prisma as never);
+
+    await service.updateSettings(authenticated, workspace(true), {
+      conversionCurrency: "USD",
+    });
+    expect(tx.workspace.findUnique).toHaveBeenCalled();
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        beforeSummary: { conversionCurrency: "EUR" },
+        afterSummary: { conversionCurrency: "USD" },
+      }),
+    });
+
+    tx.auditLog.create.mockClear();
+    tx.workspace.update.mockClear();
+    await service.updateSettings(authenticated, workspace(true), {
+      conversionCurrency: "EUR",
+    });
+    expect(tx.workspace.update).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
 });

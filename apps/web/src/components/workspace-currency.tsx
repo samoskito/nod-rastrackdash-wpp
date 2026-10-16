@@ -106,8 +106,9 @@ export function RuleCurrencySelect({
 /**
  * Moeda obrigatória de uma regra de CRM (Kommo/Pipedrive): BRL/USD/EUR, e
  * regras novas começam na moeda do workspace. Um código gravado fora da lista
- * continua selecionável, para que editar a regra nunca troque a moeda sem
- * querer. `emptyLabel` mostra a opção "sem moeda" quando o campo é opcional
+ * continua visível, para que editar a regra nunca troque a moeda sem querer;
+ * a API recusa salvá-lo (400 "Moeda inválida") e, no envio, a regra usa a
+ * moeda do workspace. `emptyLabel` mostra a opção "sem moeda" quando o campo é opcional
  * (por exemplo, negócio ganho que traz a própria moeda).
  */
 export function CrmCurrencySelect({
@@ -147,7 +148,11 @@ export function CrmCurrencySelect({
             {option.label}
           </option>
         ))}
-        {custom ? <option value={custom}>{custom}</option> : null}
+        {custom ? (
+          <option value={custom}>
+            {`${custom} (não aceita mais: escolha BRL, USD ou EUR)`}
+          </option>
+        ) : null}
       </select>
     </label>
   );

@@ -34,6 +34,7 @@ import {
   authorizedCtwaDestinationSchema,
   conversionEventNameSchema,
   conversionEventRequiresValue,
+  normalizeCurrencyCode,
   providerConversionDecisionSchema,
   type ConversionEventNameDto,
   type ProviderConversionDecisionDto,
@@ -1203,7 +1204,7 @@ export class ProviderConversionProductionService
     const valueCents = carriesValue ? rule.defaultValueCents : null;
     // Regra -> workspace -> BRL: a rule without currency (null) inherits.
     const currency = carriesValue
-      ? (rule.defaultCurrency ??
+      ? (normalizeCurrencyCode(rule.defaultCurrency) ??
         (valueCents
           ? await loadWorkspaceConversionCurrency(
               this.prisma,
@@ -1410,7 +1411,7 @@ export class ProviderConversionProductionService
     const valueCents = rule.conversionRule.defaultValueCents;
     // Regra -> workspace -> BRL: a rule without currency (null) inherits.
     const currency =
-      rule.conversionRule.defaultCurrency ??
+      normalizeCurrencyCode(rule.conversionRule.defaultCurrency) ??
       (matchedTriggerPhrase && valueCents
         ? await loadWorkspaceConversionCurrency(
             this.prisma,

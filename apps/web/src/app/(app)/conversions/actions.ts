@@ -142,8 +142,11 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "Esta regra já está conectada aos números.",
   "Somente regras antigas de compra por palavra-chave podem ser adaptadas":
     "Só regras antigas de compra por palavra podem ser conectadas aos números.",
+  "Configure produto e valor antes de adaptar esta regra":
+    "Informe produto e valor da regra antiga antes de conectá-la aos números.",
+  // Mensagem da API anterior à Fase 5.1 (moeda obrigatória).
   "Configure produto, valor e moeda antes de adaptar esta regra":
-    "Informe produto, valor e moeda da regra antiga antes de conectá-la aos números.",
+    "Informe produto e valor da regra antiga antes de conectá-la aos números.",
   "Esta regra e gerenciada em Conversoes; edite-a pela regra do provedor":
     "Esta regra já está conectada aos números e é editada pela lista de regras.",
   "Regras com valor fixo precisam manter um valor positivo":

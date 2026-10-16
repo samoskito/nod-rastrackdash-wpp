@@ -36,7 +36,7 @@ describe("Payt automation v1 parser", () => {
     expect(JSON.stringify(parsed)).not.toContain("integration_key");
   });
 
-  it("reads a supported currency declared by the sale and ignores unknown ones", () => {
+  it("reads a supported currency declared by the sale and refuses other ones", () => {
     const paid = fixture("order-paid.sanitized.json") as Record<string, unknown>;
     const transaction = paid.transaction as Record<string, unknown>;
     expect(
@@ -48,8 +48,21 @@ describe("Payt automation v1 parser", () => {
     expect(
       parsePaytAutomationV1({ ...paid, currency: "EUR" }),
     ).toMatchObject({ ok: true, value: { currency: "EUR" } });
+    // Moeda declarada fora de BRL/USD/EUR: a venda é recusada com motivo
+    // (o valor nunca sai à Meta como BRL/USD).
+    expect(parsePaytAutomationV1({ ...paid, currency: "ARS" })).toEqual({
+      ok: false,
+      errorCode: "payt_currency_unsupported",
+    });
     expect(
-      parsePaytAutomationV1({ ...paid, currency: "ARS" }),
+      parsePaytAutomationV1({
+        ...paid,
+        transaction: { ...transaction, currency: "gbp" },
+        currency: "BRL",
+      }),
+    ).toEqual({ ok: false, errorCode: "payt_currency_unsupported" });
+    expect(
+      parsePaytAutomationV1({ ...paid, currency: "  " }),
     ).toMatchObject({ ok: true, value: { currency: null } });
   });
 

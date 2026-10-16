@@ -102,3 +102,34 @@ export function formatMoney(
 
   return `${negative ? "-" : ""}${symbol} ${number}`;
 }
+
+/** Mensagem do 400 quando a regra recebe uma moeda fora de BRL/USD/EUR. */
+export const RULE_CURRENCY_INVALID_MESSAGE =
+  "Moeda inválida: use BRL, USD ou EUR";
+
+/**
+ * Moeda gravada numa regra (provedor, regra antiga, catálogo, Kommo,
+ * Pipedrive): aceita só BRL/USD/EUR, em qualquer caixa. Regras já gravadas
+ * com outro código continuam sendo lidas (os contratos de saída não usam
+ * este schema) e, no envio, contam como sem moeda (herdam o workspace).
+ */
+export const ruleCurrencyInputSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .pipe(
+    z.enum(supportedCurrencyCodes, {
+      errorMap: () => ({ message: RULE_CURRENCY_INVALID_MESSAGE }),
+    }),
+  );
+
+/** True quando o erro de validação vem de uma moeda fora da lista. */
+export function hasRuleCurrencyIssue(error: z.ZodError): boolean {
+  return error.issues.some(
+    (issue) =>
+      issue.message === RULE_CURRENCY_INVALID_MESSAGE ||
+      // Também dentro de uniões (contrato de criação de regra de provedor).
+      (issue.code === z.ZodIssueCode.invalid_union &&
+        issue.unionErrors.some(hasRuleCurrencyIssue)),
+  );
+}
