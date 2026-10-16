@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +11,7 @@ import {
   KommoConversionPanel,
   type KommoConversionPanelProps,
 } from "../src/app/(app)/settings/kommo-conversion-panel";
+import { readFileSync } from "./support/read-source";
 
 afterEach(cleanup);
 

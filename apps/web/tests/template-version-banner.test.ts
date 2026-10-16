@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { createElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -420,7 +420,7 @@ describe("template version banner mount points", () => {
       .filter((file) =>
         readFileSync(file, "utf8").includes(`/${moduleName}"`),
       )
-      .map((file) => relative(srcRoot, file));
+      .map((file) => relative(srcRoot, file).split(sep).join("/"));
   }
 
   it("is only reachable from the backoffice layout, never the workspace product", () => {

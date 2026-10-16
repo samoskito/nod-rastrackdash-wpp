@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ProductLayout from "../src/app/(app)/layout";
 import { WorkspaceAccessGate } from "../src/components/workspace-access-gate";
+import { readFileSync } from "./support/read-source";
 
 const requestHeaderState = vi.hoisted(() => ({
   pathname: "/overview",
