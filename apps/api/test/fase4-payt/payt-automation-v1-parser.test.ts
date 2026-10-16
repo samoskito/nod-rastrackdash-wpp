@@ -14,7 +14,7 @@ function fixture(name: string): unknown {
 }
 
 describe("Payt automation v1 parser", () => {
-  it("parses a paid order as a BRL Purchase in cents without retaining PII", () => {
+  it("parses a paid order as a Purchase in cents without retaining PII", () => {
     const parsed = parsePaytAutomationV1(fixture("order-paid.sanitized.json"));
 
     expect(parsed).toMatchObject({
@@ -27,12 +27,43 @@ describe("Payt automation v1 parser", () => {
         phoneCandidates: ["11999999999", "5511999999999"],
         externalExecutionKey: "PAYTS2",
         valueCents: 233331,
-        currency: "BRL",
+        // A Payt não declara moeda: decide a da regra ou a do workspace.
+        currency: null,
         test: true,
       },
     });
     expect(PAYT_AUTOMATION_V1_PARSER_VERSION).toBe("automation-v1");
     expect(JSON.stringify(parsed)).not.toContain("integration_key");
+  });
+
+  it("reads a supported currency declared by the sale and refuses other ones", () => {
+    const paid = fixture("order-paid.sanitized.json") as Record<string, unknown>;
+    const transaction = paid.transaction as Record<string, unknown>;
+    expect(
+      parsePaytAutomationV1({
+        ...paid,
+        transaction: { ...transaction, currency: "usd" },
+      }),
+    ).toMatchObject({ ok: true, value: { currency: "USD", valueCents: 233331 } });
+    expect(
+      parsePaytAutomationV1({ ...paid, currency: "EUR" }),
+    ).toMatchObject({ ok: true, value: { currency: "EUR" } });
+    // Moeda declarada fora de BRL/USD/EUR: a venda é recusada com motivo
+    // (o valor nunca sai à Meta como BRL/USD).
+    expect(parsePaytAutomationV1({ ...paid, currency: "ARS" })).toEqual({
+      ok: false,
+      errorCode: "payt_currency_unsupported",
+    });
+    expect(
+      parsePaytAutomationV1({
+        ...paid,
+        transaction: { ...transaction, currency: "gbp" },
+        currency: "BRL",
+      }),
+    ).toEqual({ ok: false, errorCode: "payt_currency_unsupported" });
+    expect(
+      parsePaytAutomationV1({ ...paid, currency: "  " }),
+    ).toMatchObject({ ok: true, value: { currency: null } });
   });
 
   it("treats a non-paid order as a non-purchase, not an invalid purchase", () => {
@@ -54,7 +85,7 @@ describe("Payt automation v1 parser", () => {
         phoneCandidates: ["63999990071", "5563999990071"],
         externalExecutionKey: "SYNTHCOD1",
         valueCents: 36699,
-        currency: "BRL",
+        currency: null,
         test: false,
       },
     });

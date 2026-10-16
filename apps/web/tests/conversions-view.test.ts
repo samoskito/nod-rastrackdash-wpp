@@ -572,10 +572,11 @@ describe("rule draft: scope and payload", () => {
         connectionId: "conn_qr_a",
         channelIds: ["ch_02"],
         defaultValueCents: 139_700,
-        defaultCurrency: "BRL",
+        // Sem moeda escolhida a regra herda a do workspace (nada é gravado).
       },
     });
     expect(result.ok && "scope" in result.value).toBe(false);
+    expect(result.ok && "defaultCurrency" in result.value).toBe(false);
   });
 
   it("sends numbers of several connections as an unbound rule", () => {

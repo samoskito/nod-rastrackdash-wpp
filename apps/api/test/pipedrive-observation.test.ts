@@ -333,7 +333,10 @@ describe("Pipedrive rules, ingress and recovery boundaries", () => {
     ["ViewContent", "deal", 0, "BRL", "BRL", "observed", null],
     ["ViewContent", "deal", -5, "BRL", "BRL", "observed", null],
     ["ViewContent", "deal", 12.5, null, "BRL", "observed", 1250],
-    ["ViewContent", "deal", 12.5, null, null, "ignored", null],
+    // Fase 5.1: negócio e regra sem moeda usam a do workspace (BRL aqui).
+    ["ViewContent", "deal", 12.5, null, null, "observed", 1250],
+    // Negócio em moeda fora de BRL/USD/EUR nunca vai à Meta.
+    ["Purchase", "deal", 12.5, "BRL", "GBP", "ignored", null],
     ["QualifiedLead", "deal", 12.5, null, "BRL", "observed", null],
   ])(
     "evaluates %s/%s value %s (%s/%s)",
@@ -387,7 +390,7 @@ describe("Pipedrive rules, ingress and recovery boundaries", () => {
       actor,
       {
         eventName: "Purchase",
-        currency: "brl",
+        currency: "brl" as never, // caixa baixa é normalizada no serviço
         valueMode: "fixed",
         fixedValueCents: 500,
       },

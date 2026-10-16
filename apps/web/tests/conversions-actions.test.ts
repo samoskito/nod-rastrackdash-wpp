@@ -579,6 +579,51 @@ describe("conversions actions: manage, legacy and history", () => {
     ).toMatchObject({ ok: false, message: "Informe um valor maior que zero." });
   });
 
+  it("saves a legacy rule without currency as inheriting the workspace currency", async () => {
+    serverApiFetch.mockResolvedValue(undefined);
+
+    const inherit = await updateLegacyRuleAction(
+      form({
+        ruleId: "legacy_1",
+        intent: "value",
+        productName: "Consulta",
+        defaultValue: "250,00",
+        defaultCurrency: "",
+      }),
+    );
+    expect(inherit).toMatchObject({ ok: true });
+    expect(JSON.parse(serverApiFetch.mock.calls.at(-1)![1].body)).toMatchObject({
+      defaultValueCents: 25_000,
+      defaultCurrency: null,
+    });
+
+    await updateLegacyRuleAction(
+      form({
+        ruleId: "legacy_1",
+        intent: "value",
+        defaultValue: "9,90",
+        defaultCurrency: "USD",
+      }),
+    );
+    expect(JSON.parse(serverApiFetch.mock.calls.at(-1)![1].body)).toMatchObject({
+      defaultValueCents: 990,
+      defaultCurrency: "USD",
+    });
+
+    serverApiFetch.mockClear();
+    expect(
+      await updateLegacyRuleAction(
+        form({
+          ruleId: "legacy_1",
+          intent: "value",
+          defaultValue: "9,90",
+          defaultCurrency: "GBP",
+        }),
+      ),
+    ).toMatchObject({ ok: false });
+    expect(serverApiFetch).not.toHaveBeenCalled();
+  });
+
   it("loads the executions scoped to the selected provider rule", async () => {
     serverApiFetch.mockResolvedValueOnce({
       providerRuleId: "provider_rule_1",

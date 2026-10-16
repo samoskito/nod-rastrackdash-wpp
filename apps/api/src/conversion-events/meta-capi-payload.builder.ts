@@ -1,5 +1,7 @@
 import {
+  DEFAULT_CURRENCY_CODE,
   conversionEventMetadata,
+  normalizeCurrencyCode,
   type ConversionEventCustomDataDto,
   type ConversionEventNameDto
 } from "@wpptrack/shared";
@@ -54,7 +56,18 @@ export function buildMetaCapiPayload(
     ...(typeof input.valueCents === "number"
       ? { value: input.valueCents / 100 }
       : {}),
-    ...(input.currency ? { currency: input.currency } : {}),
+    // A Meta precisa da moeda de todo valor: valor nunca vai sem moeda e só
+    // BRL/USD/EUR saem daqui. Eventos gravados antes da moeda configurável só
+    // ficavam sem moeda quando eram BRL (o padrão histórico). Um código fora
+    // da lista é barrado antes, em preflightMetaCapiEvent (UnsupportedCurrency).
+    ...(typeof input.valueCents === "number"
+      ? {
+          currency:
+            normalizeCurrencyCode(input.currency) ?? DEFAULT_CURRENCY_CODE,
+        }
+      : normalizeCurrencyCode(input.currency)
+        ? { currency: normalizeCurrencyCode(input.currency)! }
+        : {}),
     ...(input.contentName ? { content_name: input.contentName } : {})
   };
   // Never forward a caller-provided ad_id when the event has no ad.

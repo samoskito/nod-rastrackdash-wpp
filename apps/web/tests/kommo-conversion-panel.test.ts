@@ -11,6 +11,7 @@ import {
 } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WorkspaceCurrencyProvider } from "../src/components/workspace-currency";
 
 const { routerRefresh } = vi.hoisted(() => ({ routerRefresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
@@ -1139,15 +1140,95 @@ describe("Kommo panel: rules", () => {
     fillBasics();
     const ruleForm = within(screen.getByRole("form", { name: "Nova regra Kommo" }));
     fireEvent.change(ruleForm.getByLabelText("Conversão disparada"), { target: { value: "Purchase" } });
-    const currency = ruleForm.getByLabelText(/Moeda/) as HTMLInputElement;
+    const currency = ruleForm.getByLabelText(/Moeda/) as HTMLSelectElement;
     fireEvent.change(currency, { target: { value: "" } });
     await act(async () => {
       fireEvent.submit(screen.getByRole("form", { name: "Nova regra Kommo" }));
     });
     expect(screen.getByRole("alert").textContent).toContain(
-      "Informe a moeda (3 letras, por exemplo BRL).",
+      "Escolha a moeda (Real, Dólar ou Euro).",
     );
     expect(createRuleAction).not.toHaveBeenCalled();
+  });
+
+  it.each(["BRL", "USD", "EUR"] as const)(
+    "starts a new rule on the workspace currency (%s) and sends it with the lead price",
+    async (workspaceCurrency) => {
+      const createRuleAction = vi.fn().mockResolvedValue({
+        ok: true,
+        message: "Regra Kommo criada.",
+        rule: { ...productionRule, id: "rule_cur", currency: workspaceCurrency },
+      } satisfies KommoRuleActionResult);
+      const props = makeProps({ createRuleAction });
+      render(
+        createElement(
+          WorkspaceCurrencyProvider,
+          { currency: workspaceCurrency },
+          createElement(KommoConversionPanel, props),
+        ),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
+      fillBasics();
+      const ruleForm = within(screen.getByRole("form", { name: "Nova regra Kommo" }));
+      fireEvent.change(ruleForm.getByLabelText("Conversão disparada"), {
+        target: { value: "Purchase" },
+      });
+      const currency = ruleForm.getByLabelText(/Moeda/) as HTMLSelectElement;
+      expect(currency.tagName).toBe("SELECT");
+      expect(currency.value).toBe(workspaceCurrency);
+      expect(
+        Array.from(currency.options).map((option) => option.value).filter(Boolean),
+      ).toEqual(["BRL", "USD", "EUR"]);
+
+      await act(async () => {
+        fireEvent.submit(screen.getByRole("form", { name: "Nova regra Kommo" }));
+      });
+      expect(createRuleAction).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(
+        String((createRuleAction.mock.calls[0] as [FormData])[0].get("payload")),
+      );
+      expect(payload).toMatchObject({
+        eventName: "Purchase",
+        valueMode: "lead_price",
+        currency: workspaceCurrency,
+      });
+    },
+  );
+
+  it("keeps the stored currency when editing and lets the user change it", async () => {
+    const stored = { ...productionRule, id: "rule_edit", currency: "EUR" };
+    const updateRuleAction = vi.fn().mockResolvedValue({
+      ok: true,
+      message: "Regra Kommo atualizada.",
+      rule: { ...stored, currency: "USD" },
+    } satisfies KommoRuleActionResult);
+    render(
+      createElement(
+        WorkspaceCurrencyProvider,
+        { currency: "BRL" },
+        createElement(
+          KommoConversionPanel,
+          makeProps({
+            connections: [conn({ rules: [stored] })],
+            updateRuleAction,
+          }),
+        ),
+      ),
+    );
+    const details = screen.getByText("Editar regra").closest("details") as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    const form = within(screen.getByRole("form", { name: /Editar regra/ }));
+    const currency = form.getByLabelText(/Moeda/) as HTMLSelectElement;
+    expect(currency.value).toBe("EUR");
+    fireEvent.change(currency, { target: { value: "USD" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /Editar regra/ }));
+    });
+    const payload = JSON.parse(
+      String((updateRuleAction.mock.calls[0] as [FormData])[0].get("payload")),
+    );
+    expect(payload).toMatchObject({ currency: "USD" });
   });
 
   it("a fixed value needs an amount", async () => {

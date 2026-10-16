@@ -377,6 +377,13 @@ enum InboundWebhookReplaySelection {
   remaining
 }
 
+/// Moedas suportadas nas conversões e na correção por conta de anúncio.
+enum CurrencyCode {
+  BRL
+  USD
+  EUR
+}
+
 model User {
   id              String        @id @default(cuid())
   email           String        @unique
@@ -412,13 +419,15 @@ model User {
 }
 
 model Workspace {
-  id                String                     @id @default(cuid())
-  name              String
-  slug              String                     @unique
-  asaasCustomerId   String?
-  operationalStatus WorkspaceOperationalStatus @default(active)
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  id                 String                     @id @default(cuid())
+  name               String
+  slug               String                     @unique
+  asaasCustomerId    String?
+  operationalStatus  WorkspaceOperationalStatus @default(active)
+  /// "Moeda das conversões": padrão quando a venda e a regra não informam moeda.
+  conversionCurrency CurrencyCode               @default(BRL)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
   members                          WorkspaceMember[]
   invites                          WorkspaceInvite[]
@@ -1543,6 +1552,8 @@ model MetaReportingAccount {
   adAccountId             String
   adAccountName           String
   currency                String?
+  /// Correção manual da moeda do investimento. Efetiva = correção ?? currency ?? BRL.
+  currencyOverride        CurrencyCode?
   timezoneName            String?
   businessConnectionId    String?
   conversionDestinationId String?

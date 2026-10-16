@@ -16,6 +16,7 @@ import {
   conversionEventDisplayLabels,
   conversionEventNameSchema,
   conversionEventRequiresValue,
+  formatMoney,
   kommoChannelBindingMessages,
   kommoConnectionChannelBindingsInputSchema,
   kommoConnectionCreateInputSchema,
@@ -39,6 +40,10 @@ import { useRouter } from "next/navigation";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
+import {
+  CrmCurrencySelect,
+  useWorkspaceCurrency,
+} from "../../../components/workspace-currency";
 import {
   crmChannelOptionsFor,
   type CrmChannelOption,
@@ -222,14 +227,7 @@ export function parseMoneyToCents(value: string): number | null {
 function moneyLabel(valueCents: number | null, currency: string | null): string {
   if (valueCents == null) return "Valor não informado";
 
-  try {
-    return (valueCents / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: currency ?? "BRL",
-    });
-  } catch {
-    return `${(valueCents / 100).toFixed(2)} ${currency ?? ""}`.trim();
-  }
+  return formatMoney(valueCents, currency);
 }
 
 function formatDateTime(value: string | null): string {
@@ -2109,7 +2107,7 @@ function buildRulePayload(
 }
 
 const ruleIssueMessages: Record<string, string> = {
-  currency: "Informe a moeda (3 letras, por exemplo BRL).",
+  currency: "Escolha a moeda (Real, Dólar ou Euro).",
   fixedValueCents: "Informe o valor fixo.",
   valueMode: "Este evento não aceita configuração de valor.",
   name: "O nome da regra precisa ter entre 2 e 120 caracteres.",
@@ -2181,7 +2179,12 @@ function KommoRuleForm({
       ? (initial.fixedValueCents / 100).toFixed(2).replace(".", ",")
       : "",
   );
-  const [currency, setCurrency] = useState(initial?.currency ?? "");
+  const workspaceCurrency = useWorkspaceCurrency();
+  // Regra nova começa na "Moeda das conversões" do workspace; ao editar, a
+  // moeda gravada continua.
+  const [currency, setCurrency] = useState(
+    initial ? (initial.currency ?? "") : workspaceCurrency,
+  );
   const [contentName, setContentName] = useState(initial?.contentName ?? "");
   const carriesValue = conversionEventCarriesValue(eventName);
   const currencyRequired =
@@ -2196,7 +2199,7 @@ function KommoRuleForm({
       setCurrency("");
       setContentName("");
     } else if (!currency) {
-      setCurrency("BRL");
+      setCurrency(workspaceCurrency);
     }
   }
 
@@ -2331,20 +2334,16 @@ function KommoRuleForm({
           ) : null}
 
           <div className="provider-conversion-base-fields">
-            <label>
-              <span className="field-label">
-                Moeda (ex.: BRL){currencyRequired ? " — obrigatória" : ""}
-              </span>
-              <input
-                name="currency"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                maxLength={3}
-                placeholder="BRL"
-                disabled={pending}
-                required={currencyRequired}
-              />
-            </label>
+            {/* Sempre enviada. Regra sem moeda válida usa, no envio, a
+                "Moeda das conversões" do workspace. */}
+            <CrmCurrencySelect
+              label={`Moeda${currencyRequired ? " — obrigatória" : ""}`}
+              value={currency}
+              onChange={setCurrency}
+              required={currencyRequired}
+              emptyLabel={currencyRequired ? "Selecione a moeda" : "Sem moeda"}
+              disabled={pending}
+            />
             <label>
               <span className="field-label">Produto (opcional)</span>
               <input

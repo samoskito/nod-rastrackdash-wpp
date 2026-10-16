@@ -105,6 +105,8 @@ import {
   resolveMetaStatus,
 } from "./meta-connection-state";
 import { MetaReportingAccountsForm } from "./meta-reporting-accounts-form";
+import { WorkspaceCurrencyProvider } from "../../../components/workspace-currency";
+import { getWorkspaceCurrencySettings } from "../../../lib/currency-settings";
 
 type ResourceResult<T> = {
   data: T;
@@ -1776,7 +1778,12 @@ export default async function IntegrationsPage({
     </>
   );
 
+  // Formulários de regra oferecem "Padrão do workspace (X)" e as moedas padrão
+  // dos CRMs. Lido por último para manter a ordem das requisições anteriores.
+  const currencySettings = await getWorkspaceCurrencySettings();
+
   return (
+    <WorkspaceCurrencyProvider currency={currencySettings?.conversionCurrency}>
     <section className="page-stack page-standard integrations-page">
       <header className="page-header">
         <div>
@@ -1963,5 +1970,6 @@ export default async function IntegrationsPage({
         </div>
       </section>
     </section>
+    </WorkspaceCurrencyProvider>
   );
 }

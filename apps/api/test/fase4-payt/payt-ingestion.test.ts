@@ -42,7 +42,8 @@ describe("Payt postback on the rule URL (Fase 4a)", () => {
             eventName: "Purchase",
           }),
           valueCents: 233331,
-          currency: "BRL",
+          // A Payt não declara moeda: a da regra ou a do workspace decide depois.
+          currency: null,
         }),
       }),
     );
@@ -206,6 +207,27 @@ describe("Payt postback on the rule URL (Fase 4a)", () => {
     expect(
       harness.conversionObservation.observeAutomation,
     ).not.toHaveBeenCalled();
+  });
+
+  it("refuses a sale declared in a currency outside BRL/USD/EUR, with a clear reason (Fase 5.1)", async () => {
+    const harness = createHarness({
+      eventName: "Purchase",
+      payt: true,
+      production: true,
+    });
+    const result = await harness.service.ingest(
+      input(paytBody({ ...(paid() as Record<string, unknown>), currency: "GBP" })),
+    );
+    expect(result.observationStatus).toBe("invalid_payload");
+    expect([...harness.deliveries.values()][0]).toMatchObject({
+      status: "failed",
+      classification: "invalid_payload",
+      parseErrorCode: "payt_currency_unsupported",
+    });
+    expect(
+      harness.conversionObservation.observeAutomation,
+    ).not.toHaveBeenCalled();
+    expect(harness.decisions.size).toBe(0);
   });
 
   it("collapses a duplicate postback of the same sale into one delivery and one conversion", async () => {

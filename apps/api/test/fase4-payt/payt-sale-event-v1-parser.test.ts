@@ -53,7 +53,7 @@ describe("Payt sale event v1 parser (Fase 4a: event from the payload)", () => {
         providerStatus: "waiting_payment",
         orderRef: "PAYTS2",
         valueCents: 233331,
-        currency: "BRL",
+        currency: null,
       },
     });
   });

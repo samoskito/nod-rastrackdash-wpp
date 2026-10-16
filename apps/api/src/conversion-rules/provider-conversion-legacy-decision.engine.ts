@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { normalizeCurrencyCode } from "@wpptrack/shared";
 import type {
   ProviderConversionDecisionConversionDto,
   ProviderConversionDecisionDto,
@@ -94,11 +95,8 @@ export class ProviderConversionLegacyDecisionEngine {
       input.occurrence.messageText,
       input.rule.triggerPhrases,
     );
-    if (
-      !matchedTriggerPhrase ||
-      !input.rule.defaultValueCents ||
-      !input.rule.defaultCurrency
-    ) {
+    // Regra sem moeda (null = herdar) usa a moeda do workspace.
+    if (!matchedTriggerPhrase || !input.rule.defaultValueCents) {
       return null;
     }
 
@@ -124,8 +122,7 @@ export class ProviderConversionLegacyDecisionEngine {
     // A Payt sale carries its own value; the rule average is only a fallback.
     if (
       input.occurrence.provider === "payt" &&
-      input.occurrence.observedValueCents &&
-      input.occurrence.observedCurrency
+      input.occurrence.observedValueCents
     ) {
       return this.eligible(
         input,
@@ -134,12 +131,17 @@ export class ProviderConversionLegacyDecisionEngine {
           parsedValueCents: input.occurrence.observedValueCents,
           calculatedValueCents: input.occurrence.observedValueCents,
           observedPaymentValueCents: input.occurrence.observedValueCents,
-          currency: input.occurrence.observedCurrency,
+          // Moeda da venda -> da regra -> do workspace -> BRL.
+          currency:
+            input.occurrence.observedCurrency ??
+            normalizeCurrencyCode(input.rule.defaultCurrency) ??
+            input.occurrence.fallbackCurrency ??
+            "BRL",
         },
         "automation_matched",
       );
     }
-    if (!input.rule.defaultValueCents || !input.rule.defaultCurrency) {
+    if (!input.rule.defaultValueCents) {
       return null;
     }
 
@@ -273,7 +275,11 @@ export class ProviderConversionLegacyDecisionEngine {
       observedPaymentValueCents: null,
       catalogVariantId: null,
       contentName: input.rule.defaultContentName,
-      currency: input.rule.defaultCurrency,
+      // Regra -> workspace -> BRL (null na regra = herdar).
+      currency:
+        normalizeCurrencyCode(input.rule.defaultCurrency) ??
+        input.occurrence.fallbackCurrency ??
+        "BRL",
     };
   }
 

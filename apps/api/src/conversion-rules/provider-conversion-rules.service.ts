@@ -889,13 +889,10 @@ export class ProviderConversionRulesService {
           "Somente regras antigas de compra por palavra-chave podem ser adaptadas",
         );
       }
-      if (
-        !legacyRule.defaultValueCents ||
-        legacyRule.defaultValueCents <= 0 ||
-        !legacyRule.defaultCurrency
-      ) {
+      // Moeda é opcional: nula = herdar a "Moeda das conversões" do workspace.
+      if (!legacyRule.defaultValueCents || legacyRule.defaultValueCents <= 0) {
         throw new ConflictException(
-          "Configure produto, valor e moeda antes de adaptar esta regra",
+          "Configure produto e valor antes de adaptar esta regra",
         );
       }
 

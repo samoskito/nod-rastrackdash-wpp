@@ -75,6 +75,8 @@ function mockSettingsFetch(options: {
   opsAlertSettings?: unknown;
   opsAlertSettingsStatus?: number;
   opsAlertSettingsEmptyBody?: boolean;
+  currencySettings?: unknown;
+  adAccountCurrencies?: unknown;
 }) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
@@ -196,6 +198,26 @@ function mockSettingsFetch(options: {
 
     if (url.endsWith("/workspaces/current/invites")) {
       return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      url.endsWith("/workspaces/current/currency") &&
+      options.currencySettings !== undefined
+    ) {
+      return new Response(JSON.stringify(options.currencySettings), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      url.endsWith("/workspaces/current/currency/ad-accounts") &&
+      options.adAccountCurrencies !== undefined
+    ) {
+      return new Response(JSON.stringify(options.adAccountCurrencies), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -351,12 +373,14 @@ describe("settings route", () => {
     expect(html).toContain('href="#configuracao-conta"');
     expect(html).toContain('href="#configuracao-equipe"');
     expect(html).toContain('href="#configuracao-conversoes"');
+    expect(html).toContain('href="#configuracao-moeda"');
     expect(html).toContain('href="#configuracao-operacao"');
     expect(html).toContain('id="configuracao-conta"');
     expect(html).toContain('id="configuracao-equipe"');
     expect(html).toContain('id="configuracao-conversoes"');
+    expect(html).toContain('id="configuracao-moeda"');
     expect(html).toContain('id="configuracao-operacao"');
-    expect(html.match(/class="settings-domain-section/g)).toHaveLength(4);
+    expect(html.match(/class="settings-domain-section/g)).toHaveLength(5);
     // Only the funnel journey is left in this section: the rule panels live
     // in Conversões (providers) and in the Kommo window of Integrações.
     expect(
@@ -372,6 +396,67 @@ describe("settings route", () => {
     expect(html).toContain("Jornada do funil");
     expect(html).toContain("Salvar jornada");
     expect(html.match(/name="stageProduct:/g)).toHaveLength(1);
+  });
+
+  it("shows Configurações > Moeda with the workspace currency and the ad accounts", async () => {
+    mockSettingsFetch({
+      rulesBody: [],
+      currencySettings: {
+        workspaceId: "workspace_1",
+        conversionCurrency: "USD",
+        supportedCurrencies: ["BRL", "USD", "EUR"],
+        canManage: true,
+      },
+      adAccountCurrencies: {
+        accounts: [
+          {
+            id: "acc_1",
+            adAccountId: "act_111",
+            adAccountName: "Conta Global",
+            businessId: "bm_1",
+            businessName: "BM Principal",
+            active: true,
+            detectedCurrency: "USD",
+            detectedCurrencySupported: true,
+            currencyOverride: "EUR",
+            effectiveCurrency: "EUR",
+          },
+        ],
+        currencies: ["EUR"],
+        canManage: true,
+      },
+    });
+
+    const html = renderToStaticMarkup(await SettingsPage());
+
+    expect(html).toContain('id="configuracao-moeda"');
+    expect(html).toContain("Conversões em USD");
+    expect(html).toContain("Moeda das conversões");
+    expect(html).toContain("Conta Global");
+    expect(html).toContain("Usar a da Meta (USD)");
+    expect(html).toContain("Salvar moeda");
+    // A Jornada passa a oferecer a moeda padrão do workspace.
+    expect(html).toContain("Padrão do workspace (USD)");
+  });
+
+  it("keeps Moeda read-only for a member", async () => {
+    mockSettingsFetch({
+      workspaceRole: "member",
+      rulesBody: [],
+      currencySettings: {
+        workspaceId: "workspace_1",
+        conversionCurrency: "EUR",
+        supportedCurrencies: ["BRL", "USD", "EUR"],
+        canManage: false,
+      },
+      adAccountCurrencies: { accounts: [], currencies: [], canManage: false },
+    });
+
+    const html = renderToStaticMarkup(await SettingsPage());
+
+    expect(html).toContain("Euro (EUR)");
+    expect(html).toContain("Somente o dono ou o admin altera a moeda.");
+    expect(html).not.toContain("Salvar moeda");
   });
 
   it("keeps regular admins operational without sending team controls in HTML", async () => {

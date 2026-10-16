@@ -93,6 +93,8 @@ export function executionReasonLabel(reasonCode: string | null): string {
     rule_in_observation: "Regra em observação: nada é enviado à Meta",
     payt_purchase_identity_missing:
       "Venda sem vendedor ou pedido identificados",
+    payt_currency_unsupported:
+      "Venda em moeda fora de BRL, USD ou EUR: nada enviado à Meta",
     provider_purchase_identity_missing:
       "Venda sem vendedor ou pedido identificados",
     payt_channel_missing_or_ambiguous:

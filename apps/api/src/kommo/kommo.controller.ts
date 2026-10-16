@@ -23,6 +23,8 @@ import {
   kommoConnectionStatusUpdateInputSchema,
   kommoConversionRuleCreateInputSchema,
   kommoConversionRuleUpdateInputSchema,
+  RULE_CURRENCY_INVALID_MESSAGE,
+  hasRuleCurrencyIssue,
 } from "@wpptrack/shared";
 import { decodeKommoBody, parseKommoStageEvents } from "./kommo-webhook.parser";
 import { KommoService } from "./kommo.service";
@@ -226,7 +228,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConversionRuleCreateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
     return this.kommo.createRule(
       workspaceId,
       connectionId,
@@ -248,7 +250,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConversionRuleUpdateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
     return this.kommo.updateRule(
       workspaceId,
       connectionId,

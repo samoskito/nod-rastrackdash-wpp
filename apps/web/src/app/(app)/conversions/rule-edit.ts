@@ -5,6 +5,7 @@ import type {
 import {
   conversionEventCarriesValue,
   conversionEventRequiresValue,
+  normalizeCurrencyCode,
 } from "@wpptrack/shared";
 import {
   moneyToCents,
@@ -43,6 +44,11 @@ export type RuleEditCapabilities = {
    */
   labelsReadOnly: boolean;
   value: boolean;
+  /**
+   * Moeda da regra ("Padrão do workspace" ou BRL/USD/EUR): toda regra com
+   * valor, menos catálogos, cujos preços carregam a moeda do catálogo.
+   */
+  currency: boolean;
   catalogAliases: boolean;
 };
 
@@ -65,6 +71,7 @@ export function ruleEditCapabilities(
       (origin === "whatsapp_label" ||
         origin === "automation_umbler" ||
         origin === "automation_unnichat"),
+    currency: carriesValue && origin !== "structured_catalog",
     catalogAliases: origin === "structured_catalog" && Boolean(rule.catalog),
   };
 }
@@ -109,6 +116,9 @@ export function ruleEditDraft(
     contentName: rule.conversionRule.defaultContentName ?? "",
     labelNames: "",
     triggerLabels: [],
+    // A moeda gravada continua; null (ou código fora de BRL/USD/EUR) aparece
+    // como "Padrão do workspace" e só é enviada quando o usuário muda.
+    currency: normalizeCurrencyCode(rule.conversionRule.defaultCurrency) ?? "",
     labels: labels ? [...rule.triggerPhrases] : [],
     catalog: {
       name: rule.catalog?.name ?? "",
@@ -177,9 +187,6 @@ function valueChanges(
   const changes: Record<string, unknown> = {};
   if ((cents ?? null) !== current) {
     changes.defaultValueCents = cents ?? null;
-    if (cents && !rule.conversionRule.defaultCurrency) {
-      changes.defaultCurrency = "BRL";
-    }
   }
   const contentName = draft.contentName.trim() || null;
   if (contentName !== (rule.conversionRule.defaultContentName ?? null)) {
@@ -254,6 +261,15 @@ export function buildRuleUpdatePayload(
     const values = valueChanges(rule, draft, false);
     if (!values.ok) return values;
     Object.assign(payload, values.value);
+  }
+
+  if (capabilities.currency) {
+    const current =
+      normalizeCurrencyCode(rule.conversionRule.defaultCurrency) ?? "";
+    if (draft.currency !== current) {
+      // null = voltar a herdar a "Moeda das conversões" do workspace.
+      payload.defaultCurrency = draft.currency || null;
+    }
   }
 
   if (capabilities.labels) {

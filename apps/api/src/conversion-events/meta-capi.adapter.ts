@@ -1,6 +1,7 @@
-import type {
-  ConversionEventCustomDataDto,
-  ConversionEventNameDto,
+import {
+  normalizeCurrencyCode,
+  type ConversionEventCustomDataDto,
+  type ConversionEventNameDto,
 } from "@wpptrack/shared";
 import type { AuthorizedPagePixelCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
 import {
@@ -35,6 +36,7 @@ export type MetaCapiSendEventErrorCode =
   | "MissingCtwaClid"
   | "MissingAdId"
   | "MetaEventTimeExpired"
+  | "UnsupportedCurrency"
   | "MetaCapiRejected"
   | "MetaCapiNetworkError"
   | "MetaCapiDeliveryUnknown"
@@ -281,6 +283,20 @@ export function preflightMetaCapiEvent(
   // page/pixel path may travel without an ad id.
   if (!adId && !pagePixel) {
     return notConfigured("MissingAdId", "Meta CAPI ad id not available");
+  }
+
+  // Só BRL/USD/EUR vão à Meta: valor com moeda fora da lista (evento gravado
+  // antes da Fase 5.1) fica bloqueado com motivo, nunca sai com outra moeda.
+  const currency = input.currency?.trim();
+  if (
+    typeof input.valueCents === "number" &&
+    currency &&
+    !normalizeCurrencyCode(currency)
+  ) {
+    return notConfigured(
+      "UnsupportedCurrency",
+      `Moeda ${currency.toUpperCase()} fora de BRL, USD ou EUR: nada foi enviado à Meta`,
+    );
   }
 
   return null;

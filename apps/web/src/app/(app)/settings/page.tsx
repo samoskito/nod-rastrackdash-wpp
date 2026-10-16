@@ -13,6 +13,7 @@ import {
   Bell,
   Building2,
   ChevronDown,
+  Coins,
   ShieldCheck,
   UserPlus,
   UsersRound,
@@ -31,6 +32,11 @@ import { TeamActionButton } from "../../../components/team-action-button";
 import { displayTimeZone } from "../../../lib/date-time";
 import { serverApiFetch } from "../../../lib/server-api";
 import { getCurrentWorkspace } from "../../../lib/current-workspace";
+import {
+  getAdAccountCurrencies,
+  getWorkspaceCurrencySettings,
+} from "../../../lib/currency-settings";
+import { CurrencySettingsSection } from "./currency-settings-section";
 import { saveOpsAlertSettingsAction } from "./ops-alert-settings-actions";
 type AccountUserDto = {
   id: string;
@@ -323,9 +329,10 @@ async function saveFunnelConfiguration(
       ? parseMoneyToCents(formData.get(`stageValue:${eventName}`))
       : null,
     defaultCurrency: eventSupportsCommercialValue(eventName)
-      ? String(formData.get(`stageCurrency:${eventName}`) ?? "BRL")
+      ? // "" = padrão do workspace (null: herda a moeda das conversões).
+        String(formData.get(`stageCurrency:${eventName}`) ?? "")
           .trim()
-          .toUpperCase()
+          .toUpperCase() || null
       : null,
     defaultContentName: eventSupportsCommercialValue(eventName)
       ? String(formData.get(`stageProduct:${eventName}`) ?? "").trim() || null
@@ -553,12 +560,18 @@ export default async function SettingsPage() {
     funnelConfiguration,
     accountSettings,
     opsAlertSettings,
+    currencySettings,
+    adAccountCurrencies,
   ] = await Promise.all([
     getWorkspaceSettings(),
     getFunnelConfiguration(),
     getAccountSettings(),
     getOpsAlertSettings(),
+    getWorkspaceCurrencySettings(),
+    getAdAccountCurrencies(),
   ]);
+  const workspaceConversionCurrency =
+    currencySettings?.conversionCurrency ?? "BRL";
   const { workspace, members, invites } = workspaceSettings;
   const accountUser = accountSettings.user;
   const funnelStages = funnelConfiguration.configuration.stages;
@@ -715,6 +728,10 @@ export default async function SettingsPage() {
         <a href="#configuracao-conversoes">
           <Workflow size={16} aria-hidden="true" />
           Jornada
+        </a>
+        <a href="#configuracao-moeda">
+          <Coins size={16} aria-hidden="true" />
+          Moeda
         </a>
         <a href="#configuracao-operacao">
           <Bell size={16} aria-hidden="true" />
@@ -1228,9 +1245,12 @@ export default async function SettingsPage() {
                             <label>
                               <span>Moeda</span>
                               <select
-                                defaultValue={stage.defaultCurrency ?? "BRL"}
+                                defaultValue={stage.defaultCurrency ?? ""}
                                 name={`stageCurrency:${stage.eventName}`}
                               >
+                                <option value="">
+                                  {`Padrão do workspace (${workspaceConversionCurrency})`}
+                                </option>
                                 <option value="BRL">BRL</option>
                                 <option value="USD">USD</option>
                                 <option value="EUR">EUR</option>
@@ -1277,6 +1297,12 @@ export default async function SettingsPage() {
         </div>
       </section>
 
+      <CurrencySettingsSection
+        accounts={adAccountCurrencies}
+        sectionNumber="04"
+        settings={currencySettings}
+      />
+
       <section
         className="settings-domain-section settings-ops-alerts-domain"
         id="configuracao-operacao"
@@ -1284,7 +1310,7 @@ export default async function SettingsPage() {
       >
         <div className="settings-domain-heading">
           <span className="settings-domain-number" aria-hidden="true">
-            04
+            05
           </span>
           <div>
             <span className="eyebrow">Operacao</span>

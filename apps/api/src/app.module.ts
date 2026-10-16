@@ -7,6 +7,7 @@ import { RequestDurationInterceptor } from "./common/http/request-duration.inter
 import { QueueModule } from "./common/queue/queue.module";
 import { RuntimeModule } from "./common/runtime/runtime.module";
 import { ConversionRulesModule } from "./conversion-rules/conversion-rules.module";
+import { CurrencyModule } from "./currency/currency.module";
 import { DiagnosticsModule } from "./diagnostics/diagnostics.module";
 import { EmailModule } from "./email/email.module";
 import { ExternalDataModule } from "./external-data/external-data.module";
@@ -36,6 +37,7 @@ import { PipedriveModule } from "./pipedrive/pipedrive.module";
     AuthModule,
     BackofficeWhatsappWebhooksModule,
     WorkspacesModule,
+    CurrencyModule,
     DiagnosticsModule,
     ExternalDataModule,
     IntegrationsModule,

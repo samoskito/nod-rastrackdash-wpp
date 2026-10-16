@@ -61,6 +61,56 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 5.1 — Conversion currency (API, shared and web)**, ported from the
+  SaaS (`0bf5ebf`, `5981c7c` settings part, `ffd0bae`, `e510840`, `c4c0375`
+  audit part, `2f79c3c` settings screen, `5ce8393` rule currency):
+  - **Moeda das conversões** per workspace: BRL, USD or EUR, **default BRL**.
+    Any member reads it (`GET /workspaces/current/currency`); owner/admin
+    changes it (`PATCH`, audited `workspace.conversion_currency_updated`,
+    423 with a locked license).
+  - Optional **currency correction per ad account**
+    (`GET /workspaces/current/currency/ad-accounts`, `PATCH .../:id`, audited);
+    stored now, used by the reports in Fase 5.2.
+  - **Sending to Meta:** a conversion value always travels with a currency,
+    resolved as sale/deal currency → rule currency → workspace currency → BRL.
+    No exchange conversion. Conversions already sent never change; an unsent
+    event goes with the currency it was recorded with (an old one with a value
+    and no currency as BRL, as before; one with a code outside BRL/USD/EUR is
+    blocked by the Meta preflight with `UnsupportedCurrency`). A value that
+    arrives later on a valueless event takes that value's currency.
+  - A rule may keep its own currency or none (= follow the workspace); new
+    rules no longer get BRL forced by the contract, rules already stored keep
+    their currency. **Rule currency accepts only BRL, USD or EUR** on every
+    rule contract (provider, old rules, catalog, Kommo, Pipedrive); other
+    codes answer 400 "Moeda inválida: use BRL, USD ou EUR". Rules stored before
+    with another code still load and, when sending, use the workspace currency.
+    Payt no longer forces BRL (it uses the currency the sale declares,
+    otherwise rule/workspace); a sale declaring a currency outside the list is
+    refused with `payt_currency_unsupported` and nothing reaches Meta.
+    Pipedrive uses the deal currency and checks it against the rule's
+    (`event_currency_mismatch`); a deal without currency uses the rule's or the
+    workspace's; a deal in an unsupported currency is ignored
+    (`event_currency_unsupported`). Kommo: a rule without a valid currency
+    uses the workspace currency.
+  - **Screen (web):** Configurações → Moeda shows the workspace currency
+    (BRL/USD/EUR, with a warning before saving that the change only affects new
+    conversions; only owner/admin change it) and the ad accounts with the
+    currency detected by Meta, the manual correction (removable) and the
+    currency in use. The conversion rule (new, edit, old rules) and the Jornada
+    stages gain a currency field with "Padrão do workspace" (sends `null`) or
+    an own currency. The Kommo and Pipedrive panels start the currency on the
+    workspace's and always send it. Conversion values shown on screen use the
+    currency of the event or rule via `formatMoney`; the Reports and Overview
+    totals are untouched (Fase 5.2). Writes answer the standard locked-license
+    message on 423.
+  - **Default behavior:** a workspace that never changes the currency keeps
+    sending BRL exactly as before.
+  - Migration `20261016140000_conversion_currency` (additive: enum
+    `CurrencyCode`, `Workspace.conversionCurrency` default `BRL`,
+    `MetaReportingAccount.currencyOverride` nullable). No new env var or
+    dependency. Zod contracts in `packages/shared` (`currency.ts`,
+    `schemas/currency-settings.ts`).
+
 - **Fase 4b — Unnichat conversations and automations as Meta conversions (API,
   shared and web)**, ported from the SaaS with the same behavior and no new env
   var, dependency or Meta permission (the PalmUP social login does not

@@ -201,6 +201,45 @@ describe("conversion rules controller: Conversoes (Fase 3)", () => {
     await app.close();
   });
 
+  it("refuses a rule currency outside BRL/USD/EUR with a clear 400 (Fase 5.1)", async () => {
+    const { app, server, providerConversionRulesService, conversionRulesService } =
+      await createApp();
+
+    for (const [path, method, body] of [
+      ["/conversion-rules/providers", "post", { ...messageRule, defaultCurrency: "GBP" }],
+      ["/conversion-rules/providers/provider_rule_1", "patch", { defaultCurrency: "ars" }],
+      [
+        "/conversion-rules",
+        "post",
+        {
+          name: "Compra",
+          triggerType: "keyword",
+          triggerValue: "paguei",
+          eventName: "Purchase",
+          defaultValueCents: 100,
+          defaultCurrency: "GBP",
+        },
+      ],
+      ["/conversion-rules/legacy_1", "patch", { defaultCurrency: "GBP" }],
+    ] as const) {
+      const response = await (request(server) as any)
+        [method](path)
+        .set("Authorization", "Bearer refresh-token")
+        .send(body)
+        .expect(400);
+      expect(response.body.message).toBe("Moeda inválida: use BRL, USD ou EUR");
+    }
+
+    await request(server)
+      .post("/conversion-rules/providers")
+      .set("Authorization", "Bearer refresh-token")
+      .send({ ...messageRule, defaultCurrency: "usd" })
+      .expect(201);
+    expect(providerConversionRulesService.createRule).toHaveBeenCalledTimes(1);
+    expect(conversionRulesService.createRule).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("routes Idempotency-Key creates to the idempotent service call", async () => {
     const { app, server, providerConversionRulesService } = await createApp();
 

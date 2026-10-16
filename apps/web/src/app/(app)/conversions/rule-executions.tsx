@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProviderConversionRuleExecutionAuditDto } from "@wpptrack/shared";
+import { formatMoney } from "@wpptrack/shared";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -30,12 +31,6 @@ function formatDateTime(value: string): string {
     timeStyle: "short",
     timeZone: "America/Sao_Paulo",
   });
-}
-
-function formatMoney(valueCents: number, currency: string): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(
-    valueCents / 100,
-  );
 }
 
 /**

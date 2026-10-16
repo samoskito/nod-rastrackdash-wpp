@@ -1,3 +1,4 @@
+import { normalizeCurrencyCode, type CurrencyCode } from "@wpptrack/shared";
 import { normalizePhoneIdentity } from "../../../common/phone/phone-identity";
 import { boundedString } from "../inbound-webhook-delivery-identity";
 
@@ -40,7 +41,12 @@ export type ParsedPaytAutomationV1 = {
   externalExecutionKey: string;
   /** Always present for Purchase/InitiateCheckout; optional on CartAbandoned. */
   valueCents: number | null;
-  currency: "BRL";
+  /**
+   * Currency the sale itself declares (BRL/USD/EUR), or null when the
+   * postback carries none (Payt normally sends none): the conversion then
+   * uses the rule currency, the workspace "Moeda das conversoes", then BRL.
+   */
+  currency: CurrencyCode | null;
   test: boolean;
   /** Verified fixture keys, never integration_key. In-memory only. */
   accountRef: string;
@@ -58,7 +64,8 @@ export type PaytAutomationV1ParseResult =
       errorCode:
         | "payt_automation_v1_not_purchase"
         | "payt_automation_v1_invalid_payload"
-        | "payt_purchase_identity_missing";
+        | "payt_purchase_identity_missing"
+        | "payt_currency_unsupported";
     };
 
 export type PaytSaleEventV1ParseResult =
@@ -68,7 +75,8 @@ export type PaytSaleEventV1ParseResult =
       errorCode:
         | "payt_sale_v1_status_not_supported"
         | "payt_automation_v1_invalid_payload"
-        | "payt_purchase_identity_missing";
+        | "payt_purchase_identity_missing"
+        | "payt_currency_unsupported";
       providerStatus?: string | null;
     };
 
@@ -117,6 +125,26 @@ function parseTimestamp(value: unknown): Date | null {
 
 function lower(value: unknown, max: number): string | null {
   return boundedString(value, max)?.toLocaleLowerCase("en-US") ?? null;
+}
+
+/**
+ * Moeda que a venda declara (a da transação vale antes da do pedido). null =
+ * a venda não declara moeda (o normal na Payt): decide a regra ou o
+ * workspace. Moeda declarada fora de BRL/USD/EUR vira "unsupported": a venda
+ * é recusada com motivo (payt_currency_unsupported), porque o valor nunca
+ * pode sair à Meta numa moeda que não é a dele.
+ */
+function paytCurrency(
+  order: Record<string, unknown>,
+  transaction: Record<string, unknown> | null,
+): CurrencyCode | null | "unsupported" {
+  for (const value of [transaction?.currency, order.currency]) {
+    const declared =
+      typeof value === "string" && value.trim() ? value.trim() : null;
+    if (!declared) continue;
+    return normalizeCurrencyCode(boundedString(declared, 10)) ?? "unsupported";
+  }
+  return null;
 }
 
 function positiveCents(value: unknown): number | null {
@@ -334,6 +362,11 @@ export function parsePaytSaleEventV1(
       return { ok: false, errorCode: "payt_automation_v1_invalid_payload" };
     }
 
+    const currency = paytCurrency(order, transaction);
+    if (currency === "unsupported") {
+      return { ok: false, errorCode: "payt_currency_unsupported" };
+    }
+
     const offer = offerOf(asRecord(order.link));
     const itemCodes = Array.isArray(productRecord?.items)
       ? productRecord.items
@@ -362,7 +395,7 @@ export function parsePaytSaleEventV1(
         orderRef,
         accountRef,
         valueCents,
-        currency: "BRL",
+        currency,
         test: order.test === true,
         product,
         offer,

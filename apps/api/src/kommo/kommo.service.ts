@@ -40,9 +40,14 @@ import {
   type KommoConnectionCredentialReplaceInputDto,
   type KommoConversionRuleCreateInputDto,
   type KommoConversionRuleUpdateInputDto,
+  RULE_CURRENCY_INVALID_MESSAGE,
+  hasRuleCurrencyIssue,
+  normalizeCurrencyCode,
+  type CurrencyCode,
 } from "@wpptrack/shared";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { hashPhoneIdentity } from "../common/phone/phone-identity";
+import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { KommoAdapter, KommoAdapterError } from "./kommo.adapter";
@@ -694,7 +699,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
         if (input.contentName === undefined) candidate.contentName = null;
       }
       const parsed = kommoConversionRuleCreateInputSchema.safeParse(candidate);
-      if (!parsed.success) throw new BadRequestException("Payload invalido");
+      if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
       if (input.pipelineId !== undefined || input.statusId !== undefined) {
         await this.assertCatalogStage(
           connectionId,
@@ -1066,6 +1071,12 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       });
       if (!rules.length)
         return this.complete(event, "observed", "stage_not_configured");
+      // "Moeda das conversões": regra sem moeda (ou com código fora da
+      // lista, gravado antes da Fase 5.1) herda a do workspace.
+      const workspaceCurrency = await loadWorkspaceConversionCurrency(
+        this.prisma,
+        workspaceId,
+      );
       const resolved = await this.resolveLead(
         event.connection,
         event.dealId,
@@ -1105,7 +1116,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
             evaluationComplete: true,
           };
           if (rule.mode === "production") {
-            const value = this.valueFor(rule, event);
+            const value = this.valueFor(rule, event, workspaceCurrency);
             if ("error" in value) {
               result.status = "blocked";
               result.errorCode = value.error;
@@ -2174,13 +2185,19 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
   private valueFor(
     rule: any,
     event: any,
+    workspaceCurrency: CurrencyCode,
   ): { cents: number | null; currency: string | null } | { error: string } {
     const eventName = rule.eventName as ConversionEventNameDto;
     if (!conversionEventCarriesValue(eventName))
       return { cents: null, currency: null };
+    // Só BRL/USD/EUR vão à Meta; sem moeda válida na regra, a do workspace.
+    const ruleCurrency = normalizeCurrencyCode(rule.currency);
     if (rule.valueMode === "fixed")
-      return rule.fixedValueCents && rule.currency
-        ? { cents: rule.fixedValueCents, currency: rule.currency }
+      return rule.fixedValueCents
+        ? {
+            cents: rule.fixedValueCents,
+            currency: ruleCurrency ?? workspaceCurrency,
+          }
         : { error: "fixed_value_not_configured" };
     if (
       !event.eventPricePresent ||
@@ -2189,10 +2206,11 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     )
       return conversionEventRequiresValue(eventName)
         ? { error: "event_price_missing_or_nonpositive" }
-        : { cents: null, currency: rule.currency ?? null };
-    return rule.currency
-      ? { cents: event.eventPriceCents, currency: rule.currency }
-      : { error: "event_currency_not_configured" };
+        : { cents: null, currency: ruleCurrency };
+    return {
+      cents: event.eventPriceCents,
+      currency: ruleCurrency ?? workspaceCurrency,
+    };
   }
 
   private async enqueueRecord(event: any) {

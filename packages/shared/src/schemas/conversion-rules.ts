@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ruleCurrencyInputSchema } from "../currency";
 import {
   conversionEventCarriesValue,
   conversionEventRequiresValue,
@@ -194,7 +195,8 @@ export const conversionRuleCreateInputSchema = z.object({
   // Legacy field. New conversion sending uses the workspace MetaConversionDestination.
   pixelId: z.string().trim().min(1).max(80).nullable().optional(),
   defaultValueCents: z.number().int().positive().nullable().optional(),
-  defaultCurrency: z.string().trim().min(3).max(3).nullable().optional(),
+  // Só BRL/USD/EUR; null = herdar a "Moeda das conversões" do workspace.
+  defaultCurrency: ruleCurrencyInputSchema.nullable().optional(),
   defaultContentName: z.string().trim().min(1).max(180).nullable().optional(),
   defaultItems: z.array(conversionEventItemSchema).nullable().optional(),
   active: z.boolean().default(true),
@@ -246,7 +248,7 @@ export const providerConversionCatalogInputSchema = z
   .object({
     name: z.string().trim().min(2).max(120),
     productName: catalogTextSchema,
-    currency: currencySchema.default("BRL"),
+    currency: ruleCurrencyInputSchema.default("BRL"),
     attributes: z
       .array(providerConversionCatalogAttributeInputSchema)
       .min(1)
@@ -361,7 +363,7 @@ type ValuedRuleInput = {
   eventName: z.infer<typeof conversionEventNameSchema>;
   valueMode?: z.infer<typeof messagePhraseValueModeSchema>;
   defaultValueCents?: number | null;
-  defaultCurrency?: string;
+  defaultCurrency?: string | null;
   defaultContentName?: string | null;
 };
 
@@ -414,9 +416,12 @@ function refineEventValueFields(
 }
 
 /**
- * Eventos sem valor saem do parse sem nenhuma chave monetaria; eventos com
- * valor ganham "BRL" como moeda padrao. Manter os campos ausentes (em vez de
- * nulos) e o que impede o servico de gravar valor fantasma.
+ * Eventos sem valor saem do parse sem nenhuma chave monetaria. Eventos com
+ * valor mantem a moeda informada; sem moeda (ausente ou null) a regra fica
+ * com moeda nula = "usar a Moeda das conversoes do workspace" (resolvida no
+ * envio: venda -> regra -> workspace -> BRL). Regras ja gravadas com moeda
+ * nao mudam. Manter os campos ausentes (em vez de nulos) em eventos sem valor
+ * e o que impede o servico de gravar valor fantasma.
  *
  * O transform nao mexe em valueMode: o refine acima ja recusa
  * "message_extracted" em evento sem valor, e o default do proprio campo
@@ -426,7 +431,7 @@ function normalizeEventValueFields<Input extends ValuedRuleInput>(
   input: Input,
 ): Input {
   if (conversionEventCarriesValue(input.eventName)) {
-    return { ...input, defaultCurrency: input.defaultCurrency ?? "BRL" };
+    return input;
   }
 
   const {
@@ -442,7 +447,8 @@ function normalizeEventValueFields<Input extends ValuedRuleInput>(
 const eventValueShape = {
   // Required when valueMode is "fixed"; optional fallback when extracting.
   defaultValueCents: z.number().int().positive().nullable().optional(),
-  defaultCurrency: currencySchema.optional(),
+  // Só BRL/USD/EUR; null/ausente = herdar a "Moeda das conversões" do workspace.
+  defaultCurrency: ruleCurrencyInputSchema.nullable().optional(),
   defaultContentName: catalogTextSchema.nullable().optional(),
 };
 
@@ -622,7 +628,7 @@ export const providerConversionRuleUpdateInputSchema = z
       .optional(),
     mode: providerConversionRuleModeSchema.optional(),
     defaultValueCents: z.number().int().positive().nullable().optional(),
-    defaultCurrency: currencySchema.nullable().optional(),
+    defaultCurrency: ruleCurrencyInputSchema.nullable().optional(),
     defaultContentName: catalogTextSchema.nullable().optional(),
     valueMode: messagePhraseValueModeSchema.optional(),
     exampleMessage: messagePhraseExampleSchema.nullable().optional(),
