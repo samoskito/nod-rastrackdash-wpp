@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   parsePaytAutomationV1,
   PAYT_AUTOMATION_V1_PARSER_VERSION,
+  paytLegacyTotalPriceCents,
 } from "../../src/inbound-webhooks/providers/payt/payt-automation-v1.parser";
 
 function fixture(name: string): unknown {
@@ -25,7 +26,7 @@ describe("Payt automation v1 parser", () => {
         phone: "11999999999",
         phoneCandidates: ["11999999999", "5511999999999"],
         externalExecutionKey: "PAYTS2",
-        valueCents: 296616,
+        valueCents: 233331,
         currency: "BRL",
         test: true,
       },
@@ -106,7 +107,7 @@ describe("Payt automation v1 parser", () => {
     );
     expect(parsed).toMatchObject({
       ok: true,
-      value: { externalExecutionKey: "PAYTS2", valueCents: 296616 },
+      value: { externalExecutionKey: "PAYTS2", valueCents: 233331 },
     });
   });
 
@@ -138,4 +139,65 @@ it("requires a real seller identity and never substitutes integration_key", () =
       errorCode: "payt_purchase_identity_missing",
     });
   }
+});
+
+describe("sale value without card-installment interest", () => {
+  const sale = (transaction: Record<string, unknown>) => {
+    const paid = fixture("order-paid.sanitized.json") as Record<string, any>;
+    return {
+      ...paid,
+      product: { ...paid.product, price: 24700, quantity: 1 },
+      transaction: { ...paid.transaction, ...transaction },
+    };
+  };
+
+  it("uses price_without_installments, not the 12x total with interest", () => {
+    const payload = sale({
+      payment_method: "credit_card",
+      installments: 12,
+      installment_price: 2480,
+      total_price: 29760,
+      price_without_installments: 24700,
+    });
+    expect(parsePaytAutomationV1(payload)).toMatchObject({
+      ok: true,
+      value: { valueCents: 24700 },
+    });
+    expect(paytLegacyTotalPriceCents(payload)).toBe(29760);
+  });
+
+  it("keeps the same value for a pix sale without installments", () => {
+    expect(
+      parsePaytAutomationV1(
+        sale({
+          payment_method: "pix",
+          installments: 1,
+          installment_price: 24700,
+          total_price: 24700,
+          price_without_installments: 24700,
+        }),
+      ),
+    ).toMatchObject({ ok: true, value: { valueCents: 24700 } });
+  });
+
+  it("falls back to total_price when price_without_installments is missing or invalid", () => {
+    for (const missing of [undefined, null, 0, "24700"]) {
+      expect(
+        parsePaytAutomationV1(
+          sale({ total_price: 29760, price_without_installments: missing }),
+        ),
+      ).toMatchObject({ ok: true, value: { valueCents: 29760 } });
+    }
+  });
+
+  it("reads the legacy total_price inside the n8n envelope and never throws", () => {
+    expect(
+      paytLegacyTotalPriceCents(
+        fixture("order-paid-n8n-envelope.sanitized.json"),
+      ),
+    ).toBe(296616);
+    for (const payload of [null, "x", [], { transaction: null }]) {
+      expect(paytLegacyTotalPriceCents(payload)).toBeNull();
+    }
+  });
 });

@@ -41,7 +41,7 @@ describe("Payt postback on the rule URL (Fase 4a)", () => {
             orderRef: "PAYTS2",
             eventName: "Purchase",
           }),
-          valueCents: 296616,
+          valueCents: 233331,
           currency: "BRL",
         }),
       }),

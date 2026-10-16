@@ -127,6 +127,39 @@ function positiveCents(value: unknown): number | null {
     : null;
 }
 
+/**
+ * Sale value of a Payt transaction, in cents: the price WITHOUT card
+ * installment interest (`price_without_installments`, which already sums the
+ * product and its order bumps). `total_price` includes the interest of an
+ * installment plan (e.g. 12x R$ 24,80 = R$ 297,60 for a R$ 247,00 sale) and
+ * is only the fallback for a postback that does not carry the field.
+ */
+export function paytTransactionValueCents(
+  transaction: Record<string, unknown> | null | undefined,
+): number | null {
+  return (
+    positiveCents(transaction?.price_without_installments) ??
+    positiveCents(transaction?.total_price)
+  );
+}
+
+/** Marker of a Payt sale whose value was corrected to drop installment interest. */
+export const PAYT_VALUE_CORRECTION_REASON = "payt_price_without_installments";
+
+/**
+ * Value the parser used BEFORE `price_without_installments` was preferred
+ * (`transaction.total_price`, with interest). Only for compatibility with
+ * decisions frozen before that change and for the value backfill.
+ */
+export function paytLegacyTotalPriceCents(payload: unknown): number | null {
+  try {
+    const order = unwrap(payload);
+    return order ? positiveCents(asRecord(order.transaction)?.total_price) : null;
+  } catch {
+    return null;
+  }
+}
+
 const productCodePattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u;
 
 /**
@@ -278,7 +311,7 @@ export function parsePaytSaleEventV1(
         : 1;
     const productPrice = positiveCents(productRecord?.price);
     const valueCents =
-      positiveCents(transaction?.total_price) ??
+      paytTransactionValueCents(transaction) ??
       (eventName === "Purchase" || productPrice === null
         ? null
         : productPrice * productQuantity);

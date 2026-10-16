@@ -27,7 +27,7 @@ describe("Payt sale event v1 parser (Fase 4a: event from the payload)", () => {
         providerStatus: "paid",
         orderRef: "PAYTS2",
         accountRef: "455QA2",
-        valueCents: 296616,
+        valueCents: 233331,
         product: { code: "4O9J39", name: "Produto Agrupado" },
         // link https://payt.site/YoMCA71 -> offer code of the checkout link
         offer: { code: "YOMCA71", name: "Checkout teste" },
@@ -52,7 +52,7 @@ describe("Payt sale event v1 parser (Fase 4a: event from the payload)", () => {
         automation: "checkout_waiting_payment",
         providerStatus: "waiting_payment",
         orderRef: "PAYTS2",
-        valueCents: 296616,
+        valueCents: 233331,
         currency: "BRL",
       },
     });

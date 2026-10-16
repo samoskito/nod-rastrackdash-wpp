@@ -336,7 +336,7 @@ describe("Payt sale of a tracked CTWA lead", () => {
         occurrenceKey: purchaseKey,
         eventName: "Purchase",
       },
-      conversion: { valueCents: 296616, currency: "BRL" },
+      conversion: { valueCents: 233331, currency: "BRL" },
       leadResolution: {
         status: "resolved",
         lead: { adId: "ad_1", ctwaClid: "ctwa_1" },
@@ -393,7 +393,7 @@ describe("Payt sale of a tracked CTWA lead", () => {
     expect([...w.executions.values()][0]).toMatchObject({
       status: "eligible",
       externalExecutionKey: purchaseKey,
-      valueCents: 296616,
+      valueCents: 233331,
     });
   });
 
@@ -444,7 +444,7 @@ describe("Payt sale of a tracked CTWA lead", () => {
           eventName: "InitiateCheckout",
         }),
       },
-      conversion: { valueCents: 296616, currency: "BRL" },
+      conversion: { valueCents: 233331, currency: "BRL" },
     });
   });
 });

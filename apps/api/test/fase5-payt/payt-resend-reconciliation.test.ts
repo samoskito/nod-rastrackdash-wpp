@@ -156,7 +156,7 @@ describe("Payt resend of the same transaction with a different body", () => {
       296_616,
     );
     expect(lastObservedAutomation(harness)).toMatchObject({
-      valueCents: 296_616,
+      valueCents: 233_331,
     });
   });
 
@@ -217,7 +217,7 @@ describe("Payt resend of the same transaction with a different body", () => {
         actorUserId: "manager_1",
         reason: "operator_reprocess",
       },
-      automation: expect.objectContaining({ valueCents: 296_616 }),
+      automation: expect.objectContaining({ valueCents: 233_331 }),
     });
     expect(replay).toMatchObject({ requested: 1, queued: 1, skipped: 0 });
     expect(execution.status).toBe("eligible");

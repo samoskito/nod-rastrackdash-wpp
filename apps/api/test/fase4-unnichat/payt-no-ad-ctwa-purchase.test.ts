@@ -850,3 +850,105 @@ describe("Payt purchase of an ad lead on an Unnichat channel inheriting the work
     ).rejects.toMatchObject({ code: "provider_conversion_route_ad_not_found" });
   });
 });
+
+describe("Payt value without installment interest (decisions frozen before the fix)", () => {
+  // Real-shaped 12x card sale: 12 x R$ 24,80 = R$ 297,60 with interest; the
+  // sale value is R$ 247,00. The scenario freezes the decision with the
+  // postback's total_price (the value the parser used before the fix).
+  const installmentSale = (s: Awaited<ReturnType<typeof paytNoAdScenario>>) => {
+    Object.assign(s.sale.transaction as Record<string, unknown>, {
+      installments: 12,
+      installment_price: 2480,
+      total_price: 29760,
+      price_without_installments: 24700,
+    });
+  };
+  const run = (
+    s: Awaited<ReturnType<typeof paytNoAdScenario>>,
+    executionId: string,
+  ) =>
+    s.service.processExecution({
+      workspaceId: "w",
+      providerConversionExecutionId: executionId,
+    });
+
+  it("sends the corrected value once for a decision frozen with the legacy total_price", async () => {
+    const s = await paytNoAdScenario({ totalPriceCents: 29760 });
+    const first = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "payt_delivery_1",
+    });
+    const second = s.paytExecution({
+      id: "execution_b",
+      ruleId: "rule_b",
+      deliveryId: "payt_delivery_2",
+    });
+    expect(first.providerDecision.decisionJson.conversion.valueCents).toBe(
+      29760,
+    );
+    installmentSale(s);
+
+    await expect(run(s, first.id)).resolves.toEqual({
+      status: "materialized",
+    });
+    const purchases = s.h.logs.filter((log) => log.eventName === "Purchase");
+    expect(purchases).toHaveLength(1);
+    expect(purchases[0]).toMatchObject({
+      eventId: `conversion_purchase_${s.purchaseKey.slice(9)}`,
+      dedupeKey: s.purchaseKey,
+      valueCents: 24700,
+      currency: "BRL",
+    });
+    expect(purchases[0].sourcePayload.valueCorrection).toMatchObject({
+      previousValueCents: 29760,
+      reason: "payt_price_without_installments",
+    });
+    // The execution keeps the value that travelled.
+    expect(first).toMatchObject({ status: "materialized", valueCents: 24700 });
+    expect(s.claims.size).toBe(1);
+
+    // The same sale through another rule never sends twice.
+    await expect(run(s, second.id)).resolves.toEqual({ status: "duplicate" });
+    expect(s.h.logs.filter((log) => log.eventName === "Purchase")).toHaveLength(
+      1,
+    );
+    expect(s.claims.size).toBe(1);
+  });
+
+  it("sends a decision frozen after the fix as decided, without a correction mark", async () => {
+    const s = await paytNoAdScenario({ totalPriceCents: 24700 });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "payt_delivery_1",
+    });
+    installmentSale(s);
+
+    await expect(run(s, execution.id)).resolves.toEqual({
+      status: "materialized",
+    });
+    const purchase = s.h.logs.find((log) => log.eventName === "Purchase");
+    expect(purchase.valueCents).toBe(24700);
+    expect(purchase.sourcePayload).not.toHaveProperty("valueCorrection");
+    expect(execution).not.toHaveProperty("valueCents");
+  });
+
+  it("still refuses a frozen value that matches neither the new nor the legacy one", async () => {
+    const s = await paytNoAdScenario({ totalPriceCents: 11111 });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "payt_delivery_1",
+    });
+    installmentSale(s);
+
+    await expect(run(s, execution.id)).rejects.toMatchObject({
+      code: "provider_conversion_source_event_mismatch",
+    });
+    expect(s.h.logs.filter((log) => log.eventName === "Purchase")).toHaveLength(
+      0,
+    );
+    expect(s.claims.size).toBe(0);
+  });
+});

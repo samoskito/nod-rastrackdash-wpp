@@ -23,6 +23,8 @@ import { buildProviderPurchaseIdentity } from "../conversion-rules/provider-purc
 import {
   parsePaytSaleEventV1,
   PAYT_SALE_EVENT_NAMES,
+  PAYT_VALUE_CORRECTION_REASON,
+  paytLegacyTotalPriceCents,
 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
 import { Prisma } from "@prisma/client";
 import {
@@ -691,7 +693,12 @@ export class ProviderConversionProductionService
     // only "required" events are refused when the frozen decision has none.
     const requiresValue = conversionEventRequiresValue(eventName);
     const carriesValue = conversionEventCarriesValue(eventName);
-    const valueCents = carriesValue ? decision.conversion.valueCents : null;
+    // A Payt decision frozen before the "value without installment interest"
+    // fix carries total_price: it travels with the corrected value re-read
+    // from the same preserved postback (identity and dedupe are unchanged).
+    const valueCents = carriesValue
+      ? (purchaseContext?.correctedValueCents ?? decision.conversion.valueCents)
+      : null;
     const currency = carriesValue ? decision.conversion.currency : null;
 
     if (
@@ -1050,6 +1057,15 @@ export class ProviderConversionProductionService
             items: decision.conversion.items,
             observedPaymentValueCents:
               decision.conversion.observedPaymentValueCents,
+            ...(purchaseContext?.correctedValueCents
+              ? {
+                  valueCorrection: {
+                    previousValueCents: decision.conversion.valueCents,
+                    reason: PAYT_VALUE_CORRECTION_REASON,
+                    correctedAt: new Date().toISOString(),
+                  },
+                }
+              : {}),
             processingMode: "frozen_provider_conversion",
           },
         },
@@ -1076,6 +1092,9 @@ export class ProviderConversionProductionService
           reasonCode: null,
           leadId: lead.id,
           conversionEventLogId: conversion.conversionEventLogId,
+          // A legacy frozen Payt value travelled corrected: keep the execution
+          // consistent with the conversion event.
+          ...(purchaseContext?.correctedValueCents ? { valueCents } : {}),
           processedAt: new Date(),
           normalizedResult: this.withTechnicalDelivery(
             execution.normalizedResult,
@@ -1748,6 +1767,8 @@ export class ProviderConversionProductionService
     purchaseKey: string;
     ctwaOriginOnly: boolean;
     ctwaProof: AuthorizedCtwaDestination | undefined;
+    /** Set only for a decision frozen with the legacy Payt total_price. */
+    correctedValueCents: number | null;
   } | null> {
     if (decision.occurrence.provider === "payt")
       return this.assertPaytPurchaseContext(execution, decision);
@@ -1769,6 +1790,8 @@ export class ProviderConversionProductionService
     purchaseKey: string;
     ctwaOriginOnly: boolean;
     ctwaProof: AuthorizedCtwaDestination | undefined;
+    /** Set only for a decision frozen with the legacy Payt total_price. */
+    correctedValueCents: number | null;
   }> {
     this.assertAutomationProductionContext(execution);
     if (
@@ -1855,11 +1878,19 @@ export class ProviderConversionProductionService
       throw new ProviderConversionProductionFailure(
         "provider_purchase_channel_missing_or_ambiguous",
       );
-    const parsed = parsePaytSaleEventV1(this.decryptedPayload(execution));
+    const payload = this.decryptedPayload(execution);
+    const parsed = parsePaytSaleEventV1(payload);
     if (!parsed.ok)
       throw new ProviderConversionProductionFailure(
         "provider_purchase_identity_missing",
       );
+    // Decision frozen before the Payt value fix: it holds the same postback's
+    // total_price (with installment interest). Same sale, legacy value.
+    const legacyPaytValue =
+      parsed.value.valueCents !== null &&
+      decision.conversion.valueCents !== null &&
+      decision.conversion.valueCents !== parsed.value.valueCents &&
+      decision.conversion.valueCents === paytLegacyTotalPriceCents(payload);
     const purchaseKey = buildProviderPurchaseIdentity({
       workspaceId: execution.workspaceId,
       provider: "payt",
@@ -1879,13 +1910,19 @@ export class ProviderConversionProductionService
       purchaseKey !== execution.externalExecutionKey ||
       // A valueless abandoned cart may travel with the rule's average value.
       (parsed.value.valueCents !== null &&
-        (decision.conversion.valueCents !== parsed.value.valueCents ||
+        ((decision.conversion.valueCents !== parsed.value.valueCents &&
+          !legacyPaytValue) ||
           decision.conversion.currency !== parsed.value.currency))
     )
       throw new ProviderConversionProductionFailure(
         "provider_conversion_source_event_mismatch",
       );
-    return { purchaseKey, ctwaOriginOnly, ctwaProof };
+    return {
+      purchaseKey,
+      ctwaOriginOnly,
+      ctwaProof,
+      correctedValueCents: legacyPaytValue ? parsed.value.valueCents : null,
+    };
   }
 
   /**
