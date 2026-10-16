@@ -61,9 +61,9 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
-- **Fase 5.1 — Conversion currency (API and shared; the screen comes in a
-  later delivery)**, ported from the SaaS (`0bf5ebf`, `5981c7c` settings part,
-  `ffd0bae`, `e510840`, `c4c0375` audit part):
+- **Fase 5.1 — Conversion currency (API, shared and web)**, ported from the
+  SaaS (`0bf5ebf`, `5981c7c` settings part, `ffd0bae`, `e510840`, `c4c0375`
+  audit part, `2f79c3c` settings screen, `5ce8393` rule currency):
   - **Moeda das conversões** per workspace: BRL, USD or EUR, **default BRL**.
     Any member reads it (`GET /workspaces/current/currency`); owner/admin
     changes it (`PATCH`, audited `workspace.conversion_currency_updated`,
@@ -80,6 +80,17 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     their currency. Payt no longer forces BRL (it uses the currency the sale
     declares, otherwise rule/workspace). Pipedrive keeps using the deal
     currency and checking it against the rule's (`event_currency_mismatch`).
+  - **Screen (web):** Configurações → Moeda shows the workspace currency
+    (BRL/USD/EUR, with a warning before saving that the change only affects new
+    conversions; only owner/admin change it) and the ad accounts with the
+    currency detected by Meta, the manual correction (removable) and the
+    currency in use. The conversion rule (new, edit, old rules) and the Jornada
+    stages gain a currency field with "Padrão do workspace" (sends `null`) or
+    an own currency. The Kommo and Pipedrive panels start the currency on the
+    workspace's and always send it. Conversion values shown on screen use the
+    currency of the event or rule via `formatMoney`; the Reports and Overview
+    totals are untouched (Fase 5.2). Writes answer the standard locked-license
+    message on 423.
   - **Default behavior:** a workspace that never changes the currency keeps
     sending BRL exactly as before.
   - Migration `20261016140000_conversion_currency` (additive: enum
