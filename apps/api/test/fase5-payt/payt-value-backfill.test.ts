@@ -11,7 +11,8 @@ import { parseArgs } from "../../src/scripts/backfill-payt-sale-value";
  * AES-GCM path is covered by the payload tests).
  *
  * Adapted to this edition: only conversions NOT yet sent to Meta are
- * corrected (a sent one is counted as alreadySentToMeta), and there is no
+ * corrected (allowlist of statuses; sent, dispatching, delivery unknown and
+ * queued ones are only counted), and there is no
  * "Vendas sem atribuicao" table yet (Fase 5.3), so its block is left out.
  */
 
@@ -123,8 +124,9 @@ function harness() {
     workspaceId,
     eventName: "Purchase",
     sourceTrigger: "inbound_webhook:payt:provider_automation",
-    // Not sent to Meta yet (queued): the only kind the backfill corrects.
-    status: "ready_to_send",
+    // Refused by Meta: proven not received, so the backfill may correct it.
+    status: "error",
+    errorCode: "MetaCapiRequestRejected" as string | null,
     sentAt: null as Date | null,
     eventId: `conversion_purchase_${order}`,
     dedupeKey: buildProviderPurchaseIdentity({
@@ -169,6 +171,17 @@ function harness() {
       status: "sent",
       sentAt: new Date("2026-10-12T12:05:00Z"),
     }),
+    // Being sent right now: may reach Meta with the legacy value.
+    log("log_h", "order-h", 29760, { status: "dispatching" }),
+    // CTWA send with unknown outcome.
+    log("log_i", "order-i", 29760, {
+      status: "delivery_unknown",
+      errorCode: "MetaCapiDeliveryUnknown",
+    }),
+    // Generic send with unknown outcome (HTTP ok, no acknowledgement).
+    log("log_j", "order-j", 29760, { errorCode: "MetaCapiDeliveryUnknown" }),
+    // Queued: the sender may already hold the row with the old value.
+    log("log_k", "order-k", 29760, { status: "ready_to_send", errorCode: null }),
   ]);
   const deliveries = table([
     delivery("log_a", sale("order-a", installment)),
@@ -180,6 +193,10 @@ function harness() {
     delivery("log_d", sale("order-d", installment)),
     delivery("log_e", sale("order-e", installment)),
     delivery("log_g", sale("order-g", installment)),
+    delivery("log_h", sale("order-h", installment)),
+    delivery("log_i", sale("order-i", installment)),
+    delivery("log_j", sale("order-j", installment)),
+    delivery("log_k", sale("order-k", installment)),
   ]);
   const executions = table([
     {
@@ -233,12 +250,15 @@ describe("Payt value backfill (installment interest)", () => {
 
     expect(report.mode).toBe("dry_run");
     expect(report.conversionEvents).toMatchObject({
-      scanned: 6,
+      scanned: 10,
       corrected: 1,
       previousTotalCents: 29760,
       correctedTotalCents: 24700,
       unchanged: 1,
-      alreadySentToMeta: 1,
+      alreadySentToMeta: 2,
+      deliveryUnknown: 2,
+      queued: 1,
+      statusNotCorrectable: 0,
       payloadUnavailable: 1,
       manualAdjustment: 1,
       valueNotLegacy: 1,
@@ -266,14 +286,16 @@ describe("Payt value backfill (installment interest)", () => {
 
     expect(report.conversionEvents).toMatchObject({
       corrected: 1,
-      alreadySentToMeta: 1,
+      alreadySentToMeta: 2,
+      deliveryUnknown: 2,
+      queued: 1,
       executionsUpdated: 1,
       purchaseReviewsUpdated: 1,
     });
     const corrected = h.logs.rows.find((row) => row.id === "log_a")!;
     expect(corrected).toMatchObject({
       valueCents: 24700,
-      status: "ready_to_send",
+      status: "error",
       sentAt: null,
       eventId: "conversion_purchase_order-a",
       sourcePayload: {
@@ -307,7 +329,15 @@ describe("Payt value backfill (installment interest)", () => {
       log_e: 11111,
       log_f: 29760,
       log_g: 29760,
+      log_h: 29760,
+      log_i: 29760,
+      log_j: 29760,
+      log_k: 29760,
     });
+    for (const id of ["log_h", "log_i", "log_j", "log_k"])
+      expect(
+        h.logs.rows.find((row) => row.id === id)!.sourcePayload,
+      ).not.toHaveProperty("valueCorrection");
     const sent = h.logs.rows.find((row) => row.id === "log_g")!;
     expect(sent.sourcePayload).not.toHaveProperty("valueCorrection");
     expect(sent.status).toBe("sent");
@@ -326,16 +356,23 @@ describe("Payt value backfill (installment interest)", () => {
     });
   });
 
-  it("never races the sender: a conversion sent after it was read keeps its value", async () => {
+  it.each([
+    ["sent", { status: "sent", sentAt: now }],
+    ["dispatching", { status: "dispatching" }],
+    ["queued again (retry)", { status: "ready_to_send", errorCode: null }],
+    ["delivery unknown", { status: "delivery_unknown" }],
+    ["error with unknown outcome", { errorCode: "MetaCapiDeliveryUnknown" }],
+  ] as Array<[string, Record<string, unknown>]>)(
+    "never races the sender: a conversion %s after it was read keeps its value",
+    async (_label, change) => {
     const h = harness();
     const findDelivery = h.deliveries.findFirst;
     h.prisma.inboundWebhookDelivery = {
       ...h.deliveries,
       findFirst: async (args: any) => {
-        // The CAPI worker sends log_a while the backfill reads its body.
+        // The CAPI worker touches log_a while the backfill reads its body.
         const row = h.logs.rows.find((log) => log.id === "log_a")!;
-        row.status = "sent";
-        row.sentAt = now;
+        Object.assign(row, change);
         return findDelivery(args);
       },
     };
@@ -358,7 +395,8 @@ describe("Payt value backfill (installment interest)", () => {
     expect(
       h.audits.rows.map((row) => row.action),
     ).toEqual(["conversion_event.payt_value_backfill"]);
-  });
+    },
+  );
 
   it("is idempotent: a second run changes nothing", async () => {
     const h = harness();
@@ -401,7 +439,9 @@ describe("Payt value backfill (installment interest)", () => {
     expect(report.conversionEvents).toMatchObject({
       corrected: 0,
       payloadUnavailable: 4,
-      alreadySentToMeta: 1,
+      alreadySentToMeta: 2,
+      deliveryUnknown: 2,
+      queued: 1,
     });
     expect(h.logs.rows.find((row) => row.id === "log_a")!.valueCents).toBe(
       29760,
@@ -426,7 +466,7 @@ describe("Payt value backfill (installment interest)", () => {
       now,
     });
     expect(rest.conversionEvents).toMatchObject({
-      scanned: 4,
+      scanned: 8,
       nextCursor: null,
     });
 
@@ -466,6 +506,11 @@ describe("Payt value backfill (installment interest)", () => {
     expect(report.conversionEvents).toMatchObject({
       alreadyCorrected: 1,
       executionsUpdated: 1,
+    });
+    // The run audit counts the executions aligned in this branch too.
+    expect(h.audits.rows.at(-1)).toMatchObject({
+      action: "conversion_event.payt_value_backfill",
+      afterSummary: { executionsUpdated: 1 },
     });
     // The value Meta received (corrected at send time) stays as sent.
     expect(h.executions.rows[0]!.valueCents).toBe(24700);

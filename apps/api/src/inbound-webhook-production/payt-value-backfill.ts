@@ -12,12 +12,20 @@ import {
  * installment interest included) before the parser preferred
  * `price_without_installments`. Ported from the SaaS (`608ec47`, `1d65161`).
  *
- * Student edition rule (Fase 5.0): only a conversion that has NOT been sent
- * to Meta yet is corrected; one already sent (or being sent) keeps its value
- * everywhere and is only counted (`alreadySentToMeta`). Nothing is ever
- * resent: event_id, dedupe key and delivery status are untouched. A queued
- * conversion corrected here is sent later with the corrected value (the Meta
- * payload is built from the conversion row at send time).
+ * Student edition rule (Fase 5.0): only a conversion PROVEN not to have
+ * reached Meta is corrected (allowlist of statuses, see
+ * NOT_SENT_TO_META_STATUSES). Everything else keeps its value everywhere and
+ * is only counted:
+ * - `alreadySentToMeta`: sent, or being sent (`dispatching`);
+ * - `deliveryUnknown`: outcome unknown (`delivery_unknown`, or an error with
+ *   MetaCapiDeliveryUnknown / MetaCapiNetworkError): Meta may have it;
+ * - `queued`: `ready_to_send`. The generic sender reads the row once and
+ *   keeps `ready_to_send` during the POST, so a correction could race a send
+ *   already built with the old value. Run the backfill again once the queue
+ *   is empty;
+ * - `statusNotCorrectable`: any other status (imported, shadow, ...).
+ * Nothing is ever resent: event_id, dedupe key and delivery status are
+ * untouched.
  *
  * The new value is re-read from the preserved postback; once that body
  * expired (retention ~7 days) there is no other stored source of the value
@@ -36,8 +44,28 @@ export const PAYT_VALUE_BACKFILL_DEFAULT_LIMIT = 200;
 export const PAYT_VALUE_BACKFILL_MAX_LIMIT = 2_000;
 const BATCH_SIZE = 100;
 const SAMPLE_SIZE = 50;
-/** Conversion statuses whose value Meta has (or may have) already received. */
+/** Statuses whose value Meta has (or may have) already received. */
 const SENT_TO_META_STATUSES = ["sent", "dispatching"];
+/** Delivery attempted with an unknown outcome: Meta may have the event. */
+const DELIVERY_UNKNOWN_STATUS = "delivery_unknown";
+const DELIVERY_UNKNOWN_ERROR_CODES = [
+  "MetaCapiDeliveryUnknown",
+  "MetaCapiNetworkError",
+];
+/** Queued for the sender: never corrected (it may be sending right now). */
+const QUEUED_STATUS = "ready_to_send";
+/**
+ * Allowlist: statuses proven not to have reached Meta (never attempted, or
+ * refused before or by Meta). Only these are corrected.
+ */
+const NOT_SENT_TO_META_STATUSES = [
+  "error",
+  "skipped",
+  "not_configured",
+  "not_eligible",
+  "pending_meta_context",
+  "pending_value",
+];
 
 export type PaytValueBackfillOptions = {
   apply: boolean;
@@ -56,6 +84,9 @@ type Outcome =
   | "unchanged"
   | "alreadyCorrected"
   | "alreadySentToMeta"
+  | "deliveryUnknown"
+  | "queued"
+  | "statusNotCorrectable"
   | "manualAdjustment"
   | "payloadUnavailable"
   | "parseFailed"
@@ -74,6 +105,12 @@ export type PaytValueBackfillReport = {
     alreadyCorrected: number;
     /** Already sent to Meta (or being sent): never changed. */
     alreadySentToMeta: number;
+    /** Delivery outcome unknown (Meta may have it): never changed. */
+    deliveryUnknown: number;
+    /** Still queued (ready_to_send): run again once the queue is empty. */
+    queued: number;
+    /** Any other status outside the allowlist: never changed. */
+    statusNotCorrectable: number;
     manualAdjustment: number;
     payloadUnavailable: number;
     parseFailed: number;
@@ -105,6 +142,7 @@ type LogRow = {
   workspaceId: string | null;
   eventName: string;
   status: string;
+  errorCode: string | null;
   sentAt: Date | null;
   dedupeKey: string | null;
   valueCents: number | null;
@@ -159,8 +197,29 @@ function decryptJson(
   }
 }
 
-function sentToMeta(row: { status: string; sentAt: Date | null }): boolean {
-  return row.sentAt !== null || SENT_TO_META_STATUSES.includes(row.status);
+/** Why a conversion may not be corrected, or null when it never reached Meta. */
+function notCorrectableReason(row: {
+  status: string;
+  errorCode: string | null;
+  sentAt: Date | null;
+}):
+  | "alreadySentToMeta"
+  | "deliveryUnknown"
+  | "queued"
+  | "statusNotCorrectable"
+  | null {
+  if (row.sentAt !== null || SENT_TO_META_STATUSES.includes(row.status))
+    return "alreadySentToMeta";
+  if (
+    row.status === DELIVERY_UNKNOWN_STATUS ||
+    (row.errorCode !== null &&
+      DELIVERY_UNKNOWN_ERROR_CODES.includes(row.errorCode))
+  )
+    return "deliveryUnknown";
+  if (row.status === QUEUED_STATUS) return "queued";
+  if (!NOT_SENT_TO_META_STATUSES.includes(row.status))
+    return "statusNotCorrectable";
+  return null;
 }
 
 export async function runPaytValueBackfill(
@@ -185,6 +244,9 @@ export async function runPaytValueBackfill(
       unchanged: 0,
       alreadyCorrected: 0,
       alreadySentToMeta: 0,
+      deliveryUnknown: 0,
+      queued: 0,
+      statusNotCorrectable: 0,
       manualAdjustment: 0,
       payloadUnavailable: 0,
       parseFailed: 0,
@@ -248,10 +310,11 @@ export async function runPaytValueBackfill(
       }
       return;
     }
-    // What Meta already received never changes here.
-    if (sentToMeta(row)) {
-      events.alreadySentToMeta += 1;
-      sample(row, "alreadySentToMeta");
+    // Only what provably never reached Meta is corrected.
+    const blocked = notCorrectableReason(row);
+    if (blocked) {
+      events[blocked] += 1;
+      sample(row, blocked);
       return;
     }
     // An operator-adjusted value (purchase review) always wins.
@@ -352,10 +415,15 @@ export async function runPaytValueBackfill(
         where: {
           id: row.id,
           valueCents: previousValueCents,
-          // Never race the sender: a conversion sent (or being sent) since
-          // it was read keeps its value.
+          // Never race the sender: the allowlist is re-checked on write, so
+          // a conversion queued, sent or with an unknown outcome since it
+          // was read keeps its value.
           sentAt: null,
-          status: { notIn: SENT_TO_META_STATUSES },
+          status: { in: NOT_SENT_TO_META_STATUSES },
+          OR: [
+            { errorCode: null },
+            { errorCode: { notIn: DELIVERY_UNKNOWN_ERROR_CODES } },
+          ],
         },
         data: {
           valueCents,
@@ -437,6 +505,7 @@ export async function runPaytValueBackfill(
         workspaceId: true,
         eventName: true,
         status: true,
+        errorCode: true,
         sentAt: true,
         dedupeKey: true,
         valueCents: true,
@@ -470,7 +539,11 @@ export async function runPaytValueBackfill(
         afterSummary: {
           conversionEventsScanned: events.scanned,
           conversionEventsCorrected: events.corrected,
+          executionsUpdated: events.executionsUpdated,
           alreadySentToMeta: events.alreadySentToMeta,
+          deliveryUnknown: events.deliveryUnknown,
+          queued: events.queued,
+          statusNotCorrectable: events.statusNotCorrectable,
           payloadUnavailable: events.payloadUnavailable,
           nextCursor: events.nextCursor,
           metaEventsResent: false,

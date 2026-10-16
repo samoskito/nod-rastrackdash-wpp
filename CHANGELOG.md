@@ -351,16 +351,20 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     `total_price` (with card interest) is only the fallback. **Effect on the
     next purchases:** an installment card sale is recorded and sent to Meta
     with a lower value than before (e.g. R$ 247,00 instead of R$ 297,60 in
-    12x); Pix, boleto and one-time card sales do not change. A decision frozen
+    12x). In the observed cases (installment card sales) the value becomes
+    the product price without interest; other payment methods read the same
+    Payt field (not validated for each of them). A decision frozen
     with the old value and not sent yet travels corrected (same `event_id`,
     no double send, `sourcePayload.valueCorrection`).
   - **Backfill of sales already recorded** (optional, run right after the
     update: stored bodies expire in ~7 days):
     `pnpm --filter @wpptrack/api payt:value-backfill -- --limit 200` (dry-run),
     then `... --apply --actor-email <platform owner>` and `--after <nextCursor>`
-    until it is `null`. Only conversions **not yet sent to Meta** are
-    corrected; sent ones never change and nothing is resent. Steps in
-    `docs/setup/payt.md`.
+    until it is `null`. Only conversions **proven not to have reached Meta**
+    (refused, not configured, skipped, pending) are corrected; sent,
+    dispatching, unknown-outcome (`deliveryUnknown`) and queued (`queued`,
+    run again once the queue is empty) ones never change, and nothing is
+    resent. Steps in `docs/setup/payt.md`.
   - **Resend with a different body.** The same Payt order resent with a
     changed body no longer fails as `provider_conversion_source_event_mismatch`;
     a sale that failed that way is recoverable (Reprocessar, or a new Payt

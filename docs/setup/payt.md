@@ -102,10 +102,15 @@ Uma venda que já estava decidida com o valor antigo e ainda não foi enviada sa
 Comando único, **opcional**, para as compras Payt registradas antes desta versão com o valor com
 juros. Regras:
 
-- Só corrige o que **ainda não foi enviado à Meta** (na fila, com erro ou ignorado). O que já foi
-  enviado (ou está sendo enviado) não muda em lugar nenhum e aparece em `alreadySentToMeta`.
-- Nada é reenviado à Meta; `event_id`, `dedupeKey` e o status de entrega não mudam. Uma venda ainda
-  na fila, corrigida aqui, sai depois com o valor corrigido.
+- Só corrige a venda que **comprovadamente não chegou à Meta**: recusada pela Meta ou por
+  configuração (erro com resposta conhecida, sem destino configurado, ignorada, aguardando contexto
+  ou valor). Nada mais muda, só é contado no relatório:
+  - `alreadySentToMeta`: já enviada ou sendo enviada agora;
+  - `deliveryUnknown`: o envio foi tentado e o resultado é desconhecido (a Meta pode ter recebido);
+  - `queued`: ainda na fila de envio. Não é corrigida porque o envio pode estar em andamento com o
+    valor antigo; rode o comando de novo quando a fila esvaziar;
+  - `statusNotCorrectable`: qualquer outro status.
+- Nada é reenviado à Meta; `event_id`, `dedupeKey` e o status de entrega não mudam.
 - O valor novo é relido do corpo guardado da entrega. A retenção do corpo é de ~7 dias: depois disso
   a venda não pode mais ser corrigida (aparece em `payloadUnavailable`). Rode logo após atualizar.
 - Só corrige quando o valor atual é exatamente o `total_price` do mesmo corpo. Valor ajustado por um
@@ -130,7 +135,8 @@ Rode onde a API roda, com as mesmas variáveis de ambiente (banco e
    ```
 
    Opcional: `--workspace <workspaceId>` para um cliente só. Confira `conversionEvents.corrected`,
-   `previousTotalCents` → `correctedTotalCents`, `alreadySentToMeta` e os `samples`.
+   `previousTotalCents` → `correctedTotalCents`, `alreadySentToMeta`, `deliveryUnknown`, `queued`
+   e os `samples`.
 
 2. **Aplicar** em lote limitado (máximo 2000 por execução), informando o e-mail de um Platform Owner
    (o administrador criado com `platform-admin:create`):
@@ -140,7 +146,9 @@ Rode onde a API roda, com as mesmas variáveis de ambiente (banco e
    ```
 
 3. Enquanto `conversionEvents.nextCursor` não for `null`, repita com `--after <valor>`. Rodar de
-   novo do início é seguro: o que já foi corrigido aparece em `alreadyCorrected`.
+   novo do início é seguro: o que já foi corrigido aparece em `alreadyCorrected`. Se `queued` não
+   for zero, rode de novo (do início) depois que a fila de envio esvaziar; as que forem enviadas
+   nesse meio-tempo ficam com o valor que a Meta recebeu.
 
 Sem compras Payt parceladas no cartão, o comando não tem o que corrigir.
 
