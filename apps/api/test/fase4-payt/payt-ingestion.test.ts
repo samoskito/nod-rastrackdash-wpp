@@ -42,7 +42,8 @@ describe("Payt postback on the rule URL (Fase 4a)", () => {
             eventName: "Purchase",
           }),
           valueCents: 233331,
-          currency: "BRL",
+          // A Payt não declara moeda: a da regra ou a do workspace decide depois.
+          currency: null,
         }),
       }),
     );

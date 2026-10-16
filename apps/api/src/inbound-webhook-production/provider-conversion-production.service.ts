@@ -69,6 +69,7 @@ import {
   hashPhoneIdentityVariants,
 } from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import type { ProviderConversionProductionJobPayload } from "../common/queue/queue.constants";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
@@ -1200,7 +1201,16 @@ export class ProviderConversionProductionService
     const eventName = this.supportedEventName(parsed.eventName);
     const carriesValue = conversionEventCarriesValue(eventName);
     const valueCents = carriesValue ? rule.defaultValueCents : null;
-    const currency = carriesValue ? rule.defaultCurrency : null;
+    // Regra -> workspace -> BRL: a rule without currency (null) inherits.
+    const currency = carriesValue
+      ? (rule.defaultCurrency ??
+        (valueCents
+          ? await loadWorkspaceConversionCurrency(
+              this.prisma,
+              execution.workspaceId,
+            )
+          : null))
+      : null;
     if (conversionEventRequiresValue(eventName) && (!valueCents || !currency)) {
       throw new ProviderConversionProductionFailure(
         "provider_conversion_value_missing",
@@ -1398,7 +1408,15 @@ export class ProviderConversionProductionService
       rule.messageTriggerPhrases,
     );
     const valueCents = rule.conversionRule.defaultValueCents;
-    const currency = rule.conversionRule.defaultCurrency;
+    // Regra -> workspace -> BRL: a rule without currency (null) inherits.
+    const currency =
+      rule.conversionRule.defaultCurrency ??
+      (matchedTriggerPhrase && valueCents
+        ? await loadWorkspaceConversionCurrency(
+            this.prisma,
+            execution.workspaceId,
+          )
+        : null);
     const matched = Boolean(matchedTriggerPhrase && valueCents && currency);
 
     return {
@@ -1909,10 +1927,12 @@ export class ProviderConversionProductionService
       decision.occurrence.purchaseKey !== purchaseKey ||
       purchaseKey !== execution.externalExecutionKey ||
       // A valueless abandoned cart may travel with the rule's average value.
+      // Venda sem moeda declarada usou a moeda da regra/workspace.
       (parsed.value.valueCents !== null &&
         ((decision.conversion.valueCents !== parsed.value.valueCents &&
           !legacyPaytValue) ||
-          decision.conversion.currency !== parsed.value.currency))
+          (parsed.value.currency !== null &&
+            decision.conversion.currency !== parsed.value.currency)))
     )
       throw new ProviderConversionProductionFailure(
         "provider_conversion_source_event_mismatch",

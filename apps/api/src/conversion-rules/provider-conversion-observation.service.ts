@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type {
+  CurrencyCode,
   ProviderConversionCatalogDto,
   ProviderConversionDecisionCatalogSnapshotDto,
   ProviderConversionDecisionDto,
@@ -19,6 +20,7 @@ import {
   hashPhoneIdentityVariants,
 } from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
@@ -578,6 +580,21 @@ export class ProviderConversionObservationService {
     };
   }
 
+  /**
+   * Workspace "Moeda das conversoes" for the decision engines. BRL is the
+   * engines' own default, so it is only spelled out for USD/EUR workspaces
+   * (BRL workspaces keep byte-identical decision inputs).
+   */
+  private async fallbackCurrencyField(
+    workspaceId: string,
+  ): Promise<{ fallbackCurrency?: CurrencyCode }> {
+    const currency = await loadWorkspaceConversionCurrency(
+      this.prisma,
+      workspaceId,
+    );
+    return currency === "BRL" ? {} : { fallbackCurrency: currency };
+  }
+
   private async resolveDecision(input: {
     input: {
       workspaceId: string;
@@ -634,6 +651,7 @@ export class ProviderConversionObservationService {
         occurredAt: input.event.occurredAt.toISOString(),
         authorType: input.event.message.authorType,
         messageText: input.event.message.text!,
+        ...(await this.fallbackCurrencyField(input.input.workspaceId)),
       },
     };
     const decision = await this.engineRollout.evaluate({
@@ -725,8 +743,9 @@ export class ProviderConversionObservationService {
             : undefined,
         observedCurrency:
           "currency" in input.input.automation
-            ? input.input.automation.currency
+            ? (input.input.automation.currency ?? undefined)
             : undefined,
+        ...(await this.fallbackCurrencyField(input.input.workspaceId)),
       },
     };
     const decision = await this.engineRollout.evaluate({

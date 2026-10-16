@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CURRENCY_CODE,
   conversionEventMetadata,
   type ConversionEventCustomDataDto,
   type ConversionEventNameDto
@@ -54,7 +55,17 @@ export function buildMetaCapiPayload(
     ...(typeof input.valueCents === "number"
       ? { value: input.valueCents / 100 }
       : {}),
-    ...(input.currency ? { currency: input.currency } : {}),
+    // A Meta precisa da moeda de todo valor: valor nunca vai sem moeda.
+    // Eventos gravados antes da moeda configurável só ficavam sem moeda
+    // quando eram BRL (o padrão histórico).
+    ...(typeof input.valueCents === "number"
+      ? {
+          currency:
+            input.currency?.trim().toUpperCase() || DEFAULT_CURRENCY_CODE,
+        }
+      : input.currency
+        ? { currency: input.currency }
+        : {}),
     ...(input.contentName ? { content_name: input.contentName } : {})
   };
   // Never forward a caller-provided ad_id when the event has no ad.

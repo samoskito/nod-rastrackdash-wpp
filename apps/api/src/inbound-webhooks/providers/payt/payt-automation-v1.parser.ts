@@ -1,3 +1,4 @@
+import { normalizeCurrencyCode, type CurrencyCode } from "@wpptrack/shared";
 import { normalizePhoneIdentity } from "../../../common/phone/phone-identity";
 import { boundedString } from "../inbound-webhook-delivery-identity";
 
@@ -40,7 +41,12 @@ export type ParsedPaytAutomationV1 = {
   externalExecutionKey: string;
   /** Always present for Purchase/InitiateCheckout; optional on CartAbandoned. */
   valueCents: number | null;
-  currency: "BRL";
+  /**
+   * Currency the sale itself declares (BRL/USD/EUR), or null when the
+   * postback carries none (Payt normally sends none): the conversion then
+   * uses the rule currency, the workspace "Moeda das conversoes", then BRL.
+   */
+  currency: CurrencyCode | null;
   test: boolean;
   /** Verified fixture keys, never integration_key. In-memory only. */
   accountRef: string;
@@ -117,6 +123,21 @@ function parseTimestamp(value: unknown): Date | null {
 
 function lower(value: unknown, max: number): string | null {
   return boundedString(value, max)?.toLocaleLowerCase("en-US") ?? null;
+}
+
+/**
+ * Sale currency when the postback declares one we support. Unknown or
+ * unsupported codes are ignored (the historical behavior assumed BRL).
+ */
+function paytCurrency(
+  order: Record<string, unknown>,
+  transaction: Record<string, unknown> | null,
+): CurrencyCode | null {
+  for (const value of [transaction?.currency, order.currency]) {
+    const currency = normalizeCurrencyCode(boundedString(value, 10));
+    if (currency) return currency;
+  }
+  return null;
 }
 
 function positiveCents(value: unknown): number | null {
@@ -362,7 +383,7 @@ export function parsePaytSaleEventV1(
         orderRef,
         accountRef,
         valueCents,
-        currency: "BRL",
+        currency: paytCurrency(order, transaction),
         test: order.test === true,
         product,
         offer,

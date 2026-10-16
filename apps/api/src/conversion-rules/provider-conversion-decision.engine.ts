@@ -290,12 +290,14 @@ export class ProviderConversionDecisionEngine {
         ? (input.occurrence.observedValueCents ?? null)
         : this.extractedValueCents(input);
     const valueCents = extractedValueCents ?? input.rule.defaultValueCents;
+    // Moeda: a da venda (payload) -> a da regra -> a do workspace -> BRL.
+    // A rule without currency (null = inherit) uses the workspace currency.
     const currency =
       (input.occurrence.source === "automation"
         ? (input.occurrence.observedCurrency ?? null)
         : null) ??
       input.rule.defaultCurrency ??
-      (extractedValueCents ? "BRL" : null);
+      (valueCents ? (input.occurrence.fallbackCurrency ?? "BRL") : null);
     const matched = Boolean(valueCents && currency);
 
     return {

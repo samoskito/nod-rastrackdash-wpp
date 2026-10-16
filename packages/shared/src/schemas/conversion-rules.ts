@@ -361,7 +361,7 @@ type ValuedRuleInput = {
   eventName: z.infer<typeof conversionEventNameSchema>;
   valueMode?: z.infer<typeof messagePhraseValueModeSchema>;
   defaultValueCents?: number | null;
-  defaultCurrency?: string;
+  defaultCurrency?: string | null;
   defaultContentName?: string | null;
 };
 
@@ -414,9 +414,12 @@ function refineEventValueFields(
 }
 
 /**
- * Eventos sem valor saem do parse sem nenhuma chave monetaria; eventos com
- * valor ganham "BRL" como moeda padrao. Manter os campos ausentes (em vez de
- * nulos) e o que impede o servico de gravar valor fantasma.
+ * Eventos sem valor saem do parse sem nenhuma chave monetaria. Eventos com
+ * valor mantem a moeda informada; sem moeda (ausente ou null) a regra fica
+ * com moeda nula = "usar a Moeda das conversoes do workspace" (resolvida no
+ * envio: venda -> regra -> workspace -> BRL). Regras ja gravadas com moeda
+ * nao mudam. Manter os campos ausentes (em vez de nulos) em eventos sem valor
+ * e o que impede o servico de gravar valor fantasma.
  *
  * O transform nao mexe em valueMode: o refine acima ja recusa
  * "message_extracted" em evento sem valor, e o default do proprio campo
@@ -426,7 +429,7 @@ function normalizeEventValueFields<Input extends ValuedRuleInput>(
   input: Input,
 ): Input {
   if (conversionEventCarriesValue(input.eventName)) {
-    return { ...input, defaultCurrency: input.defaultCurrency ?? "BRL" };
+    return input;
   }
 
   const {
@@ -442,7 +445,8 @@ function normalizeEventValueFields<Input extends ValuedRuleInput>(
 const eventValueShape = {
   // Required when valueMode is "fixed"; optional fallback when extracting.
   defaultValueCents: z.number().int().positive().nullable().optional(),
-  defaultCurrency: currencySchema.optional(),
+  // null/ausente = herdar a "Moeda das conversoes" do workspace.
+  defaultCurrency: currencySchema.nullable().optional(),
   defaultContentName: catalogTextSchema.nullable().optional(),
 };
 

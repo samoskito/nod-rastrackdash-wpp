@@ -62,9 +62,8 @@ export class ConversionRulesService {
       const adaptBlockedReason =
         rule.triggerType !== "keyword" || rule.eventName !== "Purchase"
           ? ("not_keyword_purchase" as const)
-          : !rule.defaultValueCents ||
-              rule.defaultValueCents <= 0 ||
-              !rule.defaultCurrency
+          : // Moeda nula = herdar a "Moeda das conversões" do workspace.
+            !rule.defaultValueCents || rule.defaultValueCents <= 0
             ? ("missing_value" as const)
             : null;
       return {

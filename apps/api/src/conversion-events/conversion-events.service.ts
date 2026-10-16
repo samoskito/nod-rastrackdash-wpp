@@ -28,7 +28,10 @@ import {
   KOMMO_DELIVERY_UNKNOWN,
   KOMMO_DELIVERY_UNKNOWN_MESSAGE,
 } from "../kommo/kommo-sender-policy";
-import { authorizedCtwaDestinationSchema } from "@wpptrack/shared";
+import {
+  authorizedCtwaDestinationSchema,
+  resolveConversionCurrency,
+} from "@wpptrack/shared";
 import {
   CTWA_DESTINATION_PROVIDER,
   CTWA_DESTINATION_REASON,
@@ -65,6 +68,7 @@ import type {
   ConversionRuleDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 import {
   MetaConnectionResolverService,
@@ -552,6 +556,8 @@ export class ConversionEventsService {
       configuredDefaults.map((defaults) => [defaults.eventName, defaults]),
     );
 
+    let workspaceCurrency: string | null = null;
+
     for (const rule of input.rules) {
       const eventDefaults = defaultsByEvent.get(rule.eventName);
       const dedupeKey = this.buildDedupeKey(input, rule);
@@ -592,6 +598,27 @@ export class ConversionEventsService {
         eventName: rule.eventName,
         customerIdentityKey,
       });
+      const explicitCurrency =
+        input.currency ??
+        rule.defaultCurrency ??
+        eventDefaults?.defaultCurrency ??
+        null;
+      // A value always travels with a currency: venda -> regra -> workspace
+      // -> BRL. Valueless events keep the historical (possibly null) currency.
+      if (valueCents != null && !explicitCurrency && workspaceCurrency === null) {
+        workspaceCurrency = await loadWorkspaceConversionCurrency(
+          this.prisma,
+          input.workspaceId,
+        );
+      }
+      const currency =
+        valueCents != null
+          ? resolveConversionCurrency({
+              payload: input.currency,
+              rule: rule.defaultCurrency ?? eventDefaults?.defaultCurrency,
+              workspace: workspaceCurrency,
+            })
+          : explicitCurrency;
       const log = await this.prisma.conversionEventLog.create({
         data: {
           workspaceId: input.workspaceId,
@@ -619,11 +646,7 @@ export class ConversionEventsService {
               : valueCents == null
                 ? null
                 : "configured_average",
-          currency:
-            input.currency ??
-            rule.defaultCurrency ??
-            eventDefaults?.defaultCurrency ??
-            null,
+          currency,
           contentName:
             input.contentName ??
             rule.defaultContentName ??
@@ -790,6 +813,13 @@ export class ConversionEventsService {
       client,
     );
 
+    const currency = await this.valueCurrency({
+      workspaceId: input.workspaceId,
+      valueCents: input.valueCents,
+      currency: input.currency,
+      client,
+    });
+
     // The Purchase-kind lookup is the final awaited read before the canonical
     // log write. Restrict this barrier to the CRM consumers (Kommo,
     // Pipedrive) so other providers retain their existing behavior.
@@ -841,7 +871,7 @@ export class ConversionEventsService {
               : "organic_or_unattributed",
           dedupeKey: input.dedupeKey,
           valueCents: input.valueCents ?? null,
-          currency: input.currency ?? null,
+          currency,
           contentName: input.contentName ?? null,
           sourcePayload: input.ctwaDestination
             ? ({
@@ -898,6 +928,19 @@ export class ConversionEventsService {
         ? existing.businessSource
         : "paid";
     const adId = existing.adId ?? input.adId ?? null;
+    // Um valor que chega agora num evento sem valor leva a moeda da venda ou,
+    // sem ela, a "Moeda das conversões" do workspace. Evento que já tinha
+    // valor guarda a moeda que tinha (eventos antigos não mudam).
+    const currency =
+      existing.currency ??
+      (existing.valueCents == null
+        ? await this.valueCurrency({
+            workspaceId: input.workspaceId,
+            valueCents: input.valueCents,
+            currency: input.currency,
+            client,
+          })
+        : (input.currency ?? null));
     const updated = (await client.conversionEventLog.update({
       where: { id: existing.id },
       data: {
@@ -931,7 +974,7 @@ export class ConversionEventsService {
               : existing.attributionStatus,
         valueCents: existing.valueCents ?? input.valueCents ?? null,
         valueSource: existing.valueSource ?? input.valueSource ?? null,
-        currency: existing.currency ?? input.currency ?? null,
+        currency,
         ...(existing.sourcePayload == null && input.sourcePayload
           ? { sourcePayload: input.sourcePayload as Prisma.InputJsonValue }
           : {}),
@@ -954,6 +997,27 @@ export class ConversionEventsService {
       status: promotesHistoricalEvent ? "created" : "duplicate",
       deliveryStatus: updated.status,
     };
+  }
+
+  /**
+   * Currency stored with a conversion value: the caller's (sale/deal or rule)
+   * currency when given, else the workspace "Moeda das conversoes" (BRL by
+   * default). Valueless events keep whatever the caller sent (usually null).
+   */
+  private async valueCurrency(input: {
+    workspaceId: string;
+    valueCents?: number | null;
+    currency?: string | null;
+    client?: unknown;
+  }): Promise<string | null> {
+    const explicit = input.currency?.trim().toUpperCase() || null;
+    if (input.valueCents == null || explicit) return explicit;
+    const client = input.client as { workspace?: unknown } | undefined;
+
+    return loadWorkspaceConversionCurrency(
+      client?.workspace ? client : this.prisma,
+      input.workspaceId,
+    );
   }
 
   async listReadyLogIds(logIds: string[]): Promise<string[]> {
@@ -995,6 +1059,11 @@ export class ConversionEventsService {
     const customerIdentityKey = this.resolveCustomerIdentityKey(
       input.phoneHash,
     );
+    const currency = await this.valueCurrency({
+      workspaceId: input.workspaceId,
+      valueCents: input.valueCents,
+      currency: input.currency,
+    });
     const log = await this.prisma.conversionEventLog.create({
       data: {
         workspaceId: input.workspaceId,
@@ -1016,7 +1085,7 @@ export class ConversionEventsService {
         attributionStatus: "manual_test",
         dedupeKey,
         valueCents: input.valueCents ?? null,
-        currency: input.currency ?? null,
+        currency,
         contentName: input.contentName ?? null,
         customData: Prisma.JsonNull,
         errorCode: initialStatus.errorCode,
