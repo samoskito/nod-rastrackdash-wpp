@@ -432,7 +432,7 @@ describe("inbound webhook panel", () => {
     });
 
     expect(html).toContain("Prontidao parcial");
-    expect(html).toContain("<span>Rotas validas</span><strong>2/2</strong>");
+    expect(html).toContain("<span>Rotas válidas</span><strong>2/2</strong>");
     expect(html).toContain("<span>CTWA observados</span><strong>17</strong>");
     expect(html).toContain(
       "<span>Roteados preservados</span><strong>12</strong>",
@@ -484,7 +484,7 @@ describe("inbound webhook panel", () => {
     for (const command of [
       "Adicionar conexão",
       "Ativar envios automaticos",
-      "Pausar conexao",
+      "Pausar conexão",
       "Gerar nova URL",
       "Remover",
       "Pausar envio",

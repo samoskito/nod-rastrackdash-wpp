@@ -312,7 +312,8 @@ describe("Unnichat connection creation", () => {
     expect(sent.get("provider")).toBe("unnichat");
     expect(sent.get("connectedPhone")).toBe("+55 11 99999-0001");
     expect(screen.getByDisplayValue(/token=secret_u/)).toBeTruthy();
-    expect(screen.getByText("URL exibida uma unica vez")).toBeTruthy();
+    expect(screen.getByText("URL exibida uma única vez")).toBeTruthy();
+    expect(screen.getByText(/Cadastre este webhook no Unnichat agora/)).toBeTruthy();
     expect(screen.getByText("Webhook de entrada da conversa")).toBeTruthy();
     expect(screen.getByText(/adicione\s+uma chamada HTTP/)).toBeTruthy();
     // The body the Unnichat flow must send, with its placeholders.

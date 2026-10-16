@@ -197,7 +197,7 @@ export function InboundWebhookRouteEditor({
           <span className="micro-label">Roteamento Meta</span>
           <p className="muted">
             {canManage
-              ? "Associe uma ou mais BMs. Conta e destino sao opcionais."
+              ? "Associe uma ou mais BMs. Conta e destino são opcionais."
               : "Rotas visiveis em modo somente leitura."}
           </p>
         </div>

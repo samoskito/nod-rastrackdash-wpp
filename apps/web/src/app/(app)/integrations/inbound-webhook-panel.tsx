@@ -470,7 +470,7 @@ export function InboundWebhookPanel({
             <div>
               <strong>Nenhum webhook configurado</strong>
               <p className="muted">
-                Crie uma conexao para receber o primeiro payload de teste.
+                Crie uma conexão para receber o primeiro payload de teste.
               </p>
             </div>
           </div>
@@ -638,7 +638,7 @@ export function InboundWebhookPanel({
                         )}
                         {connection.status === "paused"
                           ? "Retomar observacao"
-                          : "Pausar conexao"}
+                          : "Pausar conexão"}
                       </button>
                       <button
                         className="button"
@@ -881,7 +881,7 @@ export function InboundWebhookOneTimeSecretPanel({
   onDismiss: () => void;
 }) {
   const providerLabel = inboundWebhookProviderLabel(secret.provider);
-  const providerPreposition = secret.provider === "data_crazy" ? "no" : "na";
+  const providerPreposition = secret.provider === "data_crazy" || secret.provider === "unnichat" ? "no" : "na";
   const showVerifyToken = secret.provider === "meta_cloud";
 
   return (
@@ -893,8 +893,8 @@ export function InboundWebhookOneTimeSecretPanel({
         <div>
           <span className="micro-label">
             {showVerifyToken
-              ? "URL e token exibidos uma unica vez"
-              : "URL exibida uma unica vez"}
+              ? "URL e token exibidos uma única vez"
+              : "URL exibida uma única vez"}
           </span>
           <strong>
             Cadastre este webhook {providerPreposition} {providerLabel} agora
@@ -1081,7 +1081,7 @@ function ChannelReadiness({
         </div>
         {readiness.nextPayloadExpiresAt ? (
           <span className="inbound-readiness-expiry">
-            Proxima expiracao:{" "}
+            Próxima expiração:{" "}
             <strong>{formatDateTime(readiness.nextPayloadExpiresAt)}</strong>
           </span>
         ) : null}
@@ -1089,7 +1089,7 @@ function ChannelReadiness({
 
       <div className="inbound-readiness-metrics">
         <ReadinessMetric
-          label="Rotas validas"
+          label="Rotas válidas"
           value={`${readiness.validRouteCount}/${readiness.routeCount}`}
         />
         <ReadinessMetric label="CTWA observados" value={readiness.totalCtwa} />
@@ -1137,8 +1137,8 @@ function ChannelReadiness({
         </p>
       )}
       <p className="muted">
-        A prontidao da rota nao ativa envios: a conexao ainda exige parser
-        certificado e producao habilitada. CTWA anteriores a ativacao nao sao
+        A prontidão da rota não ativa envios: a conexão ainda exige parser
+        certificado e produção habilitada. CTWA anteriores à ativação não são
         enviados automaticamente.
       </p>
 
@@ -1244,7 +1244,7 @@ function connectionStatusLabel(
 
 function formatDateTime(value: string | null): string {
   if (!value) {
-    return "Ainda nao recebida";
+    return "Ainda não recebida";
   }
 
   const date = new Date(value);
