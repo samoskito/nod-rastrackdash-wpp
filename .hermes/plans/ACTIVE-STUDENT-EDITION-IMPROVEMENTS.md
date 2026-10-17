@@ -62,7 +62,7 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 1 | bootstrap persistente, `platform_owner`, RBAC, convites e proteção de owner | público | **CONCLUÍDA** | PR #25, merge `6212b33` |
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
 | Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A MERGEADA — SMOKE REAL PAUSADO** | PR #43 merge `a48e93d`; API deployada; listagem autenticada OK no workspace `cmtbvwoop0000qa2swt9x8amu`; create/test MySQL real pausado até MySQL público fictício no Dokploy; PostgreSQL ainda não suportado |
-| Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; GupShup/Umbler existem como inbound webhook no código, mas a UX/aluno e a paridade com o app de referência ainda precisam de fechamento |
+| Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; UX/aluno de GupShup/Umbler fechada nos PRs #49/#50 (mergeado, homologação em produção não registrada); Meta Cloud (#53–#55) e Data Crazy (#59) adicionados como inbound |
 
 ### Checkpoint MySQL — pausado em 2026-09-04
 
@@ -103,44 +103,85 @@ Samuel elevou estes 3 itens à **prioridade máxima**, acima do restante do plan
 | **P0.2** | Trazer conexões **GupShup e Umbler** para o app do aluno | **Sim** — fila WhatsApp / homologação E2E e inbound genérico | Já existem parsers/conexões inbound (`gupshup`, `umbler`), painel inbound e regras; **não** estão no registry de “Conexões WhatsApp” (`uazapi_byo/waha/zapi/nod_api`) | Fechar paridade de UX/aluno: onboarding claro em Integrações, webhook copiável, docs e homologação; portar o que faltar do app de referência sem reintroduzir billing/QR |
 | **P0.3** | Conexão/parser **direto com Meta** (Samuel tem payload) | **Sim** — item Meta/Facebook e webhook Meta parcial | Meta manual + CAPI + `GET/POST /webhooks/meta` já existem; falta validar/estender parser com o payload real do Samuel | Receber payload (redigido), mapear contrato atual vs desejado, implementar/ajustar parser com testes e fail-closed |
 
-### Fila ativa reordenada — 2026-09-04
+> **Atualização 2026-10-14:** os três P0 foram mergeados (P0.1 → #46/#47/#48; P0.2 → #49/#50; P0.3 → #53/#54/#55). Tabela acima preservada como registro histórico do pedido; estado vigente na fila abaixo.
 
-| Ordem | Item | Status | Observação |
+### Fila ativa — atualizada em 2026-10-14
+
+"MERGEADO" = código em `main` com evidência de PR; homologação em produção só é marcada quando registrada.
+
+| Ordem | Item | Status | Evidência / Observação |
 |---:|---|---|---|
-| **1** | **P0.1 Excluir workspace no backoffice** | **PRÓXIMA** | prioridade máxima dos alunos |
-| **2** | **P0.2 GupShup + Umbler no app do aluno** | **NA FILA** | base inbound já existe; fechar UX/paridade/homologação |
-| **3** | **P0.3 Meta direto / parser com payload real** | **NA FILA** | Samuel fornece payload; não inventar contrato |
-| 4 | Retomada smoke MySQL fictício no Dokploy | **PAUSADA** | só depois dos P0 |
-| 5 | Doc de atualização do aluno (redeploy API/Web) | **PENDENTE** | necessária para aula; banner de versão ainda separado |
-| 6 | Banner de atualização de versão | **PENDENTE / A CONFIRMAR** | plano histórico citava; validar o que já entrou vs o que falta |
+| 1 | P0.1 Excluir workspace no backoffice | **MERGEADO** | API #46 `bde5b6d`; UI #47 `074183e`; responsivo #48 `50dd3dc` |
+| 2 | P0.2 GupShup + Umbler no app do aluno | **MERGEADO** | UX #49 `d673e72`; canais provisórios #50 `29f9be3`; envs inbound #51 `0a87c5b`; excluir conexão #52 `c9f12f6` |
+| 3 | P0.3 Meta direto / parser com payload real | **MERGEADO** | handshake F1 #53 `ab6c9fe`; URL/token UI #54 `7939dae`; parser CTWA F2 #55 `1e0a9e7` |
+| 4 | Retomada smoke MySQL fictício no Dokploy | **PAUSADA** | depende de ação manual no Dokploy (ver checkpoint MySQL) |
+| 5 | Doc de atualização do aluno (redeploy API/Web) | **MERGEADO** | #60 `43152b4` |
+| 6 | Banner de atualização de versão | **MERGEADO** | #60 `43152b4` — `GET /backoffice/template-version` + UI só no backoffice |
 | 7 | PostgreSQL external connector | **PENDENTE** | só com adapter + testes reais |
-| 8 | Segurança operacional geral + release | **PENDENTE** | após P0 e homologações |
+| 8 | Segurança operacional geral + release | **PRÓXIMA** | versão definida pelo mantenedor; ver pendências abaixo |
 
-### Estado atual detalhado — atualizado em 2026-09-04
+Entregas fora da fila original, já em `main`:
 
-- `main` atual: `3f0de68` (Workspace ID no backoffice).
-- Fase 3A backend MySQL: mergeada no PR #43 (`a48e93d`), deploy da API confirmado.
-- Smoke MySQL: **auth/list OK**; create/test **pausado** por decisão de prioridade e por falta de MySQL público fictício.
-- Workspace de teste da instalação aula: `cmtbvwoop0000qa2swt9x8amu` (Agência Palmup).
-- Delete de workspace: **gap confirmado** para o aluno (criar sim, excluir não).
-- GupShup/Umbler: **existem no produto** como inbound webhook; a demanda é trazer/fechar a experiência no app do aluno e homologar.
-- Meta: conexão manual e webhook base existem; demanda urgente é parser/conexão direta com payload real fornecido por Samuel.
-- MySQL, banner e release ficam **depois** dos 3 P0.
+- docs dos alunos alinhados ao produto — #56 `7491ae1`;
+- UAZAPI: provisionar trigger origin após teste — #57 `6b9c5cc`;
+- Meta: sync inicial ancorado no WhatsApp (máx. 7 dias, substitui 90 dias) — #58 `8347ab3`;
+- Data Crazy inbound CTWA, com migrations `20260929120000`/`20260929120100` — #59 `e0b475e`;
+- identidade de build automática do aluno + guias de atualização — #61 `643dc0d`;
+- Relatórios: ordenação global de colunas (#63 `5c73603`) e insights determinísticos sem IA (#64 `3251139`);
+- Kommo: conversões por etapa do CRM com UI auditada (#65 `a330e37`), destino único da Meta (#67 `932c655`), roteamento LeadSubmitted e retries seguros (#73 `9b91009`);
+- runtime: `body-parser` declarado como dependência (#66 `1fbfdd2`);
+- Meta CAPI: recado de Trocar token (#68 `2a5b678`), owner reenvia eventos bloqueados (#69 `0bbc2ed`), envio via Tokens/BMs (#70 `6150776`, #71 `837f6b4`), resolver injetado explicitamente no build Nest de produção (#76 `4b8e6eb`);
+- Conectar Meta via login social PalmUP, nova env pública `PALMUP_META_BROKER_URL` (#72 `80c37fb`);
+- **URGENTE** — menos chamadas ao Graph para não esgotar o limite do app Meta PalmUP (#62 `66c8552`, `f469460`);
+- Meta Cloud: rota curinga do BM (#74 `3a49625`), produção para o aluno + recuperação controlada de CTWAs antigos (#75 `27d0eba`);
+- leads novos × que voltaram e exportação CSV/Excel — #78 `29c66d4`;
+- rodapé visível no celular e banner de licença fora da sidebar — #79 `22118dc`;
+- Hub de Integrações com 4 abas (WhatsApp, Atendimento e vendas, Anúncios, CRM) — #80 `71072f8`;
+- tela Conversões com alcance da regra e Unificar — #81 `252a542`;
+- base de compra CTWA e certificação dos parsers validados — #82 `d26ef44`;
+- Fase 4a/4b/4c: Payt como origem de venda (#83 `36d86f5`), CRM Pipedrive e Kommo sem ID do anúncio (#84 `62c8e3b`), Kommo com destino só pelo número oficial do lead (#85 `dba61c9`), Unnichat com roteamento por número (#86 `0d3f81c`).
 
-### Decisão de ordenação — atualizada em 2026-09-04
+### Estado atual detalhado — atualizado em 2026-10-16
+
+- `main` atual: `0d3f81c` (#86). Última release/tag: `v1.0.0` (2026-08-24).
+- Notas de release seguem `docs/RELEASE_NOTES_AI.md`: `docs/releases/unreleased.json` acumula as mudanças com `version` ainda `PENDENTE` (definida pelo mantenedor) e pendências abertas — envio Meta real, PostgreSQL concorrente real e update/rollback em instalação real.
+- Os três P0 de 2026-09-04 estão mergeados; homologação em produção não registrada neste arquivo.
+- Fase 3A MySQL: inalterada desde 2026-09-04 — mergeada e pausada no smoke real.
+- Pendências para o item 8 (release):
+  - suíte web: **verde em `0d3f81c` + PR #87** — num checkout CRLF (Windows), 276 arquivos, 1133/1133. Pré-requisito: rodar `pnpm --filter @wpptrack/shared build` antes; com `packages/shared/dist` velho, os schemas importados chegam `undefined` e a suíte acusa ~131 falhas falsas (`reading 'safeParse'`). Histórico:
+    - as **11 falhas antigas** (`integrations-route` ×6, `navigation` ×2, `settings-route` ×2, `provider-conversion-rule-actions` ×1, presentes de antes do #60 até `4b8e6eb`) foram resolvidas no upstream pelos PRs #79–#86, que atualizaram esses testes;
+    - as **falhas só no Windows** (`app-layout`, `events-route`, `kommo-responsive-layout` por CRLF; `template-version-banner` por `path.relative()` com `\`) são corrigidas no PR #87, só em testes. `.gitattributes` com `eol=lf` foi testado e descartado: em clones antigos no Windows, os arquivos ainda em CRLF aparecem como `M` sem diferença de conteúdo, o que pode travar o `git pull` do fluxo de update do aluno;
+  - `CHANGELOG.md` `[Unreleased]` cobre Data Crazy, Conectar Meta e a redução de chamadas Meta, mas não lista vários PRs entre #43 e #86 (ex.: delete de workspace, GupShup/Umbler, Meta Cloud F1/F2, Kommo, relatórios); conferir contra `docs/releases/unreleased.json`;
+  - revisão de segurança final.
+- Candidato novo, ainda não aprovado: parser inbound `chatwoot_v1`. Chatwoot ≥ v4.15.0 (PR chatwoot#14681) persiste `referral` do Cloud API/Twilio em `content_attributes.referral` e o expõe no webhook `message_created`; providers não oficiais não têm captura no core.
+
+### Trilha Dashboard Leads → RastrackDash — aberta em 2026-10-17
+
+Pedido do Heiv: trazer para o RastrackDash os clientes, tokens e o fluxo de qualificação manual do projeto paralelo Dashboard Leads (Next.js + Supabase na Vercel), e depois desligá-lo. Fontes no escopo: formulário Meta (Lead Ads) e WhatsApp CTWA. A landing page (ConsultaTu, fonte `web`) fica fora.
+
+| Fase | Item | Status | Branch / commits |
+|---|---|---|---|
+| 1 | Cadastro dos clientes (workspaces, tokens pela UI, destinos) | **OPERACIONAL — com o Heiv** | roteiro `docs/setup/dashboard-leads-import.md` |
+| 2 | Botão Qualificado na tela do lead → `QualifiedLead` (`manual_status`, rota atribuída ao anúncio) | **IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** | `feat/manual-lead-qualification`: `91453d3`, notas `a66e7cf`; migration `20261017090000_lead_manual_status` |
+| 3 | Formulários Meta: webhook `leadgen`, conexão por Página com tokens cifrados, etapa via Conversions API for CRM | **IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** | `feat/meta-lead-ads` (sobre a Fase 2): `a278294`, notas `e343473`; migration `20261017100000_meta_lead_forms` |
+| 4 | Script `dashboard-leads:import` (dry-run, idempotente; eventos já enviados viram `imported` com a chave do botão) | **IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** | `feat/import-dashboard-leads` (sobre a Fase 3): `98fb166`, notas `11f6a82` |
+| 5 | Virada dos webhooks, import delta, desligar o Dashboard Leads | **OPERACIONAL — com o Heiv** | roteiro `docs/setup/dashboard-leads-import.md` |
+
+Testes no Windows: API 152 arquivos verdes (inclusive `test:compiled-di` 15/15); WEB verde, exceto as 4 falhas só do Windows corrigidas pelo PR #87. Limitações:
+- lead CTWA sem anúncio (Unnichat) não é enviado pelo botão; isso exige um modo próprio no caminho página/pixel;
+- `notes` do Dashboard Leads não é importado;
+- PENDENTE: webhook `leadgen` real, envio Meta real (WhatsApp e CRM) e import contra o Supabase real.
+
+### Decisão de ordenação — atualizada em 2026-10-14
 
 O modelo operacional continua: **uma instalação por aluno**, com banco/deploy/backoffice próprios.
 
-Ordem vigente **agora**:
+Itens 1, 2, 3, 5 e 6 da ordem de 2026-09-04 estão mergeados. Ordem vigente **agora** (proposta, aguardando decisão do Samuel):
 
-1. **P0.1** — excluir workspace no backoffice;
-2. **P0.2** — GupShup + Umbler no app do aluno;
-3. **P0.3** — Meta direto/parser com payload do Samuel;
-4. retomar smoke MySQL fictício no Dokploy (3306 pública);
-5. doc de atualização do aluno;
-6. banner de atualização (se ainda incompleto);
-7. PostgreSQL external, se necessário;
-8. segurança final + release.
+1. segurança final + próxima release — versão definida pelo mantenedor (começando pela suíte web verde, CHANGELOG e pendências do `unreleased.json`);
+2. retomar smoke MySQL fictício no Dokploy (3306 pública);
+3. PostgreSQL external, se necessário;
+4. avaliar parser `chatwoot_v1` (não aprovado).
 
 A Fase 3A MySQL **não está abandonada**: está **mergeada e pausada** no ponto de homologação real.
 
