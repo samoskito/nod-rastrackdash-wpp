@@ -16,6 +16,7 @@ export * from "./schemas/pipedrive";
 export * from "./schemas/conversion-rules";
 export * from "./schemas/funnel-configuration";
 export * from "./schemas/leads";
+export * from "./schemas/meta-lead-forms";
 export * from "./schemas/external-data-connectors";
 export * from "./schemas/inbound-webhooks";
 export * from "./schemas/student-inbound-replay";

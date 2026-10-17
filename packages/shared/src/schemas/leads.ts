@@ -141,7 +141,47 @@ export const leadDetailSchema = z.object({
   webhookEvents: z.array(leadDetailWebhookEventSchema),
 });
 
+/** Operator status change on the lead screen (PATCH /leads/:leadId/status). */
+export const leadStatusUpdateInputSchema = z.object({
+  status: z.enum(leadStatuses),
+});
+
+export const leadManualMetaSendOutcomes = [
+  /** Event recorded and queued for Meta. */
+  "queued",
+  /** This lead was already marked before: nothing new is sent. */
+  "already_recorded",
+  /** Event recorded but Meta needs data the lead lacks (ad, ctwa_clid). */
+  "not_eligible",
+  /** The new status sends nothing to Meta. */
+  "not_applicable",
+] as const;
+
+const leadManualMetaSendSchema = z.object({
+  outcome: z.enum(leadManualMetaSendOutcomes),
+  eventName: z.string().min(1).nullable(),
+  conversionEventLogId: z.string().min(1).nullable(),
+  errorCode: z.string().min(1).nullable(),
+  /** Portuguese reason when not_eligible (CRM path). */
+  errorMessage: z.string().min(1).nullable().default(null),
+});
+
+export const leadStatusUpdateResultSchema = z.object({
+  status: z.enum(leadStatuses),
+  /** WhatsApp (business messaging) event, by ad and ctwa_clid. */
+  metaSend: leadManualMetaSendSchema,
+  /** CRM event of the lead's latest Meta instant-form submission, if any. */
+  crmSend: leadManualMetaSendSchema.nullable().default(null),
+});
+
 export type LeadStatusDto = z.infer<typeof leadListItemSchema>["status"];
+export type LeadStatusUpdateInputDto = z.infer<
+  typeof leadStatusUpdateInputSchema
+>;
+export type LeadStatusUpdateResultDto = z.input<
+  typeof leadStatusUpdateResultSchema
+>;
+export type LeadManualMetaSendDto = z.input<typeof leadManualMetaSendSchema>;
 export type LeadBaseDto = (typeof leadBases)[number];
 export type LeadListQueryDto = z.infer<typeof leadListQuerySchema>;
 export type LeadListItemDto = z.infer<typeof leadListItemSchema>;

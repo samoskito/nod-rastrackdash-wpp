@@ -54,5 +54,9 @@ export function leadSourceLabel(
     return "NOD API";
   }
 
+  if (source === "meta_lead_form") {
+    return "Formulario Meta";
+  }
+
   return source ?? adId ?? "Origem parcial";
 }

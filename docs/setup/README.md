@@ -66,6 +66,7 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [Provedores de WhatsApp, receivers e matriz de webhook](whatsapp-providers.md)
 - [Meta Cloud: produção e recuperação por owner](meta-cloud-recovery.md)
 - [Pipedrive CRM: etapa do negócio → conversão Meta](pipedrive.md)
+- [Formulários Meta: Lead Ads → etapa do CRM](meta-lead-forms.md)
 - [Payt: vendas como conversões (postback por regra)](payt.md)
 - [Unnichat: conversas e automações como conversões (conexão por número)](unnichat.md)
 - [Guia de cobrança (BYO)](billing/README.md)
