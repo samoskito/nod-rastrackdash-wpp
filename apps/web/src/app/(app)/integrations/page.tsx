@@ -9,6 +9,7 @@ import type {
   MetaAssetsDto,
   MetaConnectionCapabilitiesDto,
   MetaConnectionDto,
+  MetaLeadFormConnectionDto,
   MetaManualConfigurationDto,
   ProviderConversionRuleDto,
   CurrentWorkspaceDto,
@@ -99,6 +100,7 @@ import {
   testMetaOAuthAdvancedConnectionAction,
   syncMetaManualHistoryAction,
 } from "./meta-manual-actions";
+import { MetaLeadFormsPanel } from "./meta-lead-forms-panel";
 import { MetaManualConnectionPanel } from "./meta-manual-connection-panel";
 import {
   metaAssetsRefreshSucceeded,
@@ -270,6 +272,21 @@ async function getMetaCapabilities(): Promise<
       },
       state: "error",
     };
+  }
+}
+
+async function getMetaLeadFormConnections(): Promise<
+  ResourceResult<MetaLeadFormConnectionDto[]>
+> {
+  try {
+    return {
+      data: await serverApiFetch<MetaLeadFormConnectionDto[]>(
+        "/integrations/meta-lead-forms",
+      ),
+      state: "real",
+    };
+  } catch {
+    return { data: [], state: "error" };
   }
 }
 
@@ -992,6 +1009,7 @@ export default async function IntegrationsPage({
     legacyWhatsappInstancesResult,
     kommoSettings,
     pipedriveSettings,
+    metaLeadFormsResult,
   ] = await Promise.all([
     oauthConnected
       ? getMetaOAuthAdvancedConfiguration()
@@ -1010,6 +1028,7 @@ export default async function IntegrationsPage({
       workspace?.id ?? null,
       canManageKommo && Boolean(kommoViewerId),
     ),
+    getMetaLeadFormConnections(),
   ]);
   const licenseLocked = Boolean(
     licenseStatus && licenseLockReason(licenseStatus) !== null,
@@ -1654,6 +1673,11 @@ export default async function IntegrationsPage({
               ) : null}
             </>
           ) : null}
+          <MetaLeadFormsPanel
+            connections={metaLeadFormsResult.data}
+            canManage={canManageIntegrations}
+            loadFailed={metaLeadFormsResult.state === "error"}
+          />
           <p className="muted integration-domain-note">
             {oauthAdvancedEnabled
               ? "A conexao Meta fica protegida no backend. Cada conta ativa usa o Pixel e a Pagina vinculados a sua BM."

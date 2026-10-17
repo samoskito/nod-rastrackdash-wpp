@@ -423,6 +423,8 @@ model Workspace {
   members                          WorkspaceMember[]
   invites                          WorkspaceInvite[]
   whatsappInstances                WhatsappInstance[]
+  metaLeadFormConnections          MetaLeadFormConnection[]
+  metaLeadSubmissions              MetaLeadSubmission[]
   uazapiChatLabelStates            UazapiChatLabelState[]
   diagnosticEvents                 DiagnosticEvent[]
   webhookLogs                      WebhookLog[]
@@ -1361,6 +1363,9 @@ model Lead {
   ctwaThumbnailUrl   String?
   firstMessageAt     DateTime?
   lastMessageAt      DateTime?
+  /// Last status change made by an operator on the lead screen.
+  statusChangedAt       DateTime?
+  statusChangedByUserId String?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
@@ -1369,6 +1374,7 @@ model Lead {
   purchaseReviews             PurchaseReview[]
   providerConversionDecisions ProviderConversionDecisionAudit[]
   pipedriveWebhookEvents      PipedriveWebhookEvent[]
+  metaLeadSubmissions         MetaLeadSubmission[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, phoneHash])
@@ -2621,4 +2627,71 @@ model KommoConversionDedupe {
   @@unique([workspaceId, verifiedAccountId, dealId, eventName])
   @@index([workspaceId, sourceEventId])
   @@index([publicationStatus, publicationNextAttemptAt])
+}
+
+/// Meta Lead Ads (instant forms) of one Page routed to this workspace
+/// (Dashboard Leads parity). Tokens are AES-256-GCM with
+/// META_TOKEN_ENCRYPTION_KEY: the Graph token reads the leads
+/// (leads_retrieval), the CAPI token sends the CRM stage to the dataset.
+model MetaLeadFormConnection {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  label               String
+  pageId              String
+  /// Empty: every form of the Page not claimed by another connection.
+  formIds             String[]  @default([])
+  crmDatasetId        String?
+  qualifiedEventName  String    @default("LeadQualificado")
+  graphTokenEncrypted String
+  graphTokenIv        String
+  graphTokenTag       String
+  graphTokenLast4     String
+  capiTokenEncrypted  String?
+  capiTokenIv         String?
+  capiTokenTag        String?
+  capiTokenLast4      String?
+  active              Boolean   @default(true)
+  pageSubscribedAt    DateTime?
+  createdByUserId     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  submissions MetaLeadSubmission[]
+
+  @@unique([workspaceId, pageId])
+  @@index([pageId, active])
+}
+
+/// One instant-form submission. A Lead is one person per phone, so a person
+/// who fills a form and talks on WhatsApp is the same Lead; each submission
+/// keeps its own Meta lead id, which the CRM event needs (user_data.lead_id).
+model MetaLeadSubmission {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  connectionId  String
+  leadId        String?
+  metaLeadId    String    @unique
+  pageId        String
+  formId        String?
+  campaignId    String?
+  adSetId       String?
+  adId          String?
+  fullName      String?
+  email         String?
+  phone         String?
+  fieldData     Json?
+  metaCreatedAt DateTime?
+  /// fetched | fetch_failed (the webhook arrived but the Graph read failed).
+  fetchStatus   String
+  fetchError    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace  Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection MetaLeadFormConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  lead       Lead?                  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, leadId, metaCreatedAt])
+  @@index([workspaceId, createdAt])
 }

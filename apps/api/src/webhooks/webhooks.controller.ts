@@ -11,6 +11,7 @@ import {
   Logger,
   NotImplementedException,
   Param,
+  Optional,
   Post,
   Query,
   RawBody,
@@ -31,6 +32,8 @@ import { parseWahaV1Webhook } from "../inbound-webhooks/providers/waha/waha-v1.p
 import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.parser";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
 import { LeadsService } from "../leads/leads.service";
+import { parseLeadgenPayload } from "../meta-lead-forms/meta-leadgen";
+import { MetaLeadFormsService } from "../meta-lead-forms/meta-lead-forms.service";
 import {
   parseUazapiWebhook,
   type ParsedUazapiWebhook,
@@ -99,6 +102,9 @@ export class WebhooksController {
     private readonly uazapiProviderConversion: UazapiProviderConversionService,
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(MetaLeadFormsService)
+    private readonly metaLeadForms?: MetaLeadFormsService,
   ) {}
 
   @Get("meta")
@@ -293,6 +299,21 @@ export class WebhooksController {
     @Headers("x-workspace-id") workspaceId?: string,
   ) {
     this.assertMetaWebhookSignature(rawBody, signature);
+
+    // Instant-form leads of a Page with a lead form connection become leads.
+    // Other Pages keep the diagnostic-only path below.
+    const leadgen = parseLeadgenPayload(body);
+    if (
+      leadgen &&
+      leadgen.changes.length > 0 &&
+      this.metaLeadForms &&
+      (await this.metaLeadForms.hasActiveConnectionForPages(
+        leadgen.changes.map((change) => change.page_id),
+      ))
+    ) {
+      return this.metaLeadForms.ingestLeadgen(leadgen.changes);
+    }
+
     const context = await this.resolveMetaContext(body);
 
     if (workspaceId && workspaceId !== context.workspaceId) {

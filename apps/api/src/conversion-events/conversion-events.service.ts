@@ -83,6 +83,11 @@ import {
   inboundParserProductionEligible,
 } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
+import {
+  buildCrmEventBody,
+  crmIneligibility,
+  postCrmEvent,
+} from "../meta-lead-forms/meta-crm-capi";
 import { inboundMetaRouteMatches } from "../inbound-webhooks/inbound-webhook-meta-route-eligibility";
 import {
   replayContextHash,
@@ -218,6 +223,31 @@ type RecordAutomaticLeadSubmittedInput = {
   adId?: string;
   ctwaClid?: string;
   eventOccurredAt?: Date | string | null;
+};
+
+export const MANUAL_STATUS_TRIGGER = "manual_status";
+
+export type RecordManualStatusConversionInput = {
+  workspaceId: string;
+  leadId: string;
+  phoneHash: string;
+  eventName: ConversionEventNameDto;
+  actorUserId: string;
+  campaignId?: string | null;
+  adSetId?: string | null;
+  adId?: string | null;
+  ctwaClid?: string | null;
+};
+
+/** Conversions API for CRM stage of a Meta instant-form submission. */
+export const META_LEAD_FORM_CRM_TRIGGER = "meta_lead_form_crm";
+
+export type RecordLeadFormCrmConversionInput = {
+  workspaceId: string;
+  leadId: string;
+  phoneHash: string;
+  submissionId: string;
+  actorUserId: string;
 };
 
 export type SendManualTestEventInput = ConversionEventTestInputDto;
@@ -700,6 +730,289 @@ export class ConversionEventsService {
     });
 
     return { created: [log.id], duplicates: [] };
+  }
+
+  /**
+   * Operator marked the lead on the lead screen (Dashboard Leads parity). One
+   * event per lead and event name, whatever the ad: re-marking never sends a
+   * second one. Delivery uses the same ad-attributed route as the WhatsApp
+   * label rules; without ad id or ctwa_clid the log stays pending_meta_context.
+   */
+  async recordManualStatusConversion(
+    input: RecordManualStatusConversionInput,
+  ): Promise<RecordRuleMatchesResult> {
+    const dedupeKey = [
+      input.workspaceId,
+      input.leadId,
+      MANUAL_STATUS_TRIGGER,
+      input.eventName,
+    ].join(":");
+    const existing = (await this.prisma.conversionEventLog.findUnique({
+      where: { dedupeKey },
+    })) as ConversionEventLogRecord | null;
+
+    if (existing) {
+      return { created: [], duplicates: [existing.id] };
+    }
+
+    const initialStatus = this.resolveInitialStatus({
+      eventName: input.eventName,
+      adId: input.adId,
+      ctwaClid: input.ctwaClid,
+      valueCents: null,
+    });
+
+    try {
+      const log = await this.prisma.conversionEventLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId,
+          phoneHash: input.phoneHash,
+          eventOccurredAt: new Date(),
+          customerIdentityKey: this.resolveCustomerIdentityKey(input.phoneHash),
+          businessSource: "paid",
+          purchaseKind: null,
+          sourceTrigger: MANUAL_STATUS_TRIGGER,
+          eventName: input.eventName,
+          status: initialStatus.status,
+          pixelId: null,
+          eventId: dedupeKey,
+          campaignId: input.campaignId ?? null,
+          adSetId: input.adSetId ?? null,
+          adId: input.adId ?? null,
+          ctwaClid: input.ctwaClid ?? null,
+          attributionStatus: input.adId ? "attributed" : "missing_ad_id",
+          dedupeKey,
+          valueCents: null,
+          currency: null,
+          contentName: null,
+          sourcePayload: { actorUserId: input.actorUserId },
+          customData: Prisma.JsonNull,
+          errorCode: initialStatus.errorCode,
+          errorMessage: initialStatus.errorMessage,
+        },
+      });
+
+      return { created: [log.id], duplicates: [] };
+    } catch (error) {
+      // Two clicks at once: the unique dedupe key keeps a single event.
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const duplicate = (await this.prisma.conversionEventLog.findUnique({
+        where: { dedupeKey },
+      })) as ConversionEventLogRecord | null;
+
+      if (!duplicate) {
+        throw error;
+      }
+
+      return { created: [], duplicates: [duplicate.id] };
+    }
+  }
+
+  /**
+   * CRM stage of a Meta instant-form submission (Dashboard Leads parity). The
+   * event id is `{metaLeadId}:{eventName}`, the same as Dashboard Leads, so
+   * Meta drops a duplicate of an event that tool already sent.
+   */
+  async recordLeadFormCrmConversion(
+    input: RecordLeadFormCrmConversionInput,
+  ): Promise<RecordRuleMatchesResult & { errorMessage: string | null }> {
+    const submission = await this.prisma.metaLeadSubmission.findFirst({
+      where: { id: input.submissionId, workspaceId: input.workspaceId },
+      include: { connection: true },
+    });
+
+    if (!submission) {
+      throw new NotFoundException("Formulario do lead nao encontrado");
+    }
+
+    const eventName = submission.connection.qualifiedEventName;
+    const eventId = `${submission.metaLeadId}:${eventName}`;
+    const dedupeKey = [
+      input.workspaceId,
+      META_LEAD_FORM_CRM_TRIGGER,
+      eventId,
+    ].join(":");
+    const existing = await this.prisma.conversionEventLog.findUnique({
+      where: { dedupeKey },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return { created: [], duplicates: [existing.id], errorMessage: null };
+    }
+
+    const ineligible = crmIneligibility({
+      metaLeadId: submission.metaLeadId,
+      createdAt: submission.metaCreatedAt ?? submission.createdAt,
+      datasetId: submission.connection.crmDatasetId,
+      eventName,
+    });
+
+    try {
+      const log = await this.prisma.conversionEventLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId,
+          phoneHash: input.phoneHash,
+          eventOccurredAt: new Date(),
+          customerIdentityKey: this.resolveCustomerIdentityKey(input.phoneHash),
+          businessSource: "paid",
+          sourceTrigger: META_LEAD_FORM_CRM_TRIGGER,
+          eventName,
+          status: ineligible ? "not_eligible" : "ready_to_send",
+          pixelId: submission.connection.crmDatasetId,
+          pageId: submission.pageId,
+          eventId,
+          campaignId: submission.campaignId,
+          adSetId: submission.adSetId,
+          adId: submission.adId,
+          attributionStatus: submission.adId ? "attributed" : "missing_ad_id",
+          dedupeKey,
+          sourceEventId: submission.metaLeadId,
+          sourcePayload: {
+            connectionId: submission.connectionId,
+            submissionId: submission.id,
+            actorUserId: input.actorUserId,
+          },
+          customData: Prisma.JsonNull,
+          errorCode: ineligible ? "MetaCrmNotEligible" : null,
+          errorMessage: ineligible,
+        },
+      });
+
+      return { created: [log.id], duplicates: [], errorMessage: ineligible };
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const duplicate = await this.prisma.conversionEventLog.findUnique({
+        where: { dedupeKey },
+        select: { id: true },
+      });
+
+      if (!duplicate) {
+        throw error;
+      }
+
+      return { created: [], duplicates: [duplicate.id], errorMessage: null };
+    }
+  }
+
+  /** Posts a ready CRM event to the dataset of its lead form connection. */
+  private async sendLeadFormCrmEvent(
+    log: ConversionEventLogRecord,
+    eventId: string,
+    options: SendReadyEventOptions,
+  ): Promise<SendReadyEventResult> {
+    const source =
+      log.sourcePayload &&
+      typeof log.sourcePayload === "object" &&
+      !Array.isArray(log.sourcePayload)
+        ? (log.sourcePayload as Record<string, unknown>)
+        : {};
+    const submission =
+      log.workspaceId && typeof source.submissionId === "string"
+        ? await this.prisma.metaLeadSubmission.findFirst({
+            where: { id: source.submissionId, workspaceId: log.workspaceId },
+            include: { connection: true },
+          })
+        : null;
+    const connection = submission?.connection;
+    const block = async (errorMessage: string) => {
+      await this.prisma.conversionEventLog.updateMany({
+        where: { id: log.id, status: "ready_to_send" },
+        data: {
+          status: "not_configured",
+          errorCode: "MissingMetaDestination",
+          errorMessage,
+        },
+      });
+
+      return {
+        conversionEventLogId: log.id,
+        workspaceId: log.workspaceId,
+        status: "not_configured" as const,
+        errorCode: "MissingMetaDestination" as const,
+        errorMessage,
+      };
+    };
+
+    if (!submission || !connection) {
+      return block("Formulario do lead nao encontrado");
+    }
+    if (!connection.active) {
+      return block("Conexao de formularios desativada");
+    }
+    if (!connection.crmDatasetId) {
+      return block("Conexao sem dataset do CRM configurado");
+    }
+
+    let token: string;
+    try {
+      token = this.metaTokenEncryption.decrypt(
+        connection.capiTokenEncrypted &&
+          connection.capiTokenIv &&
+          connection.capiTokenTag
+          ? {
+              encryptedAccessToken: connection.capiTokenEncrypted,
+              tokenIv: connection.capiTokenIv,
+              tokenTag: connection.capiTokenTag,
+            }
+          : {
+              encryptedAccessToken: connection.graphTokenEncrypted,
+              tokenIv: connection.graphTokenIv,
+              tokenTag: connection.graphTokenTag,
+            },
+      );
+    } catch {
+      return block("Token CAPI da conexao ilegivel; cadastre de novo");
+    }
+
+    const result = await postCrmEvent({
+      datasetId: connection.crmDatasetId,
+      token,
+      version: this.env.META_GRAPH_API_VERSION ?? "v21.0",
+      body: buildCrmEventBody({
+        lead: {
+          metaLeadId: submission.metaLeadId,
+          email: submission.email,
+          phone: submission.phone,
+          createdAt: submission.metaCreatedAt ?? submission.createdAt,
+        },
+        eventName: log.eventName,
+        eventId,
+        qualifiedAt: log.eventOccurredAt,
+        testEventCode: options.testEventCode ?? null,
+      }),
+    });
+
+    await this.prisma.conversionEventLog.updateMany({
+      where: { id: log.id, status: "ready_to_send" },
+      data: {
+        status: result.status,
+        sentAt: result.status === "sent" ? new Date() : null,
+        pixelId: connection.crmDatasetId,
+        providerRequestPayload: result.requestPayload as Prisma.InputJsonValue,
+        providerResponseSummary: result.responseSummary
+          ? (result.responseSummary as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+      },
+    });
+
+    return {
+      conversionEventLogId: log.id,
+      workspaceId: log.workspaceId,
+      status: result.status,
+      ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+      errorMessage: result.errorMessage,
+    };
   }
 
   async recordExternalConversion(
@@ -1482,6 +1795,10 @@ export class ConversionEventsService {
         status: "skipped",
       };
     }
+
+    // Instant-form CRM stage: its own dataset and token, not the messaging route.
+    if (log.sourceTrigger === META_LEAD_FORM_CRM_TRIGGER)
+      return this.sendLeadFormCrmEvent(log, eventId, options);
 
     if (!(await this.externalCapiDeliveryOwnedByWppTrack(log))) {
       await this.prisma.conversionEventLog.updateMany({

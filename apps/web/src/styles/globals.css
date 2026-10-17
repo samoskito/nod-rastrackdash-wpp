@@ -7511,6 +7511,31 @@ th {
   gap: 26px;
 }
 
+.lead-status-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-lead-form-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.meta-lead-form-card > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-lead-form-card code {
+  overflow-wrap: anywhere;
+}
+
 .lead-attribution-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
