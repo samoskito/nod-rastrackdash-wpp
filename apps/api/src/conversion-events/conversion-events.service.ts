@@ -220,6 +220,20 @@ type RecordAutomaticLeadSubmittedInput = {
   eventOccurredAt?: Date | string | null;
 };
 
+export const MANUAL_STATUS_TRIGGER = "manual_status";
+
+export type RecordManualStatusConversionInput = {
+  workspaceId: string;
+  leadId: string;
+  phoneHash: string;
+  eventName: ConversionEventNameDto;
+  actorUserId: string;
+  campaignId?: string | null;
+  adSetId?: string | null;
+  adId?: string | null;
+  ctwaClid?: string | null;
+};
+
 export type SendManualTestEventInput = ConversionEventTestInputDto;
 
 type MetaIntegrationCapiTokenRecord = {
@@ -700,6 +714,86 @@ export class ConversionEventsService {
     });
 
     return { created: [log.id], duplicates: [] };
+  }
+
+  /**
+   * Operator marked the lead on the lead screen (Dashboard Leads parity). One
+   * event per lead and event name, whatever the ad: re-marking never sends a
+   * second one. Delivery uses the same ad-attributed route as the WhatsApp
+   * label rules; without ad id or ctwa_clid the log stays pending_meta_context.
+   */
+  async recordManualStatusConversion(
+    input: RecordManualStatusConversionInput,
+  ): Promise<RecordRuleMatchesResult> {
+    const dedupeKey = [
+      input.workspaceId,
+      input.leadId,
+      MANUAL_STATUS_TRIGGER,
+      input.eventName,
+    ].join(":");
+    const existing = (await this.prisma.conversionEventLog.findUnique({
+      where: { dedupeKey },
+    })) as ConversionEventLogRecord | null;
+
+    if (existing) {
+      return { created: [], duplicates: [existing.id] };
+    }
+
+    const initialStatus = this.resolveInitialStatus({
+      eventName: input.eventName,
+      adId: input.adId,
+      ctwaClid: input.ctwaClid,
+      valueCents: null,
+    });
+
+    try {
+      const log = await this.prisma.conversionEventLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId,
+          phoneHash: input.phoneHash,
+          eventOccurredAt: new Date(),
+          customerIdentityKey: this.resolveCustomerIdentityKey(input.phoneHash),
+          businessSource: "paid",
+          purchaseKind: null,
+          sourceTrigger: MANUAL_STATUS_TRIGGER,
+          eventName: input.eventName,
+          status: initialStatus.status,
+          pixelId: null,
+          eventId: dedupeKey,
+          campaignId: input.campaignId ?? null,
+          adSetId: input.adSetId ?? null,
+          adId: input.adId ?? null,
+          ctwaClid: input.ctwaClid ?? null,
+          attributionStatus: input.adId ? "attributed" : "missing_ad_id",
+          dedupeKey,
+          valueCents: null,
+          currency: null,
+          contentName: null,
+          sourcePayload: { actorUserId: input.actorUserId },
+          customData: Prisma.JsonNull,
+          errorCode: initialStatus.errorCode,
+          errorMessage: initialStatus.errorMessage,
+        },
+      });
+
+      return { created: [log.id], duplicates: [] };
+    } catch (error) {
+      // Two clicks at once: the unique dedupe key keeps a single event.
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const duplicate = (await this.prisma.conversionEventLog.findUnique({
+        where: { dedupeKey },
+      })) as ConversionEventLogRecord | null;
+
+      if (!duplicate) {
+        throw error;
+      }
+
+      return { created: [], duplicates: [duplicate.id] };
+    }
   }
 
   async recordExternalConversion(

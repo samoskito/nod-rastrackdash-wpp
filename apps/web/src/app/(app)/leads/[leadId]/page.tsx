@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatDateTime } from "../../../../lib/date-time";
 import { serverApiFetch } from "../../../../lib/server-api";
 import { CreativePreview } from "./creative-preview";
+import { LeadStatusControls } from "./lead-status-controls";
 import { PresentationMask } from "../../../../components/presentation-mask";
 
 type LeadDetailParams = {
@@ -81,6 +82,7 @@ function triggerLabel(trigger: string) {
     conversation_started: "Inicio de conversa",
     keyword: "Palavra-chave",
     whatsapp_label: "Etiqueta do WhatsApp",
+    manual_status: "Marcado na tela do lead",
   };
 
   return labels[trigger] ?? trigger;
@@ -231,6 +233,14 @@ export default async function LeadDetailPage({
           </Link>
         </div>
       </header>
+
+      <section className="lead-detail-section">
+        <header className="lead-detail-section-header">
+          <span className="eyebrow">Qualificacao</span>
+          <h2>Status do lead</h2>
+        </header>
+        <LeadStatusControls leadId={lead.id} status={lead.status} />
+      </section>
 
       <div
         className={`lead-attribution-layout${lead.adId ? " has-creative" : ""}`}

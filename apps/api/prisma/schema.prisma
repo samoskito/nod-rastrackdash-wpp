@@ -1361,6 +1361,9 @@ model Lead {
   ctwaThumbnailUrl   String?
   firstMessageAt     DateTime?
   lastMessageAt      DateTime?
+  /// Last status change made by an operator on the lead screen.
+  statusChangedAt       DateTime?
+  statusChangedByUserId String?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 

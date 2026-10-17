@@ -7511,6 +7511,12 @@ th {
   gap: 26px;
 }
 
+.lead-status-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .lead-attribution-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
