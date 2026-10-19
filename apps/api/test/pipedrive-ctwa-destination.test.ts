@@ -41,8 +41,18 @@ import {
 import { ruleInput } from "./support/pipedrive-observation-harness";
 import { actor } from "./support/pipedrive-harness";
 
-beforeEach(productionEnv);
+// The harness clock is fixed (pipedrive-observation-harness), but the CTWA
+// seven day Meta window in ConversionEventsService reads the system clock.
+// Pin the system clock to the harness instant so the fixture never ages out.
+const HARNESS_INSTANT = new Date("2026-10-11T18:00:05Z");
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(HARNESS_INSTANT);
+  productionEnv();
+});
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.mocked(resolveCtwaLeadProof).mockClear();
 });
