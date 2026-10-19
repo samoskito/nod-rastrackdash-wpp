@@ -364,14 +364,16 @@ de uma venda feita em outra moeda.
 - **Ligada** (`PTAX_SYNC_ENABLED=true`, só na API): a cada 6 horas (a primeira
   1 a 2 minutos depois de a API subir) a API busca a PTAX de USD e EUR no Banco
   Central e guarda na tabela `ExchangeRate`; dias que faltam são buscados na
-  hora em que um relatório precisa. A receita atribuída a um anúncio é
+  hora em que um relatório precisa, em segundo plano (o relatório espera no
+  máximo cerca de 1,5 s). A receita atribuída a um anúncio é
   convertida para a moeda da conta pela cotação do dia da venda (horário de
   Brasília); sem boletim nesse dia (fim de semana, feriado), vale a do último
   dia útil anterior. Venda sem conta de anúncio atribuída fica na moeda
   original.
 - **Rede:** ligada, a API precisa de saída HTTPS para `olinda.bcb.gov.br`
   (API pública do Banco Central, sem chave nem cadastro). Se o Banco Central
-  estiver fora ou bloqueado, vale a última cotação guardada ou "sem cotação":
+  estiver fora ou bloqueado, vale a cotação guardada de até 10 dias antes da
+  venda ou "sem cotação":
   nenhum relatório quebra e nada é enviado à Meta por causa disso.
 - Não confunda com `WPPTRACK_PTAX_SYNC_ENABLED` (nome usado no SaaS): aqui ela
   não tem efeito. Reinicie a API depois de mudar a variável.

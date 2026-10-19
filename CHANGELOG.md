@@ -78,18 +78,25 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     `currency: "BRL"` (checked by a test against the pre-5.2 output).
   - **Ad account filter:** `adAccountIds` (comma separated or repeated, up to
     50) on the three reports and `campaigns/export.csv`, alongside the existing
-    `adAccountId`. The CSV gains a **Moeda** column at the end (other columns
-    keep their place).
+    `adAccountId`. The CSV gains **Moeda** and **Receita sem cotacao** columns
+    at the end (other columns keep their place). With mixed currencies a
+    metric sort groups rows by currency first (BRL, USD, EUR), never
+    interleaving them.
   - **PTAX** (`PTAX_SYNC_ENABLED`, **off by default**; not the SaaS
     `WPPTRACK_PTAX_SYNC_ENABLED`). Off: no external call; a sale in another
     currency stays in its original currency, out of the revenue, flagged
     `exchangeRateMissing` with `unconvertedRevenue` ("sem cotação"). On: every
     6 h the API fetches the BCB PTAX (`olinda.bcb.gov.br`, closing sell rate)
-    into `ExchangeRate` and fills missing days on demand; revenue is converted
+    into `ExchangeRate` and fills missing days in the background (a report
+    waits at most ~1.5 s; weekday holidays are not fetched again; today only
+    after 13:30 Brasília); revenue is converted
     by the rate of the sale day (America/Sao_Paulo), or the last previous
     business day. A sale with no ad account keeps its own currency. BCB down:
-    last stored rate or "sem cotação"; reports never fail and nothing is sent
-    to Meta because of it.
+    a stored rate from up to 10 days before, else "sem cotação"; reports
+    never fail and nothing is sent
+    to Meta because of it. A legacy currency code outside BRL/USD/EUR is
+    summed as before on a BRL account and is "sem cotação" on a USD/EUR one
+    (logged with the codes only).
   - Migration `20261016180000_exchange_rates` (additive: new table
     `ExchangeRate` only). No new dependency. The screen (account selector,
     totals side by side) comes in a later delivery.
