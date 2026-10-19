@@ -76,8 +76,17 @@ nenhuma regra para o número, conversa sem anúncio, contato que falou com mais 
 A URL antiga de cada regra **continua funcionando**. Não há corte automático.
 
 - **A mesma venda pelas duas URLs gera um envio só à Meta.** Na Payt, cada venda (vendedor + pedido +
-  evento) tem um vencedor durável; no Unnichat, a conversão tem uma identidade de negócio (lead +
-  clique para eventos de uma vez por lead, ou o próprio callback para os demais).
+  evento) tem um vencedor durável. No Unnichat e na Umbler, a conversão tem uma identidade de negócio:
+  lead + clique para eventos de uma vez por lead (Lead qualificado) e o próprio callback para os
+  demais (Compra...). Nestes, só um corpo **idêntico** pelas duas URLs é reconhecido como o mesmo
+  evento; se a plataforma mandar corpos diferentes para cada URL, são dois eventos.
+- **A regra tem a última palavra.** Se a regra escolhida não converter o evento (filtro de produto,
+  lead de outro número, bloqueio), ele aparece em **Vendas/Eventos sem atribuição** com o motivo
+  "A regra do número não converteu...", e os detalhes ficam em **Eventos recebidos** da regra.
+- **Tentar de novo** avalia a venda na data em que ela chegou: venda de antes de a regra entrar em
+  produção fica em observação (para enviar, use **Reprocessar** na própria regra).
+- Para desativar a URL antiga, a URL nova da plataforma (ou do evento) precisa existir; sem ela, a
+  desativação é recusada.
 - Quando a plataforma já estiver postando no endereço novo, **desative a URL antiga** regra por regra
   (com confirmação). A partir daí ela responde como inexistente (`404`) e não grava nada; a regra
   continua recebendo pelo endereço novo. É reversível: reativar volta a aceitar a URL antiga.

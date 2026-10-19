@@ -91,7 +91,20 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   - **One send for both URLs:** Payt purchase claim (seller + order +
     event); Unnichat automation conversions get a business identity (lead +
     click for lifetime events, the callback for the others) as Meta
-    `event_id` / dedupe key. Events already sent keep their ids.
+    `event_id` / dedupe key; Umbler gets the same identity. Repeatable
+    events (Purchase...) are deduplicated between the URLs only when the
+    body is identical. Events already sent keep their ids.
+  - **Review fixes:** the Umbler number proved by the router is handed to the
+    rule (checked against its scope and kept on the delivery for resends and
+    reprocesses); the Payt router uses the ad lead's verified CTWA proof when
+    no ad entry was materialized and, for a lead with entries on several
+    numbers, routes only when exactly one specific rule owns exactly one of
+    them (as the old URLs do); a routed callback the rule ignores, gives to
+    another rule, filters or blocks becomes `unattributed` with
+    `rule_declined` (the rule's own code in `ruleReasonCode`); "Tentar de
+    novo" keeps the original receipt time (production gate); receipts of a
+    removed URL are not retryable; retention runs in batches; disabling an
+    old URL without the workspace URL of that platform/event answers 409.
   - **Old per-rule URL:** keeps working; `PATCH
     /conversion-rules/providers/:id` with `publicUrlDisabled: true` and
     `confirmPublicUrlDisable: true` closes it (404, nothing stored, the rule
