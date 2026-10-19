@@ -320,6 +320,14 @@ Umbler Talk entrega também as mensagens do atendente, então regras de
 frase com autor "equipe" funcionam. Gupshup entrega apenas o que o
 número recebe.
 
+**Automação da Umbler por URL do evento (Fase 5.3).** A automação por
+tag (`lead_qualificado`, `compra_aprovada`) pode chamar **uma URL por
+evento, válida para todos os números** em vez da URL de cada regra. O
+número vem do campo opcional `channel.phone` do corpo (recomendado) ou,
+sem ele, do único número com que o contato conversou nos últimos 30
+dias; contato que falou com mais de um número fica sem atribuição.
+Detalhes e modelo do corpo em [`url-unica.md`](url-unica.md).
+
 ## Uazapi, NOD API, WAHA e Z-API — por onde os gatilhos aparecem
 
 As conexões desses provedores **não** aparecem sozinhas nos cards de

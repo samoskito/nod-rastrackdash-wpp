@@ -30,6 +30,12 @@ São dois endereços (URLs) diferentes:
 - **Venda da Payt de lead sem ID do anúncio** passa a valer para leads que entraram por um número
   Unnichat: veja [Payt](payt.md).
 
+> **URL por evento (Fase 5.3).** Em vez de uma URL por regra de automação, o Unnichat pode chamar
+> **uma URL por evento, válida para todos os números** do workspace: o `ctwa_clid` da conversa diz o
+> número, e o callback vai para a regra daquele número. Veja
+> [URL única e URLs por evento](url-unica.md). As URLs por regra continuam funcionando até você
+> desativá-las; o mesmo callback pelas duas URLs vira uma conversão só.
+
 ## Antes de começar
 
 - API atualizada com as migrations desta versão (veja [Atualizar](update.md)).

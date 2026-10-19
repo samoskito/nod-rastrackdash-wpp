@@ -61,6 +61,52 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **Fase 5.3 — Single URL per platform and per-event URLs (API and shared)**,
+  ported from the SaaS (`6d4aa02`, `a9d2d3c`, `613beb3`, `22c6506`, `46fb0df`,
+  `d3725ad`, `4cad496`, `73a9a56`; the web commits `ca783a1`, `f2e676b` and
+  `6574aad` come with the screen in a later delivery). Payt, Unnichat and
+  Umbler only (no Braip, no Guimoo):
+  - **Workspace URLs:** `POST /webhooks/inbound/integrations/:id?token=`.
+    Payt: one URL per workspace, the event comes from each postback.
+    Unnichat/Umbler: one URL per event, valid for every number. The token is
+    compared in constant time and stored only hashed and encrypted; a wrong
+    token, an unknown or a removed URL get the same `404`. Locked license:
+    `423` (global guard), nothing stored.
+  - **Routing**, then the SAME pipeline as the rule's own URL
+    (`ingestRouted`: same ingress key, delivery, decision, gates, dedupe and
+    manual replay; no parallel path). Payt: buyer phone and the number the
+    lead arrived on; specific rule > all numbers, with product filter >
+    without, then the oldest. Unnichat: the `ctwa_clid` entry. Umbler:
+    `channel.phone` of the body, else the only Umbler number the contact
+    talked to in the last 30 days (two numbers = unattributed, never
+    guessed). A provider retry of a routed sale goes back to its rule.
+  - **Product filter** on Payt rules (`productFilterCodes`, by product or
+    offer code, case-insensitive; empty = every product). A specific rule with
+    a filter only replaces the global one for its products.
+  - **Receipts** (`IntegrationEndpointEvent`, idempotent per URL + ingress
+    key) with product, destination or reason: "Produtos detectados" and
+    "Vendas sem atribuição" with "Tentar de novo". Raw body cleared with the
+    payload retention (7 days); unrouted receipts deleted after 60 days by the
+    inbound maintenance job; routed ones stay.
+  - **One send for both URLs:** Payt purchase claim (seller + order +
+    event); Unnichat automation conversions get a business identity (lead +
+    click for lifetime events, the callback for the others) as Meta
+    `event_id` / dedupe key. Events already sent keep their ids.
+  - **Old per-rule URL:** keeps working; `PATCH
+    /conversion-rules/providers/:id` with `publicUrlDisabled: true` and
+    `confirmPublicUrlDisable: true` closes it (404, nothing stored, the rule
+    keeps receiving through the workspace URL); `publicUrlDisabled: false`
+    reopens it. Audited. `perRuleUrl: false` on create makes a rule for the
+    workspace URL only.
+  - **Management API** `/integrations/endpoints`: list (with the old URLs and
+    their last delivery), create, reveal (audited), rotate, remove, detected
+    products (Payt), unattributed sales and retry. Reads for any member,
+    writes for integration managers.
+  - Migration `20261019120000_integration_single_urls` (additive: two tables,
+    one enum, three nullable/defaulted columns). Workspace deletion (backoffice
+    and `scripts/delete-workspace.js`) removes the new rows first. No new env
+    var or dependency. Guide: `docs/setup/url-unica.md`.
+
 - **Fase 5.2 — Reports per currency and PTAX (API and shared)**, ported from
   the SaaS (`996e7c1`, `5b4fdd4`, `c9428b1` env part, and the PTAX /
   `ExchangeRate` / report-contract parts of `0bf5ebf` and `5981c7c`); the

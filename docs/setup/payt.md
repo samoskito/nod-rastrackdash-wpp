@@ -22,7 +22,14 @@ ignorados (não é erro).
 **Uma regra por evento.** Cada regra tem a sua própria URL. Para enviar compra aprovada e Pix/boleto
 gerado, por exemplo, crie duas regras e cadastre as duas URLs na Payt. Uma regra só aceita o seu
 evento: postbacks de outros status chegam, aparecem como ignorados em **Eventos recebidos** e nada é
-enviado por ela. A URL única por plataforma fica para uma fase futura.
+enviado por ela.
+
+**URL única (Fase 5.3).** Em vez de uma URL por regra, a Payt pode postar num **único endereço do
+workspace**: o evento vem de cada venda e o destino é a regra do número em que o comprador chegou
+(a específica do número vence a de todos os números). As regras continuam em Conversões, agora com
+**filtro de produto** opcional (por código). Veja [URL única e URLs por evento](url-unica.md). As URLs
+por regra continuam funcionando até você desativá-las; a mesma venda pelas duas URLs gera um envio
+só à Meta.
 
 **Compra repetida conta uma vez.** Se a Payt reenviar o mesmo postback (ou mandar dois postbacks da
 mesma venda), só um evento é criado para aquela venda e aquele evento.
@@ -163,7 +170,8 @@ Sem compras Payt parceladas no cartão, o comando não tem o que corrigir.
 - Lead que chegou por **outro número** que tem a sua própria regra Payt: a venda é enviada pela regra
   daquele número, não por esta (aparece como "Venda de um lead que chegou por outro número").
 - Mais de um lead com o mesmo telefone: ambíguo, nada é enviado.
-- Filtro por produto ainda não existe (fase futura): todas as vendas do postback cadastrado entram.
+- Filtro por produto: por código do produto ou da oferta (Fase 5.3, [url-unica.md](url-unica.md));
+  regra sem filtro aceita todas as vendas.
 - Postbacks de teste da Payt não têm tratamento especial: normalmente o comprador de teste não é um
   lead rastreado e o postback fica como ignorado.
 
