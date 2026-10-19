@@ -31,6 +31,7 @@ import {
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import {
+  PAYT_PRODUCT_NOT_IN_RULE_REASON,
   ProviderConversionObservationService,
   type ProviderConversionAutomationObservationResult,
   type ProviderConversionEvaluationMode,
@@ -82,8 +83,11 @@ const overriddenBySpecificRuleMessage =
 const ownedByAnotherRuleReasons = new Set<string>([
   PAYT_LEAD_OTHER_CHANNEL_REASON,
   PROVIDER_RULE_OVERRIDDEN_REASON,
+  PAYT_PRODUCT_NOT_IN_RULE_REASON,
 ]);
 function ownedByAnotherRuleMessage(reasonCode: string | null | undefined) {
+  if (reasonCode === PAYT_PRODUCT_NOT_IN_RULE_REASON)
+    return "Venda de um produto fora do filtro desta regra";
   return reasonCode === PROVIDER_RULE_OVERRIDDEN_REASON
     ? overriddenBySpecificRuleMessage
     : paytLeadOtherChannelMessage;
@@ -278,11 +282,59 @@ export class InboundConversionAutomationIngestionService {
       input.token,
     );
     const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
+    return this.ingestForEndpoint({
+      endpoint,
+      rawBody,
+      providerAttempt: parseInboundWebhookProviderAttempt(
+        input.providerAttempt,
+      ),
+      integrationEndpointId: null,
+    });
+  }
+
+  /**
+   * Fase 5.3: a callback received by a workspace URL (URL única da Payt, URL
+   * por evento do Unnichat/Umbler) and routed to this rule. It takes EXACTLY
+   * the path of the rule's own URL (same ingress key, delivery, decision,
+   * gates, dedupe and manual replay), so the same callback arriving through
+   * both URLs is one delivery and at most one send. The rule's own URL may be
+   * disabled (publicUrlDisabledAt): it stays the internal anchor. Null when
+   * the rule can no longer receive callbacks.
+   */
+  async ingestRouted(input: {
+    workspaceId: string;
+    providerRuleId: string;
+    rawBody: Buffer;
+    providerAttempt: number | null;
+    integrationEndpointId: string;
+  }): Promise<InboundConversionAutomationIngestionResult | null> {
+    this.assertFeatureEnabled();
+    const endpoint = await this.loadRoutableEndpoint(
+      input.workspaceId,
+      input.providerRuleId,
+    );
+    if (!endpoint) return null;
+    return this.ingestForEndpoint({
+      endpoint,
+      rawBody: input.rawBody,
+      providerAttempt: input.providerAttempt,
+      integrationEndpointId: input.integrationEndpointId,
+    });
+  }
+
+  private async ingestForEndpoint(input: {
+    endpoint: PublicConversionEndpoint;
+    rawBody: Buffer;
+    providerAttempt: number | null;
+    /** Set when the callback came through a workspace URL (Fase 5.3). */
+    integrationEndpointId: string | null;
+  }): Promise<InboundConversionAutomationIngestionResult> {
+    const { endpoint, rawBody, providerAttempt } = input;
+    // The per-rule URL's lastDeliveryAt tells the operator whether the OLD URL
+    // still receives ("Desativar URL antiga"); routed callbacks do not move it.
+    const touchRuleEndpoint = input.integrationEndpointId === null;
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
     const parsed = this.parseAutomation(endpoint, payload);
-    const providerAttempt = parseInboundWebhookProviderAttempt(
-      input.providerAttempt,
-    );
     const receivedAt = new Date();
     const ingressKey = parsed.ok
       ? this.parsedIngressKey(endpoint, parsed.value.externalExecutionKey)
@@ -298,6 +350,7 @@ export class InboundConversionAutomationIngestionService {
         existing.id,
         providerAttempt,
         receivedAt,
+        touchRuleEndpoint,
       );
       if (parsed.ok) {
         // The decision and the production check must read the SAME body:
@@ -342,6 +395,7 @@ export class InboundConversionAutomationIngestionService {
         deliveryId,
         ingressKey,
         providerAttempt,
+        integrationEndpointId: input.integrationEndpointId,
         rawBodyLength: rawBody.length,
         receivedAt,
         encrypted,
@@ -360,6 +414,7 @@ export class InboundConversionAutomationIngestionService {
             duplicate.id,
             providerAttempt,
             receivedAt,
+            touchRuleEndpoint,
           );
           return {
             status: "accepted",
@@ -1498,6 +1553,9 @@ export class InboundConversionAutomationIngestionService {
       !rule ||
       !tokenMatches ||
       endpoint.removedAt !== null ||
+      // Fase 5.3, "Desativar URL antiga": only this public address is closed
+      // (same generic 404); the rule keeps receiving through the workspace URL.
+      endpoint.publicUrlDisabledAt != null ||
       rule.removedAt !== null ||
       !rule.conversionRule.active ||
       rule.conversionRule.triggerType !== "provider_automation" ||
@@ -1511,6 +1569,49 @@ export class InboundConversionAutomationIngestionService {
       throw new NotFoundException(publicEndpointNotFoundMessage);
     }
 
+    return endpoint;
+  }
+
+  /**
+   * Fase 5.3: internal lookup for a routed callback. The same validity checks
+   * as the public URL (rule live and active, automation trigger, supported
+   * contract, connection live, parser not retired) except the token and the
+   * per-rule URL switch.
+   */
+  private async loadRoutableEndpoint(
+    workspaceId: string,
+    providerRuleId: string,
+  ): Promise<PublicConversionEndpoint | null> {
+    let endpoint: PublicConversionEndpoint | null;
+    try {
+      endpoint = asBoundEndpoint(
+        await this.prisma.providerConversionRuleEndpoint.findFirst({
+          where: { workspaceId, providerRuleId, removedAt: null },
+          include: publicEndpointInclude,
+        }),
+      );
+    } catch {
+      throw new ServiceUnavailableException(publicPersistenceFailureMessage);
+    }
+    const rule = endpoint?.providerRule;
+    const isPaytAutomation =
+      rule?.parserRelease.provider === "payt" &&
+      rule?.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION;
+    if (
+      !endpoint ||
+      !rule ||
+      rule.removedAt !== null ||
+      !rule.conversionRule.active ||
+      rule.conversionRule.triggerType !== "provider_automation" ||
+      (!isPaytAutomation &&
+        rule.connection.provider !== "umbler" &&
+        rule.connection.provider !== "unnichat") ||
+      rule.connection.removedAt !== null ||
+      !["observation", "production"].includes(rule.connection.status) ||
+      rule.parserRelease.status === "retired"
+    ) {
+      return null;
+    }
     return endpoint;
   }
 
@@ -2093,6 +2194,7 @@ export class InboundConversionAutomationIngestionService {
     deliveryId: string;
     ingressKey: string;
     providerAttempt: number | null;
+    integrationEndpointId: string | null;
     rawBodyLength: number;
     receivedAt: Date;
     encrypted: {
@@ -2120,6 +2222,12 @@ export class InboundConversionAutomationIngestionService {
           purpose: "conversion_automation",
           providerRuleEndpointWorkspaceId: input.endpoint.workspaceId,
           providerRuleEndpointId: input.endpoint.id,
+          ...(input.integrationEndpointId
+            ? {
+                integrationEndpointWorkspaceId: input.endpoint.workspaceId,
+                integrationEndpointId: input.integrationEndpointId,
+              }
+            : {}),
           status:
             parsed || ignoredParseErrors.has(input.parseErrorCode ?? "")
               ? "processed"
@@ -2171,6 +2279,7 @@ export class InboundConversionAutomationIngestionService {
         input.endpoint,
         input.receivedAt,
         Boolean(parsed),
+        input.integrationEndpointId === null,
       );
     });
   }
@@ -2180,6 +2289,8 @@ export class InboundConversionAutomationIngestionService {
     deliveryId: string,
     providerAttempt: number | null,
     receivedAt: Date,
+    /** False for a routed callback: the per-rule URL itself got nothing. */
+    touchRuleEndpoint = true,
   ): Promise<void> {
     try {
       await this.prisma.$transaction(async (transaction) => {
@@ -2206,6 +2317,7 @@ export class InboundConversionAutomationIngestionService {
           endpoint,
           receivedAt,
           false,
+          touchRuleEndpoint,
         );
       });
     } catch (error) {
@@ -2249,21 +2361,29 @@ export class InboundConversionAutomationIngestionService {
     endpoint: PublicConversionEndpoint,
     receivedAt: Date,
     parsedSuccessfully: boolean,
+    /**
+     * Fase 5.3: the per-rule endpoint's lastDeliveryAt tells the operator
+     * whether the OLD URL still receives; routed callbacks do not move it
+     * (revalidateEndpoint already checked the endpoint in this transaction).
+     */
+    touchRuleEndpoint = true,
   ): Promise<void> {
     const data = {
       lastDeliveryAt: receivedAt,
       ...(parsedSuccessfully ? { lastSuccessfulParseAt: receivedAt } : {}),
     };
     const [endpointUpdate, connectionUpdate] = await Promise.all([
-      transaction.providerConversionRuleEndpoint.updateMany({
-        where: {
-          id: endpoint.id,
-          workspaceId: endpoint.workspaceId,
-          secretHash: endpoint.secretHash,
-          removedAt: null,
-        },
-        data,
-      }),
+      touchRuleEndpoint
+        ? transaction.providerConversionRuleEndpoint.updateMany({
+            where: {
+              id: endpoint.id,
+              workspaceId: endpoint.workspaceId,
+              secretHash: endpoint.secretHash,
+              removedAt: null,
+            },
+            data,
+          })
+        : Promise.resolve({ count: 1 }),
       transaction.inboundWebhookConnection.updateMany({
         where: {
           id: endpoint.providerRule.connectionId,

@@ -33,8 +33,12 @@ import {
  * is left as is and counted.
  *
  * The SaaS also corrects the "Vendas sem atribuicao" snapshot
- * (IntegrationEndpointEvent): that table arrives in this edition with Fase
- * 5.3, after the parser fix, so it never holds a legacy value here.
+ * (IntegrationEndpointEvent, own cursor `--after-unattributed`, SaaS
+ * `1d65161`). Not ported, on purpose: in this edition that table arrives
+ * with Fase 5.3, AFTER the Fase 5.0 parser fix, so every receipt is written
+ * with the value without installment interest and none ever holds the legacy
+ * `total_price`. The other half of `1d65161` (aligning the execution of a
+ * log corrected at send time) is ported below.
  *
  * Idempotent: a corrected log carries `sourcePayload.valueCorrection` and
  * every write is guarded by the previous value.

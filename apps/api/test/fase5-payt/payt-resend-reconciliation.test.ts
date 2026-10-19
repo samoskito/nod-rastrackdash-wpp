@@ -12,9 +12,8 @@ import {
 /**
  * Fase 5.0 — ported from the SaaS (`d88fc6c`, `f5f535b`, `6f5fcf0`,
  * `apps/api/test/inbound-conversion-automation-ingestion.test.ts`, block
- * "Payt resend of the same transaction with a different body"). The SaaS
- * block for the single integration URL (`ingestRouted`) is left out: that URL
- * arrives in this edition with Fase 5.3.
+ * "Payt resend of the same transaction with a different body"), including
+ * the case of the URL única (`ingestRouted`, Fase 5.3).
  */
 describe("Payt resend of the same transaction with a different body", () => {
   const paytBody = (
@@ -135,6 +134,34 @@ describe("Payt resend of the same transaction with a different body", () => {
       valueCents: 300_000,
     });
     expect(harness.decisions.size).toBe(1);
+    expect(harness.executions.size).toBe(1);
+  });
+
+  it("applies the same reconciliation to a resend routed by the URL única (Fase 5.3)", async () => {
+    const harness = paytHarness();
+    harness.conversionObservation.observeAutomation.mockResolvedValueOnce(
+      channelBlock,
+    );
+    const first = await harness.service.ingest(input(paytBody()));
+
+    const routed = await harness.service.ingestRouted({
+      workspaceId: "workspace_safe",
+      providerRuleId: "provider_rule_1",
+      rawBody: paytBody({ totalPrice: 300_000 }),
+      providerAttempt: null,
+      integrationEndpointId: "integration_endpoint_1",
+    });
+
+    expect(routed).toMatchObject({
+      deliveryId: first.deliveryId,
+      duplicate: true,
+    });
+    expect(storedBody(harness, first.deliveryId).transaction.total_price).toBe(
+      300_000,
+    );
+    expect(lastObservedAutomation(harness)).toMatchObject({
+      valueCents: 300_000,
+    });
     expect(harness.executions.size).toBe(1);
   });
 

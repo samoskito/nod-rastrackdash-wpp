@@ -83,6 +83,23 @@ export const paytSaleEventNames = [
 /** Eventos ainda em beta na Payt (a tela mostra o selo "beta"). */
 export const paytBetaSaleEventNames = ["CartAbandoned"] as const;
 
+/** Fase 5.3: código de produto/oferta de uma plataforma de venda. */
+export const saleProductCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u, "Código de produto inválido");
+
+/**
+ * Fase 5.3: filtro opcional de produto da regra (só Payt). Vazio = qualquer
+ * produto. Os códigos são comparados sem caixa (gravados em maiúsculas).
+ */
+export const saleProductFilterCodesSchema = z
+  .array(saleProductCodeSchema)
+  .max(50)
+  .transform((codes) => [
+    ...new Set(codes.map((code) => code.toLocaleUpperCase("en-US"))),
+  ]);
+
 /**
  * Alcance da regra. "specific_numbers" (padrao historico) usa os numeros
  * escolhidos; "all_numbers" vale para todo numero do workspace que suporte a
@@ -481,11 +498,23 @@ const providerAutomationCreateSchema = z
     eventName: conversionEventNameSchema,
     // Fase 4a: "payt" = regra de venda da Payt (URL propria da regra).
     automationSource: providerConversionAutomationSourceSchema.optional(),
+    // Fase 5.3: só plataformas de venda (Payt). Vazio = todos os produtos.
+    productFilterCodes: saleProductFilterCodesSchema.optional(),
+    // Fase 5.3: false = a regra recebe só pela URL única da integração (a URL
+    // própria da regra nasce desativada). Ausente = comportamento histórico.
+    perRuleUrl: z.boolean().optional(),
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
     if (input.automationSource !== "payt") {
       refineEventValueFields(input, context);
+      if (input.productFilterCodes && input.productFilterCodes.length > 0) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Filtro de produto só existe para plataformas de venda",
+          path: ["productFilterCodes"],
+        });
+      }
       return;
     }
     // A Payt traz o valor real de cada venda; o evento vem do status.
@@ -650,6 +679,13 @@ export const providerConversionRuleUpdateInputSchema = z
     messageAuthorScope: providerConversionMessageAuthorScopeSchema.optional(),
     catalog: providerConversionCatalogInputSchema.optional(),
     active: z.boolean().optional(),
+    // Fase 5.3: só regras de plataforma de venda (Payt). [] = todos.
+    productFilterCodes: saleProductFilterCodesSchema.optional(),
+    // Fase 5.3, "Desativar URL antiga": true fecha a URL própria da regra
+    // (ela continua recebendo pela URL única); false reabre. Desativar exige
+    // confirmPublicUrlDisable: true, porque a plataforma pode ainda postar ali.
+    publicUrlDisabled: z.boolean().optional(),
+    confirmPublicUrlDisable: z.literal(true).optional(),
   })
   .refine((input) => Object.keys(input).length > 0, {
     message: "Informe ao menos um campo para atualizar",
@@ -657,7 +693,26 @@ export const providerConversionRuleUpdateInputSchema = z
   .refine((input) => !(input.scope === "all_numbers" && input.channelIds), {
     message: "Regras para todos os numeros nao recebem canais",
     path: ["channelIds"],
-  });
+  })
+  .refine(
+    (input) =>
+      input.publicUrlDisabled !== true ||
+      input.confirmPublicUrlDisable === true,
+    {
+      message:
+        "Confirme a desativação: o que a plataforma ainda mandar para a URL antiga deixa de ser recebido",
+      path: ["confirmPublicUrlDisable"],
+    },
+  )
+  .refine(
+    (input) =>
+      input.confirmPublicUrlDisable === undefined ||
+      input.publicUrlDisabled === true,
+    {
+      message: "A confirmação só acompanha a desativação da URL antiga",
+      path: ["confirmPublicUrlDisable"],
+    },
+  );
 
 export const providerConversionEndpointSchema = z.object({
   id: idSchema,
@@ -668,6 +723,8 @@ export const providerConversionEndpointSchema = z.object({
   lastSuccessfulParseAt: z.string().datetime().nullable(),
   rotatedAt: z.string().datetime().nullable(),
   removedAt: z.string().datetime().nullable(),
+  // Fase 5.3: "Desativar URL antiga" (opcional para respostas anteriores).
+  publicUrlDisabledAt: z.string().datetime().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -848,6 +905,8 @@ export const providerConversionRuleSchema = z.object({
   automationSource: providerConversionAutomationSourceSchema
     .nullable()
     .optional(),
+  // Fase 5.3: códigos de produto aceitos pela regra (vazio = todos).
+  productFilterCodes: z.array(z.string()).optional(),
   endpoint: providerConversionEndpointSchema.nullable(),
   catalog: providerConversionCatalogSchema.nullable(),
   lastExecution: providerConversionExecutionSchema.nullable(),

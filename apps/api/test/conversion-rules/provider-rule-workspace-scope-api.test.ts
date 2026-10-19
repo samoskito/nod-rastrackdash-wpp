@@ -318,6 +318,11 @@ function createWorld() {
         endpoints.push(row);
         return row;
       }),
+      update: vi.fn(async ({ where, data }: Row) => {
+        const row = endpoints.find((item) => item.id === where.id)!;
+        Object.assign(row, data);
+        return row;
+      }),
     },
     providerRuleCreateClaim: {
       findUnique: vi.fn(
@@ -357,6 +362,7 @@ function createWorld() {
     connections,
     instances,
     claims,
+    endpoints,
   };
 }
 
@@ -1593,5 +1599,162 @@ describe("provider rule workspace scope migration (text check)", () => {
       /connectionId\s+String\?\r?\n\s+parserReleaseId\s+String\?/,
     );
     expect(schema).toMatch(/model ProviderRuleCreateClaim \{/);
+  });
+});
+
+describe("Fase 5.3: product filter, URL própria and 'Desativar URL antiga'", () => {
+  const paytSale = {
+    name: "Venda Payt",
+    triggerType: "provider_automation",
+    automationSource: "payt",
+    eventName: "Purchase",
+    scope: "all_numbers",
+    channelIds: [],
+    connectionId: "connection_umbler",
+  };
+
+  it("stores the product filter of a Payt rule in uppercase, without duplicates", async () => {
+    const world = createWorld();
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        ...paytSale,
+        productFilterCodes: ["proda", "PRODA", "ofr-1"],
+      }),
+      "user_1",
+    );
+    expect(created.rule.productFilterCodes).toEqual(["PRODA", "OFR-1"]);
+    const updated = await world.service.updateRule(
+      workspaceId,
+      created.rule.id,
+      providerConversionRuleUpdateInputSchema.parse({ productFilterCodes: [] }),
+      "user_1",
+    );
+    expect(updated.productFilterCodes).toEqual([]);
+  });
+
+  it("refuses a product filter outside a sales platform rule (schema and service)", async () => {
+    const world = createWorld();
+    expect(
+      providerConversionRuleCreateInputSchema.safeParse({
+        name: "Umbler",
+        triggerType: "provider_automation",
+        eventName: "QualifiedLead",
+        connectionId: "connection_umbler",
+        channelIds: ["channel_umbler"],
+        productFilterCodes: ["PRODA"],
+      }).success,
+    ).toBe(false);
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers", channelIds: [] }),
+      "user_1",
+    );
+    await expect(
+      world.service.updateRule(
+        workspaceId,
+        rule.id,
+        providerConversionRuleUpdateInputSchema.parse({
+          productFilterCodes: ["PRODA"],
+        }),
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("creates a Payt checkout rule for the URL única with a product filter and no public per-rule URL (SaaS 22c6506)", async () => {
+    const world = createWorld();
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        ...paytSale,
+        eventName: "InitiateCheckout",
+        productFilterCodes: ["PROD1"],
+        perRuleUrl: false,
+      }),
+      "user_1",
+    );
+    expect(created.rule.conversionRule.eventName).toBe("InitiateCheckout");
+    expect(created.rule.productFilterCodes).toEqual(["PROD1"]);
+    // Received only through the workspace URL: no per-rule URL is handed out.
+    expect(created.webhookUrl).toBeNull();
+    expect(created.rule.endpoint?.publicUrlDisabledAt).toEqual(
+      expect.any(String),
+    );
+  });
+
+  it("disables the old URL only with the confirmation in the PATCH, and reopens it (reversible, audited)", async () => {
+    const world = createWorld();
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse(paytSale),
+      "user_1",
+    );
+    expect(created.rule.endpoint?.publicUrlDisabledAt).toBeNull();
+    // Contract: disabling needs confirmPublicUrlDisable: true.
+    expect(
+      providerConversionRuleUpdateInputSchema.safeParse({
+        publicUrlDisabled: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      providerConversionRuleUpdateInputSchema.safeParse({
+        confirmPublicUrlDisable: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      providerConversionRuleUpdateInputSchema.safeParse({
+        publicUrlDisabled: false,
+      }).success,
+    ).toBe(true);
+
+    const disabled = await world.service.updateRule(
+      workspaceId,
+      created.rule.id,
+      providerConversionRuleUpdateInputSchema.parse({
+        publicUrlDisabled: true,
+        confirmPublicUrlDisable: true,
+      }),
+      "user_1",
+    );
+    expect(disabled.endpoint?.publicUrlDisabledAt).toEqual(expect.any(String));
+    // The rule itself is untouched: active, same mode, same endpoint.
+    expect(disabled.conversionRule.active).toBe(true);
+    expect(disabled.endpoint?.id).toBe(created.rule.endpoint?.id);
+
+    const reopened = await world.service.updateRule(
+      workspaceId,
+      created.rule.id,
+      providerConversionRuleUpdateInputSchema.parse({ publicUrlDisabled: false }),
+      "user_1",
+    );
+    expect(reopened.endpoint?.publicUrlDisabledAt).toBeNull();
+    expect(
+      world.audits
+        .map((audit) => audit.action)
+        .filter((action: string) => action.includes("public_url")),
+    ).toEqual([
+      "provider_conversion_rule.public_url_disabled",
+      "provider_conversion_rule.public_url_enabled",
+    ]);
+  });
+
+  it("refuses the switch on a rule without its own URL (message rules)", async () => {
+    const world = createWorld();
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers", channelIds: [] }),
+      "user_1",
+    );
+    await expect(
+      world.service.updateRule(
+        workspaceId,
+        rule.id,
+        providerConversionRuleUpdateInputSchema.parse({
+          publicUrlDisabled: false,
+        }),
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

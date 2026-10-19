@@ -25,7 +25,10 @@ import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedUmblerAutomationV1 } from "../inbound-webhooks/providers/umbler/umbler-automation-v1.parser";
-import type { ParsedPaytAutomationV1 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
+import {
+  paytProductFilterMatches,
+  type ParsedPaytAutomationV1,
+} from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
 import type { ParsedUnnichatAutomationV1 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
 import {
   PAYT_LEAD_OTHER_CHANNEL_REASON,
@@ -53,6 +56,9 @@ import {
   resolveApplicableProviderRules,
   resolveProviderRuleScopeChannelIds,
 } from "./provider-rule-scope";
+
+/** Fase 5.3: sale of a product outside the rule product filter. */
+export const PAYT_PRODUCT_NOT_IN_RULE_REASON = "payt_product_not_in_rule";
 
 const observedRuleInclude = {
   conversionRule: true,
@@ -281,6 +287,28 @@ export class ProviderConversionObservationService {
       "phoneCandidates" in input.automation
         ? input.automation.phoneCandidates
         : undefined;
+    // Fase 5.3: a sales-platform rule may be limited to some products (by
+    // code). A sale of another product is not this rule's: ignored, never an
+    // error, never sent by it.
+    if (
+      input.automation.provider === "payt" &&
+      !paytProductFilterMatches(
+        rule.productFilterCodes,
+        input.automation.productCodes ?? [],
+      )
+    ) {
+      return {
+        decisionId: null,
+        decisionCode: null,
+        reasonCode: PAYT_PRODUCT_NOT_IN_RULE_REASON,
+        disposition: "ignored",
+        executionId: null,
+        eligibleExecutionId: null,
+        reviewId: null,
+        channelId: null,
+        leadResolved: false,
+      };
+    }
     // Fase 4b (as in the SaaS): an Unnichat automation without ctwa_clid is
     // recorded as blocked (ctwa_missing) and nothing reaches Meta.
     if (this.isUnnichatWithoutCtwa(input.automation)) {
@@ -314,11 +342,15 @@ export class ProviderConversionObservationService {
     // of the same origin and event that owns the resolved number: that rule
     // receives the same callback on its own endpoint and sends it.
     if (channel && providerRuleScope(rule) === "all_numbers") {
-      const overriddenBy = await findOverridingSpecificRuleIds(this.prisma, {
-        workspaceId: input.workspaceId,
-        rule,
-        channelId: channel.id,
-      });
+      const overriddenBy = await this.productAwareOverrides(
+        await findOverridingSpecificRuleIds(this.prisma, {
+          workspaceId: input.workspaceId,
+          rule,
+          channelId: channel.id,
+        }),
+        input.workspaceId,
+        input.automation,
+      );
       if (overriddenBy.length > 0) {
         this.logger.log(
           JSON.stringify({
@@ -458,6 +490,33 @@ export class ProviderConversionObservationService {
       channelId: channel?.id ?? null,
       leadResolved: leadResolution.status === "resolved",
     };
+  }
+
+  /**
+   * Fase 5.3: a specific Payt rule only replaces the global one for the sales
+   * it accepts. A specific rule limited to product A does not silence the
+   * global rule for a sale of product B. Other origins keep the plain
+   * precedence.
+   */
+  private async productAwareOverrides(
+    ruleIds: string[],
+    workspaceId: string,
+    automation: ParsedProviderAutomation,
+  ): Promise<string[]> {
+    if (ruleIds.length === 0 || automation.provider !== "payt") return ruleIds;
+    const filters = await this.prisma.providerConversionRuleConfig.findMany({
+      where: { workspaceId, id: { in: ruleIds } },
+      select: { id: true, productFilterCodes: true },
+    });
+    const byId = new Map(
+      filters.map((rule) => [rule.id, rule.productFilterCodes ?? []]),
+    );
+    return ruleIds.filter((id) =>
+      paytProductFilterMatches(
+        byId.get(id) ?? [],
+        automation.productCodes ?? [],
+      ),
+    );
   }
 
   private async evaluateMessageDelivery(

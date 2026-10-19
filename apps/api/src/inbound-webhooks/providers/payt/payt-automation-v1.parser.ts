@@ -192,7 +192,7 @@ const productCodePattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u;
 
 /**
  * Product/offer codes of the sale, uppercased. Kept on the parsed value for
- * the receipt; product filters on rules are not part of this edition yet.
+ * the receipt and compared with the rule product filter (Fase 5.3).
  */
 export function normalizeProductCode(value: unknown): string | null {
   const code = boundedString(value, 80);
@@ -428,4 +428,24 @@ export function parsePaytAutomationV1(
     return { ok: false, errorCode: "payt_automation_v1_not_purchase" };
   }
   return parsed;
+}
+
+/**
+ * Fase 5.3: whether a rule product filter accepts the sale. An empty filter
+ * accepts every product (the behaviour of every rule created before it);
+ * otherwise one of the sale product/offer codes must be in the filter,
+ * compared case-insensitively.
+ */
+export function paytProductFilterMatches(
+  filterCodes: readonly string[] | null | undefined,
+  saleCodes: readonly string[],
+): boolean {
+  const filter = (filterCodes ?? [])
+    .map((code) => normalizeProductCode(code))
+    .filter((code): code is string => Boolean(code));
+  if (filter.length === 0) return true;
+  const sale = new Set(
+    saleCodes.map((code) => code.toLocaleUpperCase("en-US")),
+  );
+  return filter.some((code) => sale.has(code));
 }

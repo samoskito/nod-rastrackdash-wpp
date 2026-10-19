@@ -346,6 +346,9 @@ export class ProviderConversionRulesService {
         : providerRuleCreateIntentHash(workspaceId, input);
     this.assertUniqueCatalogVariants(input);
     let secret: string | null = null;
+    // Fase 5.3: a rule created for the workspace URL (perRuleUrl: false) keeps
+    // its endpoint only as the internal anchor of the routed callbacks.
+    let perRuleUrlDisabled = false;
 
     const result = await this.prisma
       .$transaction(
@@ -413,6 +416,19 @@ export class ProviderConversionRulesService {
               "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado",
             );
           }
+
+          const productFilterCodes =
+            input.triggerType === "provider_automation"
+              ? (input.productFilterCodes ?? [])
+              : [];
+          if (productFilterCodes.length > 0 && !isPaytAutomation) {
+            throw new BadRequestException(
+              "Filtro de produto só existe para plataformas de venda",
+            );
+          }
+          perRuleUrlDisabled =
+            input.triggerType === "provider_automation" &&
+            input.perRuleUrl === false;
 
           if (
             input.triggerType === "provider_automation" &&
@@ -605,6 +621,7 @@ export class ProviderConversionRulesService {
                   input.triggerType === "provider_automation"
                     ? null
                     : input.messageAuthorScope,
+                productFilterCodes,
                 productionActivatedAt:
                   input.mode === "production" ? new Date() : null,
                 createdByUserId: actorUserId,
@@ -627,6 +644,9 @@ export class ProviderConversionRulesService {
                 workspaceId,
                 providerRuleId: providerRule.id,
                 secretHash: this.hashSecret(secret),
+                ...(perRuleUrlDisabled
+                  ? { publicUrlDisabledAt: new Date() }
+                  : {}),
               },
             });
           }
@@ -665,6 +685,10 @@ export class ProviderConversionRulesService {
               channelCount: input.channelIds.length,
               mode: input.mode,
               endpointCreated: Boolean(secret),
+              ...(productFilterCodes.length > 0
+                ? { productFilterCodes }
+                : {}),
+              ...(perRuleUrlDisabled ? { perRuleUrl: false } : {}),
             },
           });
 
@@ -711,7 +735,7 @@ export class ProviderConversionRulesService {
     const response = {
       rule: await this.toScopedDto(workspaceId, created),
       webhookUrl:
-        secret && created.endpoint
+        secret && created.endpoint && !perRuleUrlDisabled
           ? this.buildWebhookUrl(
               config.apiPublicUrl,
               created.endpoint.id,
@@ -1133,13 +1157,17 @@ export class ProviderConversionRulesService {
         input.active === false ||
         input.triggerPhrases !== undefined ||
         input.triggerLabels !== undefined ||
-        input.messageAuthorScope !== undefined
+        input.messageAuthorScope !== undefined ||
+        input.productFilterCodes !== undefined
       ) {
         const mode = nextMode ?? current.mode;
         await transaction.providerConversionRuleConfig.update({
           where: { id: current.id },
           data: {
             mode,
+            ...(input.productFilterCodes !== undefined
+              ? { productFilterCodes: input.productFilterCodes }
+              : {}),
             ...(input.triggerPhrases !== undefined
               ? { messageTriggerPhrases: input.triggerPhrases }
               : {}),
@@ -1159,6 +1187,27 @@ export class ProviderConversionRulesService {
                 : null,
           },
         });
+      }
+
+      // Fase 5.3, "Desativar URL antiga" (confirmed by the HTTP contract):
+      // closes or reopens only the rule's own public URL. The rule keeps
+      // receiving through the workspace URL; the endpoint row stays as the
+      // internal anchor. Reversible; an unchanged state is a no-op.
+      let publicUrlChange: "disabled" | "enabled" | null = null;
+      if (input.publicUrlDisabled !== undefined) {
+        if (!current.endpoint || current.endpoint.removedAt) {
+          throw new NotFoundException(endpointNotFoundMessage);
+        }
+        const isDisabled = current.endpoint.publicUrlDisabledAt != null;
+        if (input.publicUrlDisabled !== isDisabled) {
+          await transaction.providerConversionRuleEndpoint.update({
+            where: { id: current.endpoint.id },
+            data: {
+              publicUrlDisabledAt: input.publicUrlDisabled ? new Date() : null,
+            },
+          });
+          publicUrlChange = input.publicUrlDisabled ? "disabled" : "enabled";
+        }
       }
 
       // Reactivating a rule that "Unificar" paused makes it a specific rule
@@ -1277,6 +1326,16 @@ export class ProviderConversionRulesService {
         resultStatus: result.conversionRule.active ? result.mode : "paused",
         afterSummary: this.auditSummary(result),
       });
+      if (publicUrlChange && result.endpoint) {
+        await this.createAudit(transaction, {
+          workspaceId,
+          actorUserId,
+          action: `provider_conversion_rule.public_url_${publicUrlChange}`,
+          targetId: result.id,
+          resultStatus: publicUrlChange,
+          afterSummary: { endpointId: result.endpoint.id },
+        });
+      }
 
       return result;
     });
@@ -2431,6 +2490,22 @@ export class ProviderConversionRulesService {
         "O modo de valor pertence apenas a regras por mensagem com valor",
       );
     }
+    if (
+      input.productFilterCodes !== undefined &&
+      !this.isPaytAutomationRule(current)
+    ) {
+      throw new BadRequestException(
+        "Filtro de produto só existe para plataformas de venda",
+      );
+    }
+    if (
+      input.publicUrlDisabled !== undefined &&
+      current.conversionRule.triggerType !== "provider_automation"
+    ) {
+      throw new BadRequestException(
+        "Só regras com URL própria têm URL antiga para desativar",
+      );
+    }
     // Only extracted-value message rules may drop the average value: the value
     // then comes from the message itself.
     const nextValueMode = isValuedMessageRule
@@ -2780,6 +2855,7 @@ export class ProviderConversionRulesService {
       // The parser release is stored with the rule, so this remains available
       // after a connection changes and does not require a new database column.
       automationSource: this.isPaytAutomationRule(rule) ? "payt" : null,
+      productFilterCodes: rule.productFilterCodes ?? [],
       endpoint: rule.endpoint ? this.endpointToDto(rule.endpoint) : null,
       catalog: rule.catalog ? this.catalogToDto(rule.catalog) : null,
       lastExecution: rule.executions[0]
@@ -2864,6 +2940,7 @@ export class ProviderConversionRulesService {
         endpoint.lastSuccessfulParseAt?.toISOString() ?? null,
       rotatedAt: endpoint.rotatedAt?.toISOString() ?? null,
       removedAt: endpoint.removedAt?.toISOString() ?? null,
+      publicUrlDisabledAt: endpoint.publicUrlDisabledAt?.toISOString() ?? null,
       createdAt: endpoint.createdAt.toISOString(),
       updatedAt: endpoint.updatedAt.toISOString(),
     };
