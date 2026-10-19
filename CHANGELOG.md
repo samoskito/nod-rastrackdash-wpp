@@ -61,10 +61,10 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
-- **Fase 5.3 — Single URL per platform and per-event URLs (API and shared)**,
+- **Fase 5.3 — Single URL per platform and per-event URLs (API, shared and screens)**,
   ported from the SaaS (`6d4aa02`, `a9d2d3c`, `613beb3`, `22c6506`, `46fb0df`,
   `d3725ad`, `4cad496`, `73a9a56`; the web commits `ca783a1`, `f2e676b` and
-  `6574aad` come with the screen in a later delivery). Payt, Unnichat and
+  `6574aad`, adapted to the student edition). Payt, Unnichat and
   Umbler only (no Braip, no Guimoo):
   - **Workspace URLs:** `POST /webhooks/inbound/integrations/:id?token=`.
     Payt: one URL per workspace, the event comes from each postback.

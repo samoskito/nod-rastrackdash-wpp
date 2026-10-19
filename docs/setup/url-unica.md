@@ -98,9 +98,22 @@ A URL antiga de cada regra **continua funcionando**. Não há corte automático.
    roteado aparece na regra dona).
 5. Quando o endereço novo estiver recebendo, desative as URLs antigas.
 
-PENDENTE: as telas (cards da Payt, do Unnichat e da Umbler no Hub de Integrações e o filtro de produto
-em Conversões) chegam na parte web desta fase. Até lá, o recurso existe só na API
-(`/integrations/endpoints`).
+## Onde fica na tela
+
+- **Integrações → Payt, Unnichat ou Umbler Talk:** a URL (única ou por evento), com **Mostrar URL**,
+  **Copiar URL**, **Gerar nova URL** e **Remover URL**; os contadores e o último recebimento; **Vendas
+  sem atribuição** (na Payt) ou **Eventos sem atribuição** (Unnichat e Umbler), com o motivo e
+  **Tentar de novo**; **Produtos detectados** (só Payt); e **URLs antigas**, com o último recebimento e
+  **Desativar URL antiga** (pede confirmação) ou **Reativar URL antiga**.
+- **Mostrar URL fica registrado:** a lista nunca traz a URL com a chave. Cada vez que alguém pede
+  para mostrar, o sistema grava quem viu e quando. A URL fica só na tela aberta (use **Ocultar URL**
+  depois de copiar) e nunca vai para o endereço do navegador.
+- **Conversões → regra da Payt:** em **Editar**, o filtro de produto (marque os produtos detectados ou
+  digite o código); em **URL e configuração**, a URL e o estado da URL antiga. Regras novas, com a URL
+  única ativa, já nascem sem URL própria.
+- **Quem pode:** só quem gerencia integrações gera, mostra, gira, remove, desativa ou tenta de novo;
+  os demais membros só leem contadores e datas. Com a licença bloqueada, as ações ficam desabilitadas
+  e mostram o aviso padrão de licença.
 
 ## Licença e segurança
 
