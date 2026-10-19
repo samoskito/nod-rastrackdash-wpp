@@ -7,6 +7,7 @@ import {
   type ReportTotalsDto,
   type UnconvertedRevenueDto,
 } from "@wpptrack/shared";
+import { Logger } from "@nestjs/common";
 import {
   saoPauloDate,
   type ExchangeRateRequest,
@@ -30,6 +31,8 @@ import type {
  *   na moeda original (a tela mostra "sem cotação").
  * - Evento antigo sem moeda = BRL (padrão histórico).
  */
+
+const logger = new Logger("ReportingCurrency");
 
 export type ReportAttribution = {
   campaignId: string | null;
@@ -94,18 +97,36 @@ export function convertEventValues<E extends ReportingMetricEvent>(
   targetOf: AttributionCurrencyResolver,
   table: ExchangeRateTable | null,
 ): Array<E & CurrencyConvertedEvent> {
-  return events.map((event) => {
+  const unsupportedCodes = new Set<string>();
+  const results = events.map((event) => {
     const own = eventOwnCurrency(event);
     const target = targetOf(event) ?? own;
 
     if (event.valueCents == null) {
-      return { ...event, currency: target ?? DEFAULT_CURRENCY_CODE };
+      return {
+        ...event,
+        currency: targetOf(event) ?? own ?? DEFAULT_CURRENCY_CODE,
+      };
     }
 
-    // Código fora de BRL/USD/EUR gravado antes da moeda configurável: sem
-    // como converter, segue somado como sempre foi (na moeda do anúncio).
+    // Código fora de BRL/USD/EUR gravado antes da moeda configurável. Com
+    // destino BRL segue somado como sempre foi (paridade); com destino em
+    // outra moeda não há cotação: fica fora da receita, "sem cotação".
     if (!own) {
-      return { ...event, currency: target ?? DEFAULT_CURRENCY_CODE };
+      const destination = targetOf(event) ?? DEFAULT_CURRENCY_CODE;
+      if (destination === DEFAULT_CURRENCY_CODE) {
+        return { ...event, currency: destination };
+      }
+      const code = legacyCurrencyCode(event.currency);
+      unsupportedCodes.add(`${code}->${destination}`);
+      return {
+        ...event,
+        currency: destination,
+        valueCents: null,
+        originalValueCents: event.valueCents,
+        originalCurrency: code,
+        exchangeRateMissing: true,
+      };
     }
 
     if (!target || own === target) {
@@ -130,6 +151,21 @@ export function convertEventValues<E extends ReportingMetricEvent>(
       ...(converted === null ? { exchangeRateMissing: true } : {}),
     };
   });
+
+  if (unsupportedCodes.size > 0) {
+    // Só códigos de moeda: nenhum dado do lead ou da venda vai para o log.
+    logger.warn(
+      `REPORT_UNSUPPORTED_SALE_CURRENCY pairs=${[...unsupportedCodes].sort().join(",")}`,
+    );
+  }
+
+  return results;
+}
+
+/** Código de 3 letras como gravado (maiúsculo), ou "XXX" quando inválido. */
+function legacyCurrencyCode(value: string | null): string {
+  const code = value?.trim().toUpperCase() ?? "";
+  return /^[A-Z]{3}$/u.test(code) ? code : "XXX";
 }
 
 function groupCurrency(
@@ -144,20 +180,27 @@ function groupCurrency(
 export function unconvertedRevenueOf(
   events: CurrencyConvertedEvent[],
 ): UnconvertedRevenueDto[] {
-  const totals = new Map<CurrencyCode, number>();
+  const totals = new Map<string, number>();
 
   for (const event of events) {
     if (!event.exchangeRateMissing || !event.originalValueCents) continue;
-    const currency = normalizeCurrencyCode(event.originalCurrency);
-    if (!currency) continue;
+    const currency =
+      normalizeCurrencyCode(event.originalCurrency) ??
+      legacyCurrencyCode(event.originalCurrency ?? null);
     totals.set(
       currency,
       (totals.get(currency) ?? 0) + event.originalValueCents,
     );
   }
 
-  return supportedCurrencyCodes
-    .filter((currency) => totals.has(currency))
+  // BRL, USD, EUR primeiro; outros códigos antigos depois, em ordem.
+  const order = (code: string) => {
+    const index = (supportedCurrencyCodes as readonly string[]).indexOf(code);
+    return index >= 0 ? `0${index}` : `1${code}`;
+  };
+
+  return [...totals.keys()]
+    .sort((a, b) => order(a).localeCompare(order(b)))
     .map((currency) => ({ currency, valueCents: totals.get(currency)! }));
 }
 

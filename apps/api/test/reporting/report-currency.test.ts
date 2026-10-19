@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import {
   ExchangeRateService,
@@ -5,19 +6,19 @@ import {
 } from "../../src/currency/exchange-rate.service";
 import type { PtaxFetch } from "../../src/currency/ptax.client";
 import type { MetaReportingService } from "../../src/reporting/meta-reporting.service";
+import { convertEventValues } from "../../src/reporting/reporting-currency";
+import type { ReportingMetricEvent } from "../../src/reporting/reporting-metrics.engine";
 import {
   account,
   adTree,
-  bcbPayload,
   conversionLog,
   createReportingService,
   emptyDb,
   lead,
-  ptaxHarness,
-  storedRate,
   WORKSPACE,
   type HarnessDb,
 } from "./currency-report-harness";
+import { bcbPayload, ptaxHarness, storedRate } from "./ptax-harness";
 
 // Fase 5.2: gasto e receita na moeda de cada conta de anúncio. Os casos
 // "duas moedas", "conta parada", "correção manual", "conjuntos/anúncios" e
@@ -230,12 +231,14 @@ describe("relatórios por moeda: duas moedas (portado do SaaS)", () => {
     });
     const lines = csv.content.trim().split("\n");
 
-    expect(lines[0]).toMatch(/^Campanha,Status,Investimento,.*,Moeda$/u);
+    expect(lines[0]).toMatch(
+      /^Campanha,Status,Investimento,.*,Moeda,Receita sem cotacao$/u,
+    );
     expect(lines.find((line) => line.startsWith("Campanha br,"))).toMatch(
-      /^Campanha br,active,600\.00,.*,BRL$/u,
+      /^Campanha br,active,600\.00,.*,BRL,$/u,
     );
     expect(lines.find((line) => line.startsWith("Campanha us,"))).toMatch(
-      /^Campanha us,active,50\.00,.*,USD$/u,
+      /^Campanha us,active,50\.00,.*,USD,$/u,
     );
   });
 });
@@ -576,5 +579,200 @@ describe("PTAX_SYNC_ENABLED ligada", () => {
 
     expect(report.exchangeRateMissing).toBe(true);
     expect(report.totals).toMatchObject({ purchases: 1 });
+  });
+});
+
+describe("relatórios por moeda: ordenação, isolamento e códigos antigos (revisão)", () => {
+  it("never interleaves currencies in a metric sort and keeps pages stable", async () => {
+    const { db } = twoCurrencyDb();
+    const cheap = adTree(db, {
+      suffix: "br2",
+      adAccountId: "act_123",
+      spendCents: 1_000,
+      metaConversationsStarted: 5,
+    });
+    db.conversionLogs.push(
+      conversionLog({
+        id: "purchase_br2",
+        eventName: "Purchase",
+        occurredAt: "2026-07-01T15:00:00.000Z",
+        phoneHash: "phone_br2",
+        attribution: cheap,
+        valueCents: 3_000,
+        currency: "BRL",
+        purchaseKind: "first_purchase",
+      }),
+    );
+    const service = createReportingService(db);
+    withRates(service, [{ currency: "USD", date: "2026-07-01", rate: 5 }]);
+    const sorted = (page: number) =>
+      overview(service, {
+        sort: { key: "costPerPurchaseCents", direction: "asc" },
+        page,
+        pageSize: 2,
+      });
+
+    const first = await sorted(1);
+    const second = await sorted(2);
+
+    // Plain metric order would be br2 (R$ 10), us (US$ 50), br (R$ 600).
+    expect(first.currency).toBeNull();
+    expect(first.campaigns.map((row) => [row.id, row.currency])).toEqual([
+      ["cmp_br2", "BRL"],
+      ["cmp_br", "BRL"],
+    ]);
+    expect(second.campaigns.map((row) => [row.id, row.currency])).toEqual([
+      ["cmp_us", "USD"],
+    ]);
+    expect(first.pagination).toEqual({
+      page: 1,
+      pageSize: 2,
+      totalItems: 3,
+      totalPages: 2,
+    });
+    expect((await sorted(1)).campaigns.map((row) => row.id)).toEqual(
+      first.campaigns.map((row) => row.id),
+    );
+
+    const adSets = await service.getAdSetReportOverview({
+      workspaceId: WORKSPACE,
+      rangeLabel: "Periodo",
+      sort: { key: "costPerPurchaseCents", direction: "asc" },
+    });
+    expect(adSets.adSets.map((row) => row.currency)).toEqual([
+      "BRL",
+      "BRL",
+      "USD",
+    ]);
+  });
+
+  it("ignores an ad account id that belongs to another workspace", async () => {
+    const { db } = twoCurrencyDb();
+    const other = account("act_other", "USD");
+    other.workspaceId = "workspace_2";
+    db.reportingAccounts.push(other);
+    const before = db.campaigns.length;
+    adTree(db, {
+      suffix: "other",
+      adAccountId: "act_other",
+      spendCents: 9_999,
+      metaConversationsStarted: 3,
+    });
+    for (const row of [
+      ...db.campaigns.slice(before),
+      ...db.adSets.slice(before),
+      ...db.ads.slice(before),
+    ]) {
+      row.workspaceId = "workspace_2";
+    }
+    const service = createReportingService(db);
+    withRates(service, [{ currency: "USD", date: "2026-07-01", rate: 5 }]);
+
+    const onlyOther = await overview(service, {
+      adAccountIds: ["act_other"],
+      includeSummary: true,
+    });
+    expect(onlyOther.campaigns).toEqual([]);
+    expect(onlyOther.totals).toMatchObject({ spendCents: 0 });
+    expect(onlyOther.byCurrency).toBeUndefined();
+
+    const single = await overview(service, { adAccountId: "act_other" });
+    expect(single.campaigns).toEqual([]);
+
+    const mixed = await overview(service, {
+      adAccountIds: ["act_other", "act_123"],
+    });
+    expect(mixed.campaigns.map((row) => row.id)).toEqual(["cmp_br"]);
+    expect(mixed.currency).toBe("BRL");
+
+    const ads = await service.getAdReportOverview({
+      workspaceId: WORKSPACE,
+      rangeLabel: "Periodo",
+      adAccountIds: ["act_other"],
+    });
+    expect(ads.ads).toEqual([]);
+  });
+
+  it("a legacy currency code is summed as before on BRL and is sem cotação elsewhere", async () => {
+    const { db, br, us } = twoCurrencyDb();
+    db.conversionLogs = [
+      conversionLog({
+        id: "legacy_br",
+        eventName: "Purchase",
+        occurredAt: "2026-07-01T15:00:00.000Z",
+        phoneHash: "phone_legacy_br",
+        attribution: br,
+        valueCents: 7_000,
+        currency: "ars",
+        purchaseKind: "first_purchase",
+      }),
+      conversionLog({
+        id: "legacy_us",
+        eventName: "Purchase",
+        occurredAt: "2026-07-01T15:00:00.000Z",
+        phoneHash: "phone_legacy_us",
+        attribution: us,
+        valueCents: 5_000,
+        currency: "ARS",
+        purchaseKind: "first_purchase",
+      }),
+    ];
+    const service = createReportingService(db);
+    const loadRateTable = withRates(service, []);
+    const warn = vi
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => undefined);
+
+    const report = await overview(service);
+    const csv = await service.getCampaignReportCsv({
+      workspaceId: WORKSPACE,
+      rangeLabel: "Periodo",
+    });
+
+    expect(loadRateTable).not.toHaveBeenCalled();
+    expect(report.campaigns.find((row) => row.id === "cmp_br")).toMatchObject({
+      currency: "BRL",
+      totalRevenueCents: 7_000,
+    });
+    expect(
+      report.campaigns.find((row) => row.id === "cmp_br"),
+    ).not.toHaveProperty("exchangeRateMissing");
+    expect(report.campaigns.find((row) => row.id === "cmp_us")).toMatchObject({
+      currency: "USD",
+      purchases: 1,
+      totalRevenueCents: 0,
+      exchangeRateMissing: true,
+      unconvertedRevenue: [{ currency: "ARS", valueCents: 5_000 }],
+    });
+    expect(
+      csv.content.split("\n").find((line) => line.startsWith("Campanha us,")),
+    ).toMatch(/,USD,ARS 50\.00$/u);
+    const messages = warn.mock.calls.map((call) => String(call[0]));
+    expect(messages).toContain(
+      "REPORT_UNSUPPORTED_SALE_CURRENCY pairs=ARS->USD",
+    );
+    expect(messages.join(" ")).not.toContain("phone_legacy");
+    warn.mockRestore();
+  });
+
+  it("keeps the own currency of a valueless sale with no ad", () => {
+    const base = conversionLog({
+      id: "no_value",
+      eventName: "Purchase",
+      occurredAt: "2026-07-01T15:00:00.000Z",
+      phoneHash: "phone_x",
+      attribution: null,
+      valueCents: null,
+      currency: "EUR",
+    }) as unknown as ReportingMetricEvent;
+    const legacy = {
+      ...(base as object),
+      currency: "ARS",
+    } as ReportingMetricEvent;
+
+    const [eur, ars] = convertEventValues([base, legacy], () => null, null);
+
+    expect(eur!.currency).toBe("EUR");
+    expect(ars!.currency).toBe("BRL");
   });
 });

@@ -44,3 +44,30 @@ function finiteOrNull(value: number | null | undefined): number | null {
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
+
+const CURRENCY_ORDER = ["BRL", "USD", "EUR"];
+
+/**
+ * Fase 5.2: rows in more than one currency are grouped by currency (BRL, USD,
+ * EUR) before the metric order, so values of different currencies are never
+ * interleaved. One currency (every BRL-only workspace): same order as
+ * sortReportRows.
+ */
+export function sortReportRowsByCurrency<
+  T extends SortableReportRow & { currency?: string | null },
+>(rows: readonly T[], sort: ReportSortDto): T[] {
+  const sorted = sortReportRows(rows, sort);
+  const currencies = new Set(sorted.map((row) => row.currency ?? "BRL"));
+
+  if (currencies.size <= 1) {
+    return sorted;
+  }
+
+  const rank = (row: T) => {
+    const index = CURRENCY_ORDER.indexOf(row.currency ?? "BRL");
+    return index >= 0 ? index : CURRENCY_ORDER.length;
+  };
+
+  // Array.prototype.sort is stable: the metric order stays inside each group.
+  return sorted.sort((left, right) => rank(left) - rank(right));
+}

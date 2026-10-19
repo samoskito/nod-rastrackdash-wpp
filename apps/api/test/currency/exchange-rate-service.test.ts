@@ -10,11 +10,7 @@ import {
   parsePtaxResponse,
   type PtaxFetch,
 } from "../../src/currency/ptax.client";
-import {
-  bcbPayload,
-  ptaxHarness,
-  storedRate,
-} from "../reporting/currency-report-harness";
+import { bcbPayload, ptaxHarness, storedRate } from "../reporting/ptax-harness";
 
 // Fase 5.2: PTAX do Banco Central. Portado do SaaS (5981c7c,
 // exchange-rate-service) e adaptado à variável PTAX_SYNC_ENABLED do aluno,
@@ -237,5 +233,142 @@ describe("ExchangeRateService (PTAX ligada)", () => {
       failed: [],
     });
     expect(rows).toHaveLength(4);
+  });
+});
+
+describe("ExchangeRateService: leitura do relatório não espera o BCB (revisão)", () => {
+  /** BCB that answers only when the test releases it. */
+  function slowBcb(payload = closing) {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl = vi.fn<PtaxFetch>(async () => {
+      await gate;
+      return { ok: true, status: 200, json: async () => payload };
+    });
+    return { fetchImpl, release: () => release() };
+  }
+
+  it("slow BCB: returns within the wait with stored rates and fills in the background once", async () => {
+    const bcb = slowBcb();
+    const { service, rows } = ptaxHarness({
+      enabled: true,
+      fetchImpl: bcb.fetchImpl,
+      lazyFillWaitMs: 20,
+      rows: [storedRate("2026-10-07", "USD", "4.00000000")],
+    });
+    const request = [{ currency: "USD" as const, date: "2026-10-09" }];
+
+    const started = Date.now();
+    const [first, concurrent] = await Promise.all([
+      service.loadRateTable(request),
+      service.loadRateTable(request),
+    ]);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // Meanwhile: the last stored rate (07/10) within the 10-day fallback.
+    expect(first.convert(1000, "USD", "BRL", "2026-10-09")).toBe(4000);
+    expect(concurrent.convert(1000, "USD", "BRL", "2026-10-09")).toBe(4000);
+    // One fetch shared by both requests.
+    expect(bcb.fetchImpl).toHaveBeenCalledTimes(1);
+
+    bcb.release();
+    await service.whenIdle();
+    expect(rows.map((row) => row.date.toISOString().slice(0, 10))).toEqual([
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+    ]);
+
+    const after = await service.loadRateTable(request);
+    expect(after.convert(10000, "USD", "BRL", "2026-10-09")).toBe(49892);
+    expect(bcb.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("BCB that never answers: the report still loads after the short wait", async () => {
+    const hanging = vi.fn<PtaxFetch>(() => new Promise(() => undefined));
+    const { service } = ptaxHarness({
+      enabled: true,
+      fetchImpl: hanging,
+      lazyFillWaitMs: 20,
+    });
+
+    const table = await service.loadRateTable([
+      { currency: "EUR", date: "2026-10-09" },
+      { currency: "USD", date: "2026-10-09" },
+    ]);
+
+    expect(table.convert(1000, "EUR", "BRL", "2026-10-09")).toBeNull();
+    // USD and EUR fetched in parallel, not one after the other.
+    expect(hanging).toHaveBeenCalledTimes(2);
+  });
+
+  it("a weekday holiday fetched without a bulletin is not fetched again", async () => {
+    const fetchImpl = okFetch();
+    const { service, clock } = ptaxHarness({ enabled: true, fetchImpl });
+    // Monday 12/10/2026 (Nossa Senhora Aparecida): no bulletin.
+    const request = [{ currency: "USD" as const, date: "2026-10-12" }];
+
+    const first = await service.loadRateTable(request);
+    expect(first.convert(10000, "USD", "BRL", "2026-10-12")).toBe(49892);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    clock.now = new Date("2026-10-15T23:00:00.000Z");
+    const later = await service.loadRateTable(request);
+    expect(later.convert(10000, "USD", "BRL", "2026-10-12")).toBe(49892);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for today's rate only after 13h30 in Brasília", async () => {
+    const fetchImpl = okFetch();
+    const { service, clock } = ptaxHarness({
+      enabled: true,
+      fetchImpl,
+      // 12:00 in Brasília.
+      now: "2026-10-15T15:00:00.000Z",
+      rows: [storedRate("2026-10-14", "USD", "5.00000000")],
+    });
+    const request = [{ currency: "USD" as const, date: "2026-10-15" }];
+
+    const morning = await service.loadRateTable(request);
+    expect(morning.convert(1000, "USD", "BRL", "2026-10-15")).toBe(5000);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    // 14:00 in Brasília: the closing bulletin may exist now.
+    clock.now = new Date("2026-10-15T17:00:00.000Z");
+    await service.loadRateTable(request);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not alternate between converted and sem cotação when the database cannot store", async () => {
+    const fetchImpl = okFetch();
+    const { service } = ptaxHarness({
+      enabled: true,
+      fetchImpl,
+      failStore: true,
+    });
+    const request = [{ currency: "USD" as const, date: "2026-10-09" }];
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const table = await service.loadRateTable(request);
+      expect(table.convert(10000, "USD", "BRL", "2026-10-09")).toBe(49892);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("after a BCB failure waits an hour before trying the currency again", async () => {
+    const down = vi.fn<PtaxFetch>(async () => {
+      throw new Error("ECONNRESET");
+    });
+    const { service, clock } = ptaxHarness({ enabled: true, fetchImpl: down });
+    const request = [{ currency: "USD" as const, date: "2026-10-09" }];
+
+    await service.loadRateTable(request);
+    await service.loadRateTable(request);
+    expect(down).toHaveBeenCalledTimes(1);
+
+    clock.now = new Date(clock.now.getTime() + 61 * 60_000);
+    await service.loadRateTable(request);
+    expect(down).toHaveBeenCalledTimes(2);
   });
 });

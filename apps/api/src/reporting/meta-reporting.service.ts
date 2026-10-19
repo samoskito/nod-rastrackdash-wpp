@@ -106,7 +106,10 @@ import {
   type ReportingMetricLead,
   type ReportingMetricScope,
 } from "./reporting-metrics.engine";
-import { sortReportRows, type SortableReportRow } from "./report-row-sort";
+import {
+  sortReportRowsByCurrency,
+  type SortableReportRow,
+} from "./report-row-sort";
 
 export type MetaStructureSyncInput = {
   workspaceId: string;
@@ -2989,6 +2992,8 @@ export class MetaReportingService {
         "ROAS com recompra",
         // Last column, so spreadsheets built on the old layout keep working.
         "Moeda",
+        // "BRL 100.00; USD 5.00": sales out of the revenue for lack of a rate.
+        "Receita sem cotacao",
       ],
       ...report.campaigns.map((campaign) => [
         campaign.name,
@@ -3012,6 +3017,11 @@ export class MetaReportingService {
           ? ""
           : String(campaign.roasWithRepurchase),
         campaign.currency ?? report.currency ?? DEFAULT_CURRENCY_CODE,
+        (campaign.unconvertedRevenue ?? [])
+          .map(
+            (item) => `${item.currency} ${this.centsToDecimal(item.valueCents)}`,
+          )
+          .join("; "),
       ]),
     ];
 
@@ -3642,7 +3652,10 @@ export class MetaReportingService {
     };
   }
 
-  private paginateReportRows<TRecord, TRow extends SortableReportRow>(
+  private paginateReportRows<
+    TRecord,
+    TRow extends SortableReportRow & { currency?: string | null },
+  >(
     records: TRecord[],
     input: Pick<ReportFilterInput, "page" | "pageSize" | "sort">,
     toRow: (record: TRecord) => TRow,
@@ -3657,7 +3670,7 @@ export class MetaReportingService {
     // entities, events and leads behind those rows are already loaded for
     // the totals, so this adds row construction but no queries.
     return this.paginateRecords(
-      sortReportRows(records.map(toRow), input.sort),
+      sortReportRowsByCurrency(records.map(toRow), input.sort),
       input,
     );
   }

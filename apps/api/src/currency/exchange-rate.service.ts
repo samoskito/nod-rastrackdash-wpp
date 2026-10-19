@@ -23,7 +23,7 @@ import {
 const FOREIGN_CURRENCIES: ForeignCurrency[] = ["USD", "EUR"];
 /** Sem boletim no dia, usa o último dia útil anterior até N dias antes. */
 export const MAX_RATE_FALLBACK_DAYS = 10;
-/** Não repete a busca sob demanda da mesma moeda/dia por este tempo. */
+/** Depois de uma falha do BCB, a moeda só é buscada de novo após este tempo. */
 const LAZY_FILL_RETRY_MS = 60 * 60_000;
 /** A busca sob demanda nunca pede mais que isto de uma vez. */
 const MAX_LAZY_FILL_DAYS = 400;
@@ -149,18 +149,65 @@ export class ExchangeRateTable {
   }
 }
 
+/** Hora (Brasília) a partir da qual o boletim de fechamento do dia costuma existir. */
+const TODAY_CLOSING_AFTER_MINUTES = 13 * 60 + 30;
+
+/** Minutos desde a meia-noite em America/Sao_Paulo. */
+function saoPauloMinutes(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: PTAX_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const part = (type: string) =>
+    Number(parts.find((item) => item.type === type)?.value ?? "0");
+
+  return part("hour") * 60 + part("minute");
+}
+
+/** Dias úteis (seg-sex) de from a to, inclusive. */
+function weekdaysBetween(from: string, to: string): string[] {
+  const days: string[] = [];
+  for (let day = from; day <= to; day = shiftIsoDate(day, 1)) {
+    if (previousWeekday(day) === day) days.push(day);
+  }
+  return days;
+}
+
+export type ExchangeRateOptions = {
+  /** Quanto a leitura de um relatório espera pelo BCB (padrão 1,5 s). */
+  lazyFillWaitMs?: number;
+};
+export const EXCHANGE_RATE_OPTIONS = Symbol("EXCHANGE_RATE_OPTIONS");
+export const DEFAULT_LAZY_FILL_WAIT_MS = 1_500;
+
 /**
  * Cotação PTAX (Banco Central) para os relatórios por moeda (Fase 5.2).
  * Mesmo padrão do sync automático da Meta: um timer no processo da API,
  * ligado só por variável de ambiente. Nada aqui envia algo à Meta e nenhum
  * erro do Banco Central sobe para quem chamou: no pior caso, "sem cotação".
+ *
+ * A leitura de um relatório nunca espera o BCB por mais de ~1,5 s: o que
+ * falta é buscado em segundo plano (uma busca por moeda de cada vez, sem
+ * duplicar entre pedidos simultâneos) e a tabela sai com o que já se sabe.
+ * Cotações buscadas ficam também em memória, para o mesmo relatório não
+ * alternar entre convertido e "sem cotação" se o banco não gravar.
  */
 @Injectable()
 export class ExchangeRateService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(ExchangeRateService.name);
-  private readonly lazyAttempts = new Map<string, number>();
+  /** Cotações já obtidas do BCB nesta API (moeda -> dia -> reais). */
+  private readonly knownRates = new Map<ForeignCurrency, Map<string, number>>();
+  /** Dias úteis buscados com sucesso que vieram sem boletim (feriados). */
+  private readonly resolvedWithoutBulletin = new Set<string>();
+  /** Busca em andamento por moeda (uma só, compartilhada). */
+  private readonly inflight = new Map<ForeignCurrency, Promise<void>>();
+  /** Depois de uma falha, a moeda só é buscada de novo a partir daqui. */
+  private readonly retryAfter = new Map<ForeignCurrency, number>();
+  private readonly lazyFillWaitMs: number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private initialTimer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
@@ -179,7 +226,12 @@ export class ExchangeRateService
     @Optional()
     @Inject(EXCHANGE_RATE_CLOCK)
     private readonly clock: ExchangeRateClock = { now: () => new Date() },
-  ) {}
+    @Optional()
+    @Inject(EXCHANGE_RATE_OPTIONS)
+    options?: ExchangeRateOptions,
+  ) {
+    this.lazyFillWaitMs = options?.lazyFillWaitMs ?? DEFAULT_LAZY_FILL_WAIT_MS;
+  }
 
   enabled(): boolean {
     return isPtaxSyncEnabled(this.env ?? process.env);
@@ -220,9 +272,9 @@ export class ExchangeRateService
   }
 
   /**
-   * Sincronização periódica: guarda a PTAX dos últimos dias de USD e EUR.
-   * Idempotente (única por dia e par de moedas); falha do BCB só gera log e
-   * as cotações já guardadas continuam valendo.
+   * Sincronização periódica: guarda a PTAX dos últimos dias de USD e EUR (em
+   * paralelo). Idempotente (única por dia e par de moedas); falha do BCB só
+   * gera log e as cotações já guardadas continuam valendo.
    */
   async syncRecentRates(): Promise<{
     stored: number;
@@ -235,30 +287,39 @@ export class ExchangeRateService
     this.running = true;
     const today = saoPauloDate(this.clock.now());
     const from = shiftIsoDate(today, -PTAX_SYNC_LOOKBACK_DAYS);
-    let stored = 0;
-    const failed: ForeignCurrency[] = [];
 
     try {
-      for (const currency of FOREIGN_CURRENCIES) {
-        try {
-          const rates = await this.fetchRates(currency, from, today);
-          stored += await this.storeRates(currency, rates);
-        } catch {
-          failed.push(currency);
-          this.logger.warn(`PTAX_SYNC_UNAVAILABLE currency=${currency}`);
-        }
-      }
+      const results = await Promise.all(
+        FOREIGN_CURRENCIES.map(async (currency) => {
+          try {
+            const rates = await this.fetchAndRemember(currency, from, today);
+            return {
+              currency,
+              stored: await this.storeRates(currency, rates),
+            };
+          } catch {
+            this.logger.warn(`PTAX_SYNC_UNAVAILABLE currency=${currency}`);
+            return { currency, stored: null };
+          }
+        }),
+      );
+
+      return {
+        stored: results.reduce((sum, item) => sum + (item.stored ?? 0), 0),
+        failed: results
+          .filter((item) => item.stored === null)
+          .map((item) => item.currency),
+      };
     } finally {
       this.running = false;
     }
-
-    return { stored, failed };
   }
 
   /**
    * Cotações para converter vendas nas datas pedidas. Desligada: tabela
-   * vazia, sem ler o banco nem a rede. Ligada: lê o que está guardado e busca
-   * no BCB, uma vez por hora no máximo, os dias úteis que faltam. Nunca lança.
+   * vazia, sem ler o banco nem a rede. Ligada: lê o que está guardado (e o
+   * que esta API já buscou) e, para dias úteis que faltam, dispara a busca no
+   * BCB em segundo plano, esperando no máximo ~1,5 s. Nunca lança.
    */
   async loadRateTable(
     requests: ExchangeRateRequest[],
@@ -311,51 +372,142 @@ export class ExchangeRateService
       }
     } catch {
       this.logger.warn("EXCHANGE_RATE_READ_FAILED");
-      return table;
     }
 
-    const today = saoPauloDate(this.clock.now());
-    const nowMs = this.clock.now().getTime();
+    this.addKnownRates(table, datesByCurrency.keys());
+
+    const fills: Promise<void>[] = [];
 
     for (const [currency, dates] of datesByCurrency) {
-      const businessDays = new Set([...dates].map(previousWeekday));
-      const missing = [...businessDays]
-        .filter(
-          (date) =>
-            date <= today &&
-            !table.hasExact(currency, date) &&
-            nowMs - (this.lazyAttempts.get(`${currency}:${date}`) ?? 0) >=
-              LAZY_FILL_RETRY_MS,
-        )
-        .sort();
-
+      const missing = this.missingBusinessDays(currency, dates, table);
       if (missing.length === 0) continue;
+      const fill = this.fillInBackground(currency, missing);
+      if (fill) fills.push(fill);
+    }
 
-      const to = missing[missing.length - 1]!;
-      const earliest = shiftIsoDate(to, -MAX_LAZY_FILL_DAYS);
-      const from = shiftIsoDate(
-        missing[0]! < earliest ? earliest : missing[0]!,
-        -MAX_RATE_FALLBACK_DAYS,
-      );
+    if (fills.length > 0) {
+      let waitTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled(fills),
+        new Promise<void>((resolve) => {
+          waitTimer = setTimeout(resolve, this.lazyFillWaitMs);
+        }),
+      ]);
+      if (waitTimer) clearTimeout(waitTimer);
+      this.addKnownRates(table, datesByCurrency.keys());
+    }
 
-      for (const date of missing) {
-        this.lazyAttempts.set(`${currency}:${date}`, nowMs);
+    return table;
+  }
+
+  /** Resolve quando nenhuma busca em segundo plano está em andamento. */
+  async whenIdle(): Promise<void> {
+    while (this.inflight.size > 0) {
+      await Promise.allSettled([...this.inflight.values()]);
+    }
+  }
+
+  private addKnownRates(
+    table: ExchangeRateTable,
+    currencies: Iterable<ForeignCurrency>,
+  ): void {
+    for (const currency of currencies) {
+      for (const [date, rate] of this.knownRates.get(currency) ?? []) {
+        table.add(currency, date, rate);
       }
+    }
+  }
 
+  /**
+   * Dias úteis ainda sem cotação que valem uma busca: nem guardados, nem já
+   * buscados sem boletim (feriado), e hoje só depois das 13h30 de Brasília.
+   */
+  private missingBusinessDays(
+    currency: ForeignCurrency,
+    dates: Set<string>,
+    table: ExchangeRateTable,
+  ): string[] {
+    const now = this.clock.now();
+    const today = saoPauloDate(now);
+    const todayClosed = saoPauloMinutes(now) >= TODAY_CLOSING_AFTER_MINUTES;
+
+    return [...new Set([...dates].map(previousWeekday))]
+      .filter(
+        (date) =>
+          (date < today || (date === today && todayClosed)) &&
+          !table.hasExact(currency, date) &&
+          !this.resolvedWithoutBulletin.has(`${currency}:${date}`),
+      )
+      .sort();
+  }
+
+  /** Dispara (ou reaproveita) a busca da moeda; null se em espera após falha. */
+  private fillInBackground(
+    currency: ForeignCurrency,
+    missing: string[],
+  ): Promise<void> | null {
+    const running = this.inflight.get(currency);
+    if (running) return running;
+
+    if ((this.retryAfter.get(currency) ?? 0) > this.clock.now().getTime()) {
+      return null;
+    }
+
+    const to = missing[missing.length - 1]!;
+    const earliest = shiftIsoDate(to, -MAX_LAZY_FILL_DAYS);
+    const from = shiftIsoDate(
+      missing[0]! < earliest ? earliest : missing[0]!,
+      -MAX_RATE_FALLBACK_DAYS,
+    );
+    const fill = (async () => {
       try {
-        const rates = await this.fetchRates(currency, from, to);
-        for (const rate of rates) table.add(currency, rate.date, rate.rate);
+        const rates = await this.fetchAndRemember(currency, from, to);
         await this.storeRates(currency, rates);
+        this.retryAfter.delete(currency);
       } catch {
+        this.retryAfter.set(
+          currency,
+          this.clock.now().getTime() + LAZY_FILL_RETRY_MS,
+        );
         this.logger.warn(
           `PTAX_LAZY_FILL_UNAVAILABLE currency=${currency} from=${from} to=${to}`,
         );
+      } finally {
+        this.inflight.delete(currency);
       }
+    })();
+
+    this.inflight.set(currency, fill);
+    return fill;
+  }
+
+  /**
+   * Busca no BCB, guarda em memória e marca como resolvidos os dias úteis do
+   * intervalo que vieram sem boletim (hoje só depois do fechamento).
+   */
+  private async fetchAndRemember(
+    currency: ForeignCurrency,
+    from: string,
+    to: string,
+  ): Promise<PtaxClosingRate[]> {
+    const rates = await this.fetchRates(currency, from, to);
+    const known = this.knownRates.get(currency) ?? new Map<string, number>();
+    for (const rate of rates) known.set(rate.date, rate.rate);
+    this.knownRates.set(currency, known);
+
+    const now = this.clock.now();
+    const today = saoPauloDate(now);
+    const todayClosed = saoPauloMinutes(now) >= TODAY_CLOSING_AFTER_MINUTES;
+    if (this.resolvedWithoutBulletin.size > 5_000) {
+      this.resolvedWithoutBulletin.clear();
+    }
+    for (const day of weekdaysBetween(from, to)) {
+      if (known.has(day)) continue;
+      if (day > today || (day === today && !todayClosed)) continue;
+      this.resolvedWithoutBulletin.add(`${currency}:${day}`);
     }
 
-    if (this.lazyAttempts.size > 5_000) this.lazyAttempts.clear();
-
-    return table;
+    return rates;
   }
 
   private async fetchRates(

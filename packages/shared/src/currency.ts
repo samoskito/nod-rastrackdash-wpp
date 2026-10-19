@@ -106,9 +106,11 @@ export function formatMoney(
 /**
  * Receita que ficou fora de um total por falta de cotação PTAX (cotação
  * desligada, BCB fora do ar ou dia sem boletim), na moeda original da venda.
+ * Normalmente BRL/USD/EUR; pode ser outro código ISO de 3 letras gravado
+ * antes da moeda configurável (sem cotação possível).
  */
 export const unconvertedRevenueSchema = z.object({
-  currency: currencyCodeSchema,
+  currency: z.string().regex(/^[A-Z]{3}$/u),
   valueCents: z.number().int().nonnegative(),
 });
 export type UnconvertedRevenueDto = z.infer<typeof unconvertedRevenueSchema>;
