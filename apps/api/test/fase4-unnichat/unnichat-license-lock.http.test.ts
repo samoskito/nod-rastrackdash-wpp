@@ -11,6 +11,7 @@ import { configureInboundWebhookBodyParser } from "../../src/inbound-webhooks/in
 import { InboundWebhookIngestionService } from "../../src/inbound-webhooks/inbound-webhook-ingestion.service";
 import { InboundWebhookMetaCloudVerificationService } from "../../src/inbound-webhooks/inbound-webhook-meta-cloud-verification.service";
 import { InboundWebhookPublicController } from "../../src/inbound-webhooks/inbound-webhook-public.controller";
+import { IntegrationEndpointsService } from "../../src/inbound-webhooks/integration-endpoints.service";
 import { LicenseClientService } from "../../src/licensing-client/license-client.service";
 import { LicenseSoftlockGuard } from "../../src/licensing-client/license-softlock.guard";
 import { createHarness, secret } from "../fase4-payt/payt-ingestion-harness";
@@ -56,6 +57,7 @@ async function appFor(locked: boolean) {
         provide: InboundConversionAutomationIngestionService,
         useValue: automation.service,
       },
+      { provide: IntegrationEndpointsService, useValue: { ingest: vi.fn() } },
       { provide: InboundWebhookIngestionService, useValue: entryIngestion },
       {
         provide: InboundWebhookMetaCloudVerificationService,

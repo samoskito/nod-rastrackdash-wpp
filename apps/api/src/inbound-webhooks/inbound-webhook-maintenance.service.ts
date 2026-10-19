@@ -23,6 +23,13 @@ export const INBOUND_WEBHOOK_RECOVERY_GRACE_MS = 60 * 1_000;
 export const INBOUND_WEBHOOK_RECOVERY_CLAIM_TTL_MS = 5 * 60 * 1_000;
 export const INBOUND_WEBHOOK_MAINTENANCE_BATCH_SIZE = 100;
 export const INBOUND_WEBHOOK_PAYLOAD_CLEANUP_BATCH_SIZE = 250;
+/**
+ * Fase 5.3: receipts of the workspace URLs that never reached a rule
+ * (pending, unattributed, ignored, invalid) are deleted after this many days.
+ * Routed receipts stay: they point to the rule's delivery and execution.
+ */
+export const INTEGRATION_RECEIPT_RETENTION_DAYS = 60;
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 const maintenanceFailedCode = "inbound_webhook_maintenance_failed";
 const payloadUnavailableCode = "inbound_webhook_payload_unavailable";
@@ -55,6 +62,7 @@ type RecoveryCandidate = Prisma.InboundWebhookDeliveryGetPayload<{
 export type InboundWebhookMaintenanceResult = {
   enabled: boolean;
   payloadsCleared: number;
+  integrationReceiptsDeleted: number;
   unavailableMarked: number;
   recoveryCandidates: number;
   recoveryClaims: number;
@@ -76,6 +84,7 @@ function emptyResult(enabled: boolean): InboundWebhookMaintenanceResult {
   return {
     enabled,
     payloadsCleared: 0,
+    integrationReceiptsDeleted: 0,
     unavailableMarked: 0,
     recoveryCandidates: 0,
     recoveryClaims: 0,
@@ -158,7 +167,11 @@ export class InboundWebhookMaintenanceService
 
     try {
       const result = emptyResult(true);
-      result.payloadsCleared = await this.clearExpiredPayloads(now);
+      result.payloadsCleared =
+        (await this.clearExpiredPayloads(now)) +
+        (await this.clearExpiredIntegrationReceiptPayloads(now));
+      result.integrationReceiptsDeleted =
+        await this.deleteOldIntegrationReceipts(now);
       result.unavailableMarked =
         await this.markUnavailablePendingDeliveries(now);
 
@@ -208,6 +221,7 @@ export class InboundWebhookMaintenanceService
         this.logger.log(
           [
             `Inbound webhook maintenance cleared=${result.payloadsCleared}`,
+            `integrationReceiptsDeleted=${result.integrationReceiptsDeleted}`,
             `unavailable=${result.unavailableMarked}`,
             `candidates=${result.recoveryCandidates}`,
             `claimed=${result.recoveryClaims}`,
@@ -287,6 +301,53 @@ export class InboundWebhookMaintenanceService
         return total;
       }
     }
+  }
+
+  /**
+   * Fase 5.3: receipts of the workspace URLs keep the raw postback (buyer
+   * data) only for the same retention as deliveries; the product and reason
+   * stay for "Produtos detectados" and "Vendas sem atribuição".
+   */
+  private async clearExpiredIntegrationReceiptPayloads(
+    now: Date,
+  ): Promise<number> {
+    const cleared = await this.prisma.integrationEndpointEvent.updateMany({
+      where: {
+        payloadExpiresAt: { lte: now },
+        OR: [
+          { encryptedPayload: { not: null } },
+          { payloadIv: { not: null } },
+          { payloadTag: { not: null } },
+          { encryptionKeyVersion: { not: null } },
+        ],
+      },
+      data: {
+        encryptedPayload: null,
+        payloadIv: null,
+        payloadTag: null,
+        encryptionKeyVersion: null,
+      },
+    });
+    return cleared.count;
+  }
+
+  /**
+   * Fase 5.3: unrouted receipts (never delivered to a rule) older than
+   * INTEGRATION_RECEIPT_RETENTION_DAYS since their last attempt are deleted.
+   * "routed" ones stay with the rule's delivery/execution they point to.
+   */
+  private async deleteOldIntegrationReceipts(now: Date): Promise<number> {
+    const deleted = await this.prisma.integrationEndpointEvent.deleteMany({
+      where: {
+        status: { in: ["pending", "unattributed", "ignored", "invalid"] },
+        lastReceivedAt: {
+          lt: new Date(
+            now.getTime() - INTEGRATION_RECEIPT_RETENTION_DAYS * DAY_MS,
+          ),
+        },
+      },
+    });
+    return deleted.count;
   }
 
   private async markUnavailablePendingDeliveries(now: Date): Promise<number> {
