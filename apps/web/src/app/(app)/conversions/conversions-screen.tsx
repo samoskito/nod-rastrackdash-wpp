@@ -2,6 +2,9 @@
 
 import type {
   ConversionEventNameDto,
+  IntegrationDetectedProductDto,
+  IntegrationEndpointDto,
+  IntegrationUnattributedEventListDto,
   LegacyConversionRuleDto,
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
@@ -46,6 +49,10 @@ import {
 import type { ComingSoonNumber } from "./conversions-data";
 import { conversionsLicenseLockedNote } from "./license-lock";
 import { NumbersWithoutRules } from "./numbers-without-rules";
+import {
+  UnattributedSalesList,
+  type SingleUrlActions,
+} from "../integrations/single-url/single-url-panels";
 import { LegacyRules, type LegacyRuleActions } from "./legacy-rules";
 import { NewRuleFlow } from "./new-rule-flow";
 import { RuleExecutions } from "./rule-executions";
@@ -90,6 +97,15 @@ export type ConversionsScreenProps = {
   legacyRulesState?: "real" | "error";
   ruleActions?: Omit<RuleManageActions, "update">;
   legacyActions?: LegacyRuleActions;
+  /** Fase 5.3: URL única/por evento, produtos e vendas sem atribuição. */
+  singleUrl?: ConversionsSingleUrl;
+};
+
+export type ConversionsSingleUrl = {
+  endpoints: IntegrationEndpointDto[];
+  paytProducts: IntegrationDetectedProductDto[];
+  paytUnattributed: IntegrationUnattributedEventListDto | null;
+  actions: SingleUrlActions;
 };
 
 type ManageTarget = {
@@ -152,6 +168,7 @@ export function ConversionsScreen({
   legacyRulesState = "real",
   ruleActions,
   legacyActions,
+  singleUrl,
 }: ConversionsScreenProps) {
   const router = useRouter();
   const [filters, setFilters] = useState<RuleFilters>(emptyRuleFilters);
@@ -513,6 +530,23 @@ export function ConversionsScreen({
         ) : null}
       </section>
 
+      {singleUrl &&
+      singleUrl.paytUnattributed &&
+      singleUrl.paytUnattributed.total > 0 ? (
+        <section
+          className="conversions-list-section conversions-unattributed"
+          aria-labelledby="conversions-unattributed-title"
+        >
+          <h2 id="conversions-unattributed-title">Vendas sem atribuição</h2>
+          <UnattributedSalesList
+            list={singleUrl.paytUnattributed}
+            canManage={canManage}
+            licenseLocked={licenseLocked}
+            retry={singleUrl.actions.retry}
+          />
+        </section>
+      ) : null}
+
       {legacyActions ? (
         <LegacyRules
           rules={legacyRules}
@@ -551,6 +585,9 @@ export function ConversionsScreen({
             licenseLocked={licenseLocked}
             createAction={createAction}
             confirmAction={confirmCreateAction}
+            paytProducts={singleUrl?.paytProducts}
+            integrationEndpoints={singleUrl?.endpoints}
+            singleUrlActions={singleUrl?.actions}
             onBusyChange={setFlowBusy}
             onFinished={() => {
               setCloseBlocked(false);
@@ -636,6 +673,9 @@ export function ConversionsScreen({
             canManage={canManage}
             licenseLocked={licenseLocked}
             actions={manageActions}
+            integrationEndpoints={singleUrl?.endpoints}
+            paytProducts={singleUrl?.paytProducts}
+            singleUrlActions={singleUrl?.actions}
             initialTab={manage.tab}
             freshUrl={freshUrl}
             onFreshUrl={(webhookUrl) => setFreshEndpoint({ ruleId: manage.row.id, webhookUrl })}

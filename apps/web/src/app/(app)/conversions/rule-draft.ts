@@ -64,6 +64,8 @@ export type RuleDraft = {
    * das conversões); a moeda da venda, quando vier, sempre vence.
    */
   currency: "" | CurrencyCode;
+  /** Payt: códigos de produto/oferta aceitos (vazio = todos os produtos). */
+  productCodes: string[];
 };
 
 export type DraftContext = {
@@ -73,6 +75,11 @@ export type DraftContext = {
   capabilities: ProviderConversionRuleCapabilitiesDto | null;
   /** "Moeda das conversões" (catálogo precisa de moeda concreta). */
   workspaceCurrency?: CurrencyCode;
+  /**
+   * Fase 5.3: a URL única/por evento está ativa no workspace. A regra nova
+   * recebe por ela (a URL própria da regra nasce desativada).
+   */
+  singleUrl?: boolean;
 };
 
 export function emptyRuleDraft(
@@ -99,6 +106,7 @@ export function emptyRuleDraft(
     labelNames: "",
     triggerLabels: [],
     currency: "",
+    productCodes: [],
     catalog: {
       name: "",
       productName: "",
@@ -414,6 +422,10 @@ export function buildRulePayload(
           triggerType: "provider_automation",
           eventName,
           automationSource: "payt",
+          ...(draft.productCodes.length > 0
+            ? { productFilterCodes: [...draft.productCodes] }
+            : {}),
+          ...(context.singleUrl ? { perRuleUrl: false } : {}),
           // Moeda da venda -> da regra -> do workspace.
           ...(conversionEventCarriesValue(eventName) && draft.currency
             ? { defaultCurrency: draft.currency }
@@ -431,6 +443,7 @@ export function buildRulePayload(
           triggerType: "provider_automation",
           eventName,
           ...values.value,
+          ...(context.singleUrl ? { perRuleUrl: false } : {}),
         },
       };
     }

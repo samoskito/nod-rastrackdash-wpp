@@ -7156,3 +7156,278 @@ body {
   display: grid;
   gap: 6px;
 }
+
+/* Fase 5.3: URL única (Payt) e URLs por evento (Unnichat/Umbler).
+ * Tudo cabe em 375px: grids com minmax(0, 1fr), filhos com min-width: 0 e a
+ * tabela de produtos rola dentro do próprio contêiner. */
+
+.single-url-panel,
+.single-url-box,
+.single-url-unattributed,
+.single-url-migration,
+.single-url-after-create,
+.conversion-endpoint-single-url,
+.conversion-endpoint-legacy,
+.conversion-endpoint-legacy-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  gap: 10px;
+  width: 100%;
+}
+
+.single-url-panel > *,
+.single-url-box > *,
+.single-url-unattributed > *,
+.single-url-migration > *,
+.single-url-after-create > *,
+.single-url-event > *,
+.conversion-endpoint-single-url > *,
+.conversion-endpoint-legacy > *,
+.conversion-endpoint-legacy-section > *,
+.integration-modal-stack > *,
+.integration-modal-note > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.single-url-panel .integration-modal-note,
+.single-url-after-create {
+  justify-items: stretch;
+}
+
+.single-url-panel .button,
+.single-url-box .button,
+.single-url-event .button,
+.single-url-migration .button,
+.single-url-unattributed .button,
+.single-url-after-create .button,
+.single-url-products .button,
+.conversion-endpoint .button,
+.conversion-flow-result .button {
+  gap: 6px;
+  white-space: normal;
+  text-wrap: balance;
+  padding-inline: 16px;
+}
+
+.single-url-panel .status-chip,
+.single-url-unattributed .status-chip,
+.single-url-migration .status-chip,
+.conversions-unattributed .status-chip {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: normal;
+}
+
+.single-url-code {
+  font-family: var(--font-body);
+  font-weight: 750;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
+}
+
+.single-url-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.single-url-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.single-url-list-item > div {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.single-url-list-item > .conversion-inline-confirm {
+  flex: 1 1 100%;
+}
+
+.single-url-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.single-url-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.single-url-table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+}
+
+.single-url-table th,
+.single-url-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+/* Celular: a tabela vira uma lista de cards (Produto / Código / Oferta /
+ * Última venda), sem cortar texto nem quebrar o código no meio. */
+@media (max-width: 560px) {
+  .single-url-table-wrap {
+    overflow-x: visible;
+  }
+
+  .single-url-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .single-url-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .single-url-table tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .single-url-table tr {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .single-url-table td {
+    display: grid;
+    grid-template-columns: minmax(84px, 34%) minmax(0, 1fr);
+    gap: 8px;
+    padding: 0;
+    border-bottom: 0;
+    overflow-wrap: break-word;
+  }
+
+  .single-url-table td > * {
+    min-width: 0;
+  }
+
+  .single-url-table td::before {
+    content: attr(data-label);
+    color: var(--ink-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+.single-url-more summary {
+  cursor: pointer;
+}
+
+.single-url-offered,
+.single-url-manual-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.single-url-products {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.single-url-products .conversion-field-row {
+  align-items: end;
+}
+
+/* Linha de checkbox: caixa pequena ao lado do texto, sem o estilo de campo
+ * de texto que o construtor de regras aplica a todo input. */
+.conversion-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.conversion-check:has(input:checked) {
+  border-color: var(--mint);
+  background: rgba(66, 240, 168, 0.07);
+}
+
+.conversion-check > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.provider-conversion-builder .conversion-check input[type="checkbox"],
+.conversion-check input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: var(--mint);
+}
+
+@media (max-width: 640px) {
+  .single-url-products .conversion-field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.conversions-unattributed h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}

@@ -3,6 +3,9 @@
 import type {
   ConversionEventCategoryDto,
   ConversionEventNameDto,
+  IntegrationDetectedProductDto,
+  IntegrationEndpointDto,
+  IntegrationEndpointProviderDto,
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleOriginDto,
 } from "@wpptrack/shared";
@@ -34,6 +37,13 @@ import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
+import { findEventEndpoint } from "../integrations/single-url/single-url-copy";
+import {
+  EnsureUrlButton,
+  IntegrationUrlBox,
+  ProductFilterPicker,
+  type SingleUrlActions,
+} from "../integrations/single-url/single-url-panels";
 import type { ConversionScreenActionResult } from "./actions";
 import {
   contactMessageProviders,
@@ -98,7 +108,29 @@ export type NewRuleFlowProps = {
   confirmAction: ConfirmAction;
   onBusyChange?: (busy: boolean) => void;
   onFinished: () => void;
+  /** Fase 5.3: produtos vistos nas vendas da Payt (filtro opcional). */
+  paytProducts?: IntegrationDetectedProductDto[];
+  /** Fase 5.3: URLs únicas/por evento já geradas (sem a chave). */
+  integrationEndpoints?: IntegrationEndpointDto[];
+  /** Presente quando a URL única está ativa no workspace. */
+  singleUrlActions?: SingleUrlActions;
 };
+
+/** Plataforma da URL única/por evento de uma origem de automação. */
+export function singleUrlProviderFor(
+  origin: RuleOriginId | null,
+): IntegrationEndpointProviderDto | null {
+  switch (origin) {
+    case "automation_payt":
+      return "payt";
+    case "automation_unnichat":
+      return "unnichat";
+    case "automation_umbler":
+      return "umbler";
+    default:
+      return null;
+  }
+}
 
 const unknownCreateMessage =
   "Não deu para confirmar se a regra foi criada. Use “Conferir e concluir”: repetir este mesmo pedido nunca cria uma regra duplicada.";
@@ -121,6 +153,9 @@ export function NewRuleFlow({
   confirmAction,
   onBusyChange,
   onFinished,
+  paytProducts = [],
+  integrationEndpoints = [],
+  singleUrlActions,
 }: NewRuleFlowProps) {
   const startOrigin =
     initialOrigin && offeredOrigins.includes(initialOrigin) ? initialOrigin : null;
@@ -151,8 +186,14 @@ export function NewRuleFlow({
 
   const workspaceCurrency = useWorkspaceCurrency();
   const context = useMemo(
-    () => ({ numbers, connections, capabilities, workspaceCurrency }),
-    [numbers, connections, capabilities, workspaceCurrency],
+    () => ({
+      numbers,
+      connections,
+      capabilities,
+      workspaceCurrency,
+      singleUrl: Boolean(singleUrlActions),
+    }),
+    [numbers, connections, capabilities, workspaceCurrency, singleUrlActions],
   );
   const definition = origin ? ruleOriginDefinition(origin) : null;
   const locked = inFlight !== null;
@@ -327,12 +368,21 @@ export function NewRuleFlow({
   }
 
   if (step === "done" && result) {
+    const singleUrlProvider = singleUrlProviderFor(origin);
     return (
       <div className="conversion-flow-result provider-conversion-builder" role="status">
         <div className="feedback-banner success">
           <strong>{result.replayed ? "Regra já existia" : "Regra criada"}</strong>
           <span>{result.message}</span>
         </div>
+        {singleUrlProvider && draft && singleUrlActions && !result.webhookUrl ? (
+          <SingleUrlAfterCreate
+            provider={singleUrlProvider}
+            eventName={draft.eventName}
+            endpoints={integrationEndpoints}
+            actions={singleUrlActions}
+          />
+        ) : null}
         {result.webhookUrl && urlVisible ? (
           <div className="conversion-webhook-url">
             <label className="conversion-field">
@@ -454,6 +504,8 @@ export function NewRuleFlow({
           capabilities={capabilities}
           onChange={patch}
           disabled={locked || licenseLocked}
+          paytProducts={paytProducts}
+          singleUrl={Boolean(singleUrlActions)}
         />
       ) : null}
 
@@ -1172,6 +1224,8 @@ function DetailsStep({
   capabilities,
   onChange,
   disabled,
+  paytProducts = [],
+  singleUrl = false,
 }: {
   draft: RuleDraft;
   numbers: ConversionNumber[];
@@ -1179,6 +1233,9 @@ function DetailsStep({
   capabilities: ProviderConversionRuleCapabilitiesDto | null;
   onChange: (update: Partial<RuleDraft>) => void;
   disabled: boolean;
+  paytProducts?: IntegrationDetectedProductDto[];
+  /** Fase 5.3: a regra recebe pela URL única/por evento do workspace. */
+  singleUrl?: boolean;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
   const contactProviders = contactMessageProviders(capabilities);
@@ -1283,18 +1340,29 @@ function DetailsStep({
         <>
           <ValueFields draft={draft} onChange={onChange} />
           <p className="action-note">
-            Depois de criar, você recebe a URL desta regra para colar no fluxo
-            do Unnichat, na etapa que marca a conversão. A URL só aparece
-            uma vez.
+            {singleUrl
+              ? "Depois de criar, você recebe a URL deste evento para colar no fluxo do Unnichat, na etapa que marca a conversão. A mesma URL vale para todos os números."
+              : "Depois de criar, você recebe a URL desta regra para colar no fluxo do Unnichat, na etapa que marca a conversão. A URL só aparece uma vez."}
           </p>
         </>
       ) : null}
 
       {draft.origin === "automation_payt" ? (
-        <p className="action-note">
-          Depois de criar, você recebe a URL de postback para colar na Payt, em
-          Postback. O valor de cada venda vem da própria Payt.
-        </p>
+        <>
+          {singleUrl ? (
+            <ProductFilterPicker
+              products={paytProducts}
+              selected={draft.productCodes}
+              onChange={(productCodes) => onChange({ productCodes })}
+              disabled={disabled}
+            />
+          ) : null}
+          <p className="action-note">
+            {singleUrl
+              ? "O valor de cada venda vem da própria Payt. As vendas chegam pela URL única da Payt (uma para a conta toda)."
+              : "Depois de criar, você recebe a URL de postback para colar na Payt, em Postback. O valor de cada venda vem da própria Payt."}
+          </p>
+        </>
       ) : null}
 
       {conversionEventCarriesValue(definition.lockedEvent ?? draft.eventName) ? (
@@ -1324,12 +1392,71 @@ function DetailsStep({
           <dt>Alcance</dt>
           <dd>{scopeSummary}</dd>
         </div>
+        {draft.origin === "automation_payt" && singleUrl ? (
+          <div>
+            <dt>Produtos</dt>
+            <dd>
+              {draft.productCodes.length > 0
+                ? draft.productCodes.join(", ")
+                : "Todos os produtos"}
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt>Começa em</dt>
           <dd>Observação: nada é enviado à Meta até você ativar o envio.</dd>
         </div>
       </dl>
     </fieldset>
+  );
+}
+
+/** Depois de criar: a URL única (Payt) ou a URL do evento (Unnichat/Umbler). */
+function SingleUrlAfterCreate({
+  provider,
+  eventName,
+  endpoints,
+  actions,
+}: {
+  provider: IntegrationEndpointProviderDto;
+  eventName: ConversionEventNameDto;
+  endpoints: readonly IntegrationEndpointDto[];
+  actions: SingleUrlActions;
+}) {
+  const existing = findEventEndpoint(endpoints, provider, eventName);
+  const [created, setCreated] = useState<IntegrationEndpointDto | null>(null);
+  const endpoint = created ?? existing;
+  const label =
+    provider === "payt"
+      ? "URL única da Payt (cole em Postback)"
+      : `URL do evento “${ruleEventLabelForOrigin(`automation_${provider}`, eventName)}”`;
+
+  return (
+    <div className="integration-modal-note single-url-after-create">
+      <strong>{provider === "payt" ? "URL única da Payt" : "URL do evento"}</strong>
+      <p className="muted">
+        {provider === "payt"
+          ? "A mesma URL vale para todas as regras e números da Payt. Se ela já está na Payt, não precisa fazer nada."
+          : "A mesma URL vale para todos os números da conta. Cole na automação que marca este evento."}
+      </p>
+      {endpoint ? (
+        <IntegrationUrlBox
+          key={endpoint.id}
+          endpoint={endpoint}
+          label={label}
+          canManage
+          actions={actions}
+        />
+      ) : (
+        <EnsureUrlButton
+          provider={provider}
+          eventName={provider === "payt" ? null : eventName}
+          ensure={actions.ensure}
+          label={provider === "payt" ? "Gerar URL única" : "Gerar URL do evento"}
+          onReady={setCreated}
+        />
+      )}
+    </div>
   );
 }
 

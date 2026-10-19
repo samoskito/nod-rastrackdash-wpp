@@ -62,6 +62,15 @@ function BodyBlock() {
   );
 }
 
+/** Corpo JSON do Unnichat com o botão de copiar (URL por evento). */
+export function UnnichatWebhookBody() {
+  return (
+    <div className="unnichat-setup">
+      <BodyBlock />
+    </div>
+  );
+}
+
 /**
  * Passo a passo mostrado junto da URL de entrada da conexão (exibida uma vez):
  * webhook de entrada da conversa que veio do anúncio.

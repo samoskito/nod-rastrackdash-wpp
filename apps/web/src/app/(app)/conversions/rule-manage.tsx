@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  IntegrationDetectedProductDto,
+  IntegrationEndpointDto,
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
   ProviderConversionRuleOriginDto,
@@ -29,6 +31,10 @@ import {
   type RuleEditDraft,
 } from "./rule-edit";
 import { RuleEndpoint } from "./rule-endpoint";
+import {
+  ProductFilterPicker,
+  type SingleUrlActions,
+} from "../integrations/single-url/single-url-panels";
 
 type RuleAction = (formData: FormData) => Promise<ProviderConversionRuleActionResult>;
 
@@ -103,7 +109,15 @@ export function RuleManage({
   onSaved,
   onRemoved,
   onChanged,
+  integrationEndpoints = [],
+  paytProducts = [],
+  singleUrlActions,
 }: {
+  /** Fase 5.3: URLs únicas/por evento do workspace (sem a chave). */
+  integrationEndpoints?: IntegrationEndpointDto[];
+  /** Fase 5.3: produtos vistos nas vendas da Payt (filtro de produto). */
+  paytProducts?: IntegrationDetectedProductDto[];
+  singleUrlActions?: SingleUrlActions;
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
   numbers: ConversionNumber[];
@@ -303,6 +317,7 @@ export function RuleManage({
             licenseLocked={licenseLocked}
             updateAction={actions.update}
             onSaved={onSaved}
+            paytProducts={paytProducts}
           />
         ) : null}
         {tab === "endpoint" ? (
@@ -318,6 +333,22 @@ export function RuleManage({
               onChanged?.();
             }}
             onDismiss={() => onDismissFreshUrl?.()}
+            singleUrlActions={singleUrlActions}
+            urlsCanManage={canManage}
+            licenseLocked={licenseLocked}
+            integrationEndpoint={
+              integrationEndpoints.find(
+                (endpoint) =>
+                  (origin === "automation_payt" &&
+                    endpoint.provider === "payt") ||
+                  (origin === "automation_unnichat" &&
+                    endpoint.provider === "unnichat" &&
+                    endpoint.eventName === rule.conversionRule.eventName) ||
+                  (origin === "automation_umbler" &&
+                    endpoint.provider === "umbler" &&
+                    endpoint.eventName === rule.conversionRule.eventName),
+              ) ?? null
+            }
           />
         ) : null}
         {tab === "received" ? (
@@ -359,7 +390,9 @@ function RuleEditForm({
   licenseLocked,
   updateAction,
   onSaved,
+  paytProducts = [],
 }: {
+  paytProducts?: IntegrationDetectedProductDto[];
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
   numbers: ConversionNumber[];
@@ -461,6 +494,21 @@ function RuleEditForm({
         connectionLocked
         legend="Números"
       />
+
+      {editCaps.productFilter ? (
+        <fieldset className="conversion-flow-fieldset" disabled={disabled}>
+          <legend>Produtos</legend>
+          <ProductFilterPicker
+            products={paytProducts}
+            selected={draft.productCodes}
+            onChange={(productCodes) => patch({ productCodes })}
+            disabled={disabled}
+          />
+          <p className="action-note">
+            O valor de cada venda vem da própria Payt.
+          </p>
+        </fieldset>
+      ) : null}
 
       {editCaps.messageValue ? (
         <fieldset className="conversion-flow-fieldset" disabled={disabled}>

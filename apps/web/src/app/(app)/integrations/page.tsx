@@ -43,6 +43,21 @@ import {
   listPipedriveConnectionsAction,
   type PipedriveConnectionDetailDto,
 } from "./pipedrive-actions";
+import {
+  ensureIntegrationEndpointAction,
+  removeIntegrationEndpointAction,
+  retryIntegrationEventAction,
+  revealIntegrationEndpointAction,
+  rotateIntegrationEndpointAction,
+  setRulePublicUrlAction,
+} from "./single-url/single-url-actions";
+import { legacyUrlsFor } from "./single-url/single-url-copy";
+import { loadSingleUrlData } from "./single-url/single-url-data";
+import {
+  AutomationEventUrlsPanel,
+  PaytSingleUrlPanel,
+  type SingleUrlActions,
+} from "./single-url/single-url-panels";
 import { buildIntegrationCards } from "./hub/integration-cards";
 import { integrationsHubInitialState } from "./hub/initial-state";
 import { IntegrationsHub } from "./hub/integrations-hub";
@@ -994,6 +1009,7 @@ export default async function IntegrationsPage({
     legacyWhatsappInstancesResult,
     kommoSettings,
     pipedriveSettings,
+    singleUrlData,
   ] = await Promise.all([
     oauthConnected
       ? getMetaOAuthAdvancedConfiguration()
@@ -1012,6 +1028,8 @@ export default async function IntegrationsPage({
       workspace?.id ?? null,
       canManageKommo && Boolean(kommoViewerId),
     ),
+    // Fase 5.3: cada leitura falha sozinha (uma API antiga não derruba a tela).
+    loadSingleUrlData(),
   ]);
   const licenseLocked = Boolean(
     licenseStatus && licenseLockReason(licenseStatus) !== null,
@@ -1138,6 +1156,46 @@ export default async function IntegrationsPage({
     (rule) => rule.automationSource === "payt",
   );
 
+  // Fase 5.3: URL única (Payt) e URLs por evento (Unnichat e Umbler).
+  const singleUrlEnabled = Boolean(singleUrlData.endpoints?.enabled);
+  const singleUrlEndpoints = singleUrlData.endpoints?.endpoints ?? [];
+  const singleUrlLegacy = singleUrlData.endpoints?.legacyUrls ?? [];
+  // A API é a fonte da permissão (membros só leem); a sessão confirma.
+  const canManageSingleUrl =
+    canManageIntegrations && (singleUrlData.endpoints?.canManage ?? true);
+  const singleUrlActions: SingleUrlActions = {
+    ensure: ensureIntegrationEndpointAction,
+    reveal: revealIntegrationEndpointAction,
+    rotate: rotateIntegrationEndpointAction,
+    remove: removeIntegrationEndpointAction,
+    retry: retryIntegrationEventAction,
+    setPublicUrl: setRulePublicUrlAction,
+  };
+  const paytIntegrationUrl =
+    singleUrlEndpoints.find((endpoint) => endpoint.provider === "payt") ??
+    null;
+  const ruleEventsFor = (origin: string) => [
+    ...new Set(
+      (inboundWebhookData?.providerRules ?? [])
+        .filter(
+          (rule) =>
+            (rule.origin === origin ||
+              (origin === "automation_payt" &&
+                rule.automationSource === "payt")) &&
+            rule.conversionRule.active,
+        )
+        .map((rule) => rule.conversionRule.eventName),
+    ),
+  ];
+  const singleUrlNumberNames = Object.fromEntries(
+    inboundConnections
+      .flatMap(({ channels }) => channels)
+      .map((channel) => [
+        channel.id,
+        channel.channelName ?? channel.connectedPhone ?? "Número",
+      ]),
+  );
+
   const cards = buildIntegrationCards({
     inbound: inboundWebhookData
       ? {
@@ -1165,6 +1223,7 @@ export default async function IntegrationsPage({
       ruleCount: paytRules.length,
       activeRuleCount: paytRules.filter((rule) => rule.conversionRule.active)
         .length,
+      integrationUrl: Boolean(paytIntegrationUrl),
     },
     crm: {
       kommo: {
@@ -1252,7 +1311,78 @@ export default async function IntegrationsPage({
   }
 
   const hasWhatsappNumber = inboundConnections.length > 0;
-  const paytPanel = (
+  const automationUrlsPanel = (provider: "unnichat" | "umbler") =>
+    singleUrlEnabled ? (
+      <div className="integration-modal-stack">
+        <AutomationEventUrlsPanel
+          provider={provider}
+          endpoints={singleUrlEndpoints.filter(
+            (endpoint) => endpoint.provider === provider,
+          )}
+          unattributed={singleUrlData.unattributed[provider]}
+          legacyUrls={legacyUrlsFor(singleUrlLegacy, provider)}
+          ruleEvents={ruleEventsFor(`automation_${provider}`)}
+          canManage={canManageSingleUrl}
+          licenseLocked={licenseLocked}
+          actions={singleUrlActions}
+          numberNames={singleUrlNumberNames}
+        />
+        {inboundPanel(provider)}
+      </div>
+    ) : (
+      inboundPanel(provider)
+    );
+  const paytRulesBlock = (
+    <div className="integration-modal-note">
+      <strong>Regras de venda</strong>
+      <p className="muted">
+        Crie uma regra por evento (compra aprovada, Pix/boleto gerado,
+        carrinho abandonado), para todos os números ou só para alguns, e, se
+        quiser, só para certos produtos. A venda segue para a regra do número
+        por onde o comprador chegou.
+      </p>
+      {hasWhatsappNumber ? (
+        <Link
+          className="button primary"
+          href={
+            paytRules.length > 0
+              ? "/conversions"
+              : "/conversions?nova=automation_payt"
+          }
+        >
+          {paytRules.length > 0
+            ? "Gerenciar regras da Payt"
+            : "Criar regra de venda da Payt"}
+        </Link>
+      ) : (
+        <>
+          <p className="muted">
+            Antes, conecte um número de WhatsApp para saber de qual anúncio veio
+            cada comprador.
+          </p>
+          <a className="button" href="#integracao-whatsapp">
+            Ir para WhatsApp
+          </a>
+        </>
+      )}
+    </div>
+  );
+  const paytPanel = singleUrlEnabled ? (
+    <div className="integration-modal-stack">
+      <PaytSingleUrlPanel
+        endpoint={paytIntegrationUrl}
+        products={singleUrlData.paytProducts}
+        unattributed={singleUrlData.unattributed.payt}
+        legacyUrls={legacyUrlsFor(singleUrlLegacy, "payt")}
+        ruleEvents={ruleEventsFor("automation_payt")}
+        canManage={canManageSingleUrl}
+        licenseLocked={licenseLocked}
+        actions={singleUrlActions}
+        numberNames={singleUrlNumberNames}
+      />
+      {paytRulesBlock}
+    </div>
+  ) : (
     <div className="integration-modal-stack">
       <div className="integration-modal-note">
         <strong>
@@ -1682,10 +1812,10 @@ export default async function IntegrationsPage({
     uazapi_byo: uazapiPanel,
     ...comingSoonPanels,
     meta_cloud: inboundPanel("meta_cloud"),
-    umbler: inboundPanel("umbler"),
+    umbler: automationUrlsPanel("umbler"),
     gupshup: inboundPanel("gupshup"),
     data_crazy: inboundPanel("data_crazy"),
-    unnichat: inboundPanel("unnichat"),
+    unnichat: automationUrlsPanel("unnichat"),
     payt: paytPanel,
     meta: metaPanel,
     kommo:

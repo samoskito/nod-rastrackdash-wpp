@@ -73,6 +73,8 @@ export type IntegrationHubSnapshot = {
     loaded: boolean;
     ruleCount: number;
     activeRuleCount: number;
+    /** Fase 5.3: a URL única da Payt já foi gerada. */
+    integrationUrl?: boolean;
   };
   crm: {
     kommo: CrmSnapshot;
@@ -214,7 +216,16 @@ function whatsappDecision(
 }
 
 function paytDecision(snapshot: IntegrationHubSnapshot): CardDecision {
-  const { loaded, ruleCount, activeRuleCount } = snapshot.payt;
+  const { loaded, ruleCount, activeRuleCount, integrationUrl = false } =
+    snapshot.payt;
+
+  if (ruleCount === 0 && integrationUrl) {
+    return {
+      state: "active",
+      status: { label: "URL criada, sem regras", tone: "warn" },
+      detail: "URL única",
+    };
+  }
 
   if (ruleCount === 0) {
     return loaded

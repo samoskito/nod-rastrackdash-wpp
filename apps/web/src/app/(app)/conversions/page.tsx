@@ -23,6 +23,15 @@ import {
 import { loadConversionsData } from "./conversions-data";
 import { ConversionsScreen } from "./conversions-screen";
 import { WorkspaceCurrencyProvider } from "../../../components/workspace-currency";
+import {
+  ensureIntegrationEndpointAction,
+  removeIntegrationEndpointAction,
+  retryIntegrationEventAction,
+  revealIntegrationEndpointAction,
+  rotateIntegrationEndpointAction,
+  setRulePublicUrlAction,
+} from "../integrations/single-url/single-url-actions";
+import { loadSingleUrlData } from "../integrations/single-url/single-url-data";
 import { getWorkspaceCurrencySettings } from "../../../lib/currency-settings";
 
 type ConversionsPageProps = {
@@ -33,9 +42,10 @@ export default async function ConversionsPage({
   searchParams,
 }: ConversionsPageProps) {
   const params = searchParams ? await searchParams : {};
-  const [data, currencySettings] = await Promise.all([
+  const [data, currencySettings, singleUrlData] = await Promise.all([
     loadConversionsData(),
     getWorkspaceCurrencySettings(),
+    loadSingleUrlData(),
   ]);
   const rows = sortRuleRows([
     ...buildProviderRuleRows(
@@ -112,6 +122,23 @@ export default async function ConversionsPage({
           update: updateLegacyRuleAction,
           adapt: adaptProviderConversionRuleAction,
         }}
+        singleUrl={
+          singleUrlData.endpoints?.enabled
+            ? {
+                endpoints: singleUrlData.endpoints.endpoints,
+                paytProducts: singleUrlData.paytProducts,
+                paytUnattributed: singleUrlData.unattributed.payt,
+                actions: {
+                  ensure: ensureIntegrationEndpointAction,
+                  reveal: revealIntegrationEndpointAction,
+                  rotate: rotateIntegrationEndpointAction,
+                  remove: removeIntegrationEndpointAction,
+                  retry: retryIntegrationEventAction,
+                  setPublicUrl: setRulePublicUrlAction,
+                },
+              }
+            : undefined
+        }
       />
       </WorkspaceCurrencyProvider>
     </section>

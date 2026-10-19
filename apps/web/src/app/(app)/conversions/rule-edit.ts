@@ -50,6 +50,8 @@ export type RuleEditCapabilities = {
    */
   currency: boolean;
   catalogAliases: boolean;
+  /** Fase 5.3: filtro de produto (só regras de venda da Payt). */
+  productFilter: boolean;
 };
 
 export function ruleEditCapabilities(
@@ -73,6 +75,7 @@ export function ruleEditCapabilities(
         origin === "automation_unnichat"),
     currency: carriesValue && origin !== "structured_catalog",
     catalogAliases: origin === "structured_catalog" && Boolean(rule.catalog),
+    productFilter: origin === "automation_payt",
   };
 }
 
@@ -120,6 +123,7 @@ export function ruleEditDraft(
     // como "Padrão do workspace" e só é enviada quando o usuário muda.
     currency: normalizeCurrencyCode(rule.conversionRule.defaultCurrency) ?? "",
     labels: labels ? [...rule.triggerPhrases] : [],
+    productCodes: [...(rule.productFilterCodes ?? [])],
     catalog: {
       name: rule.catalog?.name ?? "",
       productName: rule.catalog?.productName ?? "",
@@ -269,6 +273,19 @@ export function buildRuleUpdatePayload(
     if (draft.currency !== current) {
       // null = voltar a herdar a "Moeda das conversões" do workspace.
       payload.defaultCurrency = draft.currency || null;
+    }
+  }
+
+  if (capabilities.productFilter) {
+    const codes = [
+      ...new Set(draft.productCodes.map((code) => code.toLocaleUpperCase("en-US"))),
+    ];
+    if (codes.length > 50) {
+      return { ok: false, message: "Use no máximo 50 produtos no filtro." };
+    }
+    if (!sameSet(codes, rule.productFilterCodes ?? [])) {
+      // [] = voltar a aceitar todos os produtos.
+      payload.productFilterCodes = codes;
     }
   }
 
