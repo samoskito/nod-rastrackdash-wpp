@@ -47,6 +47,8 @@ function attachWorkspaceDeleteConsumer(
     "inboundWebhookEvent",
     "inboundWebhookDelivery",
     "inboundWebhookChannelRoute",
+    "integrationEndpointEvent",
+    "integrationEndpoint",
     "inboundWebhookChannel",
     "inboundWebhookConnection",
     "externalIngestionRecord",

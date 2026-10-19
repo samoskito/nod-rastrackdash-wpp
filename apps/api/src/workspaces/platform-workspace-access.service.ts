@@ -533,6 +533,11 @@ export class PlatformWorkspaceAccessService {
     await tx.inboundWebhookProductionItem.deleteMany({ where });
     await tx.inboundWebhookEvent.deleteMany({ where });
     await tx.inboundWebhookDelivery.deleteMany({ where });
+    // Fase 5.3: receipts reference their URL (Restrict); both reference the
+    // workspace (Restrict). Deliveries point to the URL with SetNull, but
+    // they are already gone here.
+    await tx.integrationEndpointEvent.deleteMany({ where });
+    await tx.integrationEndpoint.deleteMany({ where });
     await tx.inboundWebhookChannelRoute.deleteMany({ where });
     await tx.inboundWebhookChannel.deleteMany({ where });
     await tx.inboundWebhookConnection.deleteMany({ where });

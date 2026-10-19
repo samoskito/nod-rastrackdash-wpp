@@ -414,6 +414,7 @@ model User {
   createdProviderConversionRules   ProviderConversionRuleConfig[]    @relation("ProviderConversionRuleCreator")
   decidedPurchaseReviews           PurchaseReview[]                  @relation("PurchaseReviewDecisionActor")
   purchaseValueAdjustments         PurchaseValueAdjustment[]         @relation("PurchaseValueAdjustmentActor")
+  createdIntegrationEndpoints      IntegrationEndpoint[]             @relation("IntegrationEndpointCreator")
 
   @@index([lastWorkspaceId])
 }
@@ -473,7 +474,9 @@ model Workspace {
   providerConversionRules          ProviderConversionRuleConfig[]
   providerConversionRuleChannels   ProviderConversionRuleChannel[]
   providerConversionRuleEndpoints  ProviderConversionRuleEndpoint[]
-  providerRuleCreateClaims         ProviderRuleCreateClaim[]
+  integrationEndpoints             IntegrationEndpoint[]
+  integrationEndpointEvents        IntegrationEndpointEvent[]
+  providerRuleCreateClaims        ProviderRuleCreateClaim[]
   providerPurchaseClaims           ProviderPurchaseClaim[]
   providerConversionExecutions     ProviderConversionRuleExecution[]
   providerConversionDecisions      ProviderConversionDecisionAudit[]
@@ -1020,6 +1023,9 @@ model ProviderConversionRuleConfig {
   mode                      ProviderConversionRuleMode            @default(observation)
   messageTriggerPhrases     String[]                              @default([])
   messageAuthorScope        ProviderConversionMessageAuthorScope?
+  /// Fase 5.3: códigos de produto/oferta aceitos (vazio = qualquer produto).
+  /// Só plataformas de venda (Payt); comparados por código, sem caixa.
+  productFilterCodes        String[]                              @default([])
   productionActivatedAt     DateTime?
   removedAt                 DateTime?
   createdByUserId           String?
@@ -1119,6 +1125,10 @@ model ProviderConversionRuleEndpoint {
   lastSuccessfulParseAt DateTime?
   rotatedAt             DateTime?
   removedAt             DateTime?
+  /// Fase 5.3 ("Desativar URL antiga"): a URL pública da regra responde 404,
+  /// mas o registro continua como âncora interna das entregas roteadas pela
+  /// URL única (auditoria e reprocessamento da regra). Reversível (null).
+  publicUrlDisabledAt   DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -1129,6 +1139,99 @@ model ProviderConversionRuleEndpoint {
   @@unique([workspaceId, id])
   @@unique([workspaceId, providerRuleId])
   @@index([workspaceId, removedAt])
+}
+
+enum IntegrationEndpointKind {
+  sales_platform
+  automation_event
+}
+
+/// Fase 5.3: URL única de uma integração no workspace. Plataforma de venda
+/// (Payt): uma URL por workspace; o evento vem do payload. Automação
+/// (Unnichat/Umbler): uma URL por evento, válida para todos os números. O
+/// roteador entrega cada callback ao processamento da regra dona.
+model IntegrationEndpoint {
+  id               String                  @id @default(cuid())
+  workspaceId      String
+  provider         InboundWebhookProvider
+  kind             IntegrationEndpointKind
+  /// Evento fixo da URL (automation_event); null na plataforma de venda.
+  eventName        String?
+  parserReleaseId  String
+  /// sha256 do token; a URL pública compara em tempo constante.
+  secretHash       String
+  /// Token cifrado (AES-GCM, chave dos payloads) para reexibir a URL com auditoria.
+  secretCiphertext String
+  secretIv         String
+  secretTag        String
+  secretKeyVersion Int
+  secretVersion    Int                     @default(1)
+  lastDeliveryAt   DateTime?
+  lastRoutedAt     DateTime?
+  rotatedAt        DateTime?
+  removedAt        DateTime?
+  createdByUserId  String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  workspace     Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  parserRelease InboundWebhookParserRelease @relation(fields: [parserReleaseId], references: [id], onDelete: Restrict)
+  createdBy     User?                       @relation("IntegrationEndpointCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  deliveries    InboundWebhookDelivery[]
+  events        IntegrationEndpointEvent[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, provider, removedAt])
+  @@index([parserReleaseId])
+  @@index([createdByUserId])
+}
+
+/// Fase 5.3: recibo idempotente de cada evento recebido por uma URL única,
+/// com o produto visto (produtos detectados) e o destino ou o motivo (vendas
+/// sem atribuição). routed* são referências de exibição, sem FK.
+model IntegrationEndpointEvent {
+  id                    String                 @id @default(cuid())
+  workspaceId           String
+  integrationEndpointId String
+  provider              InboundWebhookProvider
+  ingressKey            String
+  externalKey           String?
+  eventName             String?
+  providerStatus        String?
+  /// pending | routed | unattributed | ignored | invalid
+  status                String
+  reasonCode            String?
+  productCode           String?
+  productName           String?
+  offerCode             String?
+  offerName             String?
+  valueCents            Int?
+  currency              String?
+  contactIdentityHash   String?
+  occurredAt            DateTime?
+  firstReceivedAt       DateTime               @default(now())
+  lastReceivedAt        DateTime               @default(now())
+  attemptCount          Int                    @default(1)
+  routedProviderRuleId  String?
+  routedDeliveryId      String?
+  routedChannelId       String?
+  routingOutcome        String?
+  encryptedPayload      String?
+  payloadIv             String?
+  payloadTag            String?
+  encryptionKeyVersion  Int?
+  payloadExpiresAt      DateTime
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  integrationEndpoint IntegrationEndpoint @relation(fields: [workspaceId, integrationEndpointId], references: [workspaceId, id], onDelete: Restrict, map: "IntegrationEndpointEvent_integrationEndpointId_fkey")
+
+  @@unique([workspaceId, id])
+  @@unique([integrationEndpointId, ingressKey], map: "IntegrationEndpointEvent_endpoint_ingress_key")
+  @@index([workspaceId, status, lastReceivedAt])
+  @@index([workspaceId, provider, productCode])
+  @@index([payloadExpiresAt])
 }
 
 model ConversionCatalog {
@@ -1663,6 +1766,7 @@ model InboundWebhookParserRelease {
   certifiedBy             User?                          @relation("InboundWebhookParserReleaseCertifier", fields: [certifiedByUserId], references: [id], onDelete: SetNull)
   connections             InboundWebhookConnection[]
   providerConversionRules ProviderConversionRuleConfig[]
+  integrationEndpoints    IntegrationEndpoint[]
 
   @@unique([provider, version], map: "InboundWebhookParserRelease_provider_version_key")
   @@index([provider, status])
@@ -1786,6 +1890,10 @@ model InboundWebhookDelivery {
   purpose                         InboundWebhookDeliveryPurpose      @default(message_observation)
   providerRuleEndpointWorkspaceId String?
   providerRuleEndpointId          String?
+  /// Fase 5.3: preenchido quando o callback chegou pela URL única do
+  /// workspace e foi roteado para esta regra.
+  integrationEndpointWorkspaceId  String?
+  integrationEndpointId           String?
   status                          InboundWebhookDeliveryStatus       @default(pending)
   classification                  InboundWebhookEventClassification?
   firstReceivedAt                 DateTime                           @default(now())
@@ -1809,6 +1917,7 @@ model InboundWebhookDelivery {
   workspace                     Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   connection                    InboundWebhookConnection             @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Restrict, map: "InboundWebhookDelivery_connectionId_fkey")
   providerRuleEndpoint          ProviderConversionRuleEndpoint?      @relation(fields: [providerRuleEndpointWorkspaceId, providerRuleEndpointId], references: [workspaceId, id], onDelete: SetNull, map: "InboundWebhookDelivery_providerRuleEndpointId_fkey")
+  integrationEndpoint           IntegrationEndpoint?                 @relation(fields: [integrationEndpointWorkspaceId, integrationEndpointId], references: [workspaceId, id], onDelete: SetNull, map: "InboundWebhookDelivery_integrationEndpointId_fkey")
   events                        InboundWebhookEvent[]
   providerConversionExecutions  ProviderConversionRuleExecution[]
   providerConversionDecisions   ProviderConversionDecisionAudit[]
@@ -1822,6 +1931,7 @@ model InboundWebhookDelivery {
   @@index([connectionId, lastReceivedAt])
   @@index([workspaceId, purpose, createdAt])
   @@index([providerRuleEndpointId])
+  @@index([integrationEndpointId])
   @@index([payloadExpiresAt], map: "InboundWebhookDelivery_payloadExpiresAt_idx")
   @@index([status, lastReceivedAt, queuedAt], map: "InboundWebhookDelivery_recovery_idx")
   @@index([externalDeliveryId])

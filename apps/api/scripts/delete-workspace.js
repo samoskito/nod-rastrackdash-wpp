@@ -26,6 +26,8 @@ const order = [
   "inboundWebhookProductionItem",
   "inboundWebhookEvent",
   "inboundWebhookDelivery",
+  "integrationEndpointEvent",
+  "integrationEndpoint",
   "inboundWebhookChannelRoute",
   "inboundWebhookChannel",
   "inboundWebhookConnection",

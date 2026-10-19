@@ -323,6 +323,8 @@ function makeHarness(initialUsers: UserState[] = []) {
     "inboundWebhookProductionItem",
     "inboundWebhookEvent",
     "inboundWebhookDelivery",
+    "integrationEndpointEvent",
+    "integrationEndpoint",
     "inboundWebhookChannelRoute",
     "inboundWebhookChannel",
     "inboundWebhookConnection",
@@ -1165,6 +1167,9 @@ describe("platform workspace access", () => {
     before("delete:pipedriveConversionRule", "delete:pipedriveConnection");
     before("delete:pipedriveStageCatalog", "delete:pipedrivePipelineCatalog");
     before("delete:pipedrivePipelineCatalog", "delete:pipedriveConnection");
+    // Fase 5.3: receipts before their URL, both before the workspace.
+    before("delete:integrationEndpointEvent", "delete:integrationEndpoint");
+    before("delete:inboundWebhookDelivery", "delete:integrationEndpoint");
   });
 
   it("removes populated Kommo Restrict rows once, scoped to the confirmed workspace", async () => {
