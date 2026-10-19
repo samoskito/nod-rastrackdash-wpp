@@ -230,6 +230,12 @@ export class ProviderConversionObservationService {
     evaluationMode?: ProviderConversionEvaluationMode;
     /** Only the explicit production "Reprocessar selecionados" action. */
     manualReplayApproval?: ProviderConversionManualReplayApproval;
+    /**
+     * Fase 5.3 (Umbler): number the URL por evento proved for this callback
+     * (channel.phone or the single number of the contact). A hint, checked
+     * against the rule scope: outside it, the rule does not own the callback.
+     */
+    routedChannelId?: string | null;
   }): Promise<ProviderConversionAutomationObservationResult> {
     if (input.automation.provider === "payt") {
       // One sale (seller + order + event) is one occurrence, whatever endpoint
@@ -337,6 +343,7 @@ export class ProviderConversionObservationService {
       deliveryReceivedAt: input.deliveryReceivedAt,
       purchaseLead,
       rule,
+      routedChannelId: input.routedChannelId ?? null,
     });
     // A workspace-wide ("all numbers") automation yields to the specific rule
     // of the same origin and event that owns the resolved number: that rule
@@ -859,6 +866,7 @@ export class ProviderConversionObservationService {
     deliveryReceivedAt: Date;
     rule: AutomationRule;
     purchaseLead?: ProviderConversionPaidLeadResolutionDto | null;
+    routedChannelId?: string | null;
   }): Promise<ObservedChannel | null> {
     const contactIdentityHashes = [
       ...new Set(
@@ -953,6 +961,29 @@ export class ProviderConversionObservationService {
       if (candidates.length !== 1) return null;
       if (proof && candidates[0]!.id !== proof.channelId) return null;
       return candidates[0]!;
+    }
+
+    // Fase 5.3: an Umbler callback routed by the URL por evento already has
+    // its number (channel.phone or the contact's single number). Recomputing
+    // it by the last message could pick another number (two numbers within
+    // 30 days) and silently drop or duplicate the conversion.
+    if (input.rule.parserRelease.provider === "umbler" && input.routedChannelId) {
+      if (!channelIds.includes(input.routedChannelId)) return null;
+      return this.prisma.inboundWebhookChannel.findFirst({
+        where: {
+          id: input.routedChannelId,
+          workspaceId: input.workspaceId,
+          connectionId: input.connectionId,
+        },
+        select: {
+          id: true,
+          organizationId: true,
+          providerChannelId: true,
+          status: true,
+          productionActivatedAt: true,
+          conversionEngineMode: true,
+        },
+      });
     }
 
     const recentEvent = await this.prisma.inboundWebhookEvent.findFirst({

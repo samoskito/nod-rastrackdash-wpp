@@ -158,34 +158,52 @@ type ExecutionRecord = Prisma.ProviderConversionRuleExecutionGetPayload<{
  * (QualifiedLead...): once per lead and click. Others (Purchase...): once per
  * callback occurrence. Events already sent keep their historical ids.
  */
-export function unnichatAutomationConversionIdentity(input: {
+export type AutomationIdentityInput = {
   workspaceId: string;
   eventName: string;
   dedupeMode: "lifetime" | "rolling_window";
   leadId: string;
   ctwaClid: string;
   occurrenceKey: string;
-}): string {
+};
+
+/** Providers whose automation conversions carry a business identity. */
+export const AUTOMATION_IDENTITY_PROVIDERS = ["unnichat", "umbler"] as const;
+export type AutomationIdentityProvider =
+  (typeof AUTOMATION_IDENTITY_PROVIDERS)[number];
+
+/**
+ * Same identity for Umbler (Fase 5.3 review): its occurrence key also comes
+ * only from the callback body (conversation + automation), so the same
+ * callback through the old per-rule URL and the per-event URL, evaluated by
+ * two rules, is one conversion.
+ */
+export function automationConversionIdentity(
+  provider: AutomationIdentityProvider,
+  input: AutomationIdentityInput,
+): string {
+  const namespace = `${provider}-automation-v1`;
   return createHash("sha256")
     .update(
       JSON.stringify(
         input.dedupeMode === "lifetime"
           ? [
-              "unnichat-automation-v1",
+              namespace,
               input.workspaceId,
               input.eventName,
               input.leadId,
               input.ctwaClid,
             ]
-          : [
-              "unnichat-automation-v1",
-              input.workspaceId,
-              input.eventName,
-              input.occurrenceKey,
-            ],
+          : [namespace, input.workspaceId, input.eventName, input.occurrenceKey],
       ),
     )
     .digest("hex");
+}
+
+export function unnichatAutomationConversionIdentity(
+  input: AutomationIdentityInput,
+): string {
+  return automationConversionIdentity("unnichat", input);
 }
 
 function executionChannelInRuleScope(execution: ExecutionRecord): boolean {
@@ -1057,17 +1075,22 @@ export class ProviderConversionProductionService
       // conversion (the second one is a dedupe hit, never a second send).
       const automationIdentity =
         !purchaseKey &&
-        occurrence.provider === "unnichat" &&
+        (AUTOMATION_IDENTITY_PROVIDERS as readonly string[]).includes(
+          occurrence.provider,
+        ) &&
         decision.rule.triggerType === "provider_automation" &&
         lead.ctwaClid
-          ? unnichatAutomationConversionIdentity({
-              workspaceId: execution.workspaceId,
-              eventName,
-              dedupeMode: dedupePolicy.mode,
-              leadId: lead.id,
-              ctwaClid: lead.ctwaClid,
-              occurrenceKey: occurrence.occurrenceKey,
-            })
+          ? automationConversionIdentity(
+              occurrence.provider as AutomationIdentityProvider,
+              {
+                workspaceId: execution.workspaceId,
+                eventName,
+                dedupeMode: dedupePolicy.mode,
+                leadId: lead.id,
+                ctwaClid: lead.ctwaClid,
+                occurrenceKey: occurrence.occurrenceKey,
+              },
+            )
           : null;
       const conversion = await this.conversions.recordExternalConversion(
         {
@@ -1082,12 +1105,12 @@ export class ProviderConversionProductionService
               ? `conversion_purchase_${purchaseKey.slice(9)}`
               : `conversion_${conversionEventMetaEventIdPrefix(eventName)}_${purchaseKey.slice(9)}`
             : automationIdentity
-              ? `unnichat_${conversionEventMetaEventIdPrefix(eventName)}_${automationIdentity}`
+              ? `${occurrence.provider}_${conversionEventMetaEventIdPrefix(eventName)}_${automationIdentity}`
               : this.metaEventId(execution.id, eventName),
           dedupeKey:
             purchaseKey ??
             (automationIdentity
-              ? `provider-automation:unnichat:${automationIdentity}`
+              ? `provider-automation:${occurrence.provider}:${automationIdentity}`
               : `provider-conversion:${execution.id}`),
           leadId: lead.id,
           phoneHash: lead.phoneHash,

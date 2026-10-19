@@ -69,6 +69,12 @@ const AUTOMATION_PARSER_VERSION = "automation-v1";
 const SECRET_CONTEXT = "integration-endpoint-secret";
 const routedProviders = ["payt", "unnichat", "umbler"] as const;
 const DAY_MS = 24 * 60 * 60 * 1_000;
+/** What the rule decided that is not a conversion (review finding M3). */
+const DECLINED_RULE_OUTCOMES = new Set<string>([
+  "ignored",
+  "blocked",
+  "invalid_payload",
+]);
 
 type EndpointRecord = Prisma.IntegrationEndpointGetPayload<{
   include: { parserRelease: true };
@@ -196,6 +202,7 @@ export class IntegrationEndpointsService {
           rawBody,
           providerAttempt,
           integrationEndpointId: endpoint.id,
+          routedChannelId: receipt.routedChannelId,
         })
         .catch((error: unknown) => {
           if (!(error instanceof NotFoundException)) throw error;
@@ -262,6 +269,9 @@ export class IntegrationEndpointsService {
       rawBody,
       providerAttempt: null,
       receivedAt: event.firstReceivedAt,
+      // Same production gate as when it arrived: a sale from before the rule
+      // went to production stays observed (the rule's reprocess may send it).
+      occurrenceReceivedAt: event.firstReceivedAt,
     });
     await this.prisma.auditLog.create({
       data: {
@@ -571,6 +581,20 @@ export class IntegrationEndpointsService {
         take: 100,
       }),
     ]);
+    const removedEndpointIds = new Set(
+      rows.length
+        ? (
+            await this.prisma.integrationEndpoint.findMany({
+              where: {
+                workspaceId,
+                id: { in: [...new Set(rows.map((row) => row.integrationEndpointId))] },
+                removedAt: { not: null },
+              },
+              select: { id: true },
+            })
+          ).map((endpoint) => endpoint.id)
+        : [],
+    );
     return {
       total,
       items: rows.map((row) => ({
@@ -586,11 +610,16 @@ export class IntegrationEndpointsService {
         reasonLabel: integrationUnattributedReasonLabel(
           row.reasonCode ?? "routing_pending",
         ),
+        ruleReasonCode:
+          row.reasonCode === "rule_declined" ? row.routingOutcome : null,
         attemptCount: row.attemptCount,
         firstReceivedAt: row.firstReceivedAt.toISOString(),
         lastReceivedAt: row.lastReceivedAt.toISOString(),
+        // A removed URL cannot be retried ("Tentar de novo" answers 404).
         retryable: Boolean(
-          row.encryptedPayload && row.payloadExpiresAt > now,
+          row.encryptedPayload &&
+            row.payloadExpiresAt > now &&
+            !removedEndpointIds.has(row.integrationEndpointId),
         ),
       })),
     };
@@ -605,6 +634,8 @@ export class IntegrationEndpointsService {
     rawBody: Buffer;
     providerAttempt: number | null;
     receivedAt: Date;
+    /** "Tentar de novo": original receipt time for the production gate. */
+    occurrenceReceivedAt?: Date;
   }): Promise<{
     status: "routed" | "unattributed" | "invalid";
     reasonCode: string | null;
@@ -656,6 +687,10 @@ export class IntegrationEndpointsService {
         rawBody: input.rawBody,
         providerAttempt: input.providerAttempt,
         integrationEndpointId: endpoint.id,
+        routedChannelId: decision.channelId,
+        ...(input.occurrenceReceivedAt
+          ? { occurrenceReceivedAt: input.occurrenceReceivedAt }
+          : {}),
       });
     } catch (error) {
       if (error instanceof NotFoundException) handedOff = null;
@@ -675,13 +710,37 @@ export class IntegrationEndpointsService {
         deliveryId: null,
       };
     }
+    // The rule has the last word: a callback it ignored, gave to another
+    // rule, filtered out or blocked is NOT a conversion and goes to "sem
+    // atribuição" with its own reason (the rule's code stays in
+    // routingOutcome, and the delivery stays linked for the rule's history).
+    const outcome = handedOff.ruleOutcome;
+    if (
+      outcome &&
+      DECLINED_RULE_OUTCOMES.has(outcome.status)
+    ) {
+      await this.updateReceipt(input.eventId, {
+        status: "unattributed",
+        reasonCode: "rule_declined",
+        routedChannelId: decision.channelId,
+        routedProviderRuleId: decision.providerRuleId,
+        routedDeliveryId: handedOff.deliveryId,
+        routingOutcome: outcome.reasonCode ?? outcome.status,
+      });
+      return {
+        status: "unattributed",
+        reasonCode: "rule_declined",
+        providerRuleId: decision.providerRuleId,
+        deliveryId: handedOff.deliveryId,
+      };
+    }
     await this.updateReceipt(input.eventId, {
       status: "routed",
       reasonCode: null,
       routedChannelId: decision.channelId,
       routedProviderRuleId: decision.providerRuleId,
       routedDeliveryId: handedOff.deliveryId,
-      routingOutcome: handedOff.observationStatus,
+      routingOutcome: outcome?.status ?? handedOff.observationStatus,
     });
     await this.prisma.integrationEndpoint.updateMany({
       where: { id: endpoint.id, workspaceId: endpoint.workspaceId },
@@ -823,6 +882,7 @@ export class IntegrationEndpointsService {
     id: string;
     duplicate: boolean;
     routedProviderRuleId: string | null;
+    routedChannelId: string | null;
   }> {
     const { endpoint, parsed } = input;
     const existing = await this.findReceipt(endpoint.id, input.ingressKey);
@@ -833,6 +893,7 @@ export class IntegrationEndpointsService {
         duplicate: true,
         routedProviderRuleId:
           existing.status === "routed" ? existing.routedProviderRuleId : null,
+        routedChannelId: existing.routedChannelId,
       };
     }
     const id = randomUUID();
@@ -903,7 +964,12 @@ export class IntegrationEndpointsService {
           data: { lastDeliveryAt: input.receivedAt },
         }),
       ]);
-      return { id, duplicate: false, routedProviderRuleId: null };
+      return {
+        id,
+        duplicate: false,
+        routedProviderRuleId: null,
+        routedChannelId: null,
+      };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -917,6 +983,7 @@ export class IntegrationEndpointsService {
             duplicate: true,
             routedProviderRuleId:
               winner.status === "routed" ? winner.routedProviderRuleId : null,
+            routedChannelId: winner.routedChannelId,
           };
         }
       }
@@ -933,7 +1000,12 @@ export class IntegrationEndpointsService {
             ingressKey,
           },
         },
-        select: { id: true, status: true, routedProviderRuleId: true },
+        select: {
+          id: true,
+          status: true,
+          routedProviderRuleId: true,
+          routedChannelId: true,
+        },
       });
     } catch {
       throw new ServiceUnavailableException(unavailableMessage);

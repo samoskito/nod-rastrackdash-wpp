@@ -168,6 +168,7 @@ function createWorld() {
   const endpoints: Row[] = [];
   const claims: Row[] = [];
   const audits: Row[] = [];
+  const integrationEndpoints: Row[] = [];
   let sequence = 0;
   const nextId = (prefix: string) => `${prefix}_${++sequence}`;
 
@@ -339,6 +340,12 @@ function createWorld() {
         return row;
       }),
     },
+    integrationEndpoint: {
+      findFirst: vi.fn(
+        async ({ where }: Row) =>
+          integrationEndpoints.find((item) => matches(item, where)) ?? null,
+      ),
+    },
     auditLog: {
       create: vi.fn(async ({ data }: Row) => {
         audits.push(data);
@@ -363,6 +370,7 @@ function createWorld() {
     instances,
     claims,
     endpoints,
+    integrationEndpoints,
   };
 }
 
@@ -1707,6 +1715,23 @@ describe("Fase 5.3: product filter, URL própria and 'Desativar URL antiga'", ()
         publicUrlDisabled: false,
       }).success,
     ).toBe(true);
+
+    // Without the URL única of the platform the old URL cannot be closed.
+    const disable = providerConversionRuleUpdateInputSchema.parse({
+      publicUrlDisabled: true,
+      confirmPublicUrlDisable: true,
+    });
+    await expect(
+      world.service.updateRule(workspaceId, created.rule.id, disable, "user_1"),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(world.endpoints[0]?.publicUrlDisabledAt ?? null).toBeNull();
+    world.integrationEndpoints.push({
+      id: "integration_payt",
+      workspaceId,
+      provider: "payt",
+      eventName: null,
+      removedAt: null,
+    });
 
     const disabled = await world.service.updateRule(
       workspaceId,

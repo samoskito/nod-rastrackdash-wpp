@@ -536,8 +536,8 @@ export function UnattributedSalesList({
             ) : null}
             {!item.retryable ? (
               <small className="muted">
-                O corpo já foi apagado (guardamos por 7 dias): não dá para tentar
-                de novo.
+                O corpo já foi apagado (guardamos por 7 dias) ou a URL foi
+                removida: não dá para tentar de novo.
               </small>
             ) : null}
             {results[item.id] ? (

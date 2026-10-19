@@ -57,6 +57,9 @@ export type Lead = {
   /** Channel of the lead's CTWA entry proof (no ad id). */
   entryChannelId: string;
   ctwaClid: string;
+  /** Ad lead: its ad id and the numbers with a materialized ad entry. */
+  adId?: string;
+  adEntries?: string[];
 };
 
 export function paytSale(input: {
@@ -248,7 +251,10 @@ export function world(options: {
       ),
       findMany: vi.fn(async ({ where }: any) =>
         [...integrationEndpoints.values()].filter(
-          (e) => !e.removedAt && e.workspaceId === where.workspaceId,
+          (e) =>
+            e.workspaceId === where.workspaceId &&
+            (where.removedAt?.not === null ? e.removedAt !== null : !e.removedAt) &&
+            (!where.id?.in || where.id.in.includes(e.id)),
         ),
       ),
       create: vi.fn(async ({ data }: any) => {
@@ -460,16 +466,20 @@ export function world(options: {
           .filter((lead) =>
             (where.phoneHash?.in ?? []).includes(hashPhoneIdentity(lead.phone)),
           )
-          .map((lead) => ({
-            id: `log_${lead.id}`,
-            sourcePayload: {
-              channelId: lead.entryChannelId,
-              connectionId: options.channels.find(
-                (c) => c.id === lead.entryChannelId,
-              )?.connectionId,
-              inboundEventId: `event_${lead.id}`,
-            },
-          })),
+          .flatMap((lead) =>
+            (lead.adEntries && where.adId !== undefined
+              ? lead.adEntries
+              : [lead.entryChannelId]
+            ).map((channelId) => ({
+              id: `log_${lead.id}_${channelId}`,
+              sourcePayload: {
+                channelId,
+                connectionId: options.channels.find((c) => c.id === channelId)
+                  ?.connectionId,
+                inboundEventId: `event_${lead.id}_${channelId}`,
+              },
+            })),
+          ),
       ),
     },
     inboundWebhookEvent: {
@@ -477,7 +487,13 @@ export function world(options: {
       // lookup returns the distinct numbers the contact talked to.
       findMany: vi.fn(async ({ where }: any) =>
         where.OR
-          ? []
+          ? [
+              ...new Set(
+                where.OR.map((proof: any) => proof.channelId as string).filter(
+                  (channelId: string) => where.channelId.in.includes(channelId),
+                ),
+              ),
+            ].map((id) => ({ channel: { id } }))
           : [
               ...new Set(
                 (options.lastMessages ?? [])
@@ -516,7 +532,7 @@ export function world(options: {
           phoneHash: hashPhoneIdentity(lead.phone)!,
           campaignId: null,
           adSetId: null,
-          adId: null,
+          adId: lead.adId ?? null,
           ctwaClid: lead.ctwaClid,
           ctwaDestination: {
             channelId: channel.id,

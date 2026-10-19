@@ -256,6 +256,19 @@ export type InboundConversionAutomationIngestionResult = {
   observationStatus: AutomationObservationStatus;
 };
 
+/**
+ * Fase 5.3: what the rule itself decided for a routed callback (also when
+ * the delivery already existed), so the URL única never shows "routed" for
+ * a callback the rule ignored, gave to another rule, filtered or blocked.
+ * Internal only: never part of a public response.
+ */
+export type RoutedIngestionResult = InboundConversionAutomationIngestionResult & {
+  ruleOutcome: {
+    status: AutomationObservationStatus;
+    reasonCode: string | null;
+  } | null;
+};
+
 @Injectable()
 export class InboundConversionAutomationIngestionService {
   private readonly logger = new Logger(
@@ -282,7 +295,7 @@ export class InboundConversionAutomationIngestionService {
       input.token,
     );
     const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
-    return this.ingestForEndpoint({
+    const { ruleOutcome: _internal, ...result } = await this.ingestForEndpoint({
       endpoint,
       rawBody,
       providerAttempt: parseInboundWebhookProviderAttempt(
@@ -290,6 +303,7 @@ export class InboundConversionAutomationIngestionService {
       ),
       integrationEndpointId: null,
     });
+    return result;
   }
 
   /**
@@ -307,7 +321,15 @@ export class InboundConversionAutomationIngestionService {
     rawBody: Buffer;
     providerAttempt: number | null;
     integrationEndpointId: string;
-  }): Promise<InboundConversionAutomationIngestionResult | null> {
+    /** Number the router proved (Umbler: channel.phone or single number). */
+    routedChannelId?: string | null;
+    /**
+     * "Tentar de novo": when the occurrence was first received. A sale from
+     * before the rule went to production stays observed, exactly as when it
+     * arrived (only the rule's explicit reprocess may send it).
+     */
+    occurrenceReceivedAt?: Date;
+  }): Promise<RoutedIngestionResult | null> {
     this.assertFeatureEnabled();
     const endpoint = await this.loadRoutableEndpoint(
       input.workspaceId,
@@ -319,6 +341,8 @@ export class InboundConversionAutomationIngestionService {
       rawBody: input.rawBody,
       providerAttempt: input.providerAttempt,
       integrationEndpointId: input.integrationEndpointId,
+      routedChannelId: input.routedChannelId ?? null,
+      occurrenceReceivedAt: input.occurrenceReceivedAt,
     });
   }
 
@@ -328,7 +352,11 @@ export class InboundConversionAutomationIngestionService {
     providerAttempt: number | null;
     /** Set when the callback came through a workspace URL (Fase 5.3). */
     integrationEndpointId: string | null;
-  }): Promise<InboundConversionAutomationIngestionResult> {
+    /** Router-proven number; undefined keeps the one stored on the delivery. */
+    routedChannelId?: string | null;
+    occurrenceReceivedAt?: Date;
+  }): Promise<RoutedIngestionResult> {
+    const routedChannelId = input.routedChannelId ?? undefined;
     const { endpoint, rawBody, providerAttempt } = input;
     // The per-rule URL's lastDeliveryAt tells the operator whether the OLD URL
     // still receives ("Desativar URL antiga"); routed callbacks do not move it.
@@ -336,6 +364,9 @@ export class InboundConversionAutomationIngestionService {
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
     const parsed = this.parseAutomation(endpoint, payload);
     const receivedAt = new Date();
+    // When the occurrence happened for the production gate (a retry keeps
+    // the original receipt time); bookkeeping stays at "now".
+    const occurrenceReceivedAt = input.occurrenceReceivedAt ?? receivedAt;
     const ingressKey = parsed.ok
       ? this.parsedIngressKey(endpoint, parsed.value.externalExecutionKey)
       : this.fallbackIngressKey(endpoint, rawBody, receivedAt);
@@ -372,14 +403,31 @@ export class InboundConversionAutomationIngestionService {
           ...(effective.evaluationMode
             ? { evaluationMode: effective.evaluationMode }
             : {}),
+          routedChannelId,
         });
         await this.enqueueEligibleObservation(endpoint.workspaceId, observed);
+        return {
+          status: "accepted",
+          deliveryId: existing.id,
+          duplicate: true,
+          observationStatus: "duplicate",
+          ruleOutcome: {
+            status: this.automationObservationStatus(observed),
+            reasonCode: observed.reasonCode,
+          },
+        };
       }
       return {
         status: "accepted",
         deliveryId: existing.id,
         duplicate: true,
         observationStatus: "duplicate",
+        ruleOutcome: {
+          status: ignoredParseErrors.has(parsed.errorCode)
+            ? "ignored"
+            : "invalid_payload",
+          reasonCode: parsed.errorCode,
+        },
       };
     }
 
@@ -398,6 +446,7 @@ export class InboundConversionAutomationIngestionService {
         integrationEndpointId: input.integrationEndpointId,
         rawBodyLength: rawBody.length,
         receivedAt,
+        firstReceivedAt: occurrenceReceivedAt,
         encrypted,
         parsed: parsed.ok ? parsed.value : null,
         parseErrorCode: parsed.ok ? null : parsed.errorCode,
@@ -421,6 +470,7 @@ export class InboundConversionAutomationIngestionService {
             deliveryId: duplicate.id,
             duplicate: true,
             observationStatus: "duplicate",
+            ruleOutcome: null,
           };
         }
       }
@@ -429,29 +479,34 @@ export class InboundConversionAutomationIngestionService {
     }
 
     if (!parsed.ok) {
+      const observationStatus = ignoredParseErrors.has(parsed.errorCode)
+        ? ("ignored" as const)
+        : ("invalid_payload" as const);
       return {
         status: "accepted",
         deliveryId,
         duplicate: false,
-        observationStatus: ignoredParseErrors.has(parsed.errorCode)
-          ? "ignored"
-          : "invalid_payload",
+        observationStatus,
+        ruleOutcome: { status: observationStatus, reasonCode: parsed.errorCode },
       };
     }
 
     const observed = await this.observeAutomation({
       endpoint,
       deliveryId,
-      deliveryReceivedAt: receivedAt,
+      deliveryReceivedAt: occurrenceReceivedAt,
       parsed: parsed.value,
+      routedChannelId,
     });
     await this.enqueueEligibleObservation(endpoint.workspaceId, observed);
 
+    const observationStatus = this.automationObservationStatus(observed);
     return {
       status: "accepted",
       deliveryId,
       duplicate: observed.reasonCode === "purchase_duplicate",
-      observationStatus: this.automationObservationStatus(observed),
+      observationStatus,
+      ruleOutcome: { status: observationStatus, reasonCode: observed.reasonCode },
     };
   }
 
@@ -1772,7 +1827,16 @@ export class InboundConversionAutomationIngestionService {
     manualRecovery?: boolean;
     evaluationMode?: ProviderConversionEvaluationMode;
     manualReplayApproval?: ProviderConversionManualReplayApproval;
+    /**
+     * Fase 5.3: number proven by the URL por evento (Umbler). Undefined =
+     * the one stored on the delivery by a previous routed evaluation, so a
+     * reprocess or a resend by the old URL decides the same number.
+     */
+    routedChannelId?: string;
   }): Promise<ProviderConversionAutomationObservationResult> {
+    const routedChannelId =
+      input.routedChannelId ??
+      (await this.storedRoutedChannelId(input.endpoint, input.deliveryId));
     const observed = await this.conversionObservation.observeAutomation({
       workspaceId: input.endpoint.workspaceId,
       connectionId: input.endpoint.providerRule.connectionId,
@@ -1786,6 +1850,7 @@ export class InboundConversionAutomationIngestionService {
       ...(input.manualRecovery === true && input.manualReplayApproval
         ? { manualReplayApproval: input.manualReplayApproval }
         : {}),
+      ...(routedChannelId ? { routedChannelId } : {}),
     });
     const processedAt = new Date();
 
@@ -1820,6 +1885,7 @@ export class InboundConversionAutomationIngestionService {
           paidLeadResolved: observed.leadResolved,
           manuallyReprocessed: input.manualRecovery === true,
           evaluatedAt: processedAt.toISOString(),
+          ...(routedChannelId ? { routedChannelId } : {}),
         }),
         parseErrorCode: null,
         routingErrorCode:
@@ -1829,6 +1895,26 @@ export class InboundConversionAutomationIngestionService {
     });
 
     return observed;
+  }
+
+  /** Umbler only: the routed number kept in the delivery summary. */
+  private async storedRoutedChannelId(
+    endpoint: PublicConversionEndpoint,
+    deliveryId: string,
+  ): Promise<string | undefined> {
+    if (endpoint.providerRule.parserRelease.provider !== "umbler")
+      return undefined;
+    const delivery = await this.prisma.inboundWebhookDelivery.findFirst({
+      where: {
+        id: deliveryId,
+        workspaceId: endpoint.workspaceId,
+        providerRuleEndpointId: endpoint.id,
+        purpose: "conversion_automation",
+      },
+      select: { normalizedSummary: true },
+    });
+    const stored = this.jsonRecord(delivery?.normalizedSummary)?.routedChannelId;
+    return typeof stored === "string" && stored ? stored : undefined;
   }
 
   private async enqueueEligibleObservation(
@@ -2197,6 +2283,8 @@ export class InboundConversionAutomationIngestionService {
     integrationEndpointId: string | null;
     rawBodyLength: number;
     receivedAt: Date;
+    /** Original receipt of the occurrence ("Tentar de novo"); else receivedAt. */
+    firstReceivedAt?: Date;
     encrypted: {
       encryptedPayload: string;
       payloadIv: string;
@@ -2237,7 +2325,7 @@ export class InboundConversionAutomationIngestionService {
             : ignoredParseErrors.has(input.parseErrorCode ?? "")
               ? "unsupported_event"
               : "invalid_payload",
-          firstReceivedAt: input.receivedAt,
+          firstReceivedAt: input.firstReceivedAt ?? input.receivedAt,
           lastReceivedAt: input.receivedAt,
           providerAttempt: input.providerAttempt,
           ...input.encrypted,

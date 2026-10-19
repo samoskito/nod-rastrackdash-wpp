@@ -311,24 +311,37 @@ export class InboundWebhookMaintenanceService
   private async clearExpiredIntegrationReceiptPayloads(
     now: Date,
   ): Promise<number> {
-    const cleared = await this.prisma.integrationEndpointEvent.updateMany({
-      where: {
-        payloadExpiresAt: { lte: now },
-        OR: [
-          { encryptedPayload: { not: null } },
-          { payloadIv: { not: null } },
-          { payloadTag: { not: null } },
-          { encryptionKeyVersion: { not: null } },
-        ],
-      },
-      data: {
-        encryptedPayload: null,
-        payloadIv: null,
-        payloadTag: null,
-        encryptionKeyVersion: null,
-      },
-    });
-    return cleared.count;
+    const where = {
+      payloadExpiresAt: { lte: now },
+      OR: [
+        { encryptedPayload: { not: null } },
+        { payloadIv: { not: null } },
+        { payloadTag: { not: null } },
+        { encryptionKeyVersion: { not: null } },
+      ],
+    } satisfies Prisma.IntegrationEndpointEventWhereInput;
+    let total = 0;
+    // Batches, like the delivery payload cleanup: short statements only.
+    for (;;) {
+      const batch = await this.prisma.integrationEndpointEvent.findMany({
+        where,
+        select: { id: true },
+        orderBy: [{ payloadExpiresAt: "asc" }, { id: "asc" }],
+        take: INBOUND_WEBHOOK_PAYLOAD_CLEANUP_BATCH_SIZE,
+      });
+      if (batch.length === 0) return total;
+      const cleared = await this.prisma.integrationEndpointEvent.updateMany({
+        where: { ...where, id: { in: batch.map((row) => row.id) } },
+        data: {
+          encryptedPayload: null,
+          payloadIv: null,
+          payloadTag: null,
+          encryptionKeyVersion: null,
+        },
+      });
+      total += cleared.count;
+      if (cleared.count === 0) return total;
+    }
   }
 
   /**
@@ -337,17 +350,29 @@ export class InboundWebhookMaintenanceService
    * "routed" ones stay with the rule's delivery/execution they point to.
    */
   private async deleteOldIntegrationReceipts(now: Date): Promise<number> {
-    const deleted = await this.prisma.integrationEndpointEvent.deleteMany({
-      where: {
-        status: { in: ["pending", "unattributed", "ignored", "invalid"] },
-        lastReceivedAt: {
-          lt: new Date(
-            now.getTime() - INTEGRATION_RECEIPT_RETENTION_DAYS * DAY_MS,
-          ),
-        },
+    const where = {
+      status: { in: ["pending", "unattributed", "ignored", "invalid"] },
+      lastReceivedAt: {
+        lt: new Date(now.getTime() - INTEGRATION_RECEIPT_RETENTION_DAYS * DAY_MS),
       },
-    });
-    return deleted.count;
+    } satisfies Prisma.IntegrationEndpointEventWhereInput;
+    let total = 0;
+    for (;;) {
+      const batch = await this.prisma.integrationEndpointEvent.findMany({
+        where,
+        select: { id: true },
+        orderBy: [{ lastReceivedAt: "asc" }, { id: "asc" }],
+        take: INBOUND_WEBHOOK_PAYLOAD_CLEANUP_BATCH_SIZE,
+      });
+      if (batch.length === 0) return total;
+      // The status/age filter is repeated: a retry that just touched a row
+      // (lastReceivedAt moved) keeps it.
+      const deleted = await this.prisma.integrationEndpointEvent.deleteMany({
+        where: { ...where, id: { in: batch.map((row) => row.id) } },
+      });
+      total += deleted.count;
+      if (deleted.count === 0) return total;
+    }
   }
 
   private async markUnavailablePendingDeliveries(now: Date): Promise<number> {

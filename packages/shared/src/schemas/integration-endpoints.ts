@@ -175,6 +175,8 @@ export const integrationUnattributedReasons = {
   routing_pending: "Recebido; ainda não foi possível atribuir (tente de novo)",
   event_mismatch: "O evento enviado não é o desta URL",
   rule_unavailable: "A regra escolhida não está mais ativa",
+  rule_declined:
+    "A regra do número não converteu (filtro, outro número, lead ou bloqueio; veja os eventos recebidos da regra)",
 } as const;
 export type IntegrationUnattributedReasonDto =
   keyof typeof integrationUnattributedReasons;
@@ -216,6 +218,8 @@ export const integrationUnattributedEventSchema = z.object({
   lastReceivedAt: z.string().datetime(),
   /** Corpo ainda guardado: "Tentar de novo" pode rotear outra vez. */
   retryable: z.boolean(),
+  /** rule_declined: o motivo que a própria regra deu (código técnico). */
+  ruleReasonCode: z.string().nullable().optional(),
 });
 
 export const integrationUnattributedEventListSchema = z.object({

@@ -476,7 +476,7 @@ model Workspace {
   providerConversionRuleEndpoints  ProviderConversionRuleEndpoint[]
   integrationEndpoints             IntegrationEndpoint[]
   integrationEndpointEvents        IntegrationEndpointEvent[]
-  providerRuleCreateClaims        ProviderRuleCreateClaim[]
+  providerRuleCreateClaims         ProviderRuleCreateClaim[]
   providerPurchaseClaims           ProviderPurchaseClaim[]
   providerConversionExecutions     ProviderConversionRuleExecution[]
   providerConversionDecisions      ProviderConversionDecisionAudit[]

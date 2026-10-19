@@ -215,11 +215,13 @@ function phoneHashes(phones: readonly string[], extra?: string): string[] {
 }
 
 /**
- * Number a resolved paid lead arrived on: the typed CTWA entry proof for a
+ * Numbers a resolved paid lead arrived on: the typed CTWA entry proof for a
  * lead without ad id, else the materialized first-entry evidence
- * (resolvePurchaseChannels). Exactly one channel or null.
+ * (resolvePurchaseChannels) and, without any, the verified CTWA entry proof
+ * of the ad lead (same fallback as the rule, review finding M2). May be more
+ * than one when the lead entered through several numbers.
  */
-async function leadOriginChannelId(
+async function leadOriginChannelIds(
   client: RoutingClient,
   input: {
     workspaceId: string;
@@ -230,17 +232,18 @@ async function leadOriginChannelId(
     phones: readonly string[];
     channels: readonly ScopedChannel[];
     receivedAt: Date;
+    /** Payt: an ad lead without materialized entry falls back to its proof. */
+    adLeadProofFallback?: boolean;
   },
-): Promise<string | null> {
+): Promise<string[]> {
   const { lead } = input;
-  if (!lead.adId) {
-    const proof = lead.ctwaDestination;
-    return proof &&
-      input.channels.some((channel) => channel.id === proof.channelId)
+  const proof = lead.ctwaDestination;
+  const proofChannel =
+    proof && input.channels.some((channel) => channel.id === proof.channelId)
       ? proof.channelId
       : null;
-  }
-  if (input.channels.length === 0) return null;
+  if (!lead.adId) return proofChannel ? [proofChannel] : [];
+  if (input.channels.length === 0) return [];
   const origins = await resolvePurchaseChannels(client, {
     workspaceId: input.workspaceId,
     channelIds: input.channels.map((channel) => channel.id),
@@ -250,7 +253,38 @@ async function leadOriginChannelId(
     ctwaClid: lead.ctwaClid,
     receivedAt: input.receivedAt,
   });
-  return origins.length === 1 ? origins[0]!.id : null;
+  if (origins.length === 0)
+    return input.adLeadProofFallback && proofChannel ? [proofChannel] : [];
+  return [...new Set(origins.map((origin) => origin.id))];
+}
+
+/**
+ * Payt lead that entered through more than one number. On the old per-rule
+ * URLs only a rule whose OWN numbers contain exactly one of those entries
+ * decides the sale (a rule for all numbers sees them all and stays out).
+ * The URL única follows the same rule: route when exactly one specific rule
+ * owns exactly one of the entries; otherwise it stays unattributed.
+ */
+function routeMultiOrigin(
+  rules: readonly RoutingRule[],
+  channels: readonly ScopedChannel[],
+  origins: readonly string[],
+  productCodes: readonly string[] | null,
+): IntegrationRouteDecision {
+  const owners = new Map<string, IntegrationRouteDecision>();
+  for (const origin of origins) {
+    const decision = finishRoute(rules, channels, origin, productCodes);
+    if (decision.status !== "routed") continue;
+    const rule = rules.find((item) => item.id === decision.providerRuleId);
+    if (!rule || providerRuleScope(rule) !== "specific_numbers") continue;
+    const owned = origins.filter((candidate) =>
+      rule.channels.some((channel) => channel.channelId === candidate),
+    );
+    if (owned.length === 1) owners.set(rule.id, decision);
+  }
+  return owners.size === 1
+    ? [...owners.values()][0]!
+    : unattributed("origin_channel_unresolved");
 }
 
 function finishRoute(
@@ -307,15 +341,18 @@ export async function routePaytSale(
   if (lead.status !== "resolved") return unattributed(leadUnresolvedReason(lead));
 
   const channels = await listWorkspaceScopeChannels(client, input.workspaceId);
-  const originChannelId = await leadOriginChannelId(client, {
+  const origins = await leadOriginChannelIds(client, {
     workspaceId: input.workspaceId,
     lead: lead.lead,
     phones: input.sale.phoneCandidates,
     channels,
     receivedAt: input.receivedAt,
+    adLeadProofFallback: true,
   });
-  if (!originChannelId) return unattributed("origin_channel_unresolved");
-  return finishRoute(productRules, channels, originChannelId, productCodes);
+  if (origins.length === 0) return unattributed("origin_channel_unresolved");
+  if (origins.length > 1)
+    return routeMultiOrigin(productRules, channels, origins, productCodes);
+  return finishRoute(productRules, channels, origins[0]!, productCodes);
 }
 
 /**
@@ -380,15 +417,15 @@ export async function routeUnnichatEvent(
     ctwaProofAnyChannel: true,
   });
   if (lead.status !== "resolved") return unattributed(leadUnresolvedReason(lead));
-  const originChannelId = await leadOriginChannelId(client, {
+  const origins = await leadOriginChannelIds(client, {
     workspaceId: input.workspaceId,
     lead: lead.lead,
     phones,
     channels,
     receivedAt: input.receivedAt,
   });
-  if (!originChannelId) return unattributed("origin_channel_unresolved");
-  return finishRoute(rules, channels, originChannelId, null);
+  if (origins.length !== 1) return unattributed("origin_channel_unresolved");
+  return finishRoute(rules, channels, origins[0]!, null);
 }
 
 /** Window of the Umbler "number the contact talked to" fallback. */

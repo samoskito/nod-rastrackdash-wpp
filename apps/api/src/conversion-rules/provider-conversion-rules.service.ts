@@ -1199,6 +1199,31 @@ export class ProviderConversionRulesService {
           throw new NotFoundException(endpointNotFoundMessage);
         }
         const isDisabled = current.endpoint.publicUrlDisabledAt != null;
+        if (input.publicUrlDisabled && !isDisabled) {
+          // Never close the only way in: the workspace URL of this platform
+          // (and event, for Unnichat/Umbler) must exist first.
+          const provider = current.parserRelease?.provider;
+          const workspaceUrl =
+            provider && ["payt", "unnichat", "umbler"].includes(provider)
+              ? await transaction.integrationEndpoint.findFirst({
+                  where: {
+                    workspaceId,
+                    provider,
+                    removedAt: null,
+                    eventName:
+                      provider === "payt"
+                        ? null
+                        : current.conversionRule.eventName,
+                  },
+                  select: { id: true },
+                })
+              : null;
+          if (!workspaceUrl) {
+            throw new ConflictException(
+              "Gere antes a URL única desta plataforma (ou a URL deste evento) e cole na plataforma; sem ela, desativar a URL antiga faria a regra parar de receber",
+            );
+          }
+        }
         if (input.publicUrlDisabled !== isDisabled) {
           await transaction.providerConversionRuleEndpoint.update({
             where: { id: current.endpoint.id },

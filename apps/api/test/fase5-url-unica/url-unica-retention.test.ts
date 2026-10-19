@@ -28,6 +28,7 @@ function receipt(id: string, status: string, ageDays: number, payload = true) {
 }
 
 function matches(row: any, where: any): boolean {
+  if (where.id?.in && !where.id.in.includes(row.id)) return false;
   if (where.status?.in && !where.status.in.includes(row.status)) return false;
   if (where.lastReceivedAt?.lt && !(row.lastReceivedAt < where.lastReceivedAt.lt))
     return false;
@@ -45,6 +46,9 @@ function service(rows: any[]) {
   const table = [...rows];
   const prisma: any = {
     integrationEndpointEvent: {
+      findMany: vi.fn(async ({ where, take }: any) =>
+        table.filter((row) => matches(row, where)).slice(0, take).map((row) => ({ id: row.id })),
+      ),
       deleteMany: vi.fn(async ({ where }: any) => {
         const doomed = table.filter((row) => matches(row, where));
         for (const row of doomed) table.splice(table.indexOf(row), 1);
