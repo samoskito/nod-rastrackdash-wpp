@@ -6,6 +6,8 @@ export class ApiRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Machine-readable `code` of the API error body, when it sends one. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -78,10 +80,8 @@ export async function serverApiFetch<T>(
       throw await licenseLockedError(response);
     }
 
-    throw new ApiRequestError(
-      await responseErrorMessage(response),
-      response.status,
-    );
+    const error = await responseErrorBody(response);
+    throw new ApiRequestError(error.message, response.status, error.code);
   }
 
   if (response.status === 204) {
@@ -136,18 +136,24 @@ async function licenseLockedError(
   return new LicenseLockedError(message, reason);
 }
 
-async function responseErrorMessage(response: Response): Promise<string> {
+async function responseErrorBody(
+  response: Response,
+): Promise<{ message: string; code?: string }> {
+  const fallback = `API request failed: ${response.status}`;
   try {
-    const body = (await response.json()) as { message?: unknown };
+    const body = (await response.json()) as { message?: unknown; code?: unknown };
+    const code =
+      typeof body.code === "string" && body.code.trim()
+        ? body.code.trim().slice(0, 120)
+        : undefined;
 
     if (typeof body.message === "string" && body.message.trim()) {
-      return body.message;
+      return { message: body.message, ...(code ? { code } : {}) };
     }
+    return { message: fallback, ...(code ? { code } : {}) };
   } catch {
-    return `API request failed: ${response.status}`;
+    return { message: fallback };
   }
-
-  return `API request failed: ${response.status}`;
 }
 
 async function getCookieHeader(): Promise<string | undefined> {

@@ -36,6 +36,13 @@ export const GLOBAL_AUTO_ACTIVATION_BUDGET_MS = 40_000;
  * covers the budget plus one workspace in flight.
  */
 const RUN_LOCK_TIMEOUT_MS = GLOBAL_AUTO_ACTIVATION_BUDGET_MS + 45_000;
+/**
+ * Hard stop inside a workspace (checked before each number): the run always
+ * ends well before RUN_LOCK_TIMEOUT_MS, so the lock transaction never expires
+ * while numbers are still being promoted (another instance could then start).
+ */
+export const GLOBAL_AUTO_ACTIVATION_HARD_STOP_MS =
+  GLOBAL_AUTO_ACTIVATION_BUDGET_MS + 30_000;
 const RUN_LOCK_KEY = "provider-rule-global-auto-activation";
 
 type Clock = () => number;
@@ -51,6 +58,12 @@ type Clock = () => number;
  * Edição do aluno: the SaaS skips workspaces without billing access; here
  * the whole run is skipped while the installation license is locked (same
  * check as the 423 of every manual write).
+ *
+ * Several API instances: the advisory lock lets only one run at a time, but
+ * the timer, the keyset cursor, the hourly reconciliation clock and the
+ * failure backoff kept in memory are PER INSTANCE. Each instance therefore
+ * does its own hourly reconciliation (serialized by the lock); the work is
+ * idempotent, so this only costs repeated reads, never a second promotion.
  */
 @Injectable()
 export class GlobalRuleAutoActivationService
@@ -171,6 +184,8 @@ export class GlobalRuleAutoActivationService
           await this.rules.autoActivateGlobalNumbers(workspaceId, due.trigger, {
             eventAt: due.eventAt,
             now,
+            shouldStop: () =>
+              clock() - startedAt >= GLOBAL_AUTO_ACTIVATION_HARD_STOP_MS,
           });
           handled.push(workspaceId);
         } catch {

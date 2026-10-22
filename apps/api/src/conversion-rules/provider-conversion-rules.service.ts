@@ -152,6 +152,15 @@ type GlobalNumberActivation = {
 @Injectable()
 export class ProviderConversionRulesService {
   private readonly logger = new Logger(ProviderConversionRulesService.name);
+  /**
+   * Last FAILED automatic attempt per number (epoch ms), kept in memory by
+   * this API instance. The audit of a repeated failure is deduplicated, so
+   * the audit trail alone would pin the backoff to the FIRST failure and the
+   * number would be retried on every sweep after 6 h; this map makes the
+   * backoff follow the latest real attempt without writing more audit rows.
+   * Per instance and lost on restart: the durable audit stays the floor.
+   */
+  private readonly autoActivationFailures = new Map<string, number>();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -2603,7 +2612,7 @@ export class ProviderConversionRulesService {
           return {
             channelId,
             outcome: "pending" as const,
-            reason: "whatsapp_disconnected" as const,
+            reason: "whatsapp_connection_inactive" as const,
           };
         }
         const requireValidMetaRoute = metaRouteRequiredForProvider(
@@ -2670,7 +2679,15 @@ export class ProviderConversionRulesService {
   async autoActivateGlobalNumbers(
     workspaceId: string,
     trigger: string,
-    options: { eventAt?: Date | null; now?: Date } = {},
+    options: {
+      eventAt?: Date | null;
+      now?: Date;
+      /**
+       * Work budget of the caller (GlobalRuleAutoActivationService): checked
+       * before each number, so one workspace never outlives the run lock.
+       */
+      shouldStop?: () => boolean;
+    } = {},
   ): Promise<{ attempted: number; promoted: number }> {
     const now = options.now ?? new Date();
     const none = { attempted: 0, promoted: 0 };
@@ -2811,27 +2828,39 @@ export class ProviderConversionRulesService {
         !touched.has(gateId)
       );
     };
-    const inBackoff = (channelId: string) => {
+    const failureKey = (channelId: string) => `${workspaceId}:${channelId}`;
+    /** Latest failed automatic attempt: audit (durable) or memory (newer). */
+    const lastFailureAt = (channelId: string): number | null => {
       const last = lastAuto.get(channelId);
-      return Boolean(
-        last &&
-          last.resultStatus === "pending" &&
-          now.getTime() - last.createdAt.getTime() <
-            GLOBAL_AUTO_ACTIVATION_BACKOFF_MS &&
-          !(options.eventAt && options.eventAt > last.createdAt),
+      const durable =
+        last && last.resultStatus === "pending" ? last.createdAt.getTime() : null;
+      const memory = this.autoActivationFailures.get(failureKey(channelId)) ?? null;
+      if (durable === null) return memory;
+      return memory === null ? durable : Math.max(durable, memory);
+    };
+    const inBackoff = (channelId: string) => {
+      const failedAt = lastFailureAt(channelId);
+      return (
+        failedAt !== null &&
+        now.getTime() - failedAt < GLOBAL_AUTO_ACTIVATION_BACKOFF_MS &&
+        !(options.eventAt && options.eventAt.getTime() > failedAt)
       );
     };
+    const lastTryAt = (channelId: string) =>
+      Math.max(
+        lastAuto.get(channelId)?.createdAt.getTime() ?? -1,
+        this.autoActivationFailures.get(failureKey(channelId)) ?? -1,
+      );
     const queue = [...targets.values()]
       .filter((target) => neverLive(target) && !inBackoff(target.channelId))
       .sort(
-        (left, right) =>
-          (lastAuto.get(left.channelId)?.createdAt.getTime() ?? -1) -
-          (lastAuto.get(right.channelId)?.createdAt.getTime() ?? -1),
+        (left, right) => lastTryAt(left.channelId) - lastTryAt(right.channelId),
       );
 
     let attempted = 0;
     let promoted = 0;
     for (const target of queue.slice(0, GLOBAL_RULE_CASCADE_LIMIT)) {
+      if (options.shouldStop?.()) break;
       const result = await this.activateCoveredNumber({
         workspaceId,
         rule: target.rule,
@@ -2839,9 +2868,17 @@ export class ProviderConversionRulesService {
         actorUserId: null,
         allowPausedChannel: false,
       });
-      if (result.outcome === "already_live") continue;
+      if (result.outcome === "already_live") {
+        this.autoActivationFailures.delete(failureKey(target.channelId));
+        continue;
+      }
       attempted += 1;
-      if (result.outcome === "promoted") promoted += 1;
+      if (result.outcome === "promoted") {
+        promoted += 1;
+        this.autoActivationFailures.delete(failureKey(target.channelId));
+      } else {
+        this.rememberAutoActivationFailure(failureKey(target.channelId), now);
+      }
       const last = lastAuto.get(target.channelId);
       const lastSummary = this.auditJsonObject(last?.afterSummary ?? null);
       if (
@@ -2877,12 +2914,28 @@ export class ProviderConversionRulesService {
     return { attempted, promoted };
   }
 
+  /** Bounded: old entries (past the backoff) are dropped first. */
+  private rememberAutoActivationFailure(key: string, now: Date): void {
+    this.autoActivationFailures.delete(key);
+    this.autoActivationFailures.set(key, now.getTime());
+    if (this.autoActivationFailures.size <= 10_000) return;
+    for (const [entry, at] of this.autoActivationFailures) {
+      if (
+        this.autoActivationFailures.size <= 10_000 &&
+        now.getTime() - at < GLOBAL_AUTO_ACTIVATION_BACKOFF_MS
+      ) {
+        break;
+      }
+      this.autoActivationFailures.delete(entry);
+    }
+  }
+
   /**
    * "Ativar envio neste número" on a production global rule. Same activation
    * as the Integrations buttons. An explicit click may resume a paused
    * CHANNEL (this number only); a paused connection stays paused
-   * (connection_paused, see Integrações) and a suspended or disconnected
-   * WhatsApp connection is only resumed in Integrações.
+   * (connection_paused, see Integrações) and a WhatsApp connection that is
+   * not active (suspended/removed) is only reactivated in Integrações.
    */
   async activateGlobalRuleNumber(
     workspaceId: string,

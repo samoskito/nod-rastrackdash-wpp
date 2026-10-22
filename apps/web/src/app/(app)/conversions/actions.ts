@@ -208,6 +208,11 @@ function revalidateRules() {
   }
 }
 
+function apiCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return isApiRequestError(error) && typeof code === "string" ? code : null;
+}
+
 function apiStatus(error: unknown): number | null {
   const status = (error as { status?: unknown } | null)?.status;
   return isApiRequestError(error) && typeof status === "number" ? status : null;
@@ -486,7 +491,7 @@ const reprocessUnknownMessage =
 
 /**
  * "Ativar envio neste número" de uma regra para todos os números: a mesma
- * ativação de Integrações. Conexão pausada ou WhatsApp desconectado voltam
+ * ativação de Integrações. Conexão pausada ou conexão WhatsApp não ativa voltam
  * pendentes e são resolvidos em Integrações. Trata o 423 da licença.
  */
 export async function activateRuleNumberAction(
@@ -519,8 +524,8 @@ export async function activateRuleNumberAction(
           ? "Envio ativado neste número. As próximas conversas dele já vão para a Meta."
           : outcome === "already_live"
             ? "Este número já estava com o envio ativo."
-            : reason === "whatsapp_disconnected"
-              ? "O WhatsApp deste número está desconectado ou suspenso. Reconecte em Integrações e tente de novo."
+            : reason === "whatsapp_connection_inactive"
+              ? "A conexão WhatsApp deste número não está ativa (suspensa ou removida). Reative-a em Integrações e tente de novo."
               : reason === "meta_route_missing"
                 ? "Falta uma rota Meta válida para este número. Configure em Integrações e tente de novo."
                 : reason === "connection_paused"
@@ -576,10 +581,10 @@ export async function reprocessBlockedExecutionsAction(
       };
     }
     if (status === 409) {
-      const message = (error as Error | null)?.message ?? "";
       return {
         ok: false,
-        message: /andamento/iu.test(message)
+        message:
+          apiCode(error) === "provider_rule_reprocess_in_progress"
           ? "Já existe um reprocessamento em andamento para esta regra. Aguarde ele terminar."
           : "A regra está pausada ou em observação. Ative o envio automático da regra antes de reprocessar.",
       };

@@ -158,8 +158,8 @@ export function pendingNumberDetail(
   >,
 ): string {
   switch (number.reason) {
-    case "whatsapp_disconnected":
-      return "O WhatsApp deste número está desconectado ou suspenso. Reconecte em Integrações.";
+    case "whatsapp_connection_inactive":
+      return "A conexão WhatsApp deste número não está ativa (suspensa ou removida). Reative-a em Integrações.";
     case "meta_route_missing":
       return "Falta uma rota Meta válida para este número. Configure em Integrações.";
     case "channel_not_active":

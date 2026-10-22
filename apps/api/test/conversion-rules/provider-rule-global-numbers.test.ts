@@ -112,7 +112,7 @@ type GNumber = {
   validRoute?: boolean;
   replayInFlight?: boolean;
   /** UAZAPI WhatsApp connection status (default active). */
-  instanceStatus?: "active" | "disconnected" | "error";
+  instanceStatus?: "active" | "suspended" | "pending_payment";
 };
 
 function globalWorld(numbers: GNumber[]) {
@@ -493,12 +493,12 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
     ).toMatchObject({ actorType: "user", actorUserId: "user_1" });
   });
 
-  it("N números (QR e Umbler com rota): todos passam a enviar; WhatsApp desconectado e Umbler sem rota ficam pendentes", async () => {
+  it("N números (QR e Umbler com rota): todos passam a enviar; conexão WhatsApp não ativa e Umbler sem rota ficam pendentes", async () => {
     const world = globalWorld([
       { key: "qr_a", provider: "uazapi" },
       { key: "qr_b", provider: "uazapi" },
       { key: "qr_c", provider: "uazapi" },
-      { key: "qr_off", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr_off", provider: "uazapi", instanceStatus: "pending_payment" },
       { key: "umbler", provider: "umbler" },
       { key: "umbler_no_route", provider: "umbler", validRoute: false },
     ]);
@@ -519,10 +519,27 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
         number.activatable,
       ]),
     ).toEqual([
-      ["channel_qr_off", "whatsapp_disconnected", false],
+      ["channel_qr_off", "whatsapp_connection_inactive", false],
       ["channel_umbler_no_route", "meta_route_missing", false],
     ]);
     expect(world.state.providerRules).toHaveLength(1);
+  });
+
+  it("conexão WhatsApp suspensa em Integrações fica fora da regra; o health check não bloqueia", async () => {
+    const world = globalWorld([
+      { key: "qr_suspended", provider: "uazapi", instanceStatus: "suspended" },
+      { key: "qr_health_down", provider: "uazapi" },
+    ]);
+    // A stale health check saying "disconnected" never blocks the activation.
+    world.state.instances.find((row) => row.id === "instance_qr_health_down")!.lastHealthStatus =
+      "disconnected";
+
+    const rule = await createGlobal(world);
+
+    expect(world.connection("qr_suspended").status).toBe("observation");
+    expect(world.connection("qr_health_down").status).toBe("production");
+    expect(rule.effectiveChannelIds).toEqual(["channel_qr_health_down"]);
+    expect(rule.pendingNumbers).toEqual([]);
   });
 
   it("um número que falha no meio é revertido sozinho e continua pendente", async () => {
@@ -558,7 +575,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
   it("regra criada em observação não ativa nada, mas já lista o que vai ficar pendente", async () => {
     const world = globalWorld([
       { key: "qr", provider: "uazapi" },
-      { key: "qr_off", provider: "uazapi", instanceStatus: "error" },
+      { key: "qr_off", provider: "uazapi", instanceStatus: "pending_payment" },
     ]);
 
     const rule = await createGlobal(world, { mode: "observation" });
@@ -568,14 +585,14 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
       rule.pendingNumbers.map((number: GRow) => [number.channelId, number.reason]),
     ).toEqual([
       ["channel_qr", "channel_not_active"],
-      ["channel_qr_off", "whatsapp_disconnected"],
+      ["channel_qr_off", "whatsapp_connection_inactive"],
     ]);
   });
 
   it("ligar o Envio ativo (observação → produção) ativa os números", async () => {
     const world = globalWorld([
       { key: "qr", provider: "uazapi" },
-      { key: "qr_off", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr_off", provider: "uazapi", instanceStatus: "pending_payment" },
     ]);
     const rule = await createGlobal(world, { mode: "observation" });
 
@@ -592,7 +609,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
     expect(updated.pendingNumbers).toEqual([
       expect.objectContaining({
         channelId: "channel_qr_off",
-        reason: "whatsapp_disconnected",
+        reason: "whatsapp_connection_inactive",
       }),
     ]);
   });
@@ -683,7 +700,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
         channelStatus: "active",
       },
       { key: "qr_new", provider: "uazapi" },
-      { key: "qr_off", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr_off", provider: "uazapi", instanceStatus: "pending_payment" },
     ]);
     const first = await createGlobal(world, {
       scope: "specific_numbers",
@@ -707,7 +724,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
     expect(unified.rule.pendingNumbers).toEqual([
       expect.objectContaining({
         channelId: "channel_qr_off",
-        reason: "whatsapp_disconnected",
+        reason: "whatsapp_connection_inactive",
       }),
     ]);
   });
@@ -739,7 +756,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
   it("canal pausado pelo operador continua pausado; “Ativar envio neste número” o retoma por clique explícito", async () => {
     const world = globalWorld([
       { key: "qr_paused", provider: "uazapi", channelStatus: "paused" },
-      { key: "qr_off", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr_off", provider: "uazapi", instanceStatus: "pending_payment" },
     ]);
     const rule = await createGlobal(world);
     // The automatic cascade never resumes a channel an operator paused.
@@ -764,7 +781,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
     );
     expect(refused).toMatchObject({
       outcome: "pending",
-      reason: "whatsapp_disconnected",
+      reason: "whatsapp_connection_inactive",
     });
     expect(world.connection("qr_off").status).toBe("observation");
     expect(world.state.audits.at(-1)).toMatchObject({
@@ -837,7 +854,7 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
 
   it("uma repetição idempotente da criação roda a ativação que a primeira tentativa não terminou", async () => {
     const world = globalWorld([
-      { key: "qr", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr", provider: "uazapi", instanceStatus: "suspended" },
     ]);
     const claims: GRow[] = [];
     world.prisma.providerRuleCreateClaim = {
@@ -865,7 +882,8 @@ describe("Todos os números: a regra global ativa os números (sem vaga nem cobr
     expect(first.outcome).toBe("created");
     expect(world.connection("qr").status).toBe("observation");
 
-    // The WhatsApp reconnected: the replay of the same request finishes it.
+    // The WhatsApp connection was reactivated in Integrações: the replay of
+    // the same request finishes it.
     world.state.instances[0]!.status = "active";
     const replay = (await world.service.createRule(
       "workspace_1",
@@ -1038,9 +1056,9 @@ describe("Todos os números: ativação automática de números conectados depoi
     expect(world.state.audits.length).toBe(before);
   });
 
-  it("a conferência de hora em hora ativa um número sem evento (ex.: WhatsApp reconectado)", async () => {
+  it("a conferência de hora em hora ativa um número sem evento (ex.: conexão WhatsApp reativada em Integrações)", async () => {
     const world = globalWorld([
-      { key: "qr", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr", provider: "uazapi", instanceStatus: "suspended" },
     ]);
     await createGlobal(world);
     expect(world.connection("qr").status).toBe("observation");
@@ -1077,7 +1095,7 @@ describe("Todos os números: ativação automática de números conectados depoi
   it("nunca ativa com a regra pausada, nunca retoma número pausado; falhas ficam pendentes", async () => {
     const world = globalWorld([
       { key: "qr_paused", provider: "uazapi", channelStatus: "paused" },
-      { key: "qr_off", provider: "uazapi", instanceStatus: "disconnected" },
+      { key: "qr_off", provider: "uazapi", instanceStatus: "pending_payment" },
       { key: "umbler_no_route", provider: "umbler", validRoute: false },
     ]);
     await createGlobal(world);
@@ -1172,10 +1190,46 @@ describe("Todos os números: ativação automática de números conectados depoi
     expect(world.connection("zz_good").status).toBe("production");
     expect(autoAudits()).toHaveLength(56);
 
+    const activate = vi.spyOn(world.service as never as { activateCoveredNumber: () => unknown }, "activateCoveredNumber");
     const muchLater = new Date(gNow.getTime() + 8 * 60 * 60_000);
     world.clock.now = muchLater;
     await auto.tick(muchLater); // retried after the backoff, not re-audited
     expect(autoAudits()).toHaveLength(56);
+    const channelsOf = () =>
+      activate.mock.calls.map((call) => ((call as unknown[])[0] as GRow).channelId as string);
+    const retried = channelsOf();
+    expect(retried).toHaveLength(50); // bounded per run
+
+    // The backoff follows that latest (unaudited) attempt, not the first
+    // audit: one hour later nothing that just failed is tried again.
+    activate.mockClear();
+    const nextSweep = new Date(muchLater.getTime() + 61 * 60_000);
+    world.clock.now = nextSweep;
+    await auto.tick(nextSweep);
+    // Only the 5 that did not fit in the previous run are tried now.
+    expect(channelsOf()).toHaveLength(5);
+    expect(channelsOf().filter((id) => retried.includes(id))).toEqual([]);
+    expect(autoAudits()).toHaveLength(56);
+  });
+
+  it("o limite de tempo para no meio de um workspace", async () => {
+    const world = globalWorld([
+      { key: "a", provider: "uazapi" },
+      { key: "b", provider: "uazapi" },
+      { key: "c", provider: "uazapi" },
+    ]);
+    const connectLater = detach(world, ["a", "b", "c"]);
+    await createGlobal(world);
+    connectLater();
+    let calls = 0;
+    const result = await world.service.autoActivateGlobalNumbers("workspace_1", "reconcile", {
+      now: gNow,
+      shouldStop: () => calls++ >= 1,
+    });
+    expect(result).toEqual({ attempted: 1, promoted: 1 });
+    expect(
+      ["a", "b", "c"].filter((key) => world.connection(key).status === "production"),
+    ).toHaveLength(1);
   });
 });
 

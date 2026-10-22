@@ -128,7 +128,7 @@ describe.skipIf(!optedIn)("Todos os números on disposable PostgreSQL", () => {
   async function qrNumber(
     workspaceId: string,
     key: string,
-    status: "active" | "disconnected" = "active",
+    status: "active" | "suspended" = "active",
   ) {
     const instance = await db.whatsappInstance.create({
       data: {
@@ -333,12 +333,21 @@ describe.skipIf(!optedIn)("Todos os números on disposable PostgreSQL", () => {
   it("incidente: conversa bloqueada antes de o número enviar é recuperada pelo Reprocessar bloqueadas, uma vez só, só nesse workspace e só dentro de 7 dias", async () => {
     const ws = await workspace("reprocessar");
     const other = await workspace("outro workspace");
-    // The WhatsApp is disconnected when the rule is created: number pending.
-    const qr = await qrNumber(ws, "incidente", "disconnected");
+    const qr = await qrNumber(ws, "incidente");
     const rule = await globalRule(ws);
-    expect(rule.pendingNumbers).toEqual([
-      expect.objectContaining({ reason: "whatsapp_disconnected" }),
-    ]);
+    // Data of the previous version: the global rule existed in production but
+    // its number had never been promoted (no promotion audit either).
+    await db.inboundWebhookConnection.update({
+      where: { id: qr.connectionId },
+      data: { status: "observation", productionActivatedAt: null },
+    });
+    await db.inboundWebhookChannel.update({
+      where: { id: qr.channelId },
+      data: { status: "discovered", productionActivatedAt: null },
+    });
+    await db.auditLog.deleteMany({
+      where: { workspaceId: ws, targetId: { in: [qr.connectionId, qr.channelId] } },
+    });
 
     // Conversations arrive while the number does not send yet.
     const blocked = await send(ws, qr, await adLead(ws));
@@ -351,11 +360,7 @@ describe.skipIf(!optedIn)("Todos os números on disposable PostgreSQL", () => {
     ]);
     expect(queue.enqueueProviderConversion).not.toHaveBeenCalled();
 
-    // Reconnected, then "Ativar envio neste número".
-    await db.whatsappInstance.update({
-      where: { id: qr.instance.id },
-      data: { status: "active" },
-    });
+    // After the update: "Ativar envio neste número".
     const activated = await rules.activateGlobalRuleNumber(ws, rule.id, qr.channelId, userId);
     expect(activated.outcome).toBe("promoted");
 
@@ -451,11 +456,25 @@ describe.skipIf(!optedIn)("Todos os números on disposable PostgreSQL", () => {
     expect((await send(ws, pausedChannel, await adLead(ws))).eligibleExecutionId).toBeTruthy();
   });
 
+  it("conexão WhatsApp suspensa em Integrações fica fora da regra e volta a enviar ao ser reativada", async () => {
+    const ws = await workspace("suspensa");
+    const qr = await qrNumber(ws, "suspensa", "suspended");
+    const rule = await globalRule(ws);
+    expect(rule.pendingNumbers).toEqual([]);
+    expect(await live(qr)).toEqual({ connection: "observation", channel: "discovered" });
+
+    await db.whatsappInstance.update({ where: { id: qr.instance.id }, data: { status: "active" } });
+    const auto = new GlobalRuleAutoActivationService(db as never, env, rules, undefined);
+    await auto.tick(new Date()); // first pass of an instance is a reconciliation
+    expect(await live(qr)).toEqual({ connection: "production", channel: "active" });
+    expect((await send(ws, qr, await adLead(ws))).eligibleExecutionId).toBeTruthy();
+  });
+
   it("o índice novo existe e o painel conta as bloqueadas pela regra", async () => {
     const indexes = await db.$queryRaw<Array<{ indexname: string }>>`
-      SELECT indexname FROM pg_indexes
-      WHERE tablename = 'ProviderConversionRuleExecution'
-        AND indexname = 'ProviderConversionRuleExecution_rule_status_occurredAt_idx'`;
+      SELECT c.relname AS indexname FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+      WHERE c.relname = 'ProviderConversionRuleExecution_rule_status_occurredAt_idx'
+        AND i.indisvalid AND i.indisready`;
     expect(indexes).toHaveLength(1);
   });
 });

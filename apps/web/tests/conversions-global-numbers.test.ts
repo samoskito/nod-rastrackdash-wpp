@@ -61,8 +61,12 @@ afterEach(() => {
   document.body.style.overflow = "";
 });
 
-function apiError(status: number, message: string) {
-  return Object.assign(new Error(message), { name: "ApiRequestError", status });
+function apiError(status: number, message: string, code?: string) {
+  return Object.assign(new Error(message), {
+    name: "ApiRequestError",
+    status,
+    ...(code ? { code } : {}),
+  });
 }
 
 function licenseLocked() {
@@ -120,7 +124,7 @@ function globalRule(
 
 describe("ações: Todos os números", () => {
   it("criar uma regra para todos os números devolve os números pendentes", async () => {
-    const rule = globalRule("observation", [pending("ch_03", "whatsapp_disconnected")]);
+    const rule = globalRule("observation", [pending("ch_03", "whatsapp_connection_inactive")]);
     serverApiFetch.mockResolvedValueOnce({
       outcome: "created",
       receipt: { ruleId: "rule_global", connectionId: null, createdAt: rule.createdAt },
@@ -149,7 +153,7 @@ describe("ações: Todos os números", () => {
     expect(result).toMatchObject({
       ok: true,
       ruleMode: "observation",
-      pendingNumbers: [expect.objectContaining({ reason: "whatsapp_disconnected" })],
+      pendingNumbers: [expect.objectContaining({ reason: "whatsapp_connection_inactive" })],
     });
   });
 
@@ -171,18 +175,18 @@ describe("ações: Todos os números", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/conversions");
   });
 
-  it("WhatsApp desconectado e conexão pausada são resolvidos em Integrações", async () => {
+  it("conexão WhatsApp não ativa e conexão pausada são resolvidos em Integrações", async () => {
     const rule = globalRule("production", []);
     serverApiFetch.mockResolvedValueOnce({
       outcome: "pending",
-      reason: "whatsapp_disconnected",
+      reason: "whatsapp_connection_inactive",
       rule,
     });
     const disconnected = await activateRuleNumberAction(
       form({ ruleId: "rule_global", channelId: "ch_03" }),
     );
     expect(disconnected.ok).toBe(false);
-    expect(disconnected.message).toContain("Reconecte em Integrações");
+    expect(disconnected.message).toContain("Reative-a em Integrações");
 
     serverApiFetch.mockResolvedValueOnce({ outcome: "pending", reason: "connection_paused", rule });
     const paused = await activateRuleNumberAction(form({ ruleId: "rule_global", channelId: "ch_01" }));
@@ -222,14 +226,19 @@ describe("ações: Todos os números", () => {
 
   it("traduz 409 (regra pausada / rodada em andamento) e 429 (intervalo)", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      apiError(409, "Ative o envio automático da regra antes de reprocessar as conversas bloqueadas"),
+      apiError(
+        409,
+        "Ative o envio automático da regra antes de reprocessar as conversas bloqueadas",
+        "provider_rule_reprocess_rule_inactive",
+      ),
     );
     expect(
       (await reprocessBlockedExecutionsAction(form({ ruleId: "rule_global" }))).message,
     ).toContain("pausada ou em observação");
 
+    // The decision comes from the code, not from the wording of the message.
     serverApiFetch.mockRejectedValueOnce(
-      apiError(409, "Já existe um reprocessamento em andamento para esta regra"),
+      apiError(409, "Mensagem qualquer", "provider_rule_reprocess_in_progress"),
     );
     expect(
       (await reprocessBlockedExecutionsAction(form({ ruleId: "rule_global" }))).message,
@@ -262,7 +271,7 @@ describe("Todos os números: números que ainda não enviam (view model)", () =>
     const views = pendingNumberViews(
       [
         pending("ch_02", "channel_not_active"),
-        pending("ch_03", "whatsapp_disconnected", { activatable: false }),
+        pending("ch_03", "whatsapp_connection_inactive", { activatable: false }),
         pending("ch_01", "meta_route_missing", { provider: "umbler", activatable: false }),
         pending("ch_09", "connection_paused", {
           label: "Número novo",
@@ -285,7 +294,7 @@ describe("Todos os números: números que ainda não enviam (view model)", () =>
         channelId: "ch_03",
         label: "Pós-venda",
         detail:
-          "O WhatsApp deste número está desconectado ou suspenso. Reconecte em Integrações.",
+          "A conexão WhatsApp deste número não está ativa (suspensa ou removida). Reative-a em Integrações.",
         action: "integrations",
       },
       {
@@ -374,7 +383,7 @@ describe("Todos os números: aviso na lista de regras", () => {
     const props = screenProps(
       globalRule("production", [
         pending("ch_02", "channel_not_active"),
-        pending("ch_03", "whatsapp_disconnected", { activatable: false }),
+        pending("ch_03", "whatsapp_connection_inactive", { activatable: false }),
       ]),
     );
     render(createElement(ConversionsScreen, props));
@@ -445,7 +454,7 @@ describe("Todos os números: aviso na lista de regras", () => {
         screenProps(
           globalRule("observation", [
             pending("ch_02", "channel_not_active"),
-            pending("ch_03", "whatsapp_disconnected", { activatable: false }),
+            pending("ch_03", "whatsapp_connection_inactive", { activatable: false }),
           ]),
         ),
       ),
@@ -469,7 +478,7 @@ describe("Todos os números: aviso na lista de regras", () => {
         ruleId: "rule_new",
         pendingNumbers: [
           pending("ch_02", "channel_not_active"),
-          pending("ch_03", "whatsapp_disconnected", { activatable: false }),
+          pending("ch_03", "whatsapp_connection_inactive", { activatable: false }),
         ],
         numbers,
         mode: "observation",
@@ -478,7 +487,7 @@ describe("Todos os números: aviso na lista de regras", () => {
     );
     const warning = screen.getByRole("region", { name: "Números que ainda não enviam" });
     expect(within(warning).getByText("Pós-venda")).toBeTruthy();
-    expect(within(warning).getByText(/Reconecte em Integrações/)).toBeTruthy();
+    expect(within(warning).getByText(/Reative-a em Integrações/)).toBeTruthy();
   });
 });
 

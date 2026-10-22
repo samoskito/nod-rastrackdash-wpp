@@ -23,9 +23,13 @@ import { metaRouteRequiredForProvider } from "../inbound-webhooks/inbound-webhoo
  *    answers 423 while it is locked (LicenseSoftlockGuard) and the automatic
  *    activation skips its run while it is locked;
  *  - a UAZAPI/NOD (QR) number is promoted only while its WhatsApp connection
- *    (WhatsappInstance) is `active`: a connection suspended by the operator
- *    or disconnected is reported as `whatsapp_disconnected` and is only
- *    resumed in Integrações;
+ *    (WhatsappInstance) is `active`, i.e. not suspended/removed in
+ *    Integrações (this edition only writes `active` and `suspended`; any
+ *    other legacy status is treated as not active, fail-closed). A suspended
+ *    connection is already out of the rule scope; one suspended in between is
+ *    reported as `whatsapp_connection_inactive`. The QR session itself
+ *    (connected or not) is NOT checked: it only shows in the health check
+ *    (`lastHealthStatus`), which may be stale, so it never blocks here;
  *  - a paused connection is never resumed here (reason connection_paused);
  *  - the Meta route rules of the Integrations buttons still apply.
  * Everything else is returned as a pending number with a reason code.
@@ -85,7 +89,7 @@ export type PendingChannelRow = Prisma.InboundWebhookChannelGetPayload<{
 /**
  * Whether the number's own WhatsApp connection allows sending. Only QR
  * numbers (UAZAPI/NOD bridge) carry a WhatsappInstance: it must be `active`
- * (not suspended, disconnected or in error). Webhook providers (Umbler,
+ * (not suspended/removed). The QR session health is deliberately ignored. Webhook providers (Umbler,
  * Gupshup, Unnichat...) have no instance and are always connectable.
  */
 export function channelConnectable(
@@ -150,7 +154,7 @@ export function pendingNumberState(input: {
     // Someone paused the connection: only Integrações resumes it.
     reason = "connection_paused";
   } else if (!channelConnectable(channel)) {
-    reason = "whatsapp_disconnected";
+    reason = "whatsapp_connection_inactive";
   } else if (
     routeRequired &&
     !promotionSet.every((row) => hasValidMetaRoute(row))

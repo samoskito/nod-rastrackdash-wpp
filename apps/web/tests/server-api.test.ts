@@ -16,6 +16,30 @@ afterEach(() => {
 });
 
 describe("server api client", () => {
+  it("keeps the machine-readable code of an API error next to its message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          statusCode: 409,
+          error: "Conflict",
+          code: "provider_rule_reprocess_in_progress",
+          message: "Já existe um reprocessamento em andamento para esta regra",
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const error = (await serverApiFetch("/conversion-rules/providers/r/reprocess-blocked", {
+      method: "POST",
+    }).catch((thrown: unknown) => thrown)) as { status: number; code?: string; message: string };
+
+    expect(error).toMatchObject({
+      status: 409,
+      code: "provider_rule_reprocess_in_progress",
+      message: "Já existe um reprocessamento em andamento para esta regra",
+    });
+  });
+
   it("forwards the Next.js cookie header to the backend", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {

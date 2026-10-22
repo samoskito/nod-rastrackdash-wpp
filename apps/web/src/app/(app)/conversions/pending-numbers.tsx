@@ -23,7 +23,7 @@ const integrationsHref = "/integrations";
  * enviam todos (porte do incidente do SaaS: toda decisão ficava bloqueada
  * porque os números nunca eram ativados). Regras em produção listam todos os
  * números pendentes; uma regra ainda em observação lista só o que ativar a
- * regra NÃO resolve (WhatsApp desconectado, rota Meta, conexão pausada), já
+ * regra NÃO resolve (conexão WhatsApp não ativa, rota Meta, conexão pausada), já
  * que os demais números passam a enviar junto com ela.
  */
 export function PendingNumbersWarning({

@@ -672,17 +672,19 @@ describe("GlobalRuleAutoActivationService", () => {
 
     await h.service.tick(now);
     expect(h.rules.autoActivateGlobalNumbers).toHaveBeenCalledTimes(3);
-    expect(h.rules.autoActivateGlobalNumbers).toHaveBeenCalledWith("ws_0000", "reconcile", {
-      eventAt: null,
-      now,
-    });
+    expect(h.rules.autoActivateGlobalNumbers).toHaveBeenCalledWith(
+      "ws_0000",
+      "reconcile",
+      expect.objectContaining({ eventAt: null, now, shouldStop: expect.any(Function) }),
+    );
 
     h.rules.autoActivateGlobalNumbers.mockClear();
     expect(await h.service.tick(minutes(2))).toEqual(["ws_0001"]);
-    expect(h.rules.autoActivateGlobalNumbers).toHaveBeenCalledWith("ws_0001", "bridge_created", {
-      eventAt: minutes(1),
-      now: minutes(2),
-    });
+    expect(h.rules.autoActivateGlobalNumbers).toHaveBeenCalledWith(
+      "ws_0001",
+      "bridge_created",
+      expect.objectContaining({ eventAt: minutes(1), now: minutes(2) }),
+    );
 
     h.rules.autoActivateGlobalNumbers.mockClear();
     expect(await h.service.tick(minutes(20))).toEqual([]);
@@ -702,6 +704,25 @@ describe("GlobalRuleAutoActivationService", () => {
     expect(seen).toHaveLength(450);
     expect(new Set(seen).size).toBe(450);
     expect(seen.at(-1)).toBe("ws_0449");
+  });
+
+  it("o limite de tempo também vale dentro de um workspace (antes do timeout do lock)", async () => {
+    const h = harness({ workspaces: 1 });
+    let fakeTime = 0;
+    const clock = () => fakeTime;
+    const stops: boolean[] = [];
+    h.rules.autoActivateGlobalNumbers.mockImplementationOnce((async (_ws: string, _t: string, options: RRow) => {
+      stops.push(options.shouldStop());
+      fakeTime = 40_000 + 29_000; // still inside the hard stop
+      stops.push(options.shouldStop());
+      fakeTime = 40_000 + 30_000; // reached it: stop before the next number
+      stops.push(options.shouldStop());
+      return { attempted: 0, promoted: 0 };
+    }) as never);
+    await h.service.tick(now, clock);
+    expect(stops).toEqual([false, false, true]);
+    // Lock timeout (budget + 45 s) is above the hard stop (budget + 30 s).
+    expect(h.prisma.lastTransactionSettings.timeout).toBeGreaterThan(70_000);
   });
 
   it("com a licença bloqueada não roda nada (fail-closed)", async () => {
@@ -756,5 +777,37 @@ describe("UazapiConversionBridgeService: evento durável da ponte", () => {
         targetId: "channel_new",
       }),
     });
+  });
+});
+
+describe("migration 20261022120000_provider_rule_blocked_reprocess_index (texto, sem PostgreSQL)", () => {
+  it("é uma única instrução CREATE INDEX CONCURRENTLY IF NOT EXISTS (o Prisma a roda fora de transação)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const migrationsDir = resolve(__dirname, "../../prisma/migrations");
+    const sql = readFileSync(
+      resolve(migrationsDir, "20261022120000_provider_rule_blocked_reprocess_index/migration.sql"),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    const statements = sql
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n")
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    expect(statements).toEqual([
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS "ProviderConversionRuleExecution_rule_status_occurredAt_idx" ON "ProviderConversionRuleExecution"("workspaceId", "providerRuleId", "status", "occurredAt")',
+    ]);
+    // Same pattern as the earlier concurrent index migration.
+    const precedent = readFileSync(
+      resolve(migrationsDir, "20260709233000_lead_ctwa_index_concurrently/migration.sql"),
+      "utf8",
+    );
+    expect(precedent).toMatch(/CREATE INDEX CONCURRENTLY IF NOT EXISTS/);
+    const schema = readFileSync(resolve(__dirname, "../../prisma/schema.prisma"), "utf8");
+    expect(schema).toContain(
+      'map: "ProviderConversionRuleExecution_rule_status_occurredAt_idx"',
+    );
   });
 });

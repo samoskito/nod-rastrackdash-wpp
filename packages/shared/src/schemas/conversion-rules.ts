@@ -856,8 +856,9 @@ const observationCanonicalChannelsSchema = z.array(
 
 /**
  * Regra "Todos os números": por que um número coberto ainda não envia.
- *  - whatsapp_disconnected: a conexão WhatsApp (QR) do número está suspensa
- *    ou desconectada em Integrações; a regra não a reativa;
+ *  - whatsapp_connection_inactive: a conexão WhatsApp (QR) do número não está
+ *    ativa (suspensa/removida em Integrações ou status legado); a regra não a
+ *    reativa. Não usa o health check (lastHealthStatus), que pode estar velho;
  *  - meta_route_missing: falta a rota Meta válida exigida pelo provedor;
  *  - channel_not_active: o canal do número ainda não está ativo;
  *  - connection_not_production: a conexão do número está em observação;
@@ -867,7 +868,7 @@ const observationCanonicalChannelsSchema = z.array(
  * é exigida em toda escrita (423 quando bloqueada).
  */
 export const providerConversionRulePendingNumberReasons = [
-  "whatsapp_disconnected",
+  "whatsapp_connection_inactive",
   "meta_route_missing",
   "channel_not_active",
   "connection_not_production",
