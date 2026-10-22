@@ -16097,3 +16097,63 @@ button.meta-manual-entry[aria-expanded="true"] {
     grid-column: 1 / -1;
   }
 }
+
+/* WAHA (motor GoWS): orientação, status da sessão e configuração manual */
+.waha-intro {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--ink-soft);
+}
+
+.waha-intro p,
+.waha-intro ol {
+  margin: 0;
+}
+
+.waha-intro ol {
+  padding-left: 20px;
+}
+
+.waha-details {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.waha-details:empty {
+  display: none;
+}
+
+.waha-status,
+.waha-confirm {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  overflow-wrap: anywhere;
+}
+
+.waha-status p,
+.waha-confirm p {
+  margin: 0;
+}
+
+.waha-status.ok {
+  border-left-color: var(--mint-strong);
+}
+
+.waha-status.warn {
+  border-left-color: var(--amber);
+}
+
+.waha-status.error {
+  border-left-color: var(--coral);
+}

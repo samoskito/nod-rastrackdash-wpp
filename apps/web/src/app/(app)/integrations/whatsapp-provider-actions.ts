@@ -5,15 +5,37 @@ import {
   whatsappConnectionEditInputSchema,
   whatsappConnectionEditMetadataSchema,
   whatsappConnectionTestResultSchema,
+  whatsappConnectionWebhookConfigureResultSchema,
   whatsappConnectionWebhookTokenRotateResultSchema,
 } from "@wpptrack/shared";
 import type { WhatsappConnectionEditMetadataDto } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
 import { licenseLockedMessageFor } from "../../../lib/license-locked-message";
 import { serverApiFetch } from "../../../lib/server-api";
+import {
+  wahaSessionGuidance,
+  wahaUnreachableMessage,
+  wahaWebhookFailureMessage,
+} from "./waha-session-guidance";
 
 export type WhatsappReceiverSecret = {
   webhookUrl: string;
+};
+
+/** Resultado de "Configurar webhook" (só WAHA). Nunca leva token. */
+export type WahaWebhookOutcome = {
+  configured: boolean;
+  events: string[];
+  sessionStatus: string | null;
+  reason?: string;
+};
+
+/** Passo a passo manual da WAHA; exibido só quando o aluno pede. */
+export type WahaManualSetup = {
+  webhookUrlWithToken: string;
+  events: string[];
+  tokenHeaderName: string;
+  webhookToken: string;
 };
 
 export type WhatsappProviderActionResult = {
@@ -21,6 +43,12 @@ export type WhatsappProviderActionResult = {
   message: string;
   connectionId?: string;
   receiverSecret?: WhatsappReceiverSecret;
+  /** Status bruto da sessão (WAHA: WORKING, SCAN_QR_CODE...). */
+  providerStatus?: string;
+  wahaWebhook?: WahaWebhookOutcome;
+  wahaManualSetup?: WahaManualSetup;
+  /** True quando a API recusou com 423 (licença bloqueada). */
+  licenseLocked?: boolean;
 };
 
 export type WhatsappConnectionEditData = WhatsappConnectionEditMetadataDto;
@@ -52,7 +80,10 @@ export async function createWhatsappConnectionAction(
     revalidatePath(integrationsPath);
     return {
       ok: true,
-      message: "Conexao salva. Use Testar antes de configurar o receiver.",
+      message:
+        input.data.provider === "waha"
+          ? "Conexão salva. Agora teste a conexão e configure o webhook."
+          : "Conexao salva. Use Testar antes de configurar o receiver.",
       connectionId: connection.id,
     };
   } catch (error) {
@@ -77,6 +108,17 @@ export async function testWhatsappConnectionAction(
     }
 
     revalidatePath(integrationsPath);
+    if (result.data.provider === "waha") {
+      const guidance = wahaSessionGuidance(result.data.providerStatus);
+      return {
+        ok: result.data.status === "connected",
+        message: guidance ? guidance.instruction : wahaUnreachableMessage,
+        connectionId,
+        ...(result.data.providerStatus
+          ? { providerStatus: result.data.providerStatus }
+          : {}),
+      };
+    }
     return {
       ok: result.data.status === "connected",
       message:
@@ -109,6 +151,21 @@ export async function rotateWhatsappWebhookTokenAction(
     }
 
     revalidatePath(integrationsPath);
+    const manual = result.data.wahaManualSetup;
+    if (result.data.connection.provider === "waha" && manual) {
+      return {
+        ok: true,
+        message:
+          "Novo token gerado. Copie a configuração agora: ela não será exibida novamente e a anterior deixou de valer.",
+        connectionId,
+        wahaManualSetup: {
+          webhookUrlWithToken: manual.webhookUrlWithToken,
+          events: manual.events,
+          tokenHeaderName: manual.tokenHeaderName,
+          webhookToken: result.data.webhookToken,
+        },
+      };
+    }
     return {
       ok: true,
       message:
@@ -120,6 +177,55 @@ export async function rotateWhatsappWebhookTokenAction(
     };
   } catch (error) {
     return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel gerar o receiver desta conexao.");
+  }
+}
+
+export async function configureWahaWebhookAction(
+  formData: FormData,
+): Promise<WhatsappProviderActionResult> {
+  const connectionId = formText(formData, "connectionId");
+  if (!connectionId) return failure("Conexao WhatsApp invalida.");
+
+  try {
+    const response = await serverApiFetch<unknown>(
+      `/integrations/whatsapp-connections/${encodeURIComponent(connectionId)}/configure-webhook`,
+      { method: "POST", body: "{}" },
+    );
+    const result =
+      whatsappConnectionWebhookConfigureResultSchema.safeParse(response);
+    if (!result.success || result.data.connectionId !== connectionId) {
+      return failure("Não foi possível configurar o webhook na sua WAHA.");
+    }
+
+    const data = result.data;
+    const outcome: WahaWebhookOutcome = {
+      configured: data.configured,
+      events: data.events,
+      sessionStatus: data.sessionStatus,
+      ...(data.reason ? { reason: data.reason } : {}),
+    };
+    if (data.configured) {
+      revalidatePath(integrationsPath);
+      return {
+        ok: true,
+        message:
+          "Webhook configurado na sua WAHA. O token anterior deixou de valer.",
+        connectionId,
+        wahaWebhook: outcome,
+        ...(data.sessionStatus ? { providerStatus: data.sessionStatus } : {}),
+      };
+    }
+    return {
+      ok: false,
+      message: wahaWebhookFailureMessage(data.reason, data.message),
+      connectionId,
+      wahaWebhook: outcome,
+    };
+  } catch (error) {
+    const locked = licenseLockedMessageFor(error);
+    return locked
+      ? { ok: false, message: locked, licenseLocked: true }
+      : failure("Não foi possível configurar o webhook na sua WAHA.");
   }
 }
 

@@ -43,6 +43,12 @@ export function NumbersWithoutRules({
               </li>
             ))}
           </ul>
+          {comingSoon.some((number) => number.provider === "waha") ? (
+            <p className="muted" data-testid="waha-rules-note">
+              Na WAHA, a entrada de lead de anúncio (CTWA) já funciona. Só as
+              regras de frase ainda não estão disponíveis.
+            </p>
+          ) : null}
         </div>
       ) : null}
       {webhookOnly.length > 0 ? (

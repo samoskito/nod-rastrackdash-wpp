@@ -56,7 +56,7 @@ export const integrationTabs: readonly IntegrationTabDefinition[] = [
     hash: "integracao-whatsapp",
     hashAliases: [],
     description:
-      "Por onde as conversas dos anúncios chegam: a sua instância Uazapi ou a API oficial do WhatsApp (Cloud API), conectada direto à Meta. WAHA, Z-API e NOD API estão em breve.",
+      "Por onde as conversas dos anúncios chegam: a sua instância Uazapi, a sua WAHA (motor GoWS) ou a API oficial do WhatsApp (Cloud API), conectada direto à Meta. Z-API e NOD API estão em breve.",
     categories: ["whatsapp_number", "whatsapp_official"],
   },
   {
@@ -229,11 +229,8 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     logo: integrationLogoPath("waha"),
     initials: "WA",
     logoSurface: logoSurface("waha"),
-    comingSoon: true,
-    comingSoonDescription:
-      "Em breve: a conexão com o WAHA ainda não está disponível para novas contas.",
     description:
-      "Sua instalação WAHA (WhatsApp HTTP API) já conectada.",
+      "Use a sua própria WAHA (motor GoWS): você hospeda o servidor e lê o QR no painel dela, e o RastrackDash recebe as conversas dos anúncios por webhook.",
     gate: { kind: "whatsapp_provider", provider: "waha" },
   },
   {

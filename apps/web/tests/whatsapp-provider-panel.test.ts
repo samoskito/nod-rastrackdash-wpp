@@ -42,6 +42,9 @@ function renderPanel(
     loadEditAction: ReturnType<typeof vi.fn>;
     deleteAction: ReturnType<typeof vi.fn>;
     canManage: boolean;
+    configureWebhookAction: ReturnType<typeof vi.fn>;
+    provider: WhatsappConnectionDto["provider"];
+    licenseLocked: boolean;
   }> = {},
 ) {
   const noopAction = vi.fn(async () => ({ ok: true as const, message: "ok" }));
@@ -69,6 +72,11 @@ function renderPanel(
     editAction: overrides.editAction ?? noopAction,
     loadEditAction,
     deleteAction: overrides.deleteAction ?? noopAction,
+    ...(overrides.configureWebhookAction
+      ? { configureWebhookAction: overrides.configureWebhookAction }
+      : {}),
+    ...(overrides.provider ? { provider: overrides.provider } : {}),
+    ...(overrides.licenseLocked ? { licenseLocked: true } : {}),
   };
 
   render(createElement(WhatsappProviderPanel, props));
@@ -103,7 +111,7 @@ describe("WhatsappProviderPanel edit flow", () => {
     const baseUrlInput = editForm.getByLabelText(
       "URL da API",
     ) as HTMLInputElement;
-    const sessionInput = editForm.getByLabelText("Sessao") as HTMLInputElement;
+    const sessionInput = editForm.getByLabelText("Sessão") as HTMLInputElement;
     const secretInput = editForm.getByLabelText(/api key/i) as HTMLInputElement;
 
     expect(baseUrlInput.value).toBe("https://waha.example.test");
@@ -198,29 +206,6 @@ describe("WhatsappProviderPanel receiver instruction", () => {
     ) as HTMLInputElement;
     expect(webhookInput.value).toBe("https://api.test/webhook/uazapi-token");
     expect(screen.getByText(/exibido uma unica vez/i)).not.toBeNull();
-  });
-
-  it("mentions the WAHA webhook field, not Uazapi, after generating a receiver for a WAHA connection", async () => {
-    const wahaConnection = connectionFor("waha", "connection_waha");
-    const rotateAction = vi.fn(async () => ({
-      ok: true as const,
-      message: "Receiver gerado.",
-      receiverSecret: { webhookUrl: "https://api.test/webhook/waha-token" },
-    }));
-    renderPanel({ connections: [wahaConnection], rotateAction });
-
-    fireEvent.click(screen.getByRole("button", { name: /gerar receiver/i }));
-
-    await waitFor(() => {
-      expect(rotateAction).toHaveBeenCalledTimes(1);
-    });
-
-    const secretPanel = within(
-      (await screen.findByText(/campo de webhook da waha/i)).closest(
-        '[data-presentation-sensitive-action="true"]',
-      ) as HTMLElement,
-    );
-    expect(secretPanel.queryByText(/uazapi/i)).toBeNull();
   });
 
   it("points students to the inbound webhooks block for Umbler Talk and Gupshup", () => {
@@ -323,5 +308,280 @@ describe("WhatsappProviderPanel delete flow", () => {
     renderPanel({ canManage: false });
 
     expect(screen.queryByRole("button", { name: /excluir/i })).toBeNull();
+  });
+});
+
+describe("WhatsappProviderPanel WAHA (GoWS)", () => {
+  const sessionResult = (providerStatus: string, ok = false) =>
+    vi.fn(async () => ({
+      ok,
+      message: "texto da API",
+      connectionId: "connection_1",
+      providerStatus,
+    }));
+
+  it("mounts the scoped WAHA panel without any connection, with the own-server guidance and the create fields", () => {
+    renderPanel({ connections: [], provider: "waha" });
+
+    const intro = within(screen.getByTestId("waha-intro"));
+    expect(intro.getAllByText(/sua WAHA/i).length).toBeGreaterThan(0);
+    expect(intro.getByText(/não mostra QR/i)).not.toBeNull();
+    expect(screen.getByLabelText("Nome")).not.toBeNull();
+    expect(screen.getByLabelText(/URL da API/)).not.toBeNull();
+    const apiKey = screen.getByLabelText(/API key/) as HTMLInputElement;
+    expect(apiKey.type).toBe("password");
+    expect((screen.getByLabelText(/Sessão/) as HTMLInputElement).required).toBe(
+      true,
+    );
+    expect(screen.queryByText(/Em breve: novas conexões/)).toBeNull();
+    // Phrase rules stay "em breve"; CTWA lead entry already works.
+    expect(
+      screen.getByText(/regras de frase da WAHA seguem em breve/i),
+    ).not.toBeNull();
+    expect(screen.queryByText("Nome exibido")).toBeNull();
+  });
+
+  it("validates the create form locally and clears the API key", async () => {
+    const createAction = vi.fn(async () => ({ ok: true, message: "ok" }));
+    renderPanel({ connections: [], provider: "waha", createAction });
+
+    const url = screen.getByLabelText(/URL da API/) as HTMLInputElement;
+    const apiKey = screen.getByLabelText(/API key/) as HTMLInputElement;
+    fireEvent.change(screen.getByLabelText("Nome"), {
+      target: { value: "Loja" },
+    });
+    fireEvent.change(url, { target: { value: "ftp://waha.test" } });
+    fireEvent.change(apiKey, { target: { value: "segredo" } });
+    fireEvent.change(screen.getByLabelText(/Sessão/), {
+      target: { value: "loja" },
+    });
+    fireEvent.submit(url.closest("form") as HTMLFormElement);
+
+    expect(await screen.findByText(/começando com http/i)).not.toBeNull();
+    expect(createAction).not.toHaveBeenCalled();
+    expect(apiKey.value).toBe("");
+  });
+
+  it("submits a valid create form with the provider fixed to WAHA", async () => {
+    const createAction = vi.fn(async (_data: FormData) => ({
+      ok: true,
+      message: "Conexão salva. Agora teste a conexão e configure o webhook.",
+    }));
+    renderPanel({ connections: [], provider: "waha", createAction });
+
+    const url = screen.getByLabelText(/URL da API/) as HTMLInputElement;
+    fireEvent.change(screen.getByLabelText("Nome"), {
+      target: { value: "Loja" },
+    });
+    fireEvent.change(url, { target: { value: "https://waha.test" } });
+    fireEvent.change(screen.getByLabelText(/API key/), {
+      target: { value: "segredo" },
+    });
+    fireEvent.change(screen.getByLabelText(/Sessão/), {
+      target: { value: "loja" },
+    });
+    fireEvent.submit(url.closest("form") as HTMLFormElement);
+
+    await waitFor(() => expect(createAction).toHaveBeenCalledTimes(1));
+    const data = createAction.mock.calls[0]![0];
+    expect(data.get("provider")).toBe("waha");
+    expect(data.get("session")).toBe("loja");
+    await screen.findByText(/Conexão salva/);
+  });
+
+  it("shows WORKING with the next step", async () => {
+    const testAction = sessionResult("WORKING", true);
+    renderPanel({ testAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /testar conexão/i }));
+
+    const status = await screen.findByTestId("waha-session-status");
+    expect(within(status).getByText("WORKING")).not.toBeNull();
+    expect(status.textContent).toMatch(/Sessão conectada/);
+    expect(status.className).toContain("ok");
+  });
+
+  it("tells the student to read the QR in their own WAHA panel on SCAN_QR_CODE", async () => {
+    const testAction = sessionResult("SCAN_QR_CODE");
+    renderPanel({ testAction });
+
+    fireEvent.click(screen.getByRole("button", { name: /testar conexão/i }));
+
+    const status = await screen.findByTestId("waha-session-status");
+    expect(within(status).getByText("SCAN_QR_CODE")).not.toBeNull();
+    expect(status.textContent).toMatch(/painel da sua WAHA/);
+    expect(status.className).toContain("warn");
+    // The app never renders a QR code.
+    expect(document.querySelector("img, canvas")).toBeNull();
+  });
+
+  it.each([
+    ["STOPPED", /Inicie a sessão/],
+    ["FAILED", /logs/],
+    ["STARTING", /subindo/],
+  ])("shows the instruction for %s", async (providerStatus, pattern) => {
+    renderPanel({ testAction: sessionResult(providerStatus) });
+
+    fireEvent.click(screen.getByRole("button", { name: /testar conexão/i }));
+
+    const status = await screen.findByTestId("waha-session-status");
+    expect(within(status).getByText(providerStatus)).not.toBeNull();
+    expect(status.textContent).toMatch(pattern);
+  });
+
+  it("configures the webhook automatically and lists the subscribed events", async () => {
+    const configureWebhookAction = vi.fn(async () => ({
+      ok: true,
+      message:
+        "Webhook configurado na sua WAHA. O token anterior deixou de valer.",
+      connectionId: "connection_1",
+      providerStatus: "WORKING",
+      wahaWebhook: {
+        configured: true,
+        events: ["message", "message.any", "session.status"],
+        sessionStatus: "WORKING",
+      },
+    }));
+    renderPanel({ configureWebhookAction });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /configurar webhook/i }),
+    );
+
+    const result = await screen.findByTestId("waha-webhook-result");
+    expect(within(result).getByText("Webhook configurado")).not.toBeNull();
+    expect(result.textContent).toContain(
+      "message, message.any, session.status",
+    );
+    expect(result.textContent).not.toMatch(/token=|X-Wpptrack/);
+    expect(screen.queryByTestId("waha-manual-setup")).toBeNull();
+  });
+
+  it("reports a refused automatic webhook and keeps the manual alternative", async () => {
+    const configureWebhookAction = vi.fn(async () => ({
+      ok: false,
+      message: "A WAHA recusou a API key. Confira a chave na conexão (Editar).",
+      connectionId: "connection_1",
+      wahaWebhook: {
+        configured: false,
+        events: [] as string[],
+        sessionStatus: null,
+        reason: "unauthorized",
+      },
+    }));
+    renderPanel({ configureWebhookAction });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /configurar webhook/i }),
+    );
+
+    const result = await screen.findByTestId("waha-webhook-result");
+    expect(within(result).getByText("Webhook não configurado")).not.toBeNull();
+    expect(result.textContent).toMatch(/recusou a API key/);
+    expect(result.textContent).toMatch(/configuração manual/);
+    expect(
+      screen.getByRole("button", { name: /configuração manual/i }),
+    ).not.toBeNull();
+  });
+
+  it("asks for confirmation before rotating the token and only then shows the manual setup", async () => {
+    const token = "t".repeat(43);
+    const rotateAction = vi.fn(async () => ({
+      ok: true,
+      message: "Novo token gerado.",
+      connectionId: "connection_1",
+      wahaManualSetup: {
+        webhookUrlWithToken:
+          "https://api.test/webhooks/whatsapp/connection_1?token=" + token,
+        events: ["message", "message.any", "session.status"],
+        tokenHeaderName: "X-Wpptrack-Webhook-Token",
+        webhookToken: token,
+      },
+    }));
+    renderPanel({ rotateAction });
+
+    // Nothing sensitive before the student asks.
+    expect(screen.queryByTestId("waha-manual-setup")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /configuração manual/i }),
+    );
+    const confirm = within(await screen.findByTestId("waha-rotate-confirm"));
+    expect(confirm.getByText(/webhook atual deixa de valer/i)).not.toBeNull();
+    expect(rotateAction).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm.getByRole("button", { name: /gerar novo token/i }));
+
+    const manual = within(await screen.findByTestId("waha-manual-setup"));
+    expect(rotateAction).toHaveBeenCalledTimes(1);
+    expect(
+      (manual.getByLabelText("URL do webhook com token") as HTMLInputElement)
+        .value,
+    ).toContain("?token=" + token);
+    expect(
+      manual.getByText("message, message.any, session.status"),
+    ).not.toBeNull();
+    expect(manual.getByText("X-Wpptrack-Webhook-Token")).not.toBeNull();
+    expect(
+      (manual.getByLabelText("Token do webhook") as HTMLInputElement).value,
+    ).toBe(token);
+
+    fireEvent.click(manual.getByRole("button", { name: /ocultar/i }));
+    expect(screen.queryByTestId("waha-manual-setup")).toBeNull();
+  });
+
+  it("cancels the token rotation without calling the API", () => {
+    const rotateAction = vi.fn();
+    renderPanel({ rotateAction });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /configuração manual/i }),
+    );
+    const confirm = within(screen.getByTestId("waha-rotate-confirm"));
+    fireEvent.click(confirm.getByRole("button", { name: /cancelar/i }));
+
+    expect(screen.queryByTestId("waha-rotate-confirm")).toBeNull();
+    expect(rotateAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the standard license message on a 423 and disables the controls when locked", async () => {
+    const lockedMessage =
+      "Licença bloqueada: alterações indisponíveis. Verifique /backoffice/license.";
+    const configureWebhookAction = vi.fn(async () => ({
+      ok: false,
+      message: lockedMessage,
+      licenseLocked: true,
+    }));
+    renderPanel({ configureWebhookAction });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /configurar webhook/i }),
+    );
+
+    expect(await screen.findByText(lockedMessage)).not.toBeNull();
+    expect(screen.queryByTestId("waha-webhook-result")).toBeNull();
+
+    cleanup();
+    renderPanel({ licenseLocked: true });
+    expect(screen.getByText(/Licença bloqueada: criar, testar/)).not.toBeNull();
+    expect(
+      (
+        screen
+          .getByRole("button", { name: /testar conexão/i })
+          .closest("fieldset") as HTMLFieldSetElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("never puts the saved API key back on the screen when editing", async () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /editar/i }));
+    const editForm = within(
+      await screen.findByTestId("whatsapp-connection-edit-connection_1"),
+    );
+    const secret = editForm.getByLabelText(/api key/i) as HTMLInputElement;
+    expect(secret.value).toBe("");
+    expect(secret.placeholder).toMatch(/em branco/i);
   });
 });

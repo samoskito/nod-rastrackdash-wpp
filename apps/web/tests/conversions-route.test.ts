@@ -337,6 +337,7 @@ describe("Conversions route", () => {
 
     expect(html).toContain("WAHA Loja");
     expect(html).toContain("WAHA · Em breve");
+    expect(html).toContain("a entrada de lead de anúncio (CTWA) já funciona");
     // Gupshup works through the provider webhook: never labelled "Em breve".
     expect(html).toContain("Gupshup · pelo webhook");
     expect(html).not.toContain("Gupshup · Em breve");

@@ -150,10 +150,13 @@ describe("integration registry", () => {
       "zapi",
       "nod_api",
     ]);
-    // Only Uazapi (instance) and Cloud API create new WhatsApp connections.
+    // Uazapi, WAHA (GoWS) and Cloud API create new WhatsApp connections.
     expect(
       integrationProviders.filter((p) => p.comingSoon).map((p) => p.id),
-    ).toEqual(["waha", "zapi", "nod_api"]);
+    ).toEqual(["zapi", "nod_api"]);
+    const waha = integrationProviders.find((p) => p.id === "waha");
+    expect(waha?.description).toContain("motor GoWS");
+    expect(waha?.description).not.toContain("Em breve");
     expect(inTab("attendance")).toEqual([
       "umbler",
       "gupshup",

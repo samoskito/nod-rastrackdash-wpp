@@ -1144,9 +1144,9 @@ describe("integrations route", () => {
     expect(html).not.toContain("Remover QR");
     // Scoped modals: the provider is fixed per card, no provider picker.
     expect(html).toContain('name="provider" value="uazapi_byo"');
-    // WAHA is "Em breve": existing connection manageable, no create form.
-    expect(html).not.toContain('name="provider" value="waha"');
-    expect(html).toContain("Novas conexões deste provedor estão em breve");
+    // WAHA (GoWS) is released: create form fixed to it, no "Em breve" note.
+    expect(html).toContain('name="provider" value="waha"');
+    expect(html).not.toContain("Novas conexões deste provedor estão em breve");
     expect(html).not.toContain("<span class=\"field-label\">Provedor</span>");
   });
 
@@ -1263,13 +1263,29 @@ describe("integrations route", () => {
     expect(unlocked).not.toContain("Licença bloqueada: criar, testar");
   });
 
-  it("shows WAHA, Z-API and NOD API as 'Em breve' without a modal, but keeps existing connections manageable", async () => {
+  it("releases WAHA with its own modal even without a connection", async () => {
+    mockWave7IntegrationsFetch({ canManage: true });
+    const html = renderToStaticMarkup(
+      createElement("div", null, await IntegrationsPage({})),
+    );
+
+    expect(html).toContain('data-integration="waha" data-state="available"');
+    expect(html).not.toContain(
+      'data-integration="waha" data-state="available" data-coming-soon="true"',
+    );
+    expect(html).toContain('id="integration-modal-waha"');
+    expect(html).toContain('name="provider" value="waha"');
+    expect(html).toContain("motor GoWS");
+    expect(html).toContain("lê o QR no painel da sua WAHA");
+  });
+
+  it("shows Z-API and NOD API as 'Em breve' without a modal, but keeps existing connections manageable", async () => {
     mockWave7IntegrationsFetch({ canManage: true });
     const none = renderToStaticMarkup(
       createElement("div", null, await IntegrationsPage({})),
     );
 
-    for (const id of ["waha", "zapi", "nod_api"]) {
+    for (const id of ["zapi", "nod_api"]) {
       expect(none).toContain(
         `data-integration="${id}" data-state="available" data-coming-soon="true"`,
       );

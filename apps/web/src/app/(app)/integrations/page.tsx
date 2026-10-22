@@ -78,6 +78,7 @@ import {
 } from "./inbound-webhook-panel";
 import {
   createWhatsappConnectionAction,
+  configureWahaWebhookAction,
   deleteWhatsappConnectionAction,
   loadWhatsappConnectionForEditAction,
   rotateWhatsappWebhookTokenAction,
@@ -1266,6 +1267,7 @@ export default async function IntegrationsPage({
         editAction={updateWhatsappConnectionAction}
         loadEditAction={loadWhatsappConnectionForEditAction}
         deleteAction={deleteWhatsappConnectionAction}
+        configureWebhookAction={configureWahaWebhookAction}
         licenseLocked={licenseLocked}
       />
     );
@@ -1794,11 +1796,12 @@ export default async function IntegrationsPage({
     </div>
   );
 
-  // WAHA, Z-API and NOD API are "Em breve": no new connections, but a workspace
+  // Z-API and NOD API are "Em breve": no new connections, but a workspace
   // that already has one keeps managing it (existing data is never hidden).
+  // WAHA (GoWS) is released: its panel mounts even without a connection.
   const comingSoonPanels: Partial<Record<IntegrationProviderId, ReactNode>> =
     {};
-  for (const provider of ["waha", "zapi", "nod_api"] as const) {
+  for (const provider of ["zapi", "nod_api"] as const) {
     if (
       whatsappConnectionsResult.data.some(
         (connection) => connection.provider === provider,
@@ -1810,6 +1813,7 @@ export default async function IntegrationsPage({
 
   const panels: Partial<Record<IntegrationProviderId, ReactNode>> = {
     uazapi_byo: uazapiPanel,
+    waha: whatsappProviderPanel("waha"),
     ...comingSoonPanels,
     meta_cloud: inboundPanel("meta_cloud"),
     umbler: automationUrlsPanel("umbler"),

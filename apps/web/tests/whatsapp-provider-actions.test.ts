@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  configureWahaWebhookAction,
   createWhatsappConnectionAction,
   deleteWhatsappConnectionAction,
   loadWhatsappConnectionForEditAction,
@@ -352,5 +353,209 @@ describe("WhatsApp provider actions", () => {
     );
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("WAHA (GoWS) actions", () => {
+  const wahaConnection = {
+    id: "connection_1",
+    name: "WAHA comercial",
+    displayName: null,
+    provider: "waha",
+    status: "active",
+    lastHealthStatus: null,
+    lastHealthCheckedAt: null,
+    createdAt: "2026-08-28T12:00:00.000Z",
+  };
+
+  function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  it("returns the raw session status and a pt-BR instruction on Testar", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        connectionId: "connection_1",
+        provider: "waha",
+        status: "needs_reconnect",
+        checkedAt: "2026-08-28T12:00:00.000Z",
+        message: "WAHA session requires QR reconnection",
+        providerStatus: "SCAN_QR_CODE",
+      }),
+    );
+
+    const result = await testWhatsappConnectionAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.providerStatus).toBe("SCAN_QR_CODE");
+    expect(result.message).toContain("painel da sua WAHA");
+    expect(result.message).not.toContain("WAHA session requires");
+  });
+
+  it("explains an unreachable WAHA when there is no session status", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        connectionId: "connection_1",
+        provider: "waha",
+        status: "error",
+        checkedAt: "2026-08-28T12:00:00.000Z",
+        message: "WAHA session API HTTP 500",
+      }),
+    );
+
+    const result = await testWhatsappConnectionAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.providerStatus).toBeUndefined();
+    expect(result.message).toContain("URL do servidor");
+  });
+
+  it("configures the webhook automatically without returning any token", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        connectionId: "connection_1",
+        provider: "waha",
+        configured: true,
+        webhookEndpoint:
+          "https://api.example.test/webhooks/whatsapp/connection_1",
+        events: ["message", "message.any", "session.status"],
+        sessionStatus: "WORKING",
+      }),
+    );
+
+    const result = await configureWahaWebhookAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      providerStatus: "WORKING",
+      wahaWebhook: {
+        configured: true,
+        events: ["message", "message.any", "session.status"],
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/webhookToken|token=/);
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/integrations/whatsapp-connections/connection_1/configure-webhook",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    );
+  });
+
+  it("maps a refused webhook to a pt-BR reason and keeps the manual path open", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        connectionId: "connection_1",
+        provider: "waha",
+        configured: false,
+        webhookEndpoint:
+          "https://api.example.test/webhooks/whatsapp/connection_1",
+        events: [],
+        sessionStatus: null,
+        reason: "unauthorized",
+        message: "WAHA rejected the API key",
+      }),
+    );
+
+    const result = await configureWahaWebhookAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.wahaWebhook).toMatchObject({
+      configured: false,
+      reason: "unauthorized",
+    });
+    expect(result.message).toContain("API key");
+    expect(result.message).not.toContain("rejected");
+  });
+
+  it("shows the standard license message on a 423 when configuring the webhook", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json(
+        {
+          statusCode: 423,
+          error: "License Locked",
+          message: "Licença não ativada",
+          reason: "license_required",
+          licenseStatus: "unlicensed",
+        },
+        423,
+      ),
+    );
+
+    const result = await configureWahaWebhookAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message:
+        "Licença bloqueada: alterações indisponíveis. Verifique /backoffice/license.",
+      licenseLocked: true,
+    });
+  });
+
+  it("returns the manual setup, with the token, only from the rotate action", async () => {
+    const token = "b".repeat(43);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        connection: wahaConnection,
+        webhookEndpoint:
+          "https://api.example.test/webhooks/whatsapp/connection_1",
+        webhookToken: token,
+        wahaManualSetup: {
+          webhookUrlWithToken:
+            "https://api.example.test/webhooks/whatsapp/connection_1?token=" +
+            token,
+          events: ["message", "message.any", "session.status"],
+          tokenHeaderName: "X-Wpptrack-Webhook-Token",
+        },
+      }),
+    );
+
+    const result = await rotateWhatsappWebhookTokenAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.receiverSecret).toBeUndefined();
+    expect(result.wahaManualSetup).toEqual({
+      webhookUrlWithToken:
+        "https://api.example.test/webhooks/whatsapp/connection_1?token=" +
+        token,
+      events: ["message", "message.any", "session.status"],
+      tokenHeaderName: "X-Wpptrack-Webhook-Token",
+      webhookToken: token,
+    });
+  });
+
+  it("creates a WAHA connection requiring url, api key and session", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(json({ id: "connection_9" }));
+
+    const result = await createWhatsappConnectionAction(
+      form({
+        provider: "waha",
+        name: "WAHA loja",
+        baseUrl: "https://waha.example.test",
+        apiKey: "do-not-return",
+        session: "loja",
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true, connectionId: "connection_9" });
+    expect(result.message).toContain("configure o webhook");
+    expect(JSON.stringify(result)).not.toContain("do-not-return");
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+    expect(body.credentials.session).toBe("loja");
   });
 });

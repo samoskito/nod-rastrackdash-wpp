@@ -3,6 +3,7 @@
 import type { WhatsappConnectionDto } from "@wpptrack/shared";
 import {
   Copy,
+  KeyRound,
   Pencil,
   RefreshCw,
   Stethoscope,
@@ -11,7 +12,13 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
+import {
+  wahaSessionGuidance,
+  type WahaSessionGuidance,
+} from "./waha-session-guidance";
 import type {
+  WahaManualSetup,
+  WahaWebhookOutcome,
   WhatsappConnectionEditData,
   WhatsappConnectionEditResult,
   WhatsappProviderActionResult,
@@ -65,8 +72,8 @@ const providerCards: Array<{
     id: "waha",
     title: "WAHA",
     ingestion:
-      "Em breve: novas conexões ainda não estão disponíveis; as existentes continuam gerenciáveis.",
-    pending: true,
+      "WAHA própria, motor GoWS: a entrada de lead de anúncio (CTWA) já funciona. As regras de frase da WAHA seguem em breve.",
+    pending: false,
   },
   {
     id: "zapi",
@@ -89,6 +96,7 @@ export function WhatsappProviderPanel({
   editAction,
   loadEditAction,
   deleteAction,
+  configureWebhookAction,
   licenseLocked = false,
   allowCreate = true,
 }: {
@@ -105,6 +113,8 @@ export function WhatsappProviderPanel({
   editAction: WhatsappProviderAction;
   loadEditAction: WhatsappProviderLoadEditAction;
   deleteAction: WhatsappProviderAction;
+  /** Só WAHA: grava o webhook direto na WAHA do aluno. */
+  configureWebhookAction?: WhatsappProviderAction;
   /**
    * Client-side hint only (the API stays the authority with HTTP 423): while
    * the license is locked every write control is disabled.
@@ -142,16 +152,114 @@ export function WhatsappProviderPanel({
   );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [wahaStates, setWahaStates] = useState<
+    Record<string, WahaConnectionState>
+  >({});
+  const [rotateConfirmId, setRotateConfirmId] = useState<string | null>(null);
+  const [manualCopied, setManualCopied] = useState<string | null>(null);
+
+  function patchWaha(
+    connectionId: string,
+    patch: Partial<WahaConnectionState>,
+  ) {
+    setWahaStates((current) => ({
+      ...current,
+      [connectionId]: { ...current[connectionId], ...patch },
+    }));
+  }
+
+  async function runWahaAction(
+    kind: "test" | "configure" | "manual",
+    connectionId: string,
+  ) {
+    if (pending) return;
+    const action =
+      kind === "test"
+        ? testAction
+        : kind === "configure"
+          ? configureWebhookAction
+          : rotateAction;
+    if (!action) return;
+    setPending(`waha-${kind}-${connectionId}`);
+    setNotice(null);
+    const formData = new FormData();
+    formData.set("connectionId", connectionId);
+    try {
+      const result = await action(formData);
+      if (kind === "test") {
+        patchWaha(connectionId, {
+          status: {
+            ok: result.ok,
+            providerStatus: result.providerStatus ?? null,
+            message: result.message,
+          },
+        });
+      } else if (kind === "configure") {
+        patchWaha(connectionId, {
+          webhook: result.wahaWebhook
+            ? { ...result.wahaWebhook, message: result.message, ok: result.ok }
+            : undefined,
+        });
+        if (result.providerStatus) {
+          patchWaha(connectionId, {
+            status: {
+              ok: result.providerStatus === "WORKING",
+              providerStatus: result.providerStatus,
+              message:
+                wahaSessionGuidance(result.providerStatus)?.instruction ?? "",
+            },
+          });
+        }
+        if (!result.wahaWebhook) setNotice(result);
+      } else if (result.wahaManualSetup) {
+        patchWaha(connectionId, { manual: result.wahaManualSetup });
+        setManualCopied(null);
+        setNotice(result);
+      } else {
+        setNotice(result);
+      }
+      if (result.ok) router.refresh();
+    } catch {
+      setNotice({
+        ok: false,
+        message: "Não foi possível concluir a ação da conexão WAHA.",
+      });
+    } finally {
+      setPending(null);
+      setRotateConfirmId(null);
+    }
+  }
+
+  async function copyManual(key: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setManualCopied(key);
+    } catch {
+      setNotice({
+        ok: false,
+        message: "Não foi possível copiar automaticamente.",
+      });
+    }
+  }
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
     const form = event.currentTarget;
+    const createData = new FormData(form);
+    if (createData.get("provider") === "waha") {
+      const problem = validateWahaCreate(createData);
+      if (problem) {
+        clearCredentials(form);
+        setNotice({ ok: false, message: problem });
+        return;
+      }
+    }
     setPending("create");
     setNotice(null);
 
     try {
-      const result = await createAction(new FormData(form));
+      const result = await createAction(createData);
       setNotice(result);
       if (result.ok) {
         form.reset();
@@ -362,6 +470,21 @@ export function WhatsappProviderPanel({
         ))}
       </div>
 
+      {scopedProvider === "waha" ? (
+        <div className="waha-intro" data-testid="waha-intro">
+          <p>
+            A WAHA é <strong>sua</strong>: você hospeda o servidor (motor
+            GoWS), cria a sessão e lê o QR no painel da sua WAHA. O
+            RastrackDash não fornece servidor e não mostra QR.
+          </p>
+          <ol>
+            <li>No painel da sua WAHA, crie a sessão e leia o QR.</li>
+            <li>Aqui, informe nome, URL do servidor, API key e sessão.</li>
+            <li>Teste a conexão e configure o webhook.</li>
+          </ol>
+        </div>
+      ) : null}
+
       {!allowCreate ? (
         <p className="action-note" role="status">
           Novas conexões deste provedor estão em breve. As conexões que você já
@@ -399,20 +522,43 @@ export function WhatsappProviderPanel({
             <span className="field-label">Nome</span>
             <input name="name" required minLength={1} maxLength={120} />
           </label>
-          <label>
-            <span className="field-label">Nome exibido</span>
-            <input name="displayName" maxLength={120} />
-          </label>
+          {provider !== "waha" ? (
+            <label>
+              <span className="field-label">Nome exibido</span>
+              <input name="displayName" maxLength={120} />
+            </label>
+          ) : null}
           {provider !== "nod_api" ? (
             <label>
               <span className="field-label">URL da API</span>
-              <input name="baseUrl" type="url" required />
+              <input
+                name="baseUrl"
+                type="url"
+                required
+                placeholder={
+                  provider === "waha" ? "https://waha.seudominio.com" : undefined
+                }
+              />
+              {provider === "waha" ? (
+                <small className="muted">
+                  URL do seu servidor WAHA, sem /api no fim.
+                </small>
+              ) : null}
             </label>
           ) : null}
           {provider === "waha" ? (
             <label>
               <span className="field-label">API key</span>
-              <input name="apiKey" type="password" required />
+              <input
+                name="apiKey"
+                type="password"
+                autoComplete="new-password"
+                required
+              />
+              <small className="muted">
+                A chave do seu servidor WAHA. Fica guardada só na API e não
+                aparece de novo na tela.
+              </small>
             </label>
           ) : null}
           {provider === "uazapi_byo" || provider === "zapi" ? (
@@ -437,8 +583,16 @@ export function WhatsappProviderPanel({
           ) : null}
           {provider === "waha" ? (
             <label>
-              <span className="field-label">Sessao</span>
-              <input name="session" />
+              <span className="field-label">Sessão</span>
+              <input
+                name="session"
+                required
+                maxLength={200}
+                placeholder="default"
+              />
+              <small className="muted">
+                O nome exato da sessão criada no painel da sua WAHA.
+              </small>
             </label>
           ) : null}
           <button
@@ -508,33 +662,73 @@ export function WhatsappProviderPanel({
                     type="button"
                     disabled={Boolean(pending)}
                     onClick={() =>
-                      void runAction(
-                        `test-${connection.id}`,
-                        testAction,
-                        connection.id,
-                      )
+                      connection.provider === "waha"
+                        ? void runWahaAction("test", connection.id)
+                        : void runAction(
+                            `test-${connection.id}`,
+                            testAction,
+                            connection.id,
+                          )
                     }
                   >
                     <Stethoscope size={15} aria-hidden="true" />
-                    {pending === `test-${connection.id}`
+                    {pending === `test-${connection.id}` ||
+                    pending === `waha-test-${connection.id}`
                       ? "Testando..."
-                      : "Testar"}
+                      : connection.provider === "waha"
+                        ? "Testar conexão"
+                        : "Testar"}
                   </button>
-                  <button
-                    className="button"
-                    type="button"
-                    disabled={Boolean(pending)}
-                    onClick={() =>
-                      void runAction(
-                        `rotate-${connection.id}`,
-                        rotateAction,
-                        connection.id,
-                      )
-                    }
-                  >
-                    <RefreshCw size={15} aria-hidden="true" />
-                    Gerar receiver
-                  </button>
+                  {connection.provider === "waha" ? (
+                    <>
+                      {configureWebhookAction ? (
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={Boolean(pending)}
+                          onClick={() =>
+                            void runWahaAction("configure", connection.id)
+                          }
+                        >
+                          <Webhook size={15} aria-hidden="true" />
+                          {pending === `waha-configure-${connection.id}`
+                            ? "Configurando..."
+                            : "Configurar webhook"}
+                        </button>
+                      ) : null}
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={Boolean(pending)}
+                        onClick={() =>
+                          setRotateConfirmId(
+                            rotateConfirmId === connection.id
+                              ? null
+                              : connection.id,
+                          )
+                        }
+                      >
+                        <KeyRound size={15} aria-hidden="true" />
+                        Configuração manual
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={Boolean(pending)}
+                      onClick={() =>
+                        void runAction(
+                          `rotate-${connection.id}`,
+                          rotateAction,
+                          connection.id,
+                        )
+                      }
+                    >
+                      <RefreshCw size={15} aria-hidden="true" />
+                      Gerar receiver
+                    </button>
+                  )}
                   <button
                     className="button"
                     type="button"
@@ -558,6 +752,27 @@ export function WhatsappProviderPanel({
                     Excluir
                   </button>
                 </div>
+              ) : null}
+
+              {connection.provider === "waha" ? (
+                <WahaConnectionDetails
+                  connectionId={connection.id}
+                  state={wahaStates[connection.id]}
+                  canManage={canManage}
+                  confirmingRotate={rotateConfirmId === connection.id}
+                  busy={Boolean(pending)}
+                  rotating={pending === `waha-manual-${connection.id}`}
+                  copiedKey={manualCopied}
+                  onConfirmRotate={() =>
+                    void runWahaAction("manual", connection.id)
+                  }
+                  onCancelRotate={() => setRotateConfirmId(null)}
+                  onCopy={(key, value) => void copyManual(key, value)}
+                  onHideManual={() => {
+                    patchWaha(connection.id, { manual: undefined });
+                    setManualCopied(null);
+                  }}
+                />
               ) : null}
 
               {canManage && deleteConfirmId === connection.id ? (
@@ -680,10 +895,11 @@ export function WhatsappProviderPanel({
                   ) : null}
                   {connection.provider === "waha" ? (
                     <label>
-                      <span className="field-label">Sessao</span>
+                      <span className="field-label">Sessão</span>
                       <input
                         name="session"
                         defaultValue={editData.session ?? ""}
+                        required
                       />
                     </label>
                   ) : null}
@@ -734,4 +950,190 @@ function clearCredentials(form: HTMLFormElement) {
     .forEach((input) => {
       input.value = "";
     });
+}
+
+type WahaConnectionState = {
+  status?: {
+    ok: boolean;
+    providerStatus: string | null;
+    message: string;
+  };
+  webhook?: WahaWebhookOutcome & { ok: boolean; message: string };
+  manual?: WahaManualSetup;
+};
+
+function validateWahaCreate(formData: FormData): string | null {
+  const text = (key: string) => {
+    const value = formData.get(key);
+    return typeof value === "string" ? value.trim() : "";
+  };
+  if (!text("name")) return "Informe o nome da conexão.";
+  const baseUrl = text("baseUrl");
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+  } catch {
+    return "Informe a URL do servidor WAHA começando com http:// ou https://.";
+  }
+  if (!text("apiKey")) return "Informe a API key da sua WAHA.";
+  if (!text("session")) {
+    return "Informe o nome da sessão criada no painel da sua WAHA.";
+  }
+  return null;
+}
+
+function WahaConnectionDetails({
+  connectionId,
+  state,
+  canManage,
+  confirmingRotate,
+  busy,
+  rotating,
+  copiedKey,
+  onConfirmRotate,
+  onCancelRotate,
+  onCopy,
+  onHideManual,
+}: {
+  connectionId: string;
+  state?: WahaConnectionState;
+  canManage: boolean;
+  confirmingRotate: boolean;
+  busy: boolean;
+  rotating: boolean;
+  copiedKey: string | null;
+  onConfirmRotate: () => void;
+  onCancelRotate: () => void;
+  onCopy: (key: string, value: string) => void;
+  onHideManual: () => void;
+}) {
+  const guidance: WahaSessionGuidance | null = state?.status
+    ? wahaSessionGuidance(state.status.providerStatus)
+    : null;
+  const manual = state?.manual;
+
+  return (
+    <div className="waha-details" data-testid={`waha-details-${connectionId}`}>
+      {state?.status ? (
+        <div
+          className={`waha-status ${guidance?.tone ?? "error"}`}
+          data-testid="waha-session-status"
+          role="status"
+        >
+          <span className="micro-label">Status da sessão</span>
+          <strong>{guidance?.label ?? "Sem resposta"}</strong>
+          <p>{guidance?.instruction ?? state.status.message}</p>
+        </div>
+      ) : null}
+
+      {state?.webhook ? (
+        <div
+          className={`waha-status ${state.webhook.ok ? "ok" : "error"}`}
+          data-testid="waha-webhook-result"
+          role="status"
+        >
+          <span className="micro-label">Webhook</span>
+          <strong>
+            {state.webhook.configured
+              ? "Webhook configurado"
+              : "Webhook não configurado"}
+          </strong>
+          <p>{state.webhook.message}</p>
+          {state.webhook.configured ? (
+            <p className="muted">
+              Eventos assinados: {state.webhook.events.join(", ")}.
+            </p>
+          ) : (
+            <p className="muted">
+              Nada mudou no app nem na sua WAHA. Corrija o ponto acima ou use a
+              configuração manual.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {canManage && confirmingRotate ? (
+        <div className="waha-confirm" data-testid="waha-rotate-confirm">
+          <p className="action-note warn">
+            Isso gera um novo token e o webhook atual deixa de valer até você
+            colar a nova configuração na sua WAHA. O token aparece uma única
+            vez.
+          </p>
+          <div className="inbound-connection-actions">
+            <button
+              className="button primary"
+              type="button"
+              disabled={busy}
+              onClick={onConfirmRotate}
+            >
+              {rotating ? "Gerando..." : "Gerar novo token e mostrar"}
+            </button>
+            <button
+              className="button"
+              type="button"
+              disabled={busy}
+              onClick={onCancelRotate}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {manual ? (
+        <div
+          className="inbound-webhook-secret"
+          data-testid="waha-manual-setup"
+          data-presentation-sensitive-action="true"
+        >
+          <div>
+            <span className="micro-label">Exibido uma única vez</span>
+            <strong>Configuração manual na sua WAHA</strong>
+            <p className="muted">
+              No painel da sua WAHA, abra os Webhooks da sessão e cole a URL
+              abaixo (ela já leva o token). Marque os eventos listados.
+            </p>
+          </div>
+          <input
+            readOnly
+            value={manual.webhookUrlWithToken}
+            aria-label="URL do webhook com token"
+            data-presentation-sensitive-field="true"
+          />
+          <button
+            className="button"
+            type="button"
+            onClick={() => onCopy("url", manual.webhookUrlWithToken)}
+          >
+            <Copy size={16} aria-hidden="true" />
+            {copiedKey === "url" ? "Copiada" : "Copiar URL com token"}
+          </button>
+          <p>
+            Eventos: <strong>{manual.events.join(", ")}</strong>
+          </p>
+          <p className="muted">
+            Alternativa: use a URL sem <code>?token=</code> e envie o token no
+            cabeçalho <code>{manual.tokenHeaderName}</code>.
+          </p>
+          <input
+            readOnly
+            value={manual.webhookToken}
+            aria-label="Token do webhook"
+            data-presentation-sensitive-field="true"
+          />
+          <button
+            className="button"
+            type="button"
+            onClick={() => onCopy("token", manual.webhookToken)}
+          >
+            <Copy size={16} aria-hidden="true" />
+            {copiedKey === "token" ? "Copiado" : "Copiar token"}
+          </button>
+          <button className="button" type="button" onClick={onHideManual}>
+            Ocultar
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
