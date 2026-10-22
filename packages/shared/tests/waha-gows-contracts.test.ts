@@ -71,6 +71,7 @@ describe("WAHA GoWS contracts for the connection screen", () => {
       whatsappConnectionWebhookTokenRotateResultSchema.parse({
         ...base,
         wahaManualSetup: {
+          webhookUrl: base.webhookEndpoint,
           webhookUrlWithToken: `${base.webhookEndpoint}?token=${base.webhookToken}`,
           events: [...WAHA_GOWS_WEBHOOK_EVENTS],
           tokenHeaderName: WAHA_WEBHOOK_TOKEN_HEADER,

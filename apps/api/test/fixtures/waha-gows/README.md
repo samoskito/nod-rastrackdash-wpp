@@ -18,9 +18,16 @@ pelos testes do parser `waha` v2 e do receptor `POST /webhooks/whatsapp/:id`
   nomes de campos reconhecidos), nunca o corpo. Desse resumo e dos registros
   de CTWA detectado vieram os formatos usados aqui: `ctwaClid` começa com
   `Af` e usa base64url (cerca de 100 caracteres), `sourceID` tem de 13 a 18
-  dígitos, `sourceURL` é `fb.me/…`, `instagram.com/p/…` ou `wa.me/wamo/…`, e
-  cerca de 5% dos cliques de anúncio chegam só com `sourceID`, sem clid
-  (anúncios no Status do WhatsApp).
+  dígitos e `sourceURL` é `fb.me/…`, `instagram.com/p/…` ou `wa.me/wamo/…`.
+- **Anúncios sem clid:** a auditoria do Rastrackapp (`CLAUDE.md`, ~linha 530)
+  achou, em 30 dias, 1.932 payloads únicos com `ctwaPayload`, dos quais 436
+  (**cerca de 22%**) vieram sem `externalAdReply.ctwaClid` — boa parte de
+  anúncios no Status do WhatsApp, em que a Meta omite o clid. Nos registros de
+  lead CTWA detectado da janela atual (22/09 a 22/10) a fração foi menor
+  (70 de 1.502, ~5%); a diferença entre as duas medidas não foi investigada.
+  Use os 22% da auditoria como referência. O aluno não cria lead nesses
+  casos (segue a Uazapi); o Rastrackapp cria lead de anúncio só com
+  `sourceID`. Decisão de produto pendente com o Samuel.
 - **Valores:** todos sintéticos. Nenhum payload real foi copiado.
 
 ## Regras de anonimização (conferidas por teste)
@@ -32,11 +39,11 @@ destes padrões:
 | --- | --- |
 | Telefones | DDD `00` (inexistente): `5500900000101`…, loja `5500900009999`; um caso com 12 dígitos (`550000000107`) |
 | LID | `1000000000001xx@lid` (mesmo contato = mesmo LID em todos os campos) |
-| Nomes / `PushName` | `Contato Sintético NN`, `Loja Sintética` |
+| Nomes (`PushName`, `notifyName`, `VerifiedName`) | `Contato Sintético NN`, `Loja Sintética`, `Loja Sintética Verificada` |
 | Textos e legendas | terminam em “(mensagem sintética)” |
 | `ctwaClid` | `AfSint3tico-CtwaClid_Fixture…` (100 caracteres, base64url) |
 | `ctwaPayload`, `conversionData`, miniaturas | base64 de textos sintéticos |
-| `sourceID` / `sourceURL` | `1202000000000000NN`, `https://fb.me/0SynthN`, `https://wa.me/wamo/0Synth2` |
+| `sourceID` / `sourceURL` | `12020000000000000N` / `1202000000000000NN`, `https://fb.me/0SynthN`, `https://wa.me/wamo/0Synth2` |
 | URLs de mídia e miniatura | domínios `.invalid` |
 | IDs de mensagem / evento | `3EB0…NN`, `evt_01k8…NN` |
 | Sessão | `aluno-sessao-teste` |

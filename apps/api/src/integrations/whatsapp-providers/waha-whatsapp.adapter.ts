@@ -29,6 +29,26 @@ import {
 
 const DEFAULT_SESSION = "default";
 
+/** Prazo do PUT da sessão: salvar reinicia a sessão na WAHA. */
+export const WAHA_SESSION_UPDATE_TIMEOUT_MS = 30_000;
+
+/** Prazo curto da consulta de LID: nunca segura a ingestão. */
+export const WAHA_LID_LOOKUP_TIMEOUT_MS = 3_000;
+
+const MASKED_SECRET_PATTERN = /^\*+$|\*{3,}/u;
+
+/** Algum texto da configuração parece um segredo mascarado (***)? */
+function containsMaskedSecret(value: unknown, depth = 0): boolean {
+  if (depth > 8) return false;
+  if (typeof value === "string") return MASKED_SECRET_PATTERN.test(value);
+  if (Array.isArray(value))
+    return value.some((item) => containsMaskedSecret(item, depth + 1));
+  const record = asRecord(value);
+  return record
+    ? Object.values(record).some((item) => containsMaskedSecret(item, depth + 1))
+    : false;
+}
+
 /** Motor da WAHA suportado pelo parser v2. */
 export const WAHA_SUPPORTED_ENGINE = "GOWS";
 
@@ -244,6 +264,23 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
     const otherWebhooks = (
       Array.isArray(existingConfig.webhooks) ? existingConfig.webhooks : []
     ).filter((webhook) => webhookUrlKey(asRecord(webhook)?.url) !== ourKey);
+
+    // A WAHA pode devolver segredos mascarados (senha do proxy, hmac.key ou
+    // cabeçalhos de outros webhooks). Gravar a configuração de volta trocaria
+    // o segredo real pelos asteriscos: nesse caso nada é gravado. O nosso
+    // próprio webhook antigo é substituído, então não conta.
+    if (
+      containsMaskedSecret({ ...existingConfig, webhooks: otherWebhooks })
+    ) {
+      return {
+        configured: false,
+        reason: "masked_secrets",
+        message:
+          "A sua WAHA devolveu senhas mascaradas na configuração da sessão (proxy, HMAC ou cabeçalhos de outro webhook). Para não apagá-las, o app não grava nada: use a configuração manual.",
+        sessionStatus,
+      };
+    }
+
     const body = {
       name: target.session,
       config: {
@@ -261,26 +298,50 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
         ],
       },
     };
+    const success: WhatsappWebhookConfigureResult = {
+      configured: true,
+      events: [...WAHA_GOWS_WEBHOOK_EVENTS],
+      sessionStatus,
+    };
 
     try {
-      const response = await fetchProviderUrl(this.fetchImpl, url, {
-        method: "PUT",
-        headers: {
-          "X-Api-Key": target.apiKey,
-          "Content-Type": "application/json",
+      // Salvar reinicia a sessão na WAHA: o PUT tem um prazo bem maior que
+      // as leituras.
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        url,
+        {
+          method: "PUT",
+          headers: {
+            "X-Api-Key": target.apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        WAHA_SESSION_UPDATE_TIMEOUT_MS,
+      );
 
-      if (!response.ok) {
-        return {
-          configured: false,
-          reason: "provider_error",
-          message: `A WAHA respondeu HTTP ${response.status} ao salvar o webhook.`,
-          sessionStatus,
-        };
+      if (response.ok) {
+        return success;
       }
+
+      if (response.status >= 500 && (await this.webhookSaved(target, input))) {
+        return success;
+      }
+
+      return {
+        configured: false,
+        reason: "provider_error",
+        message: `A WAHA respondeu HTTP ${response.status} ao salvar o webhook.`,
+        sessionStatus,
+      };
     } catch (error) {
+      // Prazo esgotado ou conexão caída durante o reinício: o PUT pode ter
+      // sido aplicado. Confere com uma nova leitura antes de desistir.
+      if (await this.webhookSaved(target, input)) {
+        return success;
+      }
+
       return {
         configured: false,
         reason: "unreachable",
@@ -288,12 +349,95 @@ export class WahaWhatsappAdapter implements WhatsappProviderAdapter {
         sessionStatus,
       };
     }
+  }
 
-    return {
-      configured: true,
-      events: [...WAHA_GOWS_WEBHOOK_EVENTS],
-      sessionStatus,
-    };
+  /**
+   * Resolve o telefone de um LID pela WAHA do aluno:
+   * GET {baseUrl}/api/{session}/lids/{lid} → { lid, pn } (documentado pela
+   * WAHA para GOWS; pn é null quando a WAHA não conhece o número). Prazo
+   * curto e nunca lança: qualquer falha devolve null.
+   */
+  async resolveLidPhone(
+    config: WhatsappProviderConfig,
+    lid: string,
+  ): Promise<string | null> {
+    const target = this.resolveTarget(config, { useEnvFallback: false });
+    const lidUser = lid.replace(/@lid$/u, "");
+
+    if (target.kind !== "ok" || !/^[0-9]{6,24}$/u.test(lidUser)) {
+      return null;
+    }
+
+    try {
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        `${target.baseUrl.replace(/\/$/, "")}/api/${encodeURIComponent(target.session)}/lids/${lidUser}`,
+        { method: "GET", headers: { "X-Api-Key": target.apiKey } },
+        WAHA_LID_LOOKUP_TIMEOUT_MS,
+      );
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = asRecord(await response.json().catch(() => null));
+      const pn = typeof payload?.pn === "string" ? payload.pn : null;
+      const match = pn
+        ? /^([0-9]{8,20})(?::\d{1,4})?@(c\.us|s\.whatsapp\.net)$/u.exec(pn)
+        : null;
+
+      return match ? match[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Nova leitura da sessão: o nosso webhook (URL, eventos e token) está lá? */
+  private async webhookSaved(
+    target: { baseUrl: string; apiKey: string; session: string },
+    input: WhatsappWebhookConfigureInput,
+  ): Promise<boolean> {
+    try {
+      const response = await fetchProviderUrl(
+        this.fetchImpl,
+        this.sessionUrl(target.baseUrl, target.session),
+        { method: "GET", headers: { "X-Api-Key": target.apiKey } },
+      );
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const session = asRecord(await response.json().catch(() => null));
+      const webhooks = asRecord(session?.config)?.webhooks;
+      const ourKey = webhookUrlKey(input.url);
+
+      return (Array.isArray(webhooks) ? webhooks : []).some((entry) => {
+        const webhook = asRecord(entry);
+        const events = Array.isArray(webhook?.events) ? webhook.events : [];
+        const headers = Array.isArray(webhook?.customHeaders)
+          ? webhook.customHeaders
+          : [];
+
+        // Só o token exato prova que é a nossa gravação (um valor
+        // mascarado não prova nada).
+        return (
+          webhookUrlKey(webhook?.url) === ourKey &&
+          WAHA_GOWS_WEBHOOK_EVENTS.every((event) => events.includes(event)) &&
+          headers.some((header) => {
+            const record = asRecord(header);
+            return (
+              typeof record?.name === "string" &&
+              record.name.toLowerCase() ===
+                WAHA_WEBHOOK_TOKEN_HEADER.toLowerCase() &&
+              record.value === input.token
+            );
+          })
+        );
+      });
+    } catch {
+      return false;
+    }
   }
 
   private resolveTarget(

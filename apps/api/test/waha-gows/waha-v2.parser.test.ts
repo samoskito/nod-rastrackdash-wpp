@@ -5,6 +5,8 @@ import {
   parseWahaSessionStatusEvent,
   parseWahaV2Webhook,
   WahaV2Parser,
+  wahaV2UnresolvedContactLid,
+  withWahaResolvedContactPhone,
 } from "../../src/inbound-webhooks/providers/waha/waha-v2.parser";
 import {
   FIXTURE_SELF_PHONE,
@@ -197,7 +199,38 @@ describe("WAHA v2 (GoWS) parser — fixtures sintéticas no formato GoWS", () =>
     );
 
     expect(result.events).toEqual([]);
+    // The ad click is never lost: own reason + hasCtwa/adId in the summary.
+    expect(result.classificationReason).toBe("ctwa_contact_phone_unresolved");
+    expect(result.normalizedSummary).toMatchObject({
+      hasCtwa: true,
+      adId: "1202000000000000013",
+    });
+    expect(wahaV2UnresolvedContactLid(wahaGowsFixture("message-lid-without-sender-alt"))).toBe(
+      "100000000000113",
+    );
+  });
+
+  it("keeps contact_phone_unresolved (hasCtwa false) for an organic LID-only message", () => {
+    const fixture = wahaGowsFixture("message-lid-without-sender-alt");
+    fixture.payload._data.Message = { conversation: "Oi (mensagem sintética)" };
+
+    const result = parseWahaV2Webhook(fixture);
+
     expect(result.classificationReason).toBe("contact_phone_unresolved");
+    expect(result.normalizedSummary).toMatchObject({ hasCtwa: false, adId: null });
+  });
+
+  it("parses the LID-only click once the phone resolved by the WAHA is placed in SenderAlt", () => {
+    const fixture = wahaGowsFixture("message-lid-without-sender-alt");
+    const resolved = withWahaResolvedContactPhone(fixture, "5500900000113");
+
+    const event = onlyEvent(parseWahaV2Webhook(resolved));
+
+    expect(event.contact.phoneNumber).toBe("5500900000113");
+    expect(event.contact.lid).toBe("100000000000113");
+    expect(event.ctwaClid).toMatch(/^Af/u);
+    // The original body is untouched.
+    expect(fixture.payload._data.Info.SenderAlt).toBe("");
   });
 
   it("resolves the same phone whether the contact arrives by LID or by phone JID", () => {
@@ -226,6 +259,7 @@ describe("WAHA v2 (GoWS) parser — fixtures sintéticas no formato GoWS", () =>
       expect(parseWahaSessionStatusEvent(fixture)).toEqual({
         session: FIXTURE_SESSION,
         status: status.toUpperCase().replace(/-/gu, "_"),
+        occurredAt: new Date(fixture.timestamp),
       });
     },
   );
@@ -245,10 +279,27 @@ describe("WAHA v2 (GoWS) parser — fixtures sintéticas no formato GoWS", () =>
     expect(parseWahaSessionStatusEvent(wahaGowsFixture("message-organic"))).toBeNull();
   });
 
-  it("requires a real boolean fromMe (a string \"false\" is invalid, not inbound)", () => {
+  it("never reads a string fromMe: falls back to Info.IsFromMe, else invalid", () => {
     const fixture = wahaGowsFixture("message-organic");
     fixture.payload.fromMe = "false";
 
+    // Info.IsFromMe (boolean) decides; the string is ignored.
+    expect(onlyEvent(parseWahaV2Webhook(fixture)).message.direction).toBe("inbound");
+
+    delete fixture.payload._data.Info.IsFromMe;
+    expect(parseWahaV2Webhook(fixture).classification).toBe("invalid_payload");
+  });
+
+  it("uses the envelope timestamp when the message has no time of its own", () => {
+    const fixture = wahaGowsFixture("message-organic");
+    delete fixture.payload.timestamp;
+    fixture.payload._data.Info.Timestamp = "0001-01-01T00:00:00Z";
+
+    const event = onlyEvent(parseWahaV2Webhook(fixture));
+
+    expect(event.occurredAt.getTime()).toBe(fixture.timestamp);
+
+    delete fixture.timestamp;
     expect(parseWahaV2Webhook(fixture).classification).toBe("invalid_payload");
   });
 

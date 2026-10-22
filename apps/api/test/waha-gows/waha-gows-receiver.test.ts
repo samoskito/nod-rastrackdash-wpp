@@ -16,7 +16,12 @@ const hash = (value: string) =>
 type ReleaseStatus = "certified" | "observation_only" | "retired" | null;
 
 function harness(
-  options: { release?: ReleaseStatus; providerInstanceId?: string } = {},
+  options: {
+    release?: ReleaseStatus;
+    providerInstanceId?: string;
+    lidPhone?: string | null;
+    lastHealthCheckedAt?: Date | null;
+  } = {},
 ) {
   const release = options.release === undefined ? "certified" : options.release;
   const instance = {
@@ -26,6 +31,8 @@ function harness(
     providerInstanceId: options.providerInstanceId ?? FIXTURE_SESSION,
     webhookTokenHash: hash(TOKEN),
     status: "active" as const,
+    lastHealthStatus: null as string | null,
+    lastHealthCheckedAt: options.lastHealthCheckedAt ?? (null as Date | null),
   };
   const leadsByPhoneHash = new Map<string, { id: string }>();
   const services = {
@@ -69,7 +76,27 @@ function harness(
       findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
         where.id === instance.id ? instance : null,
       ),
-      updateMany: vi.fn(async () => ({ count: 1 })),
+      // Emulates the conditional UPDATE (lastHealthCheckedAt null or older).
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { OR?: Array<{ lastHealthCheckedAt: null | { lt: Date } }> };
+          data: { lastHealthStatus: string; lastHealthCheckedAt: Date };
+        }) => {
+          const current = instance.lastHealthCheckedAt;
+          const allowed = (where.OR ?? []).some((condition) =>
+            condition.lastHealthCheckedAt === null
+              ? current === null
+              : current !== null && current < condition.lastHealthCheckedAt.lt,
+          );
+          if (!allowed) return { count: 0 };
+          instance.lastHealthStatus = data.lastHealthStatus;
+          instance.lastHealthCheckedAt = data.lastHealthCheckedAt;
+          return { count: 1 };
+        },
+      ),
     },
     metaAd: {
       findFirst: vi.fn(async () => ({
@@ -85,6 +112,9 @@ function harness(
       ),
     },
   };
+  const lidResolver = {
+    resolvePhone: vi.fn(async () => options.lidPhone ?? null),
+  };
   const controller = new WebhooksController(
     services.diagnosticsService as never,
     services.conversionRulesService as never,
@@ -93,6 +123,7 @@ function harness(
     services.leadsService as never,
     {} as never,
     prisma as never,
+    lidResolver as never,
   );
 
   const deliver = (body: Record<string, unknown>) =>
@@ -100,7 +131,16 @@ function harness(
   const deliverFixture = (name: WahaGowsFixtureName) =>
     deliver(wahaGowsFixture(name));
 
-  return { controller, services, prisma, deliver, deliverFixture, leadsByPhoneHash };
+  return {
+    controller,
+    services,
+    prisma,
+    deliver,
+    deliverFixture,
+    leadsByPhoneHash,
+    instance,
+    lidResolver,
+  };
 }
 
 function lastLog(services: ReturnType<typeof harness>["services"]) {
@@ -296,9 +336,17 @@ describe("POST /webhooks/whatsapp/:id — WAHA GoWS com a release waha/v2 certif
 
       await deliverFixture(`session-status-${status}`);
 
+      const envelopeTime = new Date(wahaGowsFixture(`session-status-${status}`).timestamp);
       expect(prisma.whatsappInstance.updateMany).toHaveBeenCalledWith({
-        where: { id: "connection-waha", workspaceId: "workspace-a" },
-        data: { lastHealthStatus: expected, lastHealthCheckedAt: expect.any(Date) },
+        where: {
+          id: "connection-waha",
+          workspaceId: "workspace-a",
+          OR: [
+            { lastHealthCheckedAt: null },
+            { lastHealthCheckedAt: { lt: envelopeTime } },
+          ],
+        },
+        data: { lastHealthStatus: expected, lastHealthCheckedAt: envelopeTime },
       });
       expect(lastLog(services)).toMatchObject({
         eventType: "session.status",
@@ -310,6 +358,87 @@ describe("POST /webhooks/whatsapp/:id — WAHA GoWS com a release waha/v2 certif
       expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
     },
   );
+
+  it("ignores a STARTING that arrives after a newer WORKING (out-of-order retry)", async () => {
+    const { deliver, instance } = harness();
+    const working = wahaGowsFixture("session-status-working");
+    const starting = wahaGowsFixture("session-status-working");
+    starting.payload.status = "STARTING";
+    starting.timestamp = working.timestamp - 10_000;
+
+    await deliver(working);
+    await deliver(starting);
+
+    expect(instance.lastHealthStatus).toBe("connected");
+    expect(instance.lastHealthCheckedAt).toEqual(new Date(working.timestamp));
+
+    // A newer STARTING does replace it.
+    starting.timestamp = working.timestamp + 10_000;
+    await deliver(starting);
+    expect(instance.lastHealthStatus).toBe("needs_reconnect");
+  });
+
+  it("never lets an old session.status overwrite a newer Testar result", async () => {
+    const fixture = wahaGowsFixture("session-status-failed");
+    const { deliver, instance } = harness({
+      lastHealthCheckedAt: new Date(fixture.timestamp + 60_000),
+    });
+
+    await deliver(fixture);
+
+    expect(instance.lastHealthStatus).toBeNull();
+  });
+
+  it("LID-only ad click: logs hasCtwa/adId with its own reason and no lead when the WAHA cannot resolve it", async () => {
+    const { services, deliverFixture, lidResolver } = harness({ lidPhone: null });
+
+    await deliverFixture("message-lid-without-sender-alt");
+
+    expect(lidResolver.resolvePhone).toHaveBeenCalledWith({
+      workspaceId: "workspace-a",
+      whatsappInstanceId: "connection-waha",
+      lid: "100000000000113",
+    });
+    expect(lastLog(services)).toMatchObject({
+      adId: "1202000000000000013",
+      phoneHash: undefined,
+      summaryPayload: {
+        classificationReason: "ctwa_contact_phone_unresolved",
+        hasCtwa: true,
+        adId: "1202000000000000013",
+      },
+    });
+    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it("LID-only ad click: creates the ad lead with the phone resolved by GET /lids/{lid}", async () => {
+    const { services, deliverFixture } = harness({ lidPhone: "5500900000113" });
+
+    await deliverFixture("message-lid-without-sender-alt");
+
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: "5500900000113",
+        phoneHash: hashPhoneIdentity("5500900000113"),
+        adId: "1202000000000000013",
+      }),
+    );
+    expect(lastLog(services)?.summaryPayload).toMatchObject({
+      classification: "eligible_route_unresolved",
+      contactPhoneFromLidLookup: true,
+    });
+  });
+
+  it("does not look up LIDs for organic LID-only messages", async () => {
+    const { deliver, lidResolver } = harness({ lidPhone: "5500900000113" });
+    const fixture = wahaGowsFixture("message-lid-without-sender-alt");
+    fixture.payload._data.Message = { conversation: "Oi (mensagem sintética)" };
+
+    await deliver(fixture);
+
+    expect(lidResolver.resolvePhone).not.toHaveBeenCalled();
+  });
 
   it("still rejects a delivery for another session before parsing (binding stays on the session)", async () => {
     const { services, deliverFixture } = harness({

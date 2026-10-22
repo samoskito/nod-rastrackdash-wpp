@@ -28,13 +28,23 @@ function readAll(): Array<{ file: string; text: string; json: unknown }> {
   });
 }
 
-function strings(value: unknown, out: Array<[string, string]> = [], key = ""): Array<[string, string]> {
-  if (typeof value === "string") out.push([key, value]);
-  else if (Array.isArray(value)) value.forEach((item) => strings(item, out, key));
+// [leaf key, value, ancestor keys] of every string in the fixture.
+function strings(
+  value: unknown,
+  out: Array<[string, string, string[]]> = [],
+  key = "",
+  ancestors: string[] = [],
+): Array<[string, string, string[]]> {
+  if (typeof value === "string") out.push([key, value, ancestors]);
+  else if (Array.isArray(value))
+    value.forEach((item) => strings(item, out, key, ancestors));
   else if (value && typeof value === "object")
-    for (const [k, v] of Object.entries(value)) strings(v, out, k);
+    for (const [k, v] of Object.entries(value)) strings(v, out, k, [...ancestors, k]);
   return out;
 }
+
+// Display names a contact or business can set in WhatsApp.
+const NAME_KEYS = ["PushName", "pushName", "notifyName", "VerifiedName"];
 
 describe("WAHA GoWS fixtures stay synthetic", () => {
   it("has one file per documented case and a README", () => {
@@ -69,11 +79,23 @@ describe("WAHA GoWS fixtures stay synthetic", () => {
     }
   });
 
+  it("covers notifyName and VerifiedName in at least one fixture", () => {
+    const keys = readAll().flatMap(({ json }) =>
+      strings(json).flatMap(([, , ancestors]) => ancestors),
+    );
+    expect(keys).toContain("notifyName");
+    expect(keys).toContain("VerifiedName");
+  });
+
   it("only contains synthetic names, texts and the synthetic session", () => {
     for (const { file, json } of readAll()) {
-      for (const [key, value] of strings(json)) {
-        if (["PushName", "pushName"].includes(key) && value) {
-          expect(value, file).toMatch(/Sintétic/u);
+      for (const [key, value, ancestors] of strings(json)) {
+        // Also the business name inside VerifiedName.Details.verifiedName.
+        const isName =
+          NAME_KEYS.includes(key) ||
+          (key === "verifiedName" && ancestors.includes("VerifiedName"));
+        if (value && isName) {
+          expect(value, `${file}:${ancestors.join(".")}`).toMatch(/Sintétic/u);
         }
         if (["body", "text", "caption", "conversation", "title"].includes(key) && value) {
           expect(value, `${file}:${key}`).toMatch(/sintétic/iu);

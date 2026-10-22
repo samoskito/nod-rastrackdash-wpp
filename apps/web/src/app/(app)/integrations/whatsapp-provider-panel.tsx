@@ -156,6 +156,9 @@ export function WhatsappProviderPanel({
     Record<string, WahaConnectionState>
   >({});
   const [rotateConfirmId, setRotateConfirmId] = useState<string | null>(null);
+  const [configureConfirmId, setConfigureConfirmId] = useState<
+    string | null
+  >(null);
   const [manualCopied, setManualCopied] = useState<string | null>(null);
 
   function patchWaha(
@@ -227,6 +230,7 @@ export function WhatsappProviderPanel({
     } finally {
       setPending(null);
       setRotateConfirmId(null);
+      setConfigureConfirmId(null);
     }
   }
 
@@ -694,9 +698,14 @@ export function WhatsappProviderPanel({
                           className="button"
                           type="button"
                           disabled={Boolean(pending)}
-                          onClick={() =>
-                            void runWahaAction("configure", connection.id)
-                          }
+                          onClick={() => {
+                            setRotateConfirmId(null);
+                            setConfigureConfirmId(
+                              configureConfirmId === connection.id
+                                ? null
+                                : connection.id,
+                            );
+                          }}
                         >
                           <Webhook size={15} aria-hidden="true" />
                           {pending === `waha-configure-${connection.id}`
@@ -708,13 +717,14 @@ export function WhatsappProviderPanel({
                         className="button"
                         type="button"
                         disabled={Boolean(pending)}
-                        onClick={() =>
+                        onClick={() => {
+                          setConfigureConfirmId(null);
                           setRotateConfirmId(
                             rotateConfirmId === connection.id
                               ? null
                               : connection.id,
-                          )
-                        }
+                          );
+                        }}
                       >
                         <KeyRound size={15} aria-hidden="true" />
                         Configuração manual
@@ -768,6 +778,12 @@ export function WhatsappProviderPanel({
                   state={wahaStates[connection.id]}
                   canManage={canManage}
                   confirmingRotate={rotateConfirmId === connection.id}
+                  confirmingConfigure={configureConfirmId === connection.id}
+                  configuring={pending === `waha-configure-${connection.id}`}
+                  onConfirmConfigure={() =>
+                    void runWahaAction("configure", connection.id)
+                  }
+                  onCancelConfigure={() => setConfigureConfirmId(null)}
                   busy={Boolean(pending)}
                   rotating={pending === `waha-manual-${connection.id}`}
                   copiedKey={manualCopied}
@@ -995,11 +1011,15 @@ function WahaConnectionDetails({
   state,
   canManage,
   confirmingRotate,
+  confirmingConfigure = false,
+  configuring = false,
   busy,
   rotating,
   copiedKey,
   onConfirmRotate,
   onCancelRotate,
+  onConfirmConfigure,
+  onCancelConfigure,
   onCopy,
   onHideManual,
 }: {
@@ -1007,6 +1027,10 @@ function WahaConnectionDetails({
   state?: WahaConnectionState;
   canManage: boolean;
   confirmingRotate: boolean;
+  confirmingConfigure?: boolean;
+  configuring?: boolean;
+  onConfirmConfigure?: () => void;
+  onCancelConfigure?: () => void;
   busy: boolean;
   rotating: boolean;
   copiedKey: string | null;
@@ -1060,6 +1084,34 @@ function WahaConnectionDetails({
         </div>
       ) : null}
 
+      {canManage && confirmingConfigure && onConfirmConfigure ? (
+        <div className="waha-confirm" data-testid="waha-configure-confirm">
+          <p className="action-note warn">
+            Ao salvar o webhook, a sua WAHA reinicia a sessão. Ela volta em
+            alguns segundos, sem ler o QR de novo, mas mensagens podem atrasar
+            nesse intervalo. O token anterior deixa de valer.
+          </p>
+          <div className="inbound-connection-actions">
+            <button
+              className="button primary"
+              type="button"
+              disabled={busy}
+              onClick={onConfirmConfigure}
+            >
+              {configuring ? "Configurando..." : "Reiniciar e configurar"}
+            </button>
+            <button
+              className="button"
+              type="button"
+              disabled={busy}
+              onClick={onCancelConfigure}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {canManage && confirmingRotate ? (
         <div className="waha-confirm" data-testid="waha-rotate-confirm">
           <p className="action-note warn">
@@ -1098,30 +1150,22 @@ function WahaConnectionDetails({
             <span className="micro-label">Exibido uma única vez</span>
             <strong>Configuração manual na sua WAHA</strong>
             <p className="muted">
-              No painel da sua WAHA, abra os Webhooks da sessão e cole a URL
-              abaixo (ela já leva o token). Marque os eventos listados.
+              No painel da sua WAHA, abra os Webhooks da sessão, cole a URL
+              abaixo e adicione o cabeçalho <code>{manual.tokenHeaderName}</code>{" "}
+              com o token. Marque os eventos listados.
             </p>
           </div>
-          <input
-            readOnly
-            value={manual.webhookUrlWithToken}
-            aria-label="URL do webhook com token"
-            data-presentation-sensitive-field="true"
-          />
+          <input readOnly value={manual.webhookUrl} aria-label="URL do webhook" />
           <button
             className="button"
             type="button"
-            onClick={() => onCopy("url", manual.webhookUrlWithToken)}
+            onClick={() => onCopy("url", manual.webhookUrl)}
           >
             <Copy size={16} aria-hidden="true" />
-            {copiedKey === "url" ? "Copiada" : "Copiar URL com token"}
+            {copiedKey === "url" ? "Copiada" : "Copiar URL"}
           </button>
           <p>
-            Eventos: <strong>{manual.events.join(", ")}</strong>
-          </p>
-          <p className="muted">
-            Alternativa: use a URL sem <code>?token=</code> e envie o token no
-            cabeçalho <code>{manual.tokenHeaderName}</code>.
+            Cabeçalho: <strong>{manual.tokenHeaderName}</strong>
           </p>
           <input
             readOnly
@@ -1136,6 +1180,28 @@ function WahaConnectionDetails({
           >
             <Copy size={16} aria-hidden="true" />
             {copiedKey === "token" ? "Copiado" : "Copiar token"}
+          </button>
+          <p>
+            Eventos: <strong>{manual.events.join(", ")}</strong>
+          </p>
+          <p className="muted">
+            Alternativa, se a sua WAHA não aceitar cabeçalho: a URL com{" "}
+            <code>?token=</code>. Ela pode aparecer nos logs da WAHA e do
+            proxy; prefira o cabeçalho.
+          </p>
+          <input
+            readOnly
+            value={manual.webhookUrlWithToken}
+            aria-label="URL do webhook com token"
+            data-presentation-sensitive-field="true"
+          />
+          <button
+            className="button"
+            type="button"
+            onClick={() => onCopy("url-token", manual.webhookUrlWithToken)}
+          >
+            <Copy size={16} aria-hidden="true" />
+            {copiedKey === "url-token" ? "Copiada" : "Copiar URL com token"}
           </button>
           <button className="button" type="button" onClick={onHideManual}>
             Ocultar

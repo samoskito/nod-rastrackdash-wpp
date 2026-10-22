@@ -24,6 +24,9 @@ export type InboundWebhookDeliveryNormalizedSummary = {
   classification: InboundWebhookEventClassification;
   classificationReason: string;
   eventCount: number;
+  /** Set when a CTWA click is known even without a parsed event (WAHA v2). */
+  hasCtwa?: boolean;
+  adId?: string | null;
 };
 
 export type InboundWebhookEventNormalizedSummary = {

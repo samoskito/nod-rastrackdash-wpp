@@ -36,12 +36,10 @@ export async function fetchProviderUrl(
   fetchImpl: RuntimeFetch,
   url: string,
   init: RequestInit,
+  timeoutMs: number = WHATSAPP_PROVIDER_REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    WHATSAPP_PROVIDER_REQUEST_TIMEOUT_MS,
-  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetchImpl(url, {

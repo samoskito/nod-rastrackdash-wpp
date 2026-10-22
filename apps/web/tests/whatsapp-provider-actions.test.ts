@@ -477,6 +477,20 @@ describe("WAHA (GoWS) actions", () => {
     expect(result.message).not.toContain("rejected");
   });
 
+  it("explains a 403 (no permission) when configuring the webhook", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({ statusCode: 403, message: "Forbidden" }, 403),
+    );
+
+    const result = await configureWahaWebhookAction(
+      form({ connectionId: "connection_1" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/não tem permissão para configurar o webhook/);
+    expect(result.licenseLocked).toBeUndefined();
+  });
+
   it("shows the standard license message on a 423 when configuring the webhook", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       json(
@@ -512,6 +526,7 @@ describe("WAHA (GoWS) actions", () => {
           "https://api.example.test/webhooks/whatsapp/connection_1",
         webhookToken: token,
         wahaManualSetup: {
+          webhookUrl: "https://api.example.test/webhooks/whatsapp/connection_1",
           webhookUrlWithToken:
             "https://api.example.test/webhooks/whatsapp/connection_1?token=" +
             token,
@@ -528,6 +543,7 @@ describe("WAHA (GoWS) actions", () => {
     expect(result.ok).toBe(true);
     expect(result.receiverSecret).toBeUndefined();
     expect(result.wahaManualSetup).toEqual({
+      webhookUrl: "https://api.example.test/webhooks/whatsapp/connection_1",
       webhookUrlWithToken:
         "https://api.example.test/webhooks/whatsapp/connection_1?token=" +
         token,

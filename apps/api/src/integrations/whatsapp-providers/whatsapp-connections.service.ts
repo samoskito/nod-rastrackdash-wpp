@@ -534,6 +534,7 @@ export class WhatsappConnectionsService {
       ...(existing.provider === "waha"
         ? {
             wahaManualSetup: {
+              webhookUrl: webhookEndpoint,
               webhookUrlWithToken: this.withQueryToken(
                 webhookEndpoint,
                 webhookToken,

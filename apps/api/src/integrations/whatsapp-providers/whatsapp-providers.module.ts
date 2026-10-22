@@ -9,6 +9,7 @@ import { UazapiAdapter } from "../uazapi/uazapi.adapter";
 import { NodApiWhatsappAdapter } from "./nod-api-whatsapp.adapter";
 import { UazapiByoAdapter } from "./uazapi-byo.adapter";
 import { WahaWhatsappAdapter } from "./waha-whatsapp.adapter";
+import { WahaLidResolverService } from "./waha-lid-resolver.service";
 import { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 import { WhatsappProvidersBootstrapService } from "./whatsapp-providers-bootstrap.service";
 import { WhatsappConnectionsController } from "./whatsapp-connections.controller";
@@ -20,6 +21,7 @@ export { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 export { UazapiByoAdapter } from "./uazapi-byo.adapter";
 export { NodApiWhatsappAdapter } from "./nod-api-whatsapp.adapter";
 export { WahaWhatsappAdapter } from "./waha-whatsapp.adapter";
+export { WahaLidResolverService } from "./waha-lid-resolver.service";
 export { ZapiWhatsappAdapter } from "./zapi-whatsapp.adapter";
 export type {
   WhatsappProviderAdapter,
@@ -61,6 +63,7 @@ export type {
     WhatsappProvidersBootstrapService,
     MetaTokenEncryptionService,
     WhatsappConnectionsService,
+    WahaLidResolverService,
   ],
   controllers: [WhatsappConnectionsController],
   exports: [
@@ -71,6 +74,7 @@ export type {
     WahaWhatsappAdapter,
     ZapiWhatsappAdapter,
     WhatsappConnectionsService,
+    WahaLidResolverService,
   ],
 })
 export class WhatsappProvidersModule {}

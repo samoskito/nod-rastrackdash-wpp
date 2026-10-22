@@ -6,6 +6,7 @@ import { ConversionRulesModule } from "../conversion-rules/conversion-rules.modu
 import { DiagnosticsModule } from "../diagnostics/diagnostics.module";
 import { InboundWebhooksModule } from "../inbound-webhooks/inbound-webhooks.module";
 import { LeadsModule } from "../leads/leads.module";
+import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/whatsapp-providers.module";
 import { WebhooksController } from "./webhooks.controller";
 
 @Module({
@@ -16,7 +17,8 @@ import { WebhooksController } from "./webhooks.controller";
     InboundWebhooksModule,
     LeadsModule,
     ConversionEventsModule,
-    QueueModule
+    QueueModule,
+    WhatsappProvidersModule
   ],
   controllers: [WebhooksController]
 })

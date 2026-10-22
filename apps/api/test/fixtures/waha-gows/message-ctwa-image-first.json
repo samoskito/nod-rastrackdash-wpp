@@ -60,7 +60,17 @@
           "ThreadMessageID": "",
           "ThreadMessageSenderJID": ""
         },
-        "VerifiedName": null,
+        "VerifiedName": {
+          "Certificate": {
+            "details": "U1lOVEhFVElDLUNFUlQ=",
+            "signature": "U1lOVEhFVElDLVNJRw=="
+          },
+          "Details": {
+            "serial": 1,
+            "issuer": "smb:wa",
+            "verifiedName": "Loja Sintética Verificada"
+          }
+        },
         "DeviceSentMeta": null
       },
       "Message": {

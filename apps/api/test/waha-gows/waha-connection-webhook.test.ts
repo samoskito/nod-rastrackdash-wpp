@@ -187,6 +187,7 @@ describe("POST /integrations/whatsapp-connections/:id/configure-webhook (WAHA)",
 
     const parsed = whatsappConnectionWebhookTokenRotateResultSchema.parse(result);
     expect(parsed.wahaManualSetup).toEqual({
+      webhookUrl: "https://api.example.com/webhooks/whatsapp/connection-waha",
       webhookUrlWithToken: `https://api.example.com/webhooks/whatsapp/connection-waha?token=${parsed.webhookToken}`,
       events: ["message", "message.any", "session.status"],
       tokenHeaderName: "X-Wpptrack-Webhook-Token",

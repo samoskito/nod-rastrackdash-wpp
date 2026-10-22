@@ -12,8 +12,8 @@ const schema = readFileSync(
   "utf8",
 );
 
-const providerMigration = "20261022120000_waha_inbound_provider";
-const releaseMigration = "20261022120100_waha_parser_release";
+const providerMigration = "20261022130000_waha_inbound_provider";
+const releaseMigration = "20261022130100_waha_parser_release";
 
 describe("WAHA GoWS migrations", () => {
   it("adds the enum value alone, without touching parser releases in the same file", () => {
@@ -41,14 +41,21 @@ describe("WAHA GoWS migrations", () => {
     );
   });
 
-  it("orders the enum before the seed, dated 20261022 and after every earlier migration", () => {
+  it("orders the enum before the seed, after the phases it builds on", () => {
     const all = readdirSync(migrationsDir)
       .filter((name) => /^\d{14}_/.test(name))
       .sort();
-    const names = all.filter((name) => name.startsWith("20261022"));
+    const names = all.filter((name) =>
+      /^\d{14}_waha_(inbound_provider|parser_release)$/u.test(name),
+    );
     expect(names).toEqual([providerMigration, releaseMigration]);
-    const earlier = all.filter((name) => !name.startsWith("20261022"));
-    expect(earlier.every((name) => name < providerMigration)).toBe(true);
+    // DiagnosticSource 'waha' (20260901120000) and URL única come first;
+    // other migrations (e.g. PR #96, 20261022120000) may sit around them.
+    const prerequisites = all.filter((name) =>
+      /diagnostic_source_waha_zapi|integration_single_urls/u.test(name),
+    );
+    expect(prerequisites).toHaveLength(2);
+    expect(prerequisites.every((name) => name < providerMigration)).toBe(true);
   });
 
   it("declares waha in both Prisma enums", () => {

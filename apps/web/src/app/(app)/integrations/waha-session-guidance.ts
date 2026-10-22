@@ -71,11 +71,17 @@ const webhookFailureMessages: Record<string, string> = {
     "A WAHA recusou a API key. Confira a chave na conexão (Editar).",
   engine_not_supported:
     "Essa sessão não usa o motor GoWS. Por enquanto o app só lê o motor GoWS.",
+  masked_secrets:
+    "A sua WAHA devolveu senhas mascaradas na configuração da sessão (proxy, HMAC ou cabeçalhos de outro webhook). Para não apagá-las, o app não gravou nada: use a configuração manual.",
   provider_error:
     "A WAHA recusou salvar o webhook. Tente de novo ou use a configuração manual.",
   unreachable:
     "Não foi possível alcançar o servidor da sua WAHA. Confira a URL e se o servidor está no ar, ou use a configuração manual.",
 };
+
+/** A API recusou (403): o usuário não pode gerenciar integrações. */
+export const wahaWebhookForbiddenMessage =
+  "Você não tem permissão para configurar o webhook desta conexão. Peça ao dono ou a um admin do workspace.";
 
 export function wahaWebhookFailureMessage(
   reason: string | undefined,

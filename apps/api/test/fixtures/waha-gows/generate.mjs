@@ -197,6 +197,8 @@ const ts0 = 1_792_000_000; // 2026-10 (synthetic)
   }), ts);
 }
 
+files["message-organic.json"].payload.notifyName = "Contato Sintético 03";
+
 // 4. Team message (message.any, fromMe) to a LID chat, phone in RecipientAlt, self with :NN device.
 {
   const n = 4, id = msgId(n), ts = ts0 + n;
@@ -279,6 +281,12 @@ const ts0 = 1_792_000_000; // 2026-10 (synthetic)
     },
   }), ts);
 }
+
+// Business contact: verified name (WhatsApp Business) is a display name too.
+files["message-ctwa-image-first.json"].payload._data.Info.VerifiedName = {
+  Certificate: { details: "U1lOVEhFVElDLUNFUlQ=", signature: "U1lOVEhFVElDLVNJRw==" },
+  Details: { serial: 1, issuer: "smb:wa", verifiedName: "Loja Sintética Verificada" },
+};
 
 // 9. Ephemeral (disappearing messages) wrapper with ad context, clid.
 {

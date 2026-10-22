@@ -95,6 +95,15 @@ function connectionFor(
   };
 }
 
+/** "Configurar webhook" asks first (the WAHA restarts the session). */
+async function confirmConfigureWebhook() {
+  fireEvent.click(screen.getByRole("button", { name: /configurar webhook/i }));
+  const confirm = within(await screen.findByTestId("waha-configure-confirm"));
+  fireEvent.click(
+    confirm.getByRole("button", { name: /reiniciar e configurar/i }),
+  );
+}
+
 describe("WhatsappProviderPanel edit flow", () => {
   it("loads non-sensitive metadata and pre-fills the edit form without a secret value", async () => {
     const { loadEditAction } = renderPanel();
@@ -429,6 +438,22 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
     expect(status.textContent).toMatch(pattern);
   });
 
+  it("warns that the WAHA session restarts before configuring, and cancel calls nothing", async () => {
+    const configureWebhookAction = vi.fn();
+    renderPanel({ configureWebhookAction });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /configurar webhook/i }),
+    );
+    const confirm = within(await screen.findByTestId("waha-configure-confirm"));
+    expect(confirm.getByText(/reinicia a sessão/i)).not.toBeNull();
+    expect(configureWebhookAction).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm.getByRole("button", { name: /cancelar/i }));
+    expect(screen.queryByTestId("waha-configure-confirm")).toBeNull();
+    expect(configureWebhookAction).not.toHaveBeenCalled();
+  });
+
   it("configures the webhook automatically and lists the subscribed events", async () => {
     const configureWebhookAction = vi.fn(async () => ({
       ok: true,
@@ -444,9 +469,7 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
     }));
     renderPanel({ configureWebhookAction });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /configurar webhook/i }),
-    );
+    await confirmConfigureWebhook();
 
     const result = await screen.findByTestId("waha-webhook-result");
     expect(within(result).getByText("Webhook configurado")).not.toBeNull();
@@ -471,9 +494,7 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
     }));
     renderPanel({ configureWebhookAction });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /configurar webhook/i }),
-    );
+    await confirmConfigureWebhook();
 
     const result = await screen.findByTestId("waha-webhook-result");
     expect(within(result).getByText("Webhook não configurado")).not.toBeNull();
@@ -491,6 +512,7 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
       message: "Novo token gerado.",
       connectionId: "connection_1",
       wahaManualSetup: {
+        webhookUrl: "https://api.test/webhooks/whatsapp/connection_1",
         webhookUrlWithToken:
           "https://api.test/webhooks/whatsapp/connection_1?token=" + token,
         events: ["message", "message.any", "session.status"],
@@ -521,7 +543,13 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
     expect(
       manual.getByText("message, message.any, session.status"),
     ).not.toBeNull();
-    expect(manual.getByText("X-Wpptrack-Webhook-Token")).not.toBeNull();
+    // Header first: URL without token + header + token.
+    expect(
+      (manual.getByLabelText("URL do webhook") as HTMLInputElement).value,
+    ).toBe("https://api.test/webhooks/whatsapp/connection_1");
+    expect(manual.getAllByText("X-Wpptrack-Webhook-Token").length).toBeGreaterThan(0);
+    // The ?token= URL is only the alternative, with the logs warning.
+    expect(manual.getByText(/logs da WAHA e do\s+proxy/)).not.toBeNull();
     expect(
       (manual.getByLabelText("Token do webhook") as HTMLInputElement).value,
     ).toBe(token);
@@ -554,9 +582,7 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
     }));
     renderPanel({ configureWebhookAction });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /configurar webhook/i }),
-    );
+    await confirmConfigureWebhook();
 
     expect(await screen.findByText(lockedMessage)).not.toBeNull();
     expect(screen.queryByTestId("waha-webhook-result")).toBeNull();

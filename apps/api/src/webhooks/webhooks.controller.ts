@@ -10,6 +10,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotImplementedException,
+  Optional,
   Param,
   Post,
   Query,
@@ -33,7 +34,10 @@ import {
   parseWahaSessionStatusEvent,
   parseWahaV2Webhook,
   WAHA_V2_PARSER_VERSION,
+  wahaV2UnresolvedContactLid,
+  withWahaResolvedContactPhone,
 } from "../inbound-webhooks/providers/waha/waha-v2.parser";
+import { WahaLidResolverService } from "../integrations/whatsapp-providers/waha-lid-resolver.service";
 import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.parser";
 import { mapWahaSessionStatus } from "../integrations/whatsapp-providers/waha-session-status";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
@@ -116,6 +120,9 @@ export class WebhooksController {
     private readonly uazapiProviderConversion: UazapiProviderConversionService,
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(WahaLidResolverService)
+    private readonly wahaLidResolver?: WahaLidResolverService,
   ) {}
 
   @Get("meta")
@@ -736,9 +743,32 @@ export class WebhooksController {
       parse: MESSAGE_PROVIDER_PARSERS[provider],
     },
   ) {
-    const parsed = parser.parse(body);
     const isWahaV2 =
       provider === "waha" && parser.version === WAHA_V2_PARSER_VERSION;
+    let parsed = parser.parse(body);
+    let contactResolvedByLid = false;
+
+    // Clique de anúncio com contato só por LID: tenta o telefone na WAHA do
+    // aluno (prazo curto, nunca quebra a ingestão) antes de desistir.
+    if (
+      isWahaV2 &&
+      parsed.classificationReason === "ctwa_contact_phone_unresolved" &&
+      this.wahaLidResolver
+    ) {
+      const lid = wahaV2UnresolvedContactLid(body);
+      const phone = lid
+        ? await this.wahaLidResolver.resolvePhone({ ...context, lid })
+        : null;
+
+      if (phone) {
+        const reparsed = parser.parse(withWahaResolvedContactPhone(body, phone));
+
+        if (reparsed.events.length > 0) {
+          parsed = reparsed;
+          contactResolvedByLid = true;
+        }
+      }
+    }
     const event = parsed.events[0] ?? null;
     const phoneHash = event
       ? hashPhoneIdentity(event.contact.phoneNumber)
@@ -775,10 +805,12 @@ export class WebhooksController {
         : undefined,
       payloadHash,
       phoneHash,
-      adId: event?.adId ?? undefined,
+      adId: event?.adId ?? parsed.normalizedSummary.adId ?? undefined,
       // v2 keeps only the structural summary: the GoWS body carries the raw
       // WhatsApp message (texts, names, LIDs, media keys and thumbnails).
-      summaryPayload: isWahaV2 ? this.wahaV2LogSummary(body, parsed) : body,
+      summaryPayload: isWahaV2
+        ? this.wahaV2LogSummary(body, parsed, contactResolvedByLid)
+        : body,
     });
 
     if (diagnostic.status === "duplicate" || diagnostic.status === "conflict") {
@@ -839,14 +871,22 @@ export class WebhooksController {
       return;
     }
 
+    // Entregas podem chegar fora de ordem (retentativas da WAHA): só um
+    // status mais novo que o último registrado substitui o atual.
+    const occurredAt = sessionStatus.occurredAt ?? new Date();
+
     await this.prisma.whatsappInstance.updateMany({
       where: {
         id: context.whatsappInstanceId,
         workspaceId: context.workspaceId,
+        OR: [
+          { lastHealthCheckedAt: null },
+          { lastHealthCheckedAt: { lt: occurredAt } },
+        ],
       },
       data: {
         lastHealthStatus: mapWahaSessionStatus(sessionStatus.status),
-        lastHealthCheckedAt: new Date(),
+        lastHealthCheckedAt: occurredAt,
       },
     });
   }
@@ -854,6 +894,7 @@ export class WebhooksController {
   private wahaV2LogSummary(
     body: WebhookBody,
     parsed: InboundWebhookParserResult,
+    contactResolvedByLid = false,
   ): Record<string, unknown> {
     const event = parsed.events[0];
     const sessionStatus = parseWahaSessionStatusEvent(body);
@@ -872,8 +913,14 @@ export class WebhooksController {
             hasCtwa: event.hasCtwa,
             adId: event.adId,
             contactHasLid: Boolean(event.contact.lid),
+            ...(contactResolvedByLid ? { contactPhoneFromLidLookup: true } : {}),
           }
-        : {}),
+        : parsed.normalizedSummary.hasCtwa !== undefined
+          ? {
+              hasCtwa: parsed.normalizedSummary.hasCtwa,
+              adId: parsed.normalizedSummary.adId ?? null,
+            }
+          : {}),
     };
   }
 

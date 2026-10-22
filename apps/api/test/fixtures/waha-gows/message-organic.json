@@ -73,7 +73,8 @@
       "UnavailableRequestID": "",
       "RetryCount": 0,
       "NewsletterMeta": null
-    }
+    },
+    "notifyName": "Contato Sintético 03"
   },
   "engine": "GOWS",
   "environment": {

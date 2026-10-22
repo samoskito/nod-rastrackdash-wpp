@@ -11,11 +11,12 @@ import {
 import type { WhatsappConnectionEditMetadataDto } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
 import { licenseLockedMessageFor } from "../../../lib/license-locked-message";
-import { serverApiFetch } from "../../../lib/server-api";
+import { ApiRequestError, serverApiFetch } from "../../../lib/server-api";
 import {
   wahaSessionGuidance,
   wahaUnreachableMessage,
   wahaWebhookFailureMessage,
+  wahaWebhookForbiddenMessage,
 } from "./waha-session-guidance";
 
 export type WhatsappReceiverSecret = {
@@ -32,6 +33,9 @@ export type WahaWebhookOutcome = {
 
 /** Passo a passo manual da WAHA; exibido só quando o aluno pede. */
 export type WahaManualSetup = {
+  /** URL sem token: o token vai no cabeçalho (opção principal). */
+  webhookUrl: string;
+  /** Alternativa: a URL com ?token= (pode aparecer em logs da WAHA/proxy). */
   webhookUrlWithToken: string;
   events: string[];
   tokenHeaderName: string;
@@ -159,6 +163,7 @@ export async function rotateWhatsappWebhookTokenAction(
           "Novo token gerado. Copie a configuração agora: ela não será exibida novamente e a anterior deixou de valer.",
         connectionId,
         wahaManualSetup: {
+          webhookUrl: manual.webhookUrl,
           webhookUrlWithToken: manual.webhookUrlWithToken,
           events: manual.events,
           tokenHeaderName: manual.tokenHeaderName,
@@ -223,9 +228,11 @@ export async function configureWahaWebhookAction(
     };
   } catch (error) {
     const locked = licenseLockedMessageFor(error);
-    return locked
-      ? { ok: false, message: locked, licenseLocked: true }
-      : failure("Não foi possível configurar o webhook na sua WAHA.");
+    if (locked) return { ok: false, message: locked, licenseLocked: true };
+    if (error instanceof ApiRequestError && error.status === 403) {
+      return failure(wahaWebhookForbiddenMessage);
+    }
+    return failure("Não foi possível configurar o webhook na sua WAHA.");
   }
 }
 

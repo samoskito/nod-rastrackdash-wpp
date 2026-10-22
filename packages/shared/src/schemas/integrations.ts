@@ -185,10 +185,12 @@ export const WAHA_GOWS_WEBHOOK_EVENTS = [
 export const WAHA_WEBHOOK_TOKEN_HEADER = "X-Wpptrack-Webhook-Token";
 
 // Passo a passo manual (quando o aluno prefere colar o webhook no painel da
-// WAHA): a URL já leva o token em ?token=, ou o aluno usa a URL sem token e
-// o cabeçalho tokenHeaderName com o webhookToken. Mostrado uma única vez.
+// WAHA). Opção principal: webhookUrl (sem token) + cabeçalho tokenHeaderName
+// com o webhookToken. Alternativa: webhookUrlWithToken (?token=), que pode
+// aparecer nos logs da WAHA e do proxy. Mostrado uma única vez.
 export const wahaWebhookManualSetupSchema = z
   .object({
+    webhookUrl: httpUrlSchema,
     webhookUrlWithToken: httpUrlSchema,
     events: z.array(z.enum(WAHA_GOWS_WEBHOOK_EVENTS)).min(1),
     tokenHeaderName: z.literal(WAHA_WEBHOOK_TOKEN_HEADER),
@@ -209,6 +211,9 @@ export const wahaWebhookConfigureFailureReasonSchema = z.enum([
   "session_not_found",
   "unauthorized",
   "engine_not_supported",
+  // A config da sessão veio com segredos mascarados (***): gravar de volta
+  // apagaria o segredo real, então nada é gravado (use o modo manual).
+  "masked_secrets",
   "provider_error",
   "unreachable",
 ]);

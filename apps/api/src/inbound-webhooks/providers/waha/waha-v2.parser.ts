@@ -383,6 +383,15 @@ function parseAd(adReply: JsonRecord | null): {
   };
 }
 
+/** Contexto do anúncio em _data.Message; na falta, em _data.RawMessage. */
+function messageCtwaContext(data: JsonRecord | null): CtwaContext {
+  const fromMessage = findCtwaContext(data?.Message ?? data?.RawMessage ?? null);
+
+  return fromMessage.adReply || !data?.RawMessage
+    ? fromMessage
+    : findCtwaContext(data.RawMessage);
+}
+
 function connectedPhoneSuffix(phone: string): string {
   return phone.replace(/\D/gu, "").slice(-4);
 }
@@ -526,7 +535,11 @@ function parsePayload(payload: unknown): InboundWebhookParserResult {
     );
   }
 
-  const fromMeRaw = inner.fromMe;
+  // Direção: payload.fromMe; na falta, o Info.IsFromMe do GoWS. Um texto
+  // como "false" nunca vale (no Rastrackapp, Boolean("false") viraria
+  // mensagem do time).
+  const fromMeRaw =
+    typeof inner.fromMe === "boolean" ? inner.fromMe : info.IsFromMe;
 
   if (typeof fromMeRaw !== "boolean") {
     return invalidResult(providerEventType, bestEffortMessageId);
@@ -561,7 +574,10 @@ function parsePayload(payload: unknown): InboundWebhookParserResult {
   }
 
   const messageId = bestEffortMessageId;
-  const occurredAt = parseOccurredAt(inner.timestamp, info.Timestamp);
+  // Hora da mensagem; na falta, a do envelope da WAHA (ms). Nunca "agora".
+  const occurredAt =
+    parseOccurredAt(inner.timestamp, info.Timestamp) ??
+    parseOccurredAt(envelope.timestamp, null);
 
   if (!messageId || !occurredAt) {
     return invalidResult(providerEventType, messageId);
@@ -593,11 +609,33 @@ function parsePayload(payload: unknown): InboundWebhookParserResult {
       return isPhoneJid(jid) && selfPhones.has(jid.user);
     });
 
-    return unsupportedResult(
+    if (chatIsSelf && !contactLid) {
+      return unsupportedResult(
+        providerEventType,
+        messageId,
+        "self_chat_not_supported",
+      );
+    }
+
+    // A métrica do anúncio não se perde: o clique fica com motivo próprio
+    // e o resumo leva hasCtwa/adId (sem LID nem telefone).
+    const unresolvedAd = fromMe
+      ? { adId: null, ctwaClid: null }
+      : parseAd(messageCtwaContext(data).adReply);
+    const unresolved = unsupportedResult(
       providerEventType,
       messageId,
-      chatIsSelf && !contactLid ? "self_chat_not_supported" : "contact_phone_unresolved",
+      unresolvedAd.ctwaClid
+        ? "ctwa_contact_phone_unresolved"
+        : "contact_phone_unresolved",
     );
+    unresolved.normalizedSummary = {
+      ...unresolved.normalizedSummary,
+      hasCtwa: unresolvedAd.ctwaClid !== null,
+      adId: unresolvedAd.adId,
+    };
+
+    return unresolved;
   }
 
   const connectedPhone =
@@ -605,12 +643,7 @@ function parsePayload(payload: unknown): InboundWebhookParserResult {
     (fromMe ? null : firstPhone([inner.to], new Set<string>())) ??
     "";
   const rawMessage = data?.Message ?? data?.RawMessage ?? null;
-  const ctwaContext = findCtwaContext(rawMessage);
-  const fallbackContext =
-    ctwaContext.adReply || !data?.RawMessage
-      ? ctwaContext
-      : findCtwaContext(data.RawMessage);
-  const ctwa = parseAd(fallbackContext.adReply);
+  const ctwa = parseAd(messageCtwaContext(data).adReply);
   const messageType =
     boundedString(info.MediaType, 120) ??
     boundedString(info.Type, 120) ??
@@ -731,6 +764,46 @@ export function parseWahaV2Webhook(payload: unknown): InboundWebhookParserResult
   }
 }
 
+/**
+ * Contato só com LID num clique de anúncio (motivo
+ * ctwa_contact_phone_unresolved): o LID a resolver na WAHA do aluno.
+ */
+export function wahaV2UnresolvedContactLid(payload: unknown): string | null {
+  const inner = asRecord(asRecord(payload)?.payload);
+  const info = asRecord(asRecord(inner?.["_data"])?.Info) ?? {};
+
+  for (const candidate of [inner?.from, info.Sender, info.SenderAlt, info.Chat]) {
+    const jid = parseJid(candidate);
+
+    if (isLidJid(jid)) {
+      return jid.user;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Cópia do evento com o telefone resolvido pela WAHA no lugar em que o GoWS
+ * o traria (Info.SenderAlt da mensagem recebida). O original não muda.
+ */
+export function withWahaResolvedContactPhone(
+  payload: unknown,
+  phone: string,
+): unknown {
+  const copy = JSON.parse(JSON.stringify(payload)) as JsonRecord;
+  const inner = asRecord(copy.payload);
+  const data = asRecord(inner?.["_data"]);
+
+  if (!inner || !data) {
+    return copy;
+  }
+
+  data.Info = { ...(asRecord(data.Info) ?? {}), SenderAlt: `${phone}@s.whatsapp.net` };
+
+  return copy;
+}
+
 export type WahaSessionStatus =
   | "STARTING"
   | "SCAN_QR_CODE"
@@ -752,7 +825,12 @@ const WAHA_SESSION_STATUSES: readonly WahaSessionStatus[] = [
  */
 export function parseWahaSessionStatusEvent(
   payload: unknown,
-): { session: string; status: WahaSessionStatus } | null {
+): {
+  session: string;
+  status: WahaSessionStatus;
+  /** Hora do evento no envelope da WAHA (ms); null se ausente. */
+  occurredAt: Date | null;
+} | null {
   const envelope = asRecord(payload);
 
   if (!envelope || envelope.event !== "session.status") {
@@ -770,7 +848,11 @@ export function parseWahaSessionStatusEvent(
     return null;
   }
 
-  return { session, status: status as WahaSessionStatus };
+  return {
+    session,
+    status: status as WahaSessionStatus,
+    occurredAt: parseOccurredAt(envelope.timestamp, null),
+  };
 }
 
 export class WahaV2Parser implements InboundWebhookParser {

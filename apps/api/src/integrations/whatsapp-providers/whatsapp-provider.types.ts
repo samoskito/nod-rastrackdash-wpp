@@ -67,6 +67,7 @@ export type WhatsappWebhookConfigureFailureReason =
   | "session_not_found"
   | "unauthorized"
   | "engine_not_supported"
+  | "masked_secrets"
   | "provider_error"
   | "unreachable";
 
