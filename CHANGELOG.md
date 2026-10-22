@@ -493,6 +493,53 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Fixed
 
+- **"Todos os números" rules now send (API, shared and web)**, ported from
+  the SaaS #152 (merge `b7fbd552`: `d3be95b`, `57e0b6e`, `5f5e7af`, `5df9130`, `90e5cfd`,
+  `5f13151`, `6cbdac7`, `394cbb9`, `5c1d209`, `8fe8e9f`, `1882cb2`, `b0df0a4`,
+  adapted to the student edition). Cause: `activateScopedProduction` returned
+  early for `all_numbers`, so the QR bridge stayed in observation and every
+  decision was blocked with `connection_not_production` (a QR-code phrase
+  rule with the default "Todos os números" never sent).
+  - **Number activation:** creating a production global rule, turning
+    "Envio ativo" on, editing a rule into all numbers or "Unificar" now
+    promotes every covered number (connection to production, channel
+    active), each one in its own transaction after the rule commit, with
+    audit (`provider_conversion_rule.global_numbers_activated`). One failing
+    number never rolls back the rule nor the other numbers.
+  - **Student edition instead of "paid seat":** there are no seats or charges
+    per number here. The conditions are the usable license (every write
+    answers `423` while it is locked and the automatic activation skips its
+    run) and, for QR numbers, the WhatsApp connection (`WhatsappInstance`)
+    being `active`; a suspended/disconnected one is reported as
+    `whatsapp_disconnected`. The Meta-route rules of the Integrations buttons
+    still apply (`meta_route_missing`). Paused connections
+    (`connection_paused`) and channels are never resumed by a rule.
+  - **Pending numbers:** `pendingNumbers` (with the reason) on every active
+    "all numbers" rule; Conversões shows "Esta regra ainda não envia eventos
+    em N números" with **"Ativar envio neste número"** (new
+    `POST /conversion-rules/providers/:id/numbers/:channelId/activate`) or
+    **"Resolver em Integrações"**.
+  - **Automatic activation of numbers connected later** (system actor):
+    `GlobalRuleAutoActivationService` reacts to the new durable bridge event
+    `inbound_webhook.uazapi_bridge_provisioned` and reconciles hourly; only
+    numbers that were never live (an operator's promote/observation/pause
+    decision is respected), with a 6 h backoff for failures, one instance at
+    a time (advisory lock).
+  - **"Reprocessar bloqueadas"** in the executions modal (new
+    `POST /conversion-rules/providers/:id/reprocess-blocked`): resends, once,
+    the QR conversations of the last 7 days (Meta window, minus 1 h) blocked
+    only because the number was not live; older ones are shown as expired.
+    Conversations of a period an operator paused or held back are never
+    resent. Idempotent (frozen decision, upsert, job id = execution id),
+    restricted to the workspace, advisory lock + 30 s cooldown, batches of 50.
+  - **Migration** `20261022120000_provider_rule_blocked_reprocess_index`
+    (additive: one index on `ProviderConversionRuleExecution` for the panel
+    count and the reprocess scan).
+  - Execution and purchase-review reasons with Portuguese accents.
+  - Not ported (separate SaaS features, not fixes of this area): #153
+    (one conversion per lead across numbers) and #155 (Lead recebido sent by
+    the rule, behind a flag), which also touch the reprocess.
+
 - **Fase 5.0 — Payt fixes (API only)**, ported from the SaaS (`d88fc6c`,
   `f5f535b`, `6f5fcf0`, `4ca665b`, `608ec47`, `1d65161`):
   - **Sale value without installment interest.** A Payt Purchase now uses
