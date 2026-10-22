@@ -1337,6 +1337,9 @@ model ProviderConversionRuleExecution {
   @@unique([providerDecisionWorkspaceId, providerDecisionId], map: "ProviderConversionRuleExecution_decision_key")
   @@index([workspaceId, status, occurredAt])
   @@index([workspaceId, contactIdentityHash, occurredAt])
+  /// "Reprocessar bloqueadas": execuções bloqueadas/observadas de uma regra
+  /// na janela de 7 dias (contagem do painel e varredura do reprocessamento).
+  @@index([workspaceId, providerRuleId, status, occurredAt], map: "ProviderConversionRuleExecution_rule_status_occurredAt_idx")
   @@index([sourceDeliveryId])
   @@index([channelId])
   @@index([matchedCatalogVariantId])

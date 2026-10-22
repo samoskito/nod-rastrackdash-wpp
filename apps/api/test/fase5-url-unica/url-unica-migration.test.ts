@@ -23,7 +23,11 @@ describe("Fase 5.3 migration: URL única (texto, sem PostgreSQL)", () => {
       /^\d{14}_/u.test(entry),
     );
     expect(names).toContain(name);
-    expect(names.sort().at(-1)).toBe(name);
+    // Later migrations (e.g. 20261022 "Reprocessar bloqueadas") come after it.
+    expect(names.sort().filter((entry) => entry <= name).at(-1)).toBe(name);
+    expect(
+      names.filter((entry) => entry > name).every((entry) => entry >= "20261020"),
+    ).toBe(true);
     expect(name > "20261016180000_exchange_rates").toBe(true);
   });
 

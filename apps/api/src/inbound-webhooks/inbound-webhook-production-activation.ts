@@ -78,7 +78,8 @@ export type ExternalChannelSeatHook = {
       // WhatsappInstance seat, so every caller narrows it away first.
       provider: Exclude<$Enums.InboundWebhookProvider, "uazapi">;
       normalizedPhone: string | null;
-      actorUserId: string;
+      /** Absent: system actor (automatic activation of a global rule). */
+      actorUserId?: string;
     },
   ): Promise<unknown>;
 };
@@ -172,7 +173,8 @@ export async function applyInboundWebhookChannelStatus(
     workspaceId: string;
     channelId: string;
     status: InboundWebhookChannelStatusUpdateInputDto["status"];
-    actorUserId: string;
+    /** null: system actor (automatic activation of a global rule). */
+    actorUserId: string | null;
     requireValidMetaRoute: boolean;
     seats: ExternalChannelSeatHook;
   },
@@ -216,7 +218,7 @@ export async function applyInboundWebhookChannelStatus(
       channelId,
       provider: current.connection.provider,
       normalizedPhone: current.connectedPhone || null,
-      actorUserId,
+      actorUserId: actorUserId ?? undefined,
     });
   }
 
@@ -272,7 +274,8 @@ export async function applyInboundWebhookConnectionStatus(
     workspaceId: string;
     connectionId: string;
     status: InboundWebhookConnectionStatusUpdateInputDto["status"];
-    actorUserId: string;
+    /** null: system actor (automatic activation of a global rule). */
+    actorUserId: string | null;
     requireValidMetaRoute: boolean;
     seats: ExternalChannelSeatHook;
     env?: RuntimeEnv;
@@ -471,7 +474,7 @@ async function assertProductionReady(
 async function activateProductionSeats(
   transaction: Prisma.TransactionClient,
   connection: PersistedInboundWebhookConnection,
-  options: { actorUserId: string; seats: ExternalChannelSeatHook },
+  options: { actorUserId: string | null; seats: ExternalChannelSeatHook },
 ): Promise<void> {
   if (!options.seats.enforcementEnabled() || connection.provider === "uazapi") {
     // UAZAPI/NOD channels are billed as WhatsappInstance seats already
@@ -499,7 +502,7 @@ async function activateProductionSeats(
       channelId: channel.id,
       provider: connection.provider,
       normalizedPhone: channel.connectedPhone || null,
-      actorUserId: options.actorUserId,
+      actorUserId: options.actorUserId ?? undefined,
     });
   }
 }
@@ -508,7 +511,7 @@ async function createActivationAudit(
   transaction: Prisma.TransactionClient,
   input: {
     workspaceId: string;
-    actorUserId: string;
+    actorUserId: string | null;
     action: string;
     targetType: string;
     targetId: string;
@@ -521,7 +524,7 @@ async function createActivationAudit(
     data: {
       workspaceId: input.workspaceId,
       actorUserId: input.actorUserId,
-      actorType: "user",
+      actorType: input.actorUserId ? "user" : "system",
       action: input.action,
       targetType: input.targetType,
       targetId: input.targetId,

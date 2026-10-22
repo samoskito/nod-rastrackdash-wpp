@@ -18,6 +18,8 @@ import { ProviderConversionPaidLeadResolver } from "./provider-conversion-paid-l
 import { ProviderConversionReviewApprovalService } from "./provider-conversion-review-approval.service";
 import { ProviderConversionShadowComparisonService } from "./provider-conversion-shadow-comparison.service";
 import { ProviderConversionTraceService } from "./provider-conversion-trace.service";
+import { GlobalRuleAutoActivationService } from "./provider-rule-global-auto-activation.service";
+import { LicenseClientModule } from "../licensing-client/license-client.module";
 
 @Module({
   imports: [
@@ -27,6 +29,9 @@ import { ProviderConversionTraceService } from "./provider-conversion-trace.serv
     PrismaModule,
     RuntimeModule,
     WorkspacesModule,
+    // The automatic activation of "Todos os números" skips its run while the
+    // installation license is locked (same rule as the 423 of every write).
+    LicenseClientModule,
   ],
   controllers: [ConversionRulesController],
   providers: [
@@ -44,6 +49,7 @@ import { ProviderConversionTraceService } from "./provider-conversion-trace.serv
     ProviderConversionOrchestrator,
     ProviderConversionShadowComparisonService,
     ProviderConversionTraceService,
+    GlobalRuleAutoActivationService,
   ],
   exports: [
     ConversionRulesService,
