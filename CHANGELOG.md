@@ -61,6 +61,55 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
+- **WAHA with the GoWS engine (API and shared; the screen is a later phase)**.
+  The WAHA server is the student's own: they host it, create the session and
+  scan the QR in their WAHA panel. The app never creates a session nor shows a
+  QR; the connection stores the server URL, the API key and the session
+  (required).
+  - **Parser `waha` v2** (`waha-v2.parser.ts`, registered next to the
+    untouched v1): reads `payload._data.Info` / `payload._data.Message`. Phone
+    from a phone JID or `Info.SenderAlt` (received) / `Info.RecipientAlt`
+    (team), the `:NN` device suffix stripped, the store's own number never a
+    contact; the LID is kept apart in `contact.lid` and never used as the
+    phone (a contact by `@lid` or by phone resolves to the same lead).
+    Groups, Status (`status@broadcast`), broadcast lists and newsletters are
+    discarded. Received messages only from `message`, team messages only from
+    `message.any` (no double count). `ctwa_clid` only from
+    `externalAdReply.ctwaClid`/`ctwa_clid`, searched in every message type and
+    inside `ephemeralMessage`/`viewOnceMessage*` (as the Rastrackapp
+    `findCtwaContext`); `ctwaPayload` is never a clid. `fromMe` must be a real
+    boolean.
+  - **Certified release:** migrations `20261022120000_waha_inbound_provider`
+    (enum value `waha` in `InboundWebhookProvider`) and
+    `20261022120100_waha_parser_release` (`waha`/`v2` certified; retired stays
+    retired). `POST /webhooks/whatsapp/:id` uses v2 while that release is
+    certified, otherwise v1. WAHA has no generic inbound connection (refused
+    with 409, left out of the capabilities).
+  - **Lead entry:** with a clid, ad lead + `LeadSubmitted` (same path as the
+    other providers; the push name only fills an empty lead name). Only
+    `sourceID` (WhatsApp Status ads) or organic: logged with the ad id when
+    present, no lead, nothing sent — the student edition's Uazapi behavior.
+    Idempotency keys include the event (`message` / `message.any`);
+    `session.status` updates the connection health; the webhook log keeps a
+    structural summary only (no text, name, LID, phone, clid or thumbnail).
+  - **Adapter:** Testar reads `GET /api/sessions/{s}` and returns the raw
+    status (`providerStatus`: WORKING, SCAN_QR_CODE, STARTING, FAILED,
+    STOPPED); another engine is reported as an error.
+    `POST /integrations/whatsapp-connections/:id/configure-webhook` reads the
+    session and `PUT`s it back with its config preserved, replacing only our
+    webhook (`message`, `message.any`, `session.status`, token in the
+    `X-Wpptrack-Webhook-Token` header, linear retries); the token hash is
+    stored only after the WAHA accepts it. `rotate-webhook-token` adds
+    `wahaManualSetup` (URL with `?token=`, events, header name). No HMAC yet.
+  - **Shared contracts:** `WAHA_GOWS_WEBHOOK_EVENTS`,
+    `WAHA_WEBHOOK_TOKEN_HEADER`, `wahaWebhookManualSetupSchema`,
+    `whatsappConnectionWebhookConfigureResultSchema`, `providerStatus` on the
+    test result, `waha` in `inboundWebhookProviders`.
+  - WAHA phrase rules stay locked (`UNSUPPORTED_RULE_WHATSAPP_PROVIDERS`).
+    Synthetic GoWS fixtures in `apps/api/test/fixtures/waha-gows/` (README; an
+    anonymity test guards them). Guide: `docs/setup/whatsapp-providers.md`.
+    No new env var or dependency. Roll back: see `docs/releases/unreleased.json`.
+
 - **Fase 5.3 — Single URL per platform and per-event URLs (API, shared and screens)**,
   ported from the SaaS (`6d4aa02`, `a9d2d3c`, `613beb3`, `22c6506`, `46fb0df`,
   `d3725ad`, `4cad496`, `73a9a56`; the web commits `ca783a1`, `f2e676b` and
