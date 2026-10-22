@@ -457,7 +457,11 @@ export function WhatsappProviderPanel({
       )}
 
       <div
-        className="inbound-counter-grid"
+        className={
+          scopedProvider === "waha"
+            ? "inbound-counter-grid waha-counter"
+            : "inbound-counter-grid"
+        }
         data-testid="whatsapp-provider-statuses"
       >
         {visibleCards.map((card) => (
@@ -494,7 +498,11 @@ export function WhatsappProviderPanel({
 
       {canManage && allowCreate ? (
         <form
-          className="inbound-webhook-create"
+          className={
+            provider === "waha"
+              ? "inbound-webhook-create waha-create"
+              : "inbound-webhook-create"
+          }
           onSubmit={submitCreate}
           onInvalid={(event) => clearCredentials(event.currentTarget)}
         >
@@ -1082,7 +1090,7 @@ function WahaConnectionDetails({
 
       {manual ? (
         <div
-          className="inbound-webhook-secret"
+          className="inbound-webhook-secret waha-manual"
           data-testid="waha-manual-setup"
           data-presentation-sensitive-action="true"
         >

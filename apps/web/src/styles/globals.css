@@ -16157,3 +16157,42 @@ button.meta-manual-entry[aria-expanded="true"] {
 .waha-status.error {
   border-left-color: var(--coral);
 }
+
+.waha-counter {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.waha-counter .inbound-counter {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.inbound-webhook-create.waha-create {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.inbound-webhook-create.waha-create small {
+  line-height: 1.4;
+}
+
+.inbound-webhook-create.waha-create .button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.waha-manual > div {
+  display: grid;
+  gap: 4px;
+}
+
+.waha-manual p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .inbound-webhook-create.waha-create {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
