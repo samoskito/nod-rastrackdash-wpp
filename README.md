@@ -55,7 +55,7 @@ Verify: open `/backoffice` (onboarding checklist), `/backoffice/license`, `/inte
 ## Bring your own services
 
 - SMTP for email delivery
-- WhatsApp: Uazapi BYO and/or WhatsApp Cloud API (NOD API, WAHA and Z-API are "Em breve": existing connections only)
+- WhatsApp: Uazapi BYO, WAHA (GoWS engine, your own server) and/or WhatsApp Cloud API (NOD API and Z-API are "Em breve": existing connections only)
 - Meta System User access token (manual)
 - Optional brand: `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR`
 

@@ -10,12 +10,12 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 ### Changed
 
 - **Integrations hub** (`/integrations`, web only): the page is now a catalog
-  with four tabs — **WhatsApp** (Uazapi, WhatsApp Cloud API; WAHA, Z-API and
+  with four tabs — **WhatsApp** (Uazapi, WAHA, WhatsApp Cloud API; Z-API and
   NOD API show "Em breve"), **Atendimento e vendas** (Umbler Talk, Gupshup,
   Data Crazy), **Anúncios** (Meta Ads: social login or token, traffic data and
   CAPI conversions — it receives no conversations) and **CRM** (Kommo) — with
   logo cards (**Ativo** / **Disponível**) and one connection modal per
-  platform. WAHA / Z-API / NOD API: no new connections, but an existing one stays
+  platform. Z-API / NOD API: no new connections, but an existing one stays
   active and manageable. The modals reuse the existing panels, scoped
   to the platform. New files: `apps/web/src/app/(app)/integrations/hub/*`,
   `apps/web/src/components/modal.tsx`, logos in `apps/web/public/integrations/`
@@ -61,7 +61,21 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Added
 
-- **WAHA with the GoWS engine (API and shared; the screen is a later phase)**.
+- **WAHA screen (web)**: the WAHA card in the Hub is released (no "Em breve";
+  the panel mounts even without a connection). The modal asks for name,
+  server URL, API key and session (required) with a short "your own WAHA"
+  guide; **Testar conexão** shows the session status (WORKING, SCAN_QR_CODE,
+  STARTING, STOPPED, FAILED) with what to do in each one (e.g. read the QR in
+  the student's own WAHA panel); **Configurar webhook** calls
+  `configure-webhook` and shows the subscribed events or the pt-BR reason of
+  the refusal; **Configuração manual** asks for confirmation (rotating the
+  token invalidates the current webhook), then shows once the URL with
+  `?token=`, the events and the `X-Wpptrack-Webhook-Token` header. The API key
+  never comes back to the screen; the standard license message appears on a
+  423. Conversions keep WAHA under "Em breve nas regras", with a note that ad
+  lead entry (CTWA) already works. No QR and no server in the app. New file:
+  `waha-session-guidance.ts`; no migration, no new env var.
+- **WAHA with the GoWS engine (API and shared)**.
   The WAHA server is the student's own: they host it, create the session and
   scan the QR in their WAHA panel. The app never creates a session nor shows a
   QR; the connection stores the server URL, the API key and the session

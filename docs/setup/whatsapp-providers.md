@@ -15,7 +15,7 @@ qualquer provedor.
 
 | Modelo | Onde se cria | Escopo | Providers |
 |---|---|---|---|
-| **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi; WAHA, Z-API e NOD API aparecem como "Em breve" — conexões já existentes continuam gerenciáveis) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
+| **Conexão de provedor + receiver** (`WhatsappInstance`) | `/integrations` → aba **WhatsApp** → card do provedor (Uazapi e WAHA; Z-API e NOD API aparecem como "Em breve" — conexões já existentes continuam gerenciáveis) | **Por workspace, quantas você quiser** | `uazapi_byo`, `nod_api`, `waha`, `zapi` |
 | **Conexão de webhook de entrada** (`InboundWebhookConnection`) | `/integrations` → aba **Atendimento e vendas** → card Umbler Talk / Gupshup / Data Crazy / Unnichat; aba **WhatsApp** → card **WhatsApp Cloud API** (Meta) | **Por workspace, quantas você quiser** | `umbler`, `gupshup`, `data_crazy`, `unnichat` (conexão presa ao número; [`unnichat.md`](unnichat.md)), `meta_cloud` (self-service); `uazapi` só automático (ver abaixo) |
 | **Meta Ads (conta de anúncios)** | `/integrations` → aba **Anúncios** → card **Meta Ads** (login social ou token; não recebe conversas) | Por workspace | `meta` — token de usuário do sistema, veja [`meta-manual.md`](meta-manual.md) |
 
@@ -49,9 +49,9 @@ Na prática:
 > por workspace listadas acima dele no mesmo card. Se o aluno perguntar, é
 > isso: dois blocos, dois escopos.
 
-## Aba WhatsApp — Uazapi (WAHA, Z-API e NOD API: Em breve): o que o aluno faz
+## Aba WhatsApp — Uazapi e WAHA (Z-API e NOD API: Em breve): o que o aluno faz
 
-Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi; WAHA, Z-API e NOD API estão como "Em breve" para novas conexões). A janela que abre já vem fixa nesse provedor:
+Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA; Z-API e NOD API estão como "Em breve" para novas conexões). A janela que abre já vem fixa nesse provedor:
 
 1. **Criar a conexão.** Dê um **Nome** (é esse
    nome que a exclusão vai pedir de volta) e um **Nome exibido**
@@ -60,7 +60,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi; WAHA, 
    | Provedor | Campos pedidos na UI |
    |---|---|
    | Uazapi (BYO) | URL da API, Token, Instance ID (opcional) |
-   | WAHA (Em breve no Hub; só conexões já existentes) | URL da API, API key, Sessão |
+   | WAHA (GoWS, servidor seu) | Nome, URL da API, API key, **Sessão** (obrigatória); veja [WAHA com motor GoWS](#waha-com-motor-gows-waha-servidor-do-aluno) |
    | Z-API (Em breve no Hub; só conexões já existentes) | URL da API, Token, Instance ID |
    | NOD API (Em breve no Hub; só conexões já existentes) | Instance ID, Instance token |
 
@@ -95,7 +95,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi; WAHA, 
 | Rota | Autenticação confirmada | Vínculo obrigatório do payload | Status |
 |---|---|---|---|
 | `POST /webhooks/whatsapp/:id` — **Uazapi (BYO)** | Token do receiver (header `x-wpptrack-webhook-token`, Bearer ou `?token=`) comparado ao hash salvo | — | **Pronto** |
-| `POST /webhooks/whatsapp/:id` — **WAHA** (motor GoWS) | Idem (a configuração automática manda o token no cabeçalho `X-Wpptrack-Webhook-Token`) | `session` do envelope precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — parser `waha` v2 (GoWS) enquanto a release certificada existir; veja [WAHA com motor GoWS](#waha-com-motor-gows-waha-servidor-do-aluno). Em breve no Hub: só para conexões já existentes |
+| `POST /webhooks/whatsapp/:id` — **WAHA** (motor GoWS) | Idem (a configuração automática manda o token no cabeçalho `X-Wpptrack-Webhook-Token`) | `session` do envelope precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — parser `waha` v2 (GoWS) enquanto a release certificada existir; veja [WAHA com motor GoWS](#waha-com-motor-gows-waha-servidor-do-aluno). Liberada no Hub (regras de frase da WAHA em breve) |
 | `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** — Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy / Unnichat** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
@@ -356,10 +356,10 @@ Consequências práticas, confirmadas no código:
   passo que você esqueceu de clicar.
 - **NOD API** ainda não tem receiver inbound (a rota responde `501`).
 
-> ℹ️ No Hub, WAHA, Z-API e NOD API aparecem como **Em breve**: não é possível
-> criar conexões novas; as já existentes continuam gerenciáveis. Os receivers
-> de WAHA e Z-API existem no backend (matriz acima), mas só quem já tem a
-> conexão os usa por enquanto.
+> ℹ️ No Hub, Z-API e NOD API aparecem como **Em breve**: não é possível
+> criar conexões novas; as já existentes continuam gerenciáveis. O receiver
+> da Z-API existe no backend (matriz acima), mas só quem já tem a conexão o
+> usa por enquanto. A WAHA (GoWS) já cria conexões novas.
 
 ## Gatilhos de conversão exigem as envs `INBOUND_*`
 
@@ -427,8 +427,8 @@ WEBJS) só se algum aluno pedir.
 | API key | A API key do seu servidor WAHA (fica criptografada; nunca volta para a tela) |
 | Sessão | **Obrigatória.** O nome exato da sessão criada no painel |
 
-Depois de salvar, **Testar** consulta `GET /api/sessions/{sessão}` na sua
-WAHA e mostra o status: `WORKING` = conectada; `SCAN_QR_CODE` = leia o QR
+Depois de salvar, **Testar conexão** consulta `GET /api/sessions/{sessão}` na
+sua WAHA e mostra o status: `WORKING` = conectada; `SCAN_QR_CODE` = leia o QR
 no painel da WAHA; `STARTING` = subindo; `STOPPED` = sessão parada;
 `FAILED` = erro na sessão. Uma sessão com outro motor aparece como erro
 (“use GOWS”).
@@ -445,10 +445,12 @@ no painel da WAHA; `STARTING` = subindo; `STOPPED` = sessão parada;
   salvar; uma sessão já autenticada volta sem novo QR. Se a WAHA recusar
   (sessão inexistente, API key errada, servidor fora do ar, outro motor),
   **nada muda** no app e o token anterior continua valendo.
-  PENDENTE: o botão desse modo na tela chega na próxima fase (tela WAHA);
-  hoje o endpoint já existe na API.
-- **Manual**: **Gerar receiver** devolve uma única vez a URL com `?token=`.
-  No painel da WAHA, em *Webhooks* da sessão, cole essa URL e marque os
+  Na tela é o botão **Configurar webhook**; ele mostra os eventos assinados
+  ou o motivo da recusa (sessão inexistente, API key errada, servidor fora do
+  ar, outro motor) e oferece a configuração manual.
+- **Manual**: o botão **Configuração manual** pede confirmação (gerar um novo
+  token faz o webhook atual deixar de valer) e mostra uma única vez a URL
+  com `?token=`, os eventos e o cabeçalho. No painel da WAHA, em *Webhooks* da sessão, cole essa URL e marque os
   eventos `message`, `message.any` e `session.status`. (Alternativa: a URL
   sem `?token=` e o cabeçalho `X-Wpptrack-Webhook-Token` com o token.)
   Gerar de novo invalida a URL anterior. HMAC da WAHA fica fora por enquanto.
@@ -484,7 +486,7 @@ WAHA, ponte automática para a central de Gatilhos, HMAC e outros motores
 além do GOWS. Env de fallback (`WAHA_BASE_URL`, `WAHA_API_KEY`,
 `WAHA_SESSION`) vale só para o **Testar**; a configuração automática do
 webhook usa somente o que está salvo na conexão.
-- **Em breve no Hub:** a tela de criar conexões WAHA novas chega na próxima fase; as já existentes continuam gerenciáveis.
+- **No Hub:** a WAHA está liberada para novas conexões (entrada de lead de anúncio). As **regras de frase** da WAHA seguem como "Em breve" em Conversões.
 
 ### Z-API (`zapi`)
 

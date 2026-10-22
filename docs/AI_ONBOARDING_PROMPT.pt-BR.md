@@ -53,9 +53,9 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
       GitHub do aluno.
    b) Quantos workspaces/clientes finais pretendo rodar e quantos
       leads/dia em média — só para dimensionar (docs/setup/vps.md).
-   c) Quais provedores de WhatsApp pretendo usar: Uazapi BYO, WhatsApp
+   c) Quais provedores de WhatsApp pretendo usar: Uazapi BYO, WAHA (motor GoWS, servidor do aluno), WhatsApp
       Cloud API (Meta) e/ou webhook inbound (Umbler/Gupshup/Data Crazy).
-      NOD API, WAHA e Z-API estão "Em breve (só conexões já existentes)"
+      NOD API e Z-API estão "Em breve (só conexões já existentes)"
       no Hub: não criam conexões novas. Data Crazy é suportado como
       conexão de webhook inbound por workspace: a URL com `?token=` deve
       ser colada em uma automação HTTP de mensagem recebida, e o canal só
@@ -101,7 +101,7 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    subdomínios irmãos; (8) redeploy da API após qualquer mudança de env;
    (9) criar/entrar com o primeiro admin e validar `/backoffice/clients`;
    (10) configuração manual da Meta; (11) provedor WhatsApp — Uazapi BYO
-   (NOD API, WAHA e Z-API: "Em breve", só conexões já existentes) é **uma única instância para todo o
+   (NOD API e Z-API: "Em breve", só conexões já existentes; WAHA GoWS liberada) é **uma única instância para todo o
    deployment**, configurada só pela env (redeploy e pronto — não existe
    passo de "criar instância" nem uma por workspace, a própria tela de
    Integrações avisa isso); só a conexão de webhook inbound

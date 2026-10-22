@@ -112,14 +112,14 @@ Essas duas orientações (**Trocar token** e **Reenviar bloqueados**) continuam 
 
 Leia [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md) antes de escolher — lá está o contrato completo, a matriz do que já funciona e o que ainda não. Em `/integrations` (o **Hub de Integrações**) cada plataforma é um **card** com a logo e o estado **Ativo** ou **Disponível**; clique no card para abrir a janela de conexão. Existem **dois tipos de conexão** e escolher o errado é o erro mais comum — eles ficam em abas diferentes:
 
-### 10.1 Aba WhatsApp — card Uazapi (WAHA, Z-API e NOD API como "Em breve")
+### 10.1 Aba WhatsApp — cards Uazapi e WAHA (Z-API e NOD API como "Em breve")
 
-> **WAHA, Z-API e NOD API aparecem como "Em breve"** para novas conexões. Se você já tinha uma conexão de um deles, ela continua aparecendo como **Ativo** e você segue podendo testar, editar e excluir; só não é possível criar novas por enquanto.
+> **Z-API e NOD API aparecem como "Em breve"** para novas conexões. Se você já tinha uma conexão de um deles, ela continua aparecendo como **Ativo** e você segue podendo testar, editar e excluir; só não é possível criar novas por enquanto.
 
 A Uazapi é uma conexão **por workspace**, criada na própria tela — você digita as credenciais do cliente ali, não em variável de ambiente:
 
 - **Uazapi (BYO)** — sua própria instância Uazapi (URL da API, Token, Instance ID opcional). Receiver inbound **pronto**. É o único provedor que também avalia **mensagem do atendente** e **etiquetas** para gatilhos.
-- **WAHA — Em breve (só conexões já existentes).** Ainda não validado; não é possível criar conexões novas pela tela. Quem já tinha uma continua podendo testar, editar e excluir.
+- **WAHA (motor GoWS, servidor seu).** A WAHA é sua: você hospeda o servidor, cria a sessão e lê o QR no painel da sua WAHA; o RastrackDash não fornece servidor e não mostra QR. Na janela da WAHA informe **Nome**, **URL da API**, **API key** e **Sessão** e salve. Depois use **Testar conexão** (mostra o status da sessão e o que fazer: `WORKING` = conectada; `SCAN_QR_CODE` = leia o QR no painel da sua WAHA; `STARTING`, `STOPPED`, `FAILED` têm orientação própria) e **Configurar webhook** (o app grava o webhook na sua WAHA). Se preferir, **Configuração manual** pede confirmação, gira o token e mostra uma única vez a URL com `?token=`, os eventos e o cabeçalho para você colar nos Webhooks da sessão. A API key nunca volta para a tela. A entrada de lead de anúncio (CTWA) já funciona; as **regras de frase** da WAHA seguem como "Em breve" em Conversões. Passo a passo completo: [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md).
 - **Z-API — Em breve (só conexões já existentes).** Não é possível criar conexões novas pela tela; quem já tinha uma continua podendo testar, editar e excluir.
 - **NOD API — Em breve (só conexões já existentes).** Mesma regra da Z-API. Hoje o receiver inbound da NOD API ainda não existe.
 
