@@ -510,8 +510,11 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     per number here. The conditions are the usable license (every write
     answers `423` while it is locked and the automatic activation skips its
     run) and, for QR numbers, the WhatsApp connection (`WhatsappInstance`)
-    being `active`; a suspended/disconnected one is reported as
-    `whatsapp_disconnected`. The Meta-route rules of the Integrations buttons
+    being `active`, i.e. not suspended/removed in Integrações (this edition
+    only writes `active`/`suspended`; a suspended one is out of the rule
+    scope, any other status is `whatsapp_connection_inactive`). The QR
+    session itself is not checked: it only shows in the health check
+    (`lastHealthStatus`), which may be stale, so it never blocks. The Meta-route rules of the Integrations buttons
     still apply (`meta_route_missing`). Paused connections
     (`connection_paused`) and channels are never resumed by a rule.
   - **Pending numbers:** `pendingNumbers` (with the reason) on every active
@@ -523,18 +526,30 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     `GlobalRuleAutoActivationService` reacts to the new durable bridge event
     `inbound_webhook.uazapi_bridge_provisioned` and reconciles hourly; only
     numbers that were never live (an operator's promote/observation/pause
-    decision is respected), with a 6 h backoff for failures, one instance at
-    a time (advisory lock).
+    decision is respected), with a 6 h backoff for failures that follows the
+    latest real attempt (kept in memory, so repeated failures do not flood the
+    audit), one instance at a time (advisory lock) and a time budget also
+    checked inside each workspace (it stops before the lock timeout). The
+    hourly reconciliation runs per API instance (serialized, idempotent).
   - **"Reprocessar bloqueadas"** in the executions modal (new
     `POST /conversion-rules/providers/:id/reprocess-blocked`): resends, once,
     the QR conversations of the last 7 days (Meta window, minus 1 h) blocked
     only because the number was not live; older ones are shown as expired.
     Conversations of a period an operator paused or held back are never
-    resent. Idempotent (frozen decision, upsert, job id = execution id),
+    resent; on purpose more conservative than the SaaS: any earlier
+    promotion/pause/observation of the connection, or pause of the channel,
+    before the conversation keeps it out, even an old one. Idempotent (frozen decision, upsert, job id = execution id),
     restricted to the workspace, advisory lock + 30 s cooldown, batches of 50.
   - **Migration** `20261022120000_provider_rule_blocked_reprocess_index`
-    (additive: one index on `ProviderConversionRuleExecution` for the panel
-    count and the reprocess scan).
+    (additive: one `CREATE INDEX CONCURRENTLY IF NOT EXISTS` on
+    `ProviderConversionRuleExecution` for the panel count and the reprocess
+    scan; a single statement, so Prisma runs it outside a transaction, like
+    `20260709233000_lead_ctwa_index_concurrently`). An interrupted build may
+    leave an INVALID index: check `pg_index.indisvalid`, then
+    `DROP INDEX CONCURRENTLY IF EXISTS` and recreate (see the release notes).
+  - The web keeps the API error `code` (`ApiRequestError.code`, merged into
+    `lib/server-api.ts`), so "Reprocessar bloqueadas" maps
+    `provider_rule_reprocess_in_progress` by code, not by message text.
   - Execution and purchase-review reasons with Portuguese accents.
   - Not ported (separate SaaS features, not fixes of this area): #153
     (one conversion per lead across numbers) and #155 (Lead recebido sent by
