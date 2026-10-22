@@ -93,9 +93,9 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     inside `ephemeralMessage`/`viewOnceMessage*` (as the Rastrackapp
     `findCtwaContext`); `ctwaPayload` is never a clid. `fromMe` must be a real
     boolean.
-  - **Certified release:** migrations `20261022120000_waha_inbound_provider`
+  - **Certified release:** migrations `20261022130000_waha_inbound_provider`
     (enum value `waha` in `InboundWebhookProvider`) and
-    `20261022120100_waha_parser_release` (`waha`/`v2` certified; retired stays
+    `20261022130100_waha_parser_release` (`waha`/`v2` certified; retired stays
     retired). `POST /webhooks/whatsapp/:id` uses v2 while that release is
     certified, otherwise v1. WAHA has no generic inbound connection (refused
     with 409, left out of the capabilities).
@@ -123,6 +123,20 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     Synthetic GoWS fixtures in `apps/api/test/fixtures/waha-gows/` (README; an
     anonymity test guards them). Guide: `docs/setup/whatsapp-providers.md`.
     No new env var or dependency. Roll back: see `docs/releases/unreleased.json`.
+  - **Review fixes:** the session `PUT` (it restarts the session) waits up to
+    30 s and, on timeout or 5xx, re-reads the session and succeeds only if our
+    webhook with the new token is saved; no `PUT` when the session config
+    returns masked secrets (`masked_secrets`, manual setup suggested); an
+    ad click whose contact only has a LID keeps the metric
+    (`ctwa_contact_phone_unresolved`, `hasCtwa`/`adId` in the log) and is
+    resolved through the student's WAHA (`GET /api/{session}/lids/{lid}`, 3 s,
+    best effort) before giving up; `session.status` only applies when newer
+    than the last health check (envelope `timestamp`); `fromMe` falls back to
+    `Info.IsFromMe` and the time to the envelope `timestamp`; manual setup
+    leads with the header (`webhookUrl` in `wahaManualSetup`), the `?token=`
+    URL is the alternative; "Configurar webhook" asks to confirm the restart
+    and a 403 has its own message. Migrations renamed to
+    `20261022130000_*`/`20261022130100_*` (not applied anywhere yet).
 
 - **Fase 5.3 — Single URL per platform and per-event URLs (API, shared and screens)**,
   ported from the SaaS (`6d4aa02`, `a9d2d3c`, `613beb3`, `22c6506`, `46fb0df`,

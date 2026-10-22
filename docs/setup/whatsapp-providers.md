@@ -441,19 +441,30 @@ no painel da WAHA; `STARTING` = subindo; `STOPPED` = sessão parada;
   `{API_PUBLIC_URL}/webhooks/whatsapp/{ID_DA_CONEXAO}` com os eventos
   `message`, `message.any` e `session.status` e o token no cabeçalho
   `X-Wpptrack-Webhook-Token`. O resto da configuração da sessão (proxy,
-  metadados, outros webhooks) é preservado. A WAHA pode reiniciar a sessão ao
-  salvar; uma sessão já autenticada volta sem novo QR. Se a WAHA recusar
-  (sessão inexistente, API key errada, servidor fora do ar, outro motor),
-  **nada muda** no app e o token anterior continua valendo.
-  Na tela é o botão **Configurar webhook**; ele mostra os eventos assinados
-  ou o motivo da recusa (sessão inexistente, API key errada, servidor fora do
-  ar, outro motor) e oferece a configuração manual.
+  metadados, outros webhooks) é preservado. **Salvar reinicia a sessão na
+  WAHA**: ela volta em alguns segundos, sem novo QR, e mensagens podem atrasar
+  nesse intervalo — por isso o botão **Configurar webhook** pede confirmação
+  antes. O app espera até 30 s por esse salvamento; se o prazo estourar ou a
+  WAHA responder erro 5xx, ele relê a sessão e só considera configurado se o
+  webhook com o token novo estiver lá. Se a WAHA recusar (sessão inexistente,
+  API key errada, servidor fora do ar, outro motor), **nada muda** no app e o
+  token anterior continua valendo. Se a configuração da sessão vier com
+  **senhas mascaradas** (`***` na senha do proxy, no `hmac.key` ou nos
+  cabeçalhos de outro webhook), o app **não grava nada** — gravar de volta
+  trocaria o segredo real pelos asteriscos — e pede a configuração manual.
+  A tela mostra os eventos assinados ou o motivo da recusa e oferece a
+  configuração manual.
 - **Manual**: o botão **Configuração manual** pede confirmação (gerar um novo
-  token faz o webhook atual deixar de valer) e mostra uma única vez a URL
-  com `?token=`, os eventos e o cabeçalho. No painel da WAHA, em *Webhooks* da sessão, cole essa URL e marque os
-  eventos `message`, `message.any` e `session.status`. (Alternativa: a URL
-  sem `?token=` e o cabeçalho `X-Wpptrack-Webhook-Token` com o token.)
-  Gerar de novo invalida a URL anterior. HMAC da WAHA fica fora por enquanto.
+  token faz o webhook atual deixar de valer) e mostra uma única vez a URL, o
+  token, o cabeçalho e os eventos. No painel da WAHA, em *Webhooks* da sessão:
+  1. cole a **URL** (sem token);
+  2. adicione o cabeçalho **`X-Wpptrack-Webhook-Token`** com o **token**
+     (opção recomendada);
+  3. marque os eventos `message`, `message.any` e `session.status`.
+
+  Alternativa, só se a sua WAHA não aceitar cabeçalho: a URL com `?token=`.
+  Ela funciona, mas o token pode aparecer nos logs da WAHA e do proxy.
+  Gerar de novo invalida o token anterior. HMAC da WAHA fica fora por enquanto.
 
 **4. O que acontece com cada mensagem** (parser `waha` v2)
 
@@ -465,19 +476,23 @@ no painel da WAHA; `STARTING` = subindo; `STOPPED` = sessão parada;
 | Mensagem do seu time (`message.any`, `fromMe`) | Registrada como `ignored_outbound`; regras de frase da WAHA ainda não estão liberadas |
 | Cópia `message.any` de mensagem recebida | Descartada (a recebida já veio por `message`; nada conta duas vezes) |
 | Grupo, Status (`status@broadcast`), lista de transmissão, canal | Descartados |
-| Contato só com LID, sem telefone real (`SenderAlt`/`RecipientAlt`) | Registrado como `contact_phone_unresolved`; o LID **nunca** vira telefone |
-| `session.status` | Atualiza o status da conexão (o mesmo do **Testar**) |
+| Clique em anúncio com contato só por LID (sem `SenderAlt`) | O app consulta a sua WAHA (`GET /api/{sessão}/lids/{lid}`, prazo de 3 s): com o telefone, segue como clique com clid (lead + `LeadSubmitted`). Sem resposta útil, fica registrado como `ctwa_contact_phone_unresolved` com o ID do anúncio (a métrica não se perde), sem lead |
+| Mensagem orgânica só com LID | Registrada como `contact_phone_unresolved`; não consulta a WAHA. O LID **nunca** vira telefone |
+| `session.status` | Atualiza o status da conexão (o mesmo do **Testar**), só se for mais novo que o último status registrado (retentativas fora de ordem não voltam o status) |
 
 O telefone do contato vem do JID de telefone ou de `SenderAlt` (recebida) /
 `RecipientAlt` (enviada pelo time), sem o sufixo de aparelho `:NN`; o
 número da própria loja nunca vira contato. O lead continua identificado pelo
 telefone: o mesmo contato chegando por `@lid` ou por telefone cai no mesmo
-lead. O log do webhook guarda só um resumo estrutural (sem texto, nome, LID,
+lead. Sem `payload.fromMe` booleano, vale o `Info.IsFromMe` do GoWS (um texto
+como `"false"` nunca é aceito); sem hora na mensagem, vale a hora do envelope
+da WAHA. JIDs `@hosted`/`@hosted.lid` não são lidos (o Rastrackapp também
+não os trata). O log do webhook guarda só um resumo estrutural (sem texto, nome, LID,
 telefone, clid ou miniatura).
 
 **5. Versão do parser.** O receptor usa o parser `waha` v2 enquanto a release
 `waha`/`v2` estiver **certificada** (a migration
-`20261022120100_waha_parser_release` já a cria certificada). Sem essa
+`20261022130100_waha_parser_release` já a cria certificada). Sem essa
 release, ou com ela em observação/retirada, o receptor volta ao v1, que não
 lê anúncios do GoWS.
 
