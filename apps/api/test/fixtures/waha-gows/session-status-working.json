@@ -1,0 +1,31 @@
+{
+  "id": "evt_01k80000000000000000000014",
+  "timestamp": 1792000014000,
+  "event": "session.status",
+  "session": "aluno-sessao-teste",
+  "me": {
+    "id": "5500900009999@c.us",
+    "lid": "100000000009999@lid",
+    "pushName": "Loja Sintética"
+  },
+  "payload": {
+    "status": "WORKING",
+    "statuses": [
+      {
+        "status": "STARTING",
+        "timestamp": 1792000009000
+      },
+      {
+        "status": "WORKING",
+        "timestamp": 1792000014000
+      }
+    ]
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

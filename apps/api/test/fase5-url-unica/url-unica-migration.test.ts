@@ -23,7 +23,10 @@ describe("Fase 5.3 migration: URL única (texto, sem PostgreSQL)", () => {
       /^\d{14}_/u.test(entry),
     );
     expect(names).toContain(name);
-    expect(names.sort().at(-1)).toBe(name);
+    // Last of its phase: later phases (WAHA GoWS, 20261022...) may follow.
+    expect(
+      names.filter((entry) => entry < "20261022000000").sort().at(-1),
+    ).toBe(name);
     expect(name > "20261016180000_exchange_rates").toBe(true);
   });
 

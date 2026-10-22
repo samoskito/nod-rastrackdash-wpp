@@ -1,0 +1,148 @@
+{
+  "id": "evt_01k80000000000000000000009",
+  "timestamp": 1792000009250,
+  "event": "message",
+  "session": "aluno-sessao-teste",
+  "me": {
+    "id": "5500900009999@c.us",
+    "lid": "100000000009999@lid",
+    "pushName": "Loja Sintética"
+  },
+  "payload": {
+    "id": "false_5500900000109@c.us_3EB0000000000000000009",
+    "timestamp": 1792000009,
+    "from": "5500900000109@c.us",
+    "fromMe": false,
+    "source": "app",
+    "to": "5500900009999@c.us",
+    "participant": null,
+    "body": "Oi! (mensagem temporária sintética)",
+    "hasMedia": false,
+    "media": null,
+    "ack": 2,
+    "ackName": "DEVICE",
+    "replyTo": null,
+    "_data": {
+      "Info": {
+        "Chat": "5500900000109@s.whatsapp.net",
+        "Sender": "5500900000109@s.whatsapp.net",
+        "IsFromMe": false,
+        "IsGroup": false,
+        "AddressingMode": "pn",
+        "SenderAlt": "",
+        "RecipientAlt": "",
+        "BroadcastListOwner": "",
+        "BroadcastRecipients": null,
+        "ID": "3EB0000000000000000009",
+        "ServerID": 0,
+        "Type": "text",
+        "PushName": "Contato Sintético 09",
+        "Timestamp": "2026-10-14T14:46:49-03:00",
+        "Category": "",
+        "Multicast": false,
+        "MediaType": "",
+        "Edit": "",
+        "MsgBotInfo": {
+          "EditType": "",
+          "EditTargetID": "",
+          "EditSenderTimestampMS": "0001-01-01T00:00:00Z"
+        },
+        "MsgMetaInfo": {
+          "TargetID": "",
+          "TargetSender": "",
+          "TargetChat": "",
+          "DeprecatedLIDSession": null,
+          "ThreadMessageID": "",
+          "ThreadMessageSenderJID": ""
+        },
+        "VerifiedName": null,
+        "DeviceSentMeta": null
+      },
+      "Message": {
+        "ephemeralMessage": {
+          "message": {
+            "extendedTextMessage": {
+              "text": "Oi! (mensagem temporária sintética)",
+              "contextInfo": {
+                "externalAdReply": {
+                  "title": "Anúncio sintético 9",
+                  "body": "Texto sintético do anúncio para teste.",
+                  "mediaType": 1,
+                  "thumbnailURL": "https://cdn.example.invalid/thumb/9.jpg",
+                  "thumbnail": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFNJTlRFVElDT19USFVNQk5BSUw=",
+                  "sourceType": "ad",
+                  "sourceID": "120200000000000009",
+                  "sourceURL": "https://fb.me/0Synth9",
+                  "containsAutoReply": false,
+                  "renderLargerThumbnail": true,
+                  "showAdAttribution": true,
+                  "ctwaClid": "AfSint3tico-CtwaClid_Fixture9Sint3tico-CtwaClid_Fixture9Sint3tico-CtwaClid_Fixture9Sint3tico-CtwaCli"
+                },
+                "conversionSource": "FB_Ads",
+                "conversionData": "c3ludGhldGljLWNvbnZlcnNpb24tOQ==",
+                "conversionDelaySeconds": 0,
+                "entryPointConversionSource": "ctwa_ad",
+                "entryPointConversionApp": "instagram",
+                "entryPointConversionDelaySeconds": 4,
+                "ctwaPayload": "c3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS0=",
+                "expiration": 604800
+              }
+            }
+          }
+        }
+      },
+      "RawMessage": {
+        "ephemeralMessage": {
+          "message": {
+            "extendedTextMessage": {
+              "text": "Oi! (mensagem temporária sintética)",
+              "contextInfo": {
+                "externalAdReply": {
+                  "title": "Anúncio sintético 9",
+                  "body": "Texto sintético do anúncio para teste.",
+                  "mediaType": 1,
+                  "thumbnailURL": "https://cdn.example.invalid/thumb/9.jpg",
+                  "thumbnail": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFNJTlRFVElDT19USFVNQk5BSUw=",
+                  "sourceType": "ad",
+                  "sourceID": "120200000000000009",
+                  "sourceURL": "https://fb.me/0Synth9",
+                  "containsAutoReply": false,
+                  "renderLargerThumbnail": true,
+                  "showAdAttribution": true,
+                  "ctwaClid": "AfSint3tico-CtwaClid_Fixture9Sint3tico-CtwaClid_Fixture9Sint3tico-CtwaClid_Fixture9Sint3tico-CtwaCli"
+                },
+                "conversionSource": "FB_Ads",
+                "conversionData": "c3ludGhldGljLWNvbnZlcnNpb24tOQ==",
+                "conversionDelaySeconds": 0,
+                "entryPointConversionSource": "ctwa_ad",
+                "entryPointConversionApp": "instagram",
+                "entryPointConversionDelaySeconds": 4,
+                "ctwaPayload": "c3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTktc3ludGhldGljLWN0d2EtcGF5bG9hZC05LXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtOS0=",
+                "expiration": 604800
+              }
+            }
+          }
+        }
+      },
+      "IsEphemeral": true,
+      "IsViewOnce": false,
+      "IsViewOnceV2": false,
+      "IsViewOnceV2Extension": false,
+      "IsDocumentWithCaption": false,
+      "IsLottieSticker": false,
+      "IsBotInvoke": false,
+      "IsEdit": false,
+      "SourceWebMsg": null,
+      "UnavailableRequestID": "",
+      "RetryCount": 0,
+      "NewsletterMeta": null
+    }
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

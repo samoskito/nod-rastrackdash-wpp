@@ -1,0 +1,27 @@
+{
+  "id": "evt_01k80000000000000000000015",
+  "timestamp": 1792000015000,
+  "event": "session.status",
+  "session": "aluno-sessao-teste",
+  "me": null,
+  "payload": {
+    "status": "SCAN_QR_CODE",
+    "statuses": [
+      {
+        "status": "STARTING",
+        "timestamp": 1792000010000
+      },
+      {
+        "status": "SCAN_QR_CODE",
+        "timestamp": 1792000015000
+      }
+    ]
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

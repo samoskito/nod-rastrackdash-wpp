@@ -8,15 +8,18 @@ import {
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma, WorkspaceRole } from "@prisma/client";
-import type {
-  WhatsappConnectionCreateInputDto,
-  WhatsappConnectionCredentialsUpdateDto,
-  WhatsappConnectionDto,
-  WhatsappConnectionEditInputDto,
-  WhatsappConnectionEditMetadataDto,
-  WhatsappConnectionTestResultDto,
-  WhatsappConnectionWebhookTokenRotateResultDto,
-  WhatsappConnectionUpdateInputDto,
+import {
+  WAHA_GOWS_WEBHOOK_EVENTS,
+  WAHA_WEBHOOK_TOKEN_HEADER,
+  type WhatsappConnectionCreateInputDto,
+  type WhatsappConnectionCredentialsUpdateDto,
+  type WhatsappConnectionDto,
+  type WhatsappConnectionEditInputDto,
+  type WhatsappConnectionEditMetadataDto,
+  type WhatsappConnectionTestResultDto,
+  type WhatsappConnectionWebhookConfigureResultDto,
+  type WhatsappConnectionWebhookTokenRotateResultDto,
+  type WhatsappConnectionUpdateInputDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import type { IntegrationEnv } from "../integration.types";
@@ -292,6 +295,7 @@ export class WhatsappConnectionsService {
     const checkedAt = new Date();
     let status = "error";
     let message: string | undefined;
+    let providerStatus: string | undefined;
     let uazapiIdentity:
       | { providerInstanceId: string | null; connectedPhone: string | null }
       | undefined;
@@ -310,6 +314,7 @@ export class WhatsappConnectionsService {
               .getHealth(config ?? undefined);
       status = health.status;
       message = health.message;
+      providerStatus = health.providerStatus;
     } catch (error) {
       message =
         error instanceof Error
@@ -353,7 +358,115 @@ export class WhatsappConnectionsService {
       status,
       checkedAt: checkedAt.toISOString(),
       ...(message ? { message: this.redactMessage(message) } : {}),
+      ...(providerStatus && /^[A-Za-z_]{1,40}$/u.test(providerStatus)
+        ? { providerStatus }
+        : {}),
     };
+  }
+
+  /**
+   * WAHA (motor GoWS): configura o webhook da sessão direto na WAHA do
+   * aluno. Gera um token novo, salva o webhook na WAHA (eventos message,
+   * message.any e session.status, token no cabeçalho
+   * X-Wpptrack-Webhook-Token) preservando o resto da configuração da
+   * sessão, e só então grava o hash do token. Se a WAHA recusar, nada muda
+   * no app: o token anterior continua valendo e a tela oferece o modo manual.
+   * Nunca cria sessão nem pede QR.
+   */
+  async configureWebhook(
+    actor: WorkspaceActor,
+    id: string,
+  ): Promise<WhatsappConnectionWebhookConfigureResultDto> {
+    this.assertCanManage(actor);
+    const existing = await this.findForWorkspace(actor.workspaceId, id);
+    if (existing.provider !== "waha") {
+      throw new BadRequestException(
+        "A configuração automática do webhook está disponível só para a WAHA",
+      );
+    }
+    const config = this.decryptConfig(existing);
+    const session = this.requireWahaSession(
+      this.extractConfigSession(config) ?? undefined,
+    );
+    const adapter = this.registry.require("waha");
+    if (!config || !adapter.configureWebhook) {
+      throw new BadRequestException(
+        "Informe a URL do servidor, a API key e a sessão da WAHA",
+      );
+    }
+    const webhookEndpoint = this.buildWebhookEndpoint(existing.id);
+    const webhookToken = randomBytes(32).toString("base64url");
+    let result: Awaited<
+      ReturnType<NonNullable<typeof adapter.configureWebhook>>
+    >;
+    try {
+      result = await adapter.configureWebhook(config, {
+        url: webhookEndpoint,
+        token: webhookToken,
+      });
+    } catch {
+      result = {
+        configured: false,
+        reason: "unreachable",
+        message: "Não foi possível falar com a WAHA. Confira a URL do servidor.",
+      };
+    }
+
+    if (!result.configured) {
+      await this.recordAudit({
+        workspaceId: actor.workspaceId,
+        actorUserId: actor.userId,
+        action: "whatsapp_connection.webhook_configure_failed",
+        targetId: existing.id,
+        afterSummary: { provider: existing.provider, reason: result.reason },
+      });
+      return {
+        connectionId: existing.id,
+        provider: "waha",
+        configured: false,
+        webhookEndpoint,
+        events: [...WAHA_GOWS_WEBHOOK_EVENTS],
+        sessionStatus: this.safeSessionStatus(result.sessionStatus),
+        reason: result.reason,
+        message: this.redactMessage(result.message),
+      };
+    }
+
+    const updated = (await this.prisma.whatsappInstance.update({
+      where: { id: existing.id },
+      data: {
+        providerInstanceId: session,
+        webhookTokenHash: createHash("sha256")
+          .update(webhookToken, "utf8")
+          .digest("hex"),
+        webhookUrl: webhookEndpoint,
+      },
+    })) as WhatsappConnectionRecord;
+    await this.recordAudit({
+      workspaceId: actor.workspaceId,
+      actorUserId: actor.userId,
+      action: "whatsapp_connection.webhook_configured",
+      targetId: updated.id,
+      beforeSummary: this.metadataSummary(existing),
+      afterSummary: {
+        ...this.metadataSummary(updated),
+        webhookTokenRotated: true,
+        mode: "automatic",
+      },
+    });
+
+    return {
+      connectionId: updated.id,
+      provider: "waha",
+      configured: true,
+      webhookEndpoint,
+      events: [...WAHA_GOWS_WEBHOOK_EVENTS],
+      sessionStatus: this.safeSessionStatus(result.sessionStatus),
+    };
+  }
+
+  private safeSessionStatus(value: string | null | undefined): string | null {
+    return value && /^[A-Za-z_]{1,40}$/u.test(value) ? value : null;
   }
 
   private async testUazapiConnection(
@@ -418,7 +531,25 @@ export class WhatsappConnectionsService {
       connection: this.toDto(updated),
       webhookEndpoint,
       webhookToken,
+      ...(existing.provider === "waha"
+        ? {
+            wahaManualSetup: {
+              webhookUrlWithToken: this.withQueryToken(
+                webhookEndpoint,
+                webhookToken,
+              ),
+              events: [...WAHA_GOWS_WEBHOOK_EVENTS],
+              tokenHeaderName: WAHA_WEBHOOK_TOKEN_HEADER,
+            },
+          }
+        : {}),
     };
+  }
+
+  private withQueryToken(endpoint: string, token: string): string {
+    const url = new URL(endpoint);
+    url.searchParams.set("token", token);
+    return url.toString();
   }
 
   private async findForWorkspace(

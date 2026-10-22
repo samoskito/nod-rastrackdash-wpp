@@ -14,6 +14,10 @@ export const inboundWebhookProviders = [
   // Fase 4b: atendimento por WhatsApp. A conexao nasce presa ao numero do
   // cliente (connectedPhone): o webhook de entrada nao traz id de canal.
   "unnichat",
+  // WAHA (motor GoWS): so existe aqui como release de parser (waha v2,
+  // certificada por migration) usada pelo receptor da conexao de WhatsApp
+  // (POST /webhooks/whatsapp/:id). Nao tem conexao de webhook generica.
+  "waha",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",

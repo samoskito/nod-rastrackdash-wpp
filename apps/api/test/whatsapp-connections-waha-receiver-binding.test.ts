@@ -114,6 +114,8 @@ function sharedFakeDb(initial: RecordShape[] = []) {
           records.find((item) => item.id === where.id) ?? null,
       },
       metaAd: { findFirst: async () => null },
+      // No certified waha/v2 release: the receiver keeps the v1 parser.
+      inboundWebhookParserRelease: { findUnique: async () => null },
     },
   };
 }

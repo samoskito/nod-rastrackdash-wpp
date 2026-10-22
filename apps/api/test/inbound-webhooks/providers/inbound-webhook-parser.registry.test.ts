@@ -7,6 +7,7 @@ describe("InboundWebhookParserRegistry", () => {
     ["gupshup", "v1"],
     ["meta_cloud", "v1"],
     ["waha", "v1"],
+    ["waha", "v2"],
     ["zapi", "v1"],
     ["data_crazy", "v1"],
   ])("resolves the default %s %s parser", (provider, parserVersion) => {

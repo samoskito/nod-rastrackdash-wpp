@@ -1,0 +1,93 @@
+{
+  "id": "evt_01k80000000000000000000012",
+  "timestamp": 1792000012250,
+  "event": "message",
+  "session": "aluno-sessao-teste",
+  "me": {
+    "id": "5500900009999@c.us",
+    "lid": "100000000009999@lid",
+    "pushName": "Loja Sintética"
+  },
+  "payload": {
+    "id": "false_status@c.us_3EB0000000000000000012",
+    "timestamp": 1792000012,
+    "from": "status@broadcast",
+    "fromMe": false,
+    "source": "app",
+    "to": "5500900009999@c.us",
+    "participant": "100000000000112@lid",
+    "body": "",
+    "hasMedia": true,
+    "media": {
+      "url": "https://waha.example.invalid/api/files/aluno-sessao-teste/3EB0000000000000000012.jpeg",
+      "mimetype": "image/jpeg",
+      "filename": null,
+      "error": null
+    },
+    "ack": 2,
+    "ackName": "DEVICE",
+    "replyTo": null,
+    "_data": {
+      "Info": {
+        "Chat": "status@broadcast",
+        "Sender": "100000000000112@lid",
+        "IsFromMe": false,
+        "IsGroup": true,
+        "AddressingMode": "lid",
+        "SenderAlt": "",
+        "RecipientAlt": "",
+        "BroadcastListOwner": "",
+        "BroadcastRecipients": null,
+        "ID": "3EB0000000000000000012",
+        "ServerID": 0,
+        "Type": "media",
+        "PushName": "Contato Sintético 12",
+        "Timestamp": "2026-10-14T14:46:52-03:00",
+        "Category": "",
+        "Multicast": false,
+        "MediaType": "image",
+        "Edit": "",
+        "MsgBotInfo": {
+          "EditType": "",
+          "EditTargetID": "",
+          "EditSenderTimestampMS": "0001-01-01T00:00:00Z"
+        },
+        "MsgMetaInfo": {
+          "TargetID": "",
+          "TargetSender": "",
+          "TargetChat": "",
+          "DeprecatedLIDSession": null,
+          "ThreadMessageID": "",
+          "ThreadMessageSenderJID": ""
+        },
+        "VerifiedName": null,
+        "DeviceSentMeta": null
+      },
+      "Message": {
+        "imageMessage": {
+          "mimetype": "image/jpeg",
+          "jpegThumbnail": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFNJTlRFVElDT19USFVNQk5BSUw="
+        }
+      },
+      "IsEphemeral": false,
+      "IsViewOnce": false,
+      "IsViewOnceV2": false,
+      "IsViewOnceV2Extension": false,
+      "IsDocumentWithCaption": false,
+      "IsLottieSticker": false,
+      "IsBotInvoke": false,
+      "IsEdit": false,
+      "SourceWebMsg": null,
+      "UnavailableRequestID": "",
+      "RetryCount": 0,
+      "NewsletterMeta": null
+    }
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

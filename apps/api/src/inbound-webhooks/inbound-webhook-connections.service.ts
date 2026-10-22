@@ -96,8 +96,13 @@ export class InboundWebhookConnectionsService {
       // UAZAPI/NOD is bridged automatically from the WhatsApp instance and
       // never goes through the generic manual creation flow. Payt is a sales
       // platform with no WhatsApp number: its rules live in Conversoes.
+      // WAHA is a WhatsApp connection (Integrações → WhatsApp) whose own
+      // receiver uses the waha parser release; it has no generic connection.
       providers: inboundWebhookProviders
-        .filter((provider) => provider !== "uazapi" && provider !== "payt")
+        .filter(
+          (provider) =>
+            provider !== "uazapi" && provider !== "payt" && provider !== "waha",
+        )
         .map((provider) => {
           const release = releaseByProvider.get(provider);
 
@@ -227,6 +232,14 @@ export class InboundWebhookConnectionsService {
       // and bound to the connection of its WhatsApp numbers.
       throw new ConflictException(
         "A Payt não usa conexão própria: crie a regra de venda em Conversões",
+      );
+    }
+    if (input.provider === "waha") {
+      // WAHA is connected in Integrações → WhatsApp (server URL, API key and
+      // session of the student's own WAHA); its webhook goes to the WhatsApp
+      // connection receiver, never to a generic inbound connection.
+      throw new ConflictException(
+        "A WAHA é conectada em Integrações → WhatsApp, não por uma conexão de webhook genérica",
       );
     }
     const unnichatBind = resolveUnnichatConnectionBind(input);

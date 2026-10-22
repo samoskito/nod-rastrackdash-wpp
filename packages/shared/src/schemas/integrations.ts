@@ -168,6 +168,30 @@ export const whatsappConnectionTestResultSchema = z
     status: z.string().min(1),
     checkedAt: z.string().datetime(),
     message: z.string().min(1).optional(),
+    // Status bruto da sessão no provedor, quando conhecido (WAHA:
+    // WORKING, SCAN_QR_CODE, STARTING, FAILED ou STOPPED).
+    providerStatus: z.string().min(1).max(40).optional(),
+  })
+  .strict();
+
+// WAHA (motor GoWS): eventos que o webhook da sessão precisa assinar e o
+// cabeçalho em que a WAHA envia o token do webhook. A sessão e o QR ficam
+// no painel da WAHA do próprio aluno; o app nunca cria sessão nem mostra QR.
+export const WAHA_GOWS_WEBHOOK_EVENTS = [
+  "message",
+  "message.any",
+  "session.status",
+] as const;
+export const WAHA_WEBHOOK_TOKEN_HEADER = "X-Wpptrack-Webhook-Token";
+
+// Passo a passo manual (quando o aluno prefere colar o webhook no painel da
+// WAHA): a URL já leva o token em ?token=, ou o aluno usa a URL sem token e
+// o cabeçalho tokenHeaderName com o webhookToken. Mostrado uma única vez.
+export const wahaWebhookManualSetupSchema = z
+  .object({
+    webhookUrlWithToken: httpUrlSchema,
+    events: z.array(z.enum(WAHA_GOWS_WEBHOOK_EVENTS)).min(1),
+    tokenHeaderName: z.literal(WAHA_WEBHOOK_TOKEN_HEADER),
   })
   .strict();
 
@@ -176,6 +200,34 @@ export const whatsappConnectionWebhookTokenRotateResultSchema = z
     connection: whatsappConnectionsSchema.element,
     webhookEndpoint: httpUrlSchema,
     webhookToken: z.string().min(43).max(512),
+    wahaManualSetup: wahaWebhookManualSetupSchema.optional(),
+  })
+  .strict();
+
+export const wahaWebhookConfigureFailureReasonSchema = z.enum([
+  "invalid_config",
+  "session_not_found",
+  "unauthorized",
+  "engine_not_supported",
+  "provider_error",
+  "unreachable",
+]);
+
+// Resultado de POST /integrations/whatsapp-connections/:id/configure-webhook
+// (só WAHA). configured=true: o webhook foi salvo na WAHA do aluno com um
+// token novo (o anterior deixa de valer). configured=false: nada mudou no app
+// nem na WAHA; a tela mostra a mensagem e oferece o modo manual
+// (rotate-webhook-token, que devolve wahaManualSetup).
+export const whatsappConnectionWebhookConfigureResultSchema = z
+  .object({
+    connectionId: z.string().min(1),
+    provider: z.literal("waha"),
+    configured: z.boolean(),
+    webhookEndpoint: httpUrlSchema,
+    events: z.array(z.enum(WAHA_GOWS_WEBHOOK_EVENTS)),
+    sessionStatus: z.string().min(1).max(40).nullable(),
+    reason: wahaWebhookConfigureFailureReasonSchema.optional(),
+    message: z.string().min(1).max(500).optional(),
   })
   .strict();
 
@@ -706,6 +758,15 @@ export type WhatsappConnectionTestResultDto = z.infer<
 >;
 export type WhatsappConnectionWebhookTokenRotateResultDto = z.infer<
   typeof whatsappConnectionWebhookTokenRotateResultSchema
+>;
+export type WahaWebhookManualSetupDto = z.infer<
+  typeof wahaWebhookManualSetupSchema
+>;
+export type WahaWebhookConfigureFailureReason = z.infer<
+  typeof wahaWebhookConfigureFailureReasonSchema
+>;
+export type WhatsappConnectionWebhookConfigureResultDto = z.infer<
+  typeof whatsappConnectionWebhookConfigureResultSchema
 >;
 export type WhatsappConnectionEditMetadataDto = z.infer<
   typeof whatsappConnectionEditMetadataSchema

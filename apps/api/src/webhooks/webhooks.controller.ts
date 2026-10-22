@@ -27,8 +27,15 @@ import type {
   InboundWebhookParserResult,
   ParsedInboundWebhookEvent,
 } from "../inbound-webhooks/providers/inbound-webhook-parser";
+import { inboundParserProductionEligible } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
 import { parseWahaV1Webhook } from "../inbound-webhooks/providers/waha/waha-v1.parser";
+import {
+  parseWahaSessionStatusEvent,
+  parseWahaV2Webhook,
+  WAHA_V2_PARSER_VERSION,
+} from "../inbound-webhooks/providers/waha/waha-v2.parser";
 import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.parser";
+import { mapWahaSessionStatus } from "../integrations/whatsapp-providers/waha-session-status";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
 import { LeadsService } from "../leads/leads.service";
 import {
@@ -73,6 +80,16 @@ const WIRED_MESSAGE_PROVIDER_BINDING_FIELD: Record<
 type VerifiedConnectionContext = {
   workspaceId: string;
   whatsappInstanceId: string;
+};
+
+/**
+ * Parser chosen for one delivery. WAHA uses v2 (GoWS) only while the
+ * waha/v2 parser release is certified in the database; otherwise, and for
+ * Z-API, the v1 parser keeps the previous behavior.
+ */
+type SelectedMessageParser = {
+  version: string;
+  parse: (payload: unknown) => InboundWebhookParserResult;
 };
 
 type VerifiedMetaContext = {
@@ -243,10 +260,17 @@ export class WebhooksController {
         instance.providerInstanceId,
       );
 
-      return this.recordProviderMessageWebhook(instance.provider, body, {
-        workspaceId: instance.workspaceId,
-        whatsappInstanceId: instance.id,
-      });
+      const parser = await this.selectMessageParser(instance.provider);
+
+      return this.recordProviderMessageWebhook(
+        instance.provider,
+        body,
+        {
+          workspaceId: instance.workspaceId,
+          whatsappInstanceId: instance.id,
+        },
+        parser,
+      );
     }
 
     throw new NotImplementedException(
@@ -258,6 +282,34 @@ export class WebhooksController {
     provider: string,
   ): provider is WiredMessageProvider {
     return provider === "waha" || provider === "zapi";
+  }
+
+  /**
+   * WAHA: the certified waha/v2 release (GoWS) is the receiver's parser.
+   * Without that row (migration not applied) or with the release in
+   * observation/retired, the receiver keeps v1 - the behavior shipped
+   * before v2 - instead of failing every delivery.
+   */
+  private async selectMessageParser(
+    provider: WiredMessageProvider,
+  ): Promise<SelectedMessageParser> {
+    if (provider === "waha") {
+      const release = await this.prisma.inboundWebhookParserRelease.findUnique({
+        where: {
+          provider_version: {
+            provider: "waha",
+            version: WAHA_V2_PARSER_VERSION,
+          },
+        },
+        select: { provider: true, version: true, status: true },
+      });
+
+      if (release && inboundParserProductionEligible(release)) {
+        return { version: WAHA_V2_PARSER_VERSION, parse: parseWahaV2Webhook };
+      }
+    }
+
+    return { version: "v1", parse: MESSAGE_PROVIDER_PARSERS[provider] };
   }
 
   /**
@@ -679,8 +731,14 @@ export class WebhooksController {
     provider: WiredMessageProvider,
     body: WebhookBody,
     context: VerifiedConnectionContext,
+    parser: SelectedMessageParser = {
+      version: "v1",
+      parse: MESSAGE_PROVIDER_PARSERS[provider],
+    },
   ) {
-    const parsed = MESSAGE_PROVIDER_PARSERS[provider](body);
+    const parsed = parser.parse(body);
+    const isWahaV2 =
+      provider === "waha" && parser.version === WAHA_V2_PARSER_VERSION;
     const event = parsed.events[0] ?? null;
     const phoneHash = event
       ? hashPhoneIdentity(event.contact.phoneNumber)
@@ -690,6 +748,16 @@ export class WebhooksController {
     // replay with a genuinely different body (rather than a plain retry) is
     // quarantined instead of silently treated as a duplicate.
     const payloadHash = computeCanonicalPayloadHash(body);
+    // WAHA delivers the same message twice (message and message.any). With
+    // v2 the event name is part of the key, so the second copy is its own
+    // log row instead of a payload-mismatch conflict with the first.
+    const idempotencyParts = isWahaV2
+      ? [parsed.providerEventType ?? "unknown", parsed.externalDeliveryId]
+      : [parsed.externalDeliveryId];
+
+    if (isWahaV2) {
+      await this.recordWahaSessionStatus(body, context);
+    }
 
     const diagnostic = await this.diagnosticsService.recordWebhookLog({
       workspaceId: context.workspaceId,
@@ -702,13 +770,15 @@ export class WebhooksController {
             provider,
             context.workspaceId,
             context.whatsappInstanceId,
-            parsed.externalDeliveryId,
+            ...idempotencyParts,
           ].join(":")
         : undefined,
       payloadHash,
       phoneHash,
       adId: event?.adId ?? undefined,
-      summaryPayload: body,
+      // v2 keeps only the structural summary: the GoWS body carries the raw
+      // WhatsApp message (texts, names, LIDs, media keys and thumbnails).
+      summaryPayload: isWahaV2 ? this.wahaV2LogSummary(body, parsed) : body,
     });
 
     if (diagnostic.status === "duplicate" || diagnostic.status === "conflict") {
@@ -754,6 +824,60 @@ export class WebhooksController {
   }
 
   /**
+   * WAHA `session.status`: mirrors the session state of the student's own
+   * WAHA on the connection (same mapping as "Testar conexão"). Only the
+   * connection's own session counts: the receiver already bound
+   * body.session to providerInstanceId.
+   */
+  private async recordWahaSessionStatus(
+    body: WebhookBody,
+    context: VerifiedConnectionContext,
+  ): Promise<void> {
+    const sessionStatus = parseWahaSessionStatusEvent(body);
+
+    if (!sessionStatus) {
+      return;
+    }
+
+    await this.prisma.whatsappInstance.updateMany({
+      where: {
+        id: context.whatsappInstanceId,
+        workspaceId: context.workspaceId,
+      },
+      data: {
+        lastHealthStatus: mapWahaSessionStatus(sessionStatus.status),
+        lastHealthCheckedAt: new Date(),
+      },
+    });
+  }
+
+  private wahaV2LogSummary(
+    body: WebhookBody,
+    parsed: InboundWebhookParserResult,
+  ): Record<string, unknown> {
+    const event = parsed.events[0];
+    const sessionStatus = parseWahaSessionStatusEvent(body);
+
+    return {
+      parser: { provider: parsed.provider, version: parsed.parserVersion },
+      engine: this.firstString(body.engine)?.slice(0, 20) ?? null,
+      event: parsed.providerEventType,
+      classification: parsed.classification,
+      classificationReason: parsed.classificationReason,
+      ...(sessionStatus ? { sessionStatus: sessionStatus.status } : {}),
+      ...(event
+        ? {
+            messageDirection: event.message.direction,
+            messageType: event.message.messageType,
+            hasCtwa: event.hasCtwa,
+            adId: event.adId,
+            contactHasLid: Boolean(event.contact.lid),
+          }
+        : {}),
+    };
+  }
+
+  /**
    * Downstream half of the WAHA/Z-API receiver, run while holding the
    * WebhookLog claim. Kept separate from recordProviderMessageWebhook so
    * every step of it - attribution, rules, lead, conversion, enqueue - is
@@ -792,6 +916,9 @@ export class WebhooksController {
       workspaceId: context.workspaceId,
       whatsappInstanceId: context.whatsappInstanceId,
       name: event.contact.name ?? undefined,
+      // The WhatsApp push name only fills an empty lead name; it never
+      // overwrites a name the team already set.
+      preserveExistingName: true,
       phone: event.contact.phoneNumber,
       phoneHash,
       source: provider,

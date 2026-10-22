@@ -128,6 +128,22 @@ export class WhatsappConnectionsController {
     return this.connections.rotateWebhookToken(context, connectionId);
   }
 
+  /**
+   * WAHA (GoWS): salva o webhook direto na sessão da WAHA do aluno, com um
+   * token novo. Resposta: whatsappConnectionWebhookConfigureResultSchema.
+   */
+  @Post(":id/configure-webhook")
+  @HttpCode(200)
+  async configureWebhook(
+    @AuthToken() refreshToken: string,
+    @Param("id") id: string,
+  ) {
+    const context = await this.getContext(refreshToken);
+    this.enforceMutationRateLimit(context.userId);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    return this.connections.configureWebhook(context, connectionId);
+  }
+
   @Delete(":id")
   @HttpCode(204)
   async deactivate(

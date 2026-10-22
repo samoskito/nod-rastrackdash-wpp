@@ -1,0 +1,87 @@
+{
+  "id": "evt_01k80000000000000000000004",
+  "timestamp": 1792000004250,
+  "event": "message.any",
+  "session": "aluno-sessao-teste",
+  "me": {
+    "id": "5500900009999@c.us",
+    "lid": "100000000009999@lid",
+    "pushName": "Loja Sintética"
+  },
+  "payload": {
+    "id": "true_100000000000101@lid_3EB0000000000000000004",
+    "timestamp": 1792000004,
+    "from": "5500900009999@c.us",
+    "fromMe": true,
+    "source": "app",
+    "to": "100000000000101@lid",
+    "participant": null,
+    "body": "Olá! Segue o link de pagamento (mensagem sintética).",
+    "hasMedia": false,
+    "media": null,
+    "ack": 1,
+    "ackName": "SERVER",
+    "replyTo": null,
+    "_data": {
+      "Info": {
+        "Chat": "100000000000101@lid",
+        "Sender": "100000000009999:7@lid",
+        "IsFromMe": true,
+        "IsGroup": false,
+        "AddressingMode": "lid",
+        "SenderAlt": "5500900009999:7@s.whatsapp.net",
+        "RecipientAlt": "5500900000101@s.whatsapp.net",
+        "BroadcastListOwner": "",
+        "BroadcastRecipients": null,
+        "ID": "3EB0000000000000000004",
+        "ServerID": 0,
+        "Type": "text",
+        "PushName": "Loja Sintética",
+        "Timestamp": "2026-10-14T14:46:44-03:00",
+        "Category": "",
+        "Multicast": false,
+        "MediaType": "",
+        "Edit": "",
+        "MsgBotInfo": {
+          "EditType": "",
+          "EditTargetID": "",
+          "EditSenderTimestampMS": "0001-01-01T00:00:00Z"
+        },
+        "MsgMetaInfo": {
+          "TargetID": "",
+          "TargetSender": "",
+          "TargetChat": "",
+          "DeprecatedLIDSession": null,
+          "ThreadMessageID": "",
+          "ThreadMessageSenderJID": ""
+        },
+        "VerifiedName": null,
+        "DeviceSentMeta": null
+      },
+      "Message": {
+        "extendedTextMessage": {
+          "text": "Olá! Segue o link de pagamento (mensagem sintética)."
+        }
+      },
+      "IsEphemeral": false,
+      "IsViewOnce": false,
+      "IsViewOnceV2": false,
+      "IsViewOnceV2Extension": false,
+      "IsDocumentWithCaption": false,
+      "IsLottieSticker": false,
+      "IsBotInvoke": false,
+      "IsEdit": false,
+      "SourceWebMsg": null,
+      "UnavailableRequestID": "",
+      "RetryCount": 0,
+      "NewsletterMeta": null
+    }
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

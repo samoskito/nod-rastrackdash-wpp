@@ -71,6 +71,12 @@ export type ParsedInboundWebhookContact = {
   externalContactId: string;
   phoneNumber: string;
   name: string | null;
+  /**
+   * WhatsApp LID (Linked ID) of the contact, when the provider reports one
+   * (WAHA GoWS). Kept apart on purpose: it is never used as phoneNumber nor
+   * as the lead identity, which stays the real phone.
+   */
+  lid?: string | null;
 };
 
 export type ParsedInboundWebhookAd = {

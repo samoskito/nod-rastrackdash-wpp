@@ -51,7 +51,33 @@ export interface WhatsappProviderHealthDto {
   status: IntegrationStatus;
   checkedAt: string;
   message?: string;
+  /** Raw provider session status (e.g. WAHA "WORKING"), when known. */
+  providerStatus?: string;
 }
+
+export interface WhatsappWebhookConfigureInput {
+  /** Public receiver URL, without the token. */
+  url: string;
+  /** One-time webhook token, sent by the provider in a custom header. */
+  token: string;
+}
+
+export type WhatsappWebhookConfigureFailureReason =
+  | "invalid_config"
+  | "session_not_found"
+  | "unauthorized"
+  | "engine_not_supported"
+  | "provider_error"
+  | "unreachable";
+
+export type WhatsappWebhookConfigureResult =
+  | { configured: true; events: string[]; sessionStatus: string | null }
+  | {
+      configured: false;
+      reason: WhatsappWebhookConfigureFailureReason;
+      message: string;
+      sessionStatus?: string | null;
+    };
 
 export interface WhatsappLabelListResult {
   status: "success" | "not_configured" | "error";
@@ -95,4 +121,12 @@ export interface WhatsappProviderAdapter {
     instanceId: string,
     instanceToken: string,
   ): Promise<NodApiManagedInstanceStatusDto>;
+  /**
+   * Configures the provider-side webhook for this connection (WAHA only:
+   * PUT /api/sessions/{session}, preserving the session config).
+   */
+  configureWebhook?(
+    config: WhatsappProviderConfig,
+    input: WhatsappWebhookConfigureInput,
+  ): Promise<WhatsappWebhookConfigureResult>;
 }

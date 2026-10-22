@@ -295,6 +295,7 @@ enum InboundWebhookProvider {
   data_crazy
   payt
   unnichat
+  waha
 }
 
 enum InboundWebhookParserReleaseStatus {

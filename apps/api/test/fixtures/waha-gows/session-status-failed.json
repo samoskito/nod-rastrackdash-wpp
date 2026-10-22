@@ -1,0 +1,27 @@
+{
+  "id": "evt_01k80000000000000000000016",
+  "timestamp": 1792000016000,
+  "event": "session.status",
+  "session": "aluno-sessao-teste",
+  "me": null,
+  "payload": {
+    "status": "FAILED",
+    "statuses": [
+      {
+        "status": "STARTING",
+        "timestamp": 1792000011000
+      },
+      {
+        "status": "FAILED",
+        "timestamp": 1792000016000
+      }
+    ]
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

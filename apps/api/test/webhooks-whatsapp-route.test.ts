@@ -72,6 +72,8 @@ function controllerFor(instance: Instance, services: Services = defaultServices(
     metaAd: {
       findFirst: vi.fn(async () => null),
     },
+    // No certified waha/v2 release: the receiver keeps the v1 parser.
+    inboundWebhookParserRelease: { findUnique: async () => null },
   };
   const controller = new WebhooksController(
     services.diagnosticsService as never,

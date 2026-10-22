@@ -5,6 +5,7 @@ import { MetaCloudV1Parser } from "./meta-cloud/meta-cloud-v1.parser";
 import { UmblerV1Parser } from "./umbler/umbler-v1.parser";
 import { UnnichatV1Parser } from "./unnichat/unnichat-v1.parser";
 import { WahaV1Parser } from "./waha/waha-v1.parser";
+import { WahaV2Parser } from "./waha/waha-v2.parser";
 import { ZapiV1Parser } from "./zapi/zapi-v1.parser";
 
 export type InboundWebhookParserSelector = {
@@ -51,6 +52,7 @@ function defaultParsers(): InboundWebhookParser[] {
     new GupshupV1Parser(),
     new MetaCloudV1Parser(),
     new WahaV1Parser(),
+    new WahaV2Parser(),
     new ZapiV1Parser(),
     new DataCrazyV1Parser(),
     new UnnichatV1Parser(),

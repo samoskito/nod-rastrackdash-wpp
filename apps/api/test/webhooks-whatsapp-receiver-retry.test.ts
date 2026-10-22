@@ -107,6 +107,8 @@ function controllerWith(
       ),
     },
     metaAd: { findFirst: metaAdFindFirst },
+    // No certified waha/v2 release: the receiver keeps the v1 parser.
+    inboundWebhookParserRelease: { findUnique: async () => null },
   };
 
   return new WebhooksController(
@@ -499,6 +501,8 @@ function makeWebhookLogPrisma(instance: Instance) {
         where.id === instance.id ? instance : null,
     },
     metaAd: { findFirst: async () => null },
+    // No certified waha/v2 release: the receiver keeps the v1 parser.
+    inboundWebhookParserRelease: { findUnique: async () => null },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
   };
 

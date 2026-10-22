@@ -1,0 +1,121 @@
+{
+  "id": "evt_01k80000000000000000000010",
+  "timestamp": 1792000010250,
+  "event": "message",
+  "session": "aluno-sessao-teste",
+  "me": {
+    "id": "5500900009999@c.us",
+    "lid": "100000000009999@lid",
+    "pushName": "Loja Sintética"
+  },
+  "payload": {
+    "id": "false_100000000000110@lid_3EB0000000000000000010",
+    "timestamp": 1792000010,
+    "from": "100000000000110@lid",
+    "fromMe": false,
+    "source": "app",
+    "to": "5500900009999@c.us",
+    "participant": null,
+    "body": "",
+    "hasMedia": true,
+    "media": {
+      "url": "https://waha.example.invalid/api/files/aluno-sessao-teste/3EB0000000000000000010.jpeg",
+      "mimetype": "image/jpeg",
+      "filename": null,
+      "error": null
+    },
+    "ack": 2,
+    "ackName": "DEVICE",
+    "replyTo": null,
+    "_data": {
+      "Info": {
+        "Chat": "100000000000110@lid",
+        "Sender": "100000000000110@lid",
+        "IsFromMe": false,
+        "IsGroup": false,
+        "AddressingMode": "lid",
+        "SenderAlt": "5500900000110@s.whatsapp.net",
+        "RecipientAlt": "",
+        "BroadcastListOwner": "",
+        "BroadcastRecipients": null,
+        "ID": "3EB0000000000000000010",
+        "ServerID": 0,
+        "Type": "media",
+        "PushName": "Contato Sintético 10",
+        "Timestamp": "2026-10-14T14:46:50-03:00",
+        "Category": "",
+        "Multicast": false,
+        "MediaType": "image",
+        "Edit": "",
+        "MsgBotInfo": {
+          "EditType": "",
+          "EditTargetID": "",
+          "EditSenderTimestampMS": "0001-01-01T00:00:00Z"
+        },
+        "MsgMetaInfo": {
+          "TargetID": "",
+          "TargetSender": "",
+          "TargetChat": "",
+          "DeprecatedLIDSession": null,
+          "ThreadMessageID": "",
+          "ThreadMessageSenderJID": ""
+        },
+        "VerifiedName": null,
+        "DeviceSentMeta": null
+      },
+      "Message": {
+        "viewOnceMessageV2": {
+          "message": {
+            "imageMessage": {
+              "mimetype": "image/jpeg",
+              "viewOnce": true,
+              "jpegThumbnail": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFNJTlRFVElDT19USFVNQk5BSUw=",
+              "contextInfo": {
+                "externalAdReply": {
+                  "title": "Anúncio sintético 10",
+                  "body": "Texto sintético do anúncio para teste.",
+                  "mediaType": 1,
+                  "thumbnailURL": "https://cdn.example.invalid/thumb/10.jpg",
+                  "thumbnail": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFNJTlRFVElDT19USFVNQk5BSUw=",
+                  "sourceType": "ad",
+                  "sourceID": "1202000000000000010",
+                  "sourceURL": "https://fb.me/0Synth10",
+                  "containsAutoReply": false,
+                  "renderLargerThumbnail": true,
+                  "showAdAttribution": true,
+                  "ctwaClid": "AfSint3tico-CtwaClid_Fixture10Sint3tico-CtwaClid_Fixture10Sint3tico-CtwaClid_Fixture10Sint3tico-Ctwa"
+                },
+                "conversionSource": "FB_Ads",
+                "conversionData": "c3ludGhldGljLWNvbnZlcnNpb24tMTA=",
+                "conversionDelaySeconds": 0,
+                "entryPointConversionSource": "ctwa_ad",
+                "entryPointConversionApp": "instagram",
+                "entryPointConversionDelaySeconds": 4,
+                "ctwaPayload": "c3ludGhldGljLWN0d2EtcGF5bG9hZC0xMC1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTEwLXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtMTAtc3ludGhldGljLWN0d2EtcGF5bG9hZC0xMC1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTEwLXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtMTAtc3ludGhldGljLWN0d2EtcGF5bG9hZC0xMC1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTEwLXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtMTAtc3ludGhldGljLWN0d2EtcGF5bG9hZC0xMC1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTEwLXN5bnRoZXRpYy1jdHdhLXBheWxvYWQtMTAtc3ludGhldGljLWN0d2EtcGF5bG9hZC0xMC1zeW50aGV0aWMtY3R3YS1wYXlsb2FkLTEwLQ=="
+              }
+            }
+          }
+        }
+      },
+      "IsEphemeral": false,
+      "IsViewOnce": true,
+      "IsViewOnceV2": true,
+      "IsViewOnceV2Extension": false,
+      "IsDocumentWithCaption": false,
+      "IsLottieSticker": false,
+      "IsBotInvoke": false,
+      "IsEdit": false,
+      "SourceWebMsg": null,
+      "UnavailableRequestID": "",
+      "RetryCount": 0,
+      "NewsletterMeta": null
+    }
+  },
+  "engine": "GOWS",
+  "environment": {
+    "version": "2026.9.2",
+    "engine": "GOWS",
+    "tier": "CORE",
+    "browser": null
+  }
+}

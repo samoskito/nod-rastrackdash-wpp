@@ -1,0 +1,343 @@
+import "reflect-metadata";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
+import { hashPhoneIdentity } from "../../src/common/phone/phone-identity";
+import { WebhooksController } from "../../src/webhooks/webhooks.controller";
+import {
+  FIXTURE_SESSION,
+  wahaGowsFixture,
+  type WahaGowsFixtureName,
+} from "./helpers/fixtures";
+
+const TOKEN = "waha-webhook-token-sintetico";
+const hash = (value: string) =>
+  createHash("sha256").update(value, "utf8").digest("hex");
+
+type ReleaseStatus = "certified" | "observation_only" | "retired" | null;
+
+function harness(
+  options: { release?: ReleaseStatus; providerInstanceId?: string } = {},
+) {
+  const release = options.release === undefined ? "certified" : options.release;
+  const instance = {
+    id: "connection-waha",
+    workspaceId: "workspace-a",
+    provider: "waha",
+    providerInstanceId: options.providerInstanceId ?? FIXTURE_SESSION,
+    webhookTokenHash: hash(TOKEN),
+    status: "active" as const,
+  };
+  const leadsByPhoneHash = new Map<string, { id: string }>();
+  const services = {
+    diagnosticsService: {
+      recordWebhookLog: vi.fn(async (_input: Record<string, any>) => ({
+        webhookLogId: "webhook-log-1",
+        diagnosticEventId: "diagnostic-event-1",
+        status: "received",
+      })),
+      markWebhookLogProcessed: vi.fn(async () => true),
+      markWebhookLogFailed: vi.fn(async () => true),
+    },
+    conversionRulesService: { evaluateTriggers: vi.fn(async () => []) },
+    conversionEventsService: {
+      recordAutomaticLeadSubmitted: vi.fn(async () => ({
+        created: ["log-lead-submitted"],
+        duplicates: [],
+      })),
+      recordRuleMatches: vi.fn(async () => ({ created: [], duplicates: [] })),
+      listReadyLogIds: vi.fn(async (ids: string[]) => ids),
+    },
+    conversionEventsQueueService: {
+      enqueueSend: vi.fn(async () => ({ queued: true })),
+    },
+    leadsService: {
+      // Same identity rule as LeadsService: one lead per workspace+phoneHash.
+      upsertFromWhatsappWebhook: vi.fn(
+        async (input: { workspaceId: string; phoneHash?: string }) => {
+          const key = `${input.workspaceId}:${input.phoneHash}`;
+          const existing = leadsByPhoneHash.get(key);
+          if (existing) return existing;
+          const created = { id: `lead-${leadsByPhoneHash.size + 1}` };
+          leadsByPhoneHash.set(key, created);
+          return created;
+        },
+      ),
+    },
+  };
+  const prisma = {
+    whatsappInstance: {
+      findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
+        where.id === instance.id ? instance : null,
+      ),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+    metaAd: {
+      findFirst: vi.fn(async () => ({
+        campaignId: "campaign-sintetica",
+        adSetId: "adset-sintetico",
+      })),
+    },
+    inboundWebhookParserRelease: {
+      findUnique: vi.fn(async () =>
+        release
+          ? { provider: "waha", version: "v2", status: release }
+          : null,
+      ),
+    },
+  };
+  const controller = new WebhooksController(
+    services.diagnosticsService as never,
+    services.conversionRulesService as never,
+    services.conversionEventsService as never,
+    services.conversionEventsQueueService as never,
+    services.leadsService as never,
+    {} as never,
+    prisma as never,
+  );
+
+  const deliver = (body: Record<string, unknown>) =>
+    controller.recordWhatsappConnection(instance.id, body, TOKEN);
+  const deliverFixture = (name: WahaGowsFixtureName) =>
+    deliver(wahaGowsFixture(name));
+
+  return { controller, services, prisma, deliver, deliverFixture, leadsByPhoneHash };
+}
+
+function lastLog(services: ReturnType<typeof harness>["services"]) {
+  return services.diagnosticsService.recordWebhookLog.mock.calls.at(-1)?.[0] as
+    | Record<string, any>
+    | undefined;
+}
+
+describe("POST /webhooks/whatsapp/:id — WAHA GoWS com a release waha/v2 certificada", () => {
+  it("uses the certified waha/v2 release and turns a CTWA click into a lead + LeadSubmitted to Meta", async () => {
+    const { services, prisma, deliverFixture } = harness();
+
+    const result = await deliverFixture("message-ctwa-clid");
+
+    expect(prisma.inboundWebhookParserRelease.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { provider_version: { provider: "waha", version: "v2" } },
+      }),
+    );
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledTimes(1);
+    const leadInput = services.leadsService.upsertFromWhatsappWebhook.mock
+      .calls[0]![0] as Record<string, unknown>;
+    expect(leadInput).toMatchObject({
+      workspaceId: "workspace-a",
+      whatsappInstanceId: "connection-waha",
+      phone: "5500900000101",
+      phoneHash: hashPhoneIdentity("5500900000101"),
+      name: "Contato Sintético 01",
+      preserveExistingName: true,
+      source: "waha",
+      adId: "120200000000000001",
+      campaignId: "campaign-sintetica",
+      adSetId: "adset-sintetico",
+      ctwaSourceUrl: "https://fb.me/0Synth1",
+    });
+    expect(leadInput.ctwaClid).toMatch(/^Af/u);
+    expect(
+      services.conversionEventsService.recordAutomaticLeadSubmitted,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leadId: "lead-1",
+        ctwaClid: leadInput.ctwaClid,
+        adId: "120200000000000001",
+      }),
+    );
+    expect(services.conversionEventsQueueService.enqueueSend).toHaveBeenCalledWith(
+      "log-lead-submitted",
+      "workspace-a",
+    );
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalledWith(
+      "webhook-log-1",
+    );
+    expect(result).toMatchObject({ status: "received" });
+  });
+
+  it.each([
+    "message-ctwa-image-first",
+    "message-ctwa-ephemeral",
+    "message-ctwa-view-once",
+  ] as const)("creates the ad lead when the first message is %s", async (name) => {
+    const { services, deliverFixture } = harness();
+
+    await deliverFixture(name);
+
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledTimes(1);
+    expect(
+      services.conversionEventsService.recordAutomaticLeadSubmitted,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it("Status ad with only sourceID (no clid): logged with the ad id, no lead and nothing sent to Meta — like Uazapi", async () => {
+    const { services, deliverFixture } = harness();
+
+    await deliverFixture("message-ctwa-source-id-only");
+
+    expect(lastLog(services)).toMatchObject({
+      source: "waha",
+      eventType: "message",
+      adId: "120200000000000002",
+      phoneHash: hashPhoneIdentity("5500900000102"),
+    });
+    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+    expect(
+      services.conversionEventsService.recordAutomaticLeadSubmitted,
+    ).not.toHaveBeenCalled();
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it.each([
+    "message-organic",
+    "message-any-team-recipient-alt",
+    "message-any-team-no-recipient-alt",
+    "message-any-inbound-duplicate",
+    "message-jid-device-suffix",
+    "message-group",
+    "message-status-broadcast",
+    "message-lid-without-sender-alt",
+  ] as const)("logs %s and never creates a lead or a Meta event", async (name) => {
+    const { services, deliverFixture } = harness();
+
+    await deliverFixture(name);
+
+    expect(services.diagnosticsService.recordWebhookLog).toHaveBeenCalledTimes(1);
+    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+    expect(services.conversionRulesService.evaluateTriggers).not.toHaveBeenCalled();
+    expect(
+      services.conversionEventsService.recordAutomaticLeadSubmitted,
+    ).not.toHaveBeenCalled();
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it("keys idempotency by event, so the message.any copy never collides with the message delivery", async () => {
+    const { services, deliverFixture } = harness();
+
+    await deliverFixture("message-ctwa-clid");
+    await deliverFixture("message-any-inbound-duplicate");
+
+    const keys = services.diagnosticsService.recordWebhookLog.mock.calls.map(
+      (call) => (call[0] as { idempotencyKey?: string }).idempotencyKey,
+    );
+    expect(keys).toEqual([
+      "waha:workspace-a:connection-waha:message:false_100000000000101@lid_3EB0000000000000000001",
+      "waha:workspace-a:connection-waha:message.any:false_100000000000101@lid_3EB0000000000000000001",
+    ]);
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it("stores only a structural summary: no text, name, LID, phone, clid or thumbnail", async () => {
+    const { services, deliverFixture } = harness();
+
+    await deliverFixture("message-ctwa-clid");
+
+    const log = lastLog(services)!;
+    expect(log.summaryPayload).toEqual({
+      parser: { provider: "waha", version: "v2" },
+      engine: "GOWS",
+      event: "message",
+      classification: "eligible_route_unresolved",
+      classificationReason: "route_resolution_pending",
+      messageDirection: "inbound",
+      messageType: "text",
+      hasCtwa: true,
+      adId: "120200000000000001",
+      contactHasLid: true,
+    });
+    expect(typeof log.payloadHash).toBe("string");
+    const serialized = JSON.stringify(log.summaryPayload);
+    for (const forbidden of [
+      "5500900000101",
+      "100000000000101",
+      "Contato Sintético",
+      "mensagem sintética",
+      "/9j/",
+      "Af",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("does not duplicate the lead when the same contact writes by LID and later by phone JID", async () => {
+    const { services, deliver, leadsByPhoneHash } = harness();
+    const byLid = wahaGowsFixture("message-ctwa-clid");
+    const byPhone = wahaGowsFixture("message-ctwa-clid");
+    byPhone.payload.id = "false_5500900000101@c.us_3EB0000000000000000099";
+    byPhone.payload.from = "5500900000101@c.us";
+    byPhone.payload._data.Info.ID = "3EB0000000000000000099";
+    byPhone.payload._data.Info.Chat = "5500900000101@s.whatsapp.net";
+    byPhone.payload._data.Info.Sender = "5500900000101@s.whatsapp.net";
+    byPhone.payload._data.Info.SenderAlt = "100000000000101@lid";
+
+    await deliver(byLid);
+    await deliver(byPhone);
+
+    const phoneHashes = services.leadsService.upsertFromWhatsappWebhook.mock.calls.map(
+      (call) => (call[0] as { phoneHash: string }).phoneHash,
+    );
+    expect(phoneHashes).toEqual([
+      hashPhoneIdentity("5500900000101"),
+      hashPhoneIdentity("5500900000101"),
+    ]);
+    expect(leadsByPhoneHash.size).toBe(1);
+  });
+
+  it.each([
+    ["working", "connected"],
+    ["scan-qr-code", "needs_reconnect"],
+    ["failed", "error"],
+    ["stopped", "disconnected"],
+  ] as const)(
+    "mirrors session.status %s on the connection health (%s)",
+    async (status, expected) => {
+      const { prisma, services, deliverFixture } = harness();
+
+      await deliverFixture(`session-status-${status}`);
+
+      expect(prisma.whatsappInstance.updateMany).toHaveBeenCalledWith({
+        where: { id: "connection-waha", workspaceId: "workspace-a" },
+        data: { lastHealthStatus: expected, lastHealthCheckedAt: expect.any(Date) },
+      });
+      expect(lastLog(services)).toMatchObject({
+        eventType: "session.status",
+        idempotencyKey: undefined,
+        summaryPayload: expect.objectContaining({
+          sessionStatus: status.toUpperCase().replace(/-/gu, "_"),
+        }),
+      });
+      expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still rejects a delivery for another session before parsing (binding stays on the session)", async () => {
+    const { services, deliverFixture } = harness({
+      providerInstanceId: "outra-sessao",
+    });
+
+    await expect(deliverFixture("message-ctwa-clid")).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(services.diagnosticsService.recordWebhookLog).not.toHaveBeenCalled();
+  });
+
+  it.each([null, "observation_only", "retired"] as const)(
+    "keeps the v1 parser when the waha/v2 release is %s",
+    async (release) => {
+      const { services, prisma, deliverFixture } = harness({ release });
+
+      await deliverFixture("message-ctwa-clid");
+      await deliverFixture("session-status-working");
+
+      // v1 does not read the GoWS ad context: no lead, the full body is
+      // logged as before and session.status changes nothing.
+      expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+      expect(prisma.whatsappInstance.updateMany).not.toHaveBeenCalled();
+      const first = services.diagnosticsService.recordWebhookLog.mock
+        .calls[0]![0] as Record<string, any>;
+      expect(first.summaryPayload.event).toBe("message");
+      expect(first.summaryPayload.payload).toBeDefined();
+    },
+  );
+});
