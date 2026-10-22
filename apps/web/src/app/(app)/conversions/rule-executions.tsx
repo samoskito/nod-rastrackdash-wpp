@@ -2,16 +2,23 @@
 
 import type { ProviderConversionRuleExecutionAuditDto } from "@wpptrack/shared";
 import { formatMoney } from "@wpptrack/shared";
-import { ArrowUpRight, RefreshCw } from "lucide-react";
+import { ArrowUpRight, RefreshCw, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { executionReasonLabel } from "../settings/provider-conversion-labels";
-import type { ProviderConversionRuleActionResult } from "./actions";
+import type {
+  ConversionScreenActionResult,
+  ProviderConversionRuleActionResult,
+} from "./actions";
 
 type LoadAction = (
   formData: FormData,
 ) => Promise<ProviderConversionRuleActionResult>;
+
+type ReprocessAction = (
+  formData: FormData,
+) => Promise<ConversionScreenActionResult>;
 
 const statusLabels: Record<
   ProviderConversionRuleExecutionAuditDto["items"][number]["status"],
@@ -41,17 +48,28 @@ export function RuleExecutions({
   ruleId,
   loadAction,
   purchaseReviewHref = null,
+  canManage = false,
+  reprocessAction,
 }: {
   ruleId: string;
   loadAction: LoadAction;
   /** Purchase rules: where each recognized purchase is reviewed. */
   purchaseReviewHref?: string | null;
+  /** Quem gerencia integrações e com a licença liberada. */
+  canManage?: boolean;
+  /** "Reprocessar bloqueadas" (só para quem gerencia). */
+  reprocessAction?: ReprocessAction;
 }) {
   const [state, setState] = useState<
     | { status: "loading" }
     | { status: "error"; message: string }
     | { status: "loaded"; audit: ProviderConversionRuleExecutionAuditDto }
   >({ status: "loading" });
+  const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessNote, setReprocessNote] = useState<{
+    tone: "success" | "warn";
+    message: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -75,6 +93,33 @@ export function RuleExecutions({
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function reprocess() {
+    if (!reprocessAction || reprocessing) return;
+    setReprocessing(true);
+    setReprocessNote(null);
+    const formData = new FormData();
+    formData.set("ruleId", ruleId);
+    try {
+      const result = await reprocessAction(formData);
+      setReprocessNote({
+        tone:
+          result.ok && (result.reprocess?.reprocessed ?? 0) > 0
+            ? "success"
+            : "warn",
+        message: result.message,
+      });
+      if (result.ok) await load();
+    } catch {
+      setReprocessNote({
+        tone: "warn",
+        message:
+          "Não deu para confirmar o reprocessamento. Atualize as execuções: repetir não envia nada duas vezes.",
+      });
+    } finally {
+      setReprocessing(false);
+    }
+  }
 
   if (state.status === "loading") {
     return (
@@ -118,6 +163,13 @@ export function RuleExecutions({
           <dd>{audit.summary.blocked + audit.summary.failed}</dd>
         </div>
       </dl>
+      <BlockedReprocessPanel
+        summary={audit.blockedReprocess}
+        canManage={canManage && Boolean(reprocessAction)}
+        pending={reprocessing}
+        note={reprocessNote}
+        onReprocess={() => void reprocess()}
+      />
       {audit.items.length === 0 ? (
         <p className="muted">
           Esta regra ainda não reconheceu nenhuma conversa.
@@ -177,5 +229,106 @@ export function RuleExecutions({
         </Link>
       ) : null}
     </div>
+  );
+}
+
+function countLabel(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * "Reprocessar bloqueadas": conversas paradas só porque o número ainda não
+ * enviava. Habilitado só quando ao menos uma está pronta (o número já envia
+ * e a conversa está dentro da janela de 7 dias da Meta).
+ */
+function BlockedReprocessPanel({
+  summary,
+  canManage,
+  pending,
+  note,
+  onReprocess,
+}: {
+  summary: ProviderConversionRuleExecutionAuditDto["blockedReprocess"];
+  canManage: boolean;
+  pending: boolean;
+  note: { tone: "success" | "warn"; message: string } | null;
+  onReprocess: () => void;
+}) {
+  if (!summary) return null;
+  const rulePaused = summary.ruleSendsNow === false;
+  const total = summary.ready + summary.stillBlocked + summary.expired;
+  if (total === 0 && !note) return null;
+
+  return (
+    <section
+      className="conversion-reprocess"
+      aria-label="Conversas bloqueadas antes do envio"
+    >
+      {total > 0 ? (
+        <>
+          <p className="conversion-reprocess-title">
+            <strong>
+              {countLabel(
+                total,
+                "conversa bloqueada antes do envio",
+                "conversas bloqueadas antes do envio",
+              )}
+            </strong>
+          </p>
+          <ul className="conversion-reprocess-counts" role="list">
+            <li>
+              <span className="status-chip">{summary.ready}</span>{" "}
+              {summary.ready === 1 ? "pronta para reenviar" : "prontas para reenviar"}
+            </li>
+            <li>
+              <span className="status-chip warn">{summary.stillBlocked}</span>{" "}
+              {summary.stillBlocked === 1 ? "fica como está" : "ficam como estão"}
+            </li>
+            <li>
+              <span className="status-chip neutral">{summary.expired}</span>{" "}
+              {summary.expired === 1 ? "expirada" : "expiradas"} (mais de{" "}
+              {summary.windowDays} dias)
+            </li>
+          </ul>
+          <p className="muted">
+            Reenviamos só conversas dos últimos {summary.windowDays} dias
+            (limite da Meta) e nunca enviamos a mesma conversão duas vezes.
+            Conversas de números sem envio ativo, pausados de propósito na época
+            ou que não são QR ficam como estão.
+          </p>
+          {rulePaused ? (
+            <p className="action-note warn">
+              A regra está pausada ou em observação: nada é reenviado até
+              você ativar o envio automático dela.
+            </p>
+          ) : summary.ready === 0 && summary.stillBlocked > 0 ? (
+            <p className="action-note warn">
+              Nenhuma destas conversas pode ser reenviada agora. Se o número
+              ainda não envia, ative o envio dele e depois reprocesse.
+            </p>
+          ) : null}
+          {canManage && !rulePaused ? (
+            <button
+              className="button compact-button"
+              type="button"
+              disabled={pending || summary.ready === 0}
+              data-pending={pending ? "true" : undefined}
+              onClick={onReprocess}
+            >
+              <RotateCcw size={14} aria-hidden="true" />
+              {pending ? "Reprocessando..." : "Reprocessar bloqueadas"}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      {note ? (
+        <p
+          className={`action-note${note.tone === "warn" ? " warn" : ""}`}
+          role="status"
+        >
+          {note.message}
+        </p>
+      ) : null}
+    </section>
   );
 }

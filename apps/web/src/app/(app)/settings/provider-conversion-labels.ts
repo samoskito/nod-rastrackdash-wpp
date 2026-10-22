@@ -6,7 +6,7 @@ export function purchaseReviewStatusLabel(
   const labels = {
     recognized: "Reconhecida",
     awaiting_data: "Aguardando dados",
-    review_required: "Revisao necessaria",
+    review_required: "Revisão necessária",
     approved: "Na fila",
     sent: "Enviada",
     duplicate: "Duplicada",
@@ -30,17 +30,17 @@ export function purchaseReviewTone(
 }
 
 export function purchaseReviewReasonLabel(reasonCode: string | null): string {
-  if (!reasonCode) return "Pronta para revisao";
+  if (!reasonCode) return "Pronta para revisão";
 
   const labels: Record<string, string> = {
     awaiting_complete_purchase_data: "Mensagem sem dados completos",
-    catalog_combination_not_found: "Combinacao fora do catalogo",
-    catalog_message_ambiguous: "Mensagem com combinacao ambigua",
-    provider_conversion_paid_lead_missing: "Lead pago nao localizado",
-    provider_conversion_route_missing: "Rota Meta nao localizada",
-    provider_conversion_value_missing: "Valor da compra nao localizado",
+    catalog_combination_not_found: "Combinação fora do catálogo",
+    catalog_message_ambiguous: "Mensagem com combinação ambígua",
+    provider_conversion_paid_lead_missing: "Lead pago não localizado",
+    provider_conversion_route_missing: "Rota Meta não localizada",
+    provider_conversion_value_missing: "Valor da compra não localizado",
     provider_conversion_production_context_invalid:
-      "Contexto de producao incompleto",
+      "Contexto de produção incompleto",
   };
 
   return labels[reasonCode] ?? executionReasonLabel(reasonCode);
@@ -50,44 +50,44 @@ export function executionReasonLabel(reasonCode: string | null): string {
   if (!reasonCode) return "Processado";
 
   const labels: Record<string, string> = {
-    catalog_matched: "Catalogo reconhecido",
-    catalog_matched_observation: "Reconhecido em observacao",
+    catalog_matched: "Catálogo reconhecido",
+    catalog_matched_observation: "Reconhecido em observação",
     message_matched: "Mensagem reconhecida",
-    message_matched_observation: "Reconhecido em observacao",
-    automation_matched: "Automacao reconhecida",
-    automation_matched_observation: "Reconhecido em observacao",
+    message_matched_observation: "Reconhecido em observação",
+    automation_matched: "Automação reconhecida",
+    automation_matched_observation: "Reconhecido em observação",
     automation_manual_reprocess_approved: "Reprocessamento autorizado",
     automation_event_mismatch: "Evento diferente da regra",
-    automation_channel_unresolved: "Canal nao localizado",
-    automation_paid_lead_missing: "Lead pago nao localizado",
-    automation_value_missing: "Valor medio nao configurado",
-    before_production_activation: "Historico preservado",
-    production_context_invalid: "Configuracao incompleta",
+    automation_channel_unresolved: "Canal não localizado",
+    automation_paid_lead_missing: "Lead pago não localizado",
+    automation_value_missing: "Valor médio não configurado",
+    before_production_activation: "Histórico preservado",
+    production_context_invalid: "Configuração incompleta",
     rule_production_not_activated: "Regra ainda sem envio ativo",
-    rule_parser_not_certified: "Parser da regra nao certificado",
-    connection_parser_not_certified: "Parser da conexao nao certificado",
-    parser_release_mismatch: "Parser da regra difere da conexao",
-    connection_removed: "Conexao removida",
-    connection_not_production: "Conexao ainda nao esta em producao",
-    channel_unresolved: "Canal nao localizado",
-    channel_not_active: "Canal ainda nao esta ativo",
+    rule_parser_not_certified: "Parser da regra não certificado",
+    connection_parser_not_certified: "Parser da conexão não certificado",
+    parser_release_mismatch: "Parser da regra difere da conexão",
+    connection_removed: "Conexão removida",
+    connection_not_production: "Conexão ainda não está em produção",
+    channel_unresolved: "Canal não localizado",
+    channel_not_active: "Canal ainda não está ativo",
     purchase_within_24h: "Compra repetida em menos de 24h",
-    provider_conversion_paid_lead_missing: "Lead pago nao localizado",
-    provider_conversion_catalog_mismatch: "Mensagem divergiu do catalogo",
-    provider_conversion_payload_unavailable: "Payload nao esta mais disponivel",
-    provider_conversion_source_event_mismatch: "Mensagem de origem invalida",
-    provider_conversion_value_missing: "Valor medio nao configurado",
+    provider_conversion_paid_lead_missing: "Lead pago não localizado",
+    provider_conversion_catalog_mismatch: "Mensagem divergiu do catálogo",
+    provider_conversion_payload_unavailable: "Payload não está mais disponível",
+    provider_conversion_source_event_mismatch: "Mensagem de origem inválida",
+    provider_conversion_value_missing: "Valor médio não configurado",
     provider_conversion_production_context_invalid:
-      "Contexto de producao incompleto",
-    provider_conversion_production_disabled: "Envio de conversoes desativado",
-    provider_conversion_execution_not_found: "Execucao nao localizada",
+      "Contexto de produção incompleto",
+    provider_conversion_production_disabled: "Envio de conversões desativado",
+    provider_conversion_execution_not_found: "Execução não localizada",
     provider_conversion_identity_missing: "Identidade do lead incompleta",
     provider_conversion_execution_state_changed:
-      "Estado da execucao foi alterado",
+      "Estado da execução foi alterado",
     provider_conversion_production_unexpected:
       "Falha interna ao criar o evento Meta",
-    queue_recovery_pending: "Aguardando recuperacao da fila",
-    qualified_lead_already_materialized: "Lead ja qualificado anteriormente",
+    queue_recovery_pending: "Aguardando recuperação da fila",
+    qualified_lead_already_materialized: "Lead já qualificado anteriormente",
     // Venda da Payt (Fase 4a).
     purchase_duplicate: "Venda repetida: recibo registrado, nada novo enviado",
     rule_in_observation: "Regra em observação: nada é enviado à Meta",
@@ -129,7 +129,7 @@ export function executionReasonLabel(reasonCode: string | null): string {
   };
 
   if (reasonCode.startsWith("provider_conversion_route_")) {
-    return "Rota Meta indisponivel";
+    return "Rota Meta indisponível";
   }
 
   if (labels[reasonCode]) {
@@ -145,22 +145,22 @@ export function executionReasonLabel(reasonCode: string | null): string {
 
 function catalogReasonLabel(reasonCode: string): string {
   const labels: Record<string, string> = {
-    matched: "Conversao reconhecida",
+    matched: "Conversão reconhecida",
     rule_inactive: "Regra pausada",
-    catalog_inactive: "Catalogo pausado",
+    catalog_inactive: "Catálogo pausado",
     missing_attribute: "Atributo ausente",
-    ambiguous_attribute: "Atributo ambiguo",
-    unknown_combination: "Combinacao nao cadastrada",
-    ambiguous_variant: "Variante ambigua",
+    ambiguous_attribute: "Atributo ambíguo",
+    unknown_combination: "Combinação não cadastrada",
+    ambiguous_variant: "Variante ambígua",
     missing_price: "Valor ausente",
     ambiguous_price: "Mais de um valor encontrado",
-    price_mismatch: "Valor diferente do catalogo",
+    price_mismatch: "Valor diferente do catálogo",
     trigger_missing: "Frase gatilho ausente",
     empty_template: "Template sem dados ignorado",
     awaiting_data: "Aguardando dados completos",
     incomplete_item: "Produto incompleto",
-    invalid_quantity: "Quantidade invalida",
+    invalid_quantity: "Quantidade inválida",
   };
 
-  return labels[reasonCode] ?? "Requer revisao";
+  return labels[reasonCode] ?? "Requer revisão";
 }
