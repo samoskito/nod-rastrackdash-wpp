@@ -12,11 +12,11 @@ import {
 } from "./inbound-recovery-actions";
 
 const labels: Record<StudentInboundReplayResultDto["state"], string> = {
-  pending: "Pendente — ainda nao enviado",
-  processing: "Processando — aguarde confirmacao",
+  pending: "Pendente — ainda não enviado",
+  processing: "Processando — aguarde confirmação",
   delivered: "Entrega confirmada pela Meta",
   failed: "Falhou — nenhum novo envio autorizado",
-  delivery_unknown: "Entrega incerta (UNKNOWN) — nao tente reenviar",
+  delivery_unknown: "Entrega incerta (UNKNOWN) — não tente reenviar",
 };
 
 export function InboundRecoveryPanel({
@@ -56,7 +56,7 @@ export function InboundRecoveryPanel({
       }
     } catch {
       setPreview(null);
-      setMessage("A consulta falhou. Atualize a previa antes de enviar.");
+      setMessage("A consulta falhou. Atualize a prévia antes de enviar.");
     } finally {
       setBusy(false);
     }
@@ -103,7 +103,7 @@ export function InboundRecoveryPanel({
       } catch {
         if (!cancelled)
           setMessage(
-            "Nao foi possivel atualizar o resultado. Use Atualizar previa e resultado.",
+            "Não foi possível atualizar o resultado. Use Atualizar prévia e resultado.",
           );
       } finally {
         if (!cancelled && !terminal) timeout = setTimeout(poll, 3000);
@@ -126,8 +126,8 @@ export function InboundRecoveryPanel({
       return;
     const text =
       selection === "canary_1"
-        ? "Enviar um de teste? Esta acao envia UMA conversao CTWA real para a Meta. Nao e uma simulacao."
-        : "Recuperar os demais? Esta acao envia conversoes CTWA reais para a Meta, ate 500 neste lote.";
+        ? "Enviar um de teste? Esta ação envia UMA conversão CTWA real para a Meta. Não é uma simulação."
+        : "Recuperar os demais? Esta ação envia conversões CTWA reais para a Meta, até 500 neste lote.";
     if (!window.confirm(text)) return;
     setBusy(true);
     setMessage(null);
@@ -147,7 +147,7 @@ export function InboundRecoveryPanel({
       }
     } catch {
       setMessage(
-        "Nao foi possivel confirmar o resultado. Consulte o lote antes de qualquer nova tentativa.",
+        "Não foi possível confirmar o resultado. Consulte o lote antes de qualquer nova tentativa.",
       );
       setPreview({ ...preview, previewToken: null, canSendRemaining: false });
     } finally {
@@ -158,7 +158,7 @@ export function InboundRecoveryPanel({
   return (
     <section
       className="inbound-recovery-panel"
-      aria-label="Recuperacao de CTWAs anteriores"
+      aria-label="Recuperação de CTWAs anteriores"
     >
       <button
         className="button"
@@ -174,9 +174,9 @@ export function InboundRecoveryPanel({
       {open ? (
         <div>
           <p>
-            A previa consulta eventos deste canal sem enviar nada. Enviar um de
-            teste envia uma conversao real para a Meta. O restante exige entrega
-            confirmada do teste e outra confirmacao sua.
+            A prévia consulta eventos deste canal sem enviar nada. Enviar um de
+            teste envia uma conversão real para a Meta. O restante exige entrega
+            confirmada do teste é outra confirmação sua.
           </p>
           <button
             className="button"
@@ -184,14 +184,14 @@ export function InboundRecoveryPanel({
             disabled={busy}
             onClick={() => void refresh()}
           >
-            Atualizar previa e resultado
+            Atualizar prévia e resultado
           </button>
           {message ? <p role="alert">{message}</p> : null}
           {preview ? (
             <>
               <p>
-                {preview.eligible} CTWAs elegiveis nos {preview.scanned} eventos
-                consultados (limite de consulta: {preview.scanLimit}; lote: ate{" "}
+                {preview.eligible} CTWAs elegíveis nos {preview.scanned} eventos
+                consultados (limite de consulta: {preview.scanLimit}; lote: até{" "}
                 {preview.batchLimit}). Apenas payloads ainda retidos e dentro de
                 7 dias podem ser recuperados.
               </p>
@@ -200,17 +200,17 @@ export function InboundRecoveryPanel({
               ) : null}
               {!preview.unavailableReason && preview.eligible === 0 ? (
                 <p>
-                  Nenhum CTWA anterior elegivel neste canal. Eventos expirados,
-                  sem CTWA, sem payload, ja enviados ou com entrega incerta
+                  Nenhum CTWA anterior elegível neste canal. Eventos expirados,
+                  sem CTWA, sem payload, já enviados ou com entrega incerta
                   ficam de fora.
                 </p>
               ) : null}
               {preview.previewToken ? (
                 <>
                   <label>
-                    Digite o nome da conexao para confirmar: {connectionName}
+                    Digite o nome da conexão para confirmar: {connectionName}
                     <input
-                      aria-label="Nome da conexao para confirmar"
+                      aria-label="Nome da conexão para confirmar"
                       value={confirmation}
                       onChange={(event) => setConfirmation(event.target.value)}
                       autoComplete="off"
@@ -234,12 +234,12 @@ export function InboundRecoveryPanel({
                     }
                     onClick={() => void authorize("remaining")}
                   >
-                    Recuperar os demais (ate 500)
+                    Recuperar os demais (até 500)
                   </button>
                   {!preview.canSendRemaining ? (
                     <p>
-                      Os demais ficam bloqueados ate um teste deste canal ter
-                      entrega confirmada com a mesma configuracao.
+                      Os demais ficam bloqueados até um teste deste canal ter
+                      entrega confirmada com a mesma configuração.
                     </p>
                   ) : null}
                 </>
@@ -264,9 +264,9 @@ export function InboundRecoveryPanel({
                 ))}
               </ul>
               <p>
-                Entrar na fila nao significa enviado. Uma entrega incerta
-                bloqueia nova tentativa; nao ha reenvio automatico pela
-                recuperacao.
+                Entrar na fila não significa enviado. Uma entrega incerta
+                bloqueia nova tentativa; não há reenvio automático pela
+                recuperação.
               </p>
             </div>
           ) : null}

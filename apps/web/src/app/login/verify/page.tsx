@@ -28,13 +28,13 @@ export default async function EmailVerificationPage({
               W
             </span>
             <p className="eyebrow">Acesso seguro</p>
-            <h1 id="verify-token-title">Token invalido</h1>
-            <p>O link de verificacao nao trouxe um token valido para confirmar o email.</p>
+            <h1 id="verify-token-title">Token inválido</h1>
+            <p>O link de verificação não trouxe um token válido para confirmar o email.</p>
           </div>
 
           <form className="login-form">
             <a className="secondary-button" href="/settings">
-              Voltar para configuracoes
+              Voltar para configurações
             </a>
             <a href="/login">Voltar para login</a>
           </form>

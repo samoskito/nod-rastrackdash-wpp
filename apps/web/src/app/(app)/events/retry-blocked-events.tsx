@@ -22,8 +22,8 @@ function RetryBlockedSubmitButton({ disabled }: { disabled: boolean }) {
       disabled={disabled || pending}
       title={
         disabled
-          ? "Nenhum evento bloqueado neste periodo"
-          : "Tentar enviar de novo os eventos bloqueados deste periodo com a conexao Meta atual"
+          ? "Nenhum evento bloqueado neste período"
+          : "Tentar enviar de novo os eventos bloqueados deste período com a conexão Meta atual"
       }
       type="submit"
     >

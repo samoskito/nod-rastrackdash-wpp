@@ -40,7 +40,7 @@ export async function WorkspaceAccessGate({
               <span className="eyebrow">Acesso suspenso</span>
               <h1>Workspace bloqueado</h1>
               <p>
-                Fale com o suporte da plataforma para revisar a situacao
+                Fale com o suporte da plataforma para revisar a situação
                 operacional da conta antes de continuar.
               </p>
             </div>
@@ -65,12 +65,12 @@ export async function WorkspaceAccessGate({
               <h1>
                 {hasMemberships
                   ? "Selecione uma empresa"
-                  : "Nenhuma empresa disponivel"}
+                  : "Nenhuma empresa disponível"}
               </h1>
               <p>
                 {hasMemberships
                   ? "Use o seletor no menu para abrir um workspace autorizado."
-                  : "Seu acesso ainda nao esta vinculado a um workspace ativo."}
+                  : "Seu acesso ainda não está vinculado a um workspace ativo."}
               </p>
             </div>
           </header>

@@ -23,8 +23,8 @@ const items: Array<{
     area: "home",
     href: "/backoffice",
     icon: Home,
-    label: "Inicio",
-    shortLabel: "Inicio",
+    label: "Início",
+    shortLabel: "Início",
   },
   {
     area: "clients",
@@ -51,7 +51,7 @@ const items: Array<{
 
 export function BackofficeNavigation({ active }: BackofficeNavigationProps) {
   return (
-    <nav className="backoffice-navigation" aria-label="Areas do backoffice">
+    <nav className="backoffice-navigation" aria-label="Áreas do backoffice">
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = item.area === active;

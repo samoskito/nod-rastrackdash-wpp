@@ -48,12 +48,12 @@ export function OpsAlertPhonesEditor({
     }
 
     if (digits.length < PHONE_MIN_DIGITS || digits.length > PHONE_MAX_DIGITS) {
-      setError("Telefone deve ter entre 10 e 13 digitos.");
+      setError("Telefone deve ter entre 10 e 13 dígitos.");
       return;
     }
 
     if (phones.includes(digits)) {
-      setError("Esse telefone ja foi adicionado.");
+      setError("Esse telefone já foi adicionado.");
       return;
     }
 
@@ -102,7 +102,7 @@ export function OpsAlertPhonesEditor({
         </ul>
       ) : (
         <p className="ops-alert-phones-empty">
-          Nenhum telefone cadastrado. Adicione ao menos um numero para ativar os
+          Nenhum telefone cadastrado. Adicione ao menos um número para ativar os
           alertas.
         </p>
       )}
@@ -130,7 +130,7 @@ export function OpsAlertPhonesEditor({
       {error ? (
         <small className="ops-alert-phones-error">{error}</small>
       ) : (
-        <small>DDI+DDD+numero, so digitos. Ate {MAX_PHONES} telefones.</small>
+        <small>DDI+DDD+número, só dígitos. Até {MAX_PHONES} telefones.</small>
       )}
     </div>
   );

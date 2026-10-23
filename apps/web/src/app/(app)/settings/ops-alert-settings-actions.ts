@@ -31,7 +31,7 @@ export async function saveOpsAlertSettingsAction(
   const debounceHours = Number(formData.get("debounceHours") ?? 6) || 6;
 
   if (!workspaceId) {
-    return actionState("error", "Workspace nao identificado.");
+    return actionState("error", "Workspace não identificado.");
   }
 
   if (enabled && alertPhones.length === 0) {
@@ -61,7 +61,7 @@ export async function saveOpsAlertSettingsAction(
     );
     revalidatePath("/settings");
 
-    return actionState("success", "Alertas de operacao atualizados.");
+    return actionState("success", "Alertas de operação atualizados.");
   } catch (error) {
     return actionState("error", opsAlertSettingsErrorMessage(error));
   }
@@ -73,8 +73,8 @@ function dedupePhones(phones: string[]): string[] {
 
 function opsAlertSettingsErrorMessage(error: unknown): string {
   if (isApiRequestError(error) && error.status === 403) {
-    return "Sem permissao para gerenciar alertas operacionais.";
+    return "Sem permissão para gerenciar alertas operacionais.";
   }
 
-  return "Nao foi possivel salvar os alertas.";
+  return "Não foi possível salvar os alertas.";
 }

@@ -21,7 +21,7 @@ export function CreativePreview({
   const showImage = Boolean(thumbnailUrl) && !imageFailed && !presentationMode;
 
   return (
-    <aside className="lead-creative-panel" aria-label="Criativo do anuncio">
+    <aside className="lead-creative-panel" aria-label="Criativo do anúncio">
       <div
         className="lead-creative-media"
         data-presentation-sensitive-media="true"
@@ -29,7 +29,7 @@ export function CreativePreview({
         <span className="lead-creative-badge">Criativo</span>
         {showImage ? (
           <img
-            alt={`Miniatura do anuncio ${adName}`}
+            alt={`Miniatura do anúncio ${adName}`}
             decoding="async"
             onError={() => setImageFailed(true)}
             src={thumbnailUrl ?? undefined}
@@ -38,7 +38,7 @@ export function CreativePreview({
           <div className="lead-creative-placeholder">
             <ImageOff aria-hidden="true" size={24} strokeWidth={1.7} />
             <span>
-              {presentationMode ? "Criativo oculto" : "Miniatura indisponivel"}
+              {presentationMode ? "Criativo oculto" : "Miniatura indisponível"}
             </span>
           </div>
         )}
@@ -46,16 +46,16 @@ export function CreativePreview({
 
       <div className="lead-creative-caption">
         <div>
-          <span className="micro-label">Anuncio atribuido</span>
+          <span className="micro-label">Anúncio atribuído</span>
           <strong>
-            <PresentationMask placeholder="Anuncio oculto">
+            <PresentationMask placeholder="Anúncio oculto">
               {adName}
             </PresentationMask>
           </strong>
         </div>
         {destinationUrl && !presentationMode ? (
           <a
-            aria-label="Ver anuncio no Instagram em uma nova aba"
+            aria-label="Ver anúncio no Instagram em uma nova aba"
             className="button lead-creative-link"
             href={destinationUrl}
             rel="noreferrer noopener"

@@ -28,10 +28,10 @@ export default async function AccountActivationPage({
               W
             </span>
             <p className="eyebrow">Primeiro acesso</p>
-            <h1 id="activation-token-title">Link indisponivel</h1>
+            <h1 id="activation-token-title">Link indisponível</h1>
             <p>
-              Este link e invalido, expirou ou ja foi utilizado. Solicite um
-              novo envio ao responsavel pelo seu acesso.
+              Este link é inválido, expirou ou já foi utilizado. Solicite um
+              novo envio ao responsável pelo seu acesso.
             </p>
           </div>
 
@@ -56,7 +56,7 @@ export default async function AccountActivationPage({
           <p className="eyebrow">Primeiro acesso</p>
           <h1 id="activation-title">Crie sua senha</h1>
           <p>
-            Defina uma senha pessoal. Ao concluir, voce entrara diretamente no
+            Defina uma senha pessoal. Ao concluir, você entrara diretamente no
             workspace liberado para sua conta.
           </p>
         </div>

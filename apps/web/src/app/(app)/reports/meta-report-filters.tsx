@@ -37,9 +37,9 @@ type MetaReportFiltersProps = {
 };
 
 const nameScopeOptions = [
-  ["campaign", "Campanha contem"],
-  ["adset", "Conjunto contem"],
-  ["ad", "Anuncio contem"],
+  ["campaign", "Campanha contém"],
+  ["adset", "Conjunto contém"],
+  ["ad", "Anúncio contém"],
 ] as const;
 
 const statusOptions = [
@@ -49,14 +49,14 @@ const statusOptions = [
 ] as const;
 
 const deliveryOptions = [
-  ["all", "Com ou sem veiculacao"],
-  ["had_delivery", "Teve veiculacao no periodo"],
+  ["all", "Com ou sem veiculação"],
+  ["had_delivery", "Teve veiculação no período"],
 ] as const;
 
 const classificationOptions = [
   ["whatsapp", "Campanhas WhatsApp"],
   ["needs_review", "Precisa revisar"],
-  ["excluded", "Excluidas"],
+  ["excluded", "Excluídas"],
   ["all", "Todas as campanhas"],
 ] as const;
 
@@ -211,7 +211,7 @@ export function MetaReportFilters({
   return (
     <form
       className="report-filter-form"
-      aria-label="Filtros Meta de relatorios"
+      aria-label="Filtros Meta de relatórios"
       action="/reports"
     >
       <input type="hidden" name="since" value={since ?? ""} />
@@ -288,10 +288,10 @@ export function MetaReportFilters({
           className="report-advanced-filters"
           open={advancedFilterCount > 0}
         >
-          <summary aria-label="Filtros avancados">
+          <summary aria-label="Filtros avançados">
             <span>
               <SlidersHorizontal aria-hidden="true" size={15} />
-              Avancados
+              Avançados
             </span>
             {advancedFilterCount > 0 ? (
               <span className="tag">{advancedFilterCount}</span>
@@ -329,12 +329,12 @@ export function MetaReportFilters({
               </select>
             </label>
             <label className="filter-field">
-              <span>Veiculacao</span>
+              <span>Veiculação</span>
               <select
                 className="filter-control"
                 name="delivery"
                 defaultValue={delivery}
-                aria-label="Filtrar por veiculacao no periodo"
+                aria-label="Filtrar por veiculação no período"
               >
                 {deliveryOptions.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -349,7 +349,7 @@ export function MetaReportFilters({
                 className="filter-control"
                 name="whatsappClassification"
                 defaultValue={whatsappClassification}
-                aria-label="Filtrar por classificacao WhatsApp"
+                aria-label="Filtrar por classificação WhatsApp"
               >
                 {classificationOptions.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -368,7 +368,7 @@ export function MetaReportFilters({
               />
             </label>
             <label className="filter-field">
-              <span>Comparar ate</span>
+              <span>Comparar até</span>
               <input
                 className="filter-control"
                 type="date"
@@ -377,7 +377,7 @@ export function MetaReportFilters({
               />
             </label>
             <label className="filter-field">
-              <span>Itens por pagina</span>
+              <span>Itens por página</span>
               <select
                 className="filter-control"
                 name="pageSize"
@@ -393,7 +393,7 @@ export function MetaReportFilters({
           <div className="report-filter-footer">
             <span>
               {hasFilters
-                ? "O relatorio esta usando filtros personalizados."
+                ? "O relatório está usando filtros personalizados."
                 : "Sem filtros adicionais aplicados."}
             </span>
             {hasFilters ? (

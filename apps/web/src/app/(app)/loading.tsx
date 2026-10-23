@@ -3,7 +3,7 @@ export default function ProductRouteLoading() {
     <section
       className="page-stack route-loading"
       aria-busy="true"
-      aria-label="Carregando pagina"
+      aria-label="Carregando página"
     >
       <header className="page-header route-loading-header">
         <div>
@@ -20,7 +20,7 @@ export default function ProductRouteLoading() {
       </div>
       <span className="skeleton-panel" />
       <span className="sr-only" role="status" aria-live="polite">
-        Carregando dados da pagina.
+        Carregando dados da página.
       </span>
     </section>
   );

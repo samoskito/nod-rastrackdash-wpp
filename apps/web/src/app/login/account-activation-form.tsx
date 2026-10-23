@@ -18,7 +18,7 @@ export function AccountActivationForm({ token }: { token: string }) {
     const passwordConfirmation = String(form.get("passwordConfirmation") ?? "");
 
     if (password !== passwordConfirmation) {
-      setError("As senhas informadas nao sao iguais.");
+      setError("As senhas informadas não são iguais.");
       return;
     }
 
@@ -42,7 +42,7 @@ export function AccountActivationForm({ token }: { token: string }) {
       window.location.assign("/overview");
     } catch {
       setError(
-        "Este link e invalido, expirou ou ja foi utilizado. Solicite um novo envio.",
+        "Este link é inválido, expirou ou já foi utilizado. Solicite um novo envio.",
       );
       setLoading(false);
     }

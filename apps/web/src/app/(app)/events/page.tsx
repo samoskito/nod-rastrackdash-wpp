@@ -191,12 +191,12 @@ function AuditLead({ event }: { event: AuditEvent }) {
             </Link>
           </PresentationMask>
         ) : (
-          "Lead nao vinculado"
+          "Lead não vinculado"
         )}
       </strong>
       <span>
         <PresentationMask placeholder="(00) 00000-0000">
-          {event.phoneDisplay ?? "Telefone indisponivel"}
+          {event.phoneDisplay ?? "Telefone indisponível"}
         </PresentationMask>
       </span>
     </div>
@@ -209,17 +209,17 @@ function AuditCampaign({ event }: { event: AuditEvent }) {
       <span className="micro-label">Campanha</span>
       <strong>
         <PresentationMask placeholder="Campanha oculta">
-          {event.campaignName ?? "Campanha nao resolvida"}
+          {event.campaignName ?? "Campanha não resolvida"}
         </PresentationMask>
       </strong>
       <span>
         <PresentationMask placeholder="Conjunto oculto">
-          {event.adSetName ?? "Conjunto nao resolvido"}
+          {event.adSetName ?? "Conjunto não resolvido"}
         </PresentationMask>
       </span>
       <span>
-        <PresentationMask placeholder="Anuncio oculto">
-          {event.adName ?? "Anuncio nao resolvido"}
+        <PresentationMask placeholder="Anúncio oculto">
+          {event.adName ?? "Anúncio não resolvido"}
         </PresentationMask>
       </span>
     </div>
@@ -271,7 +271,7 @@ function AuditMobileEventCard({ event }: { event: AuditEvent }) {
           <span>
             {event.sentAt
               ? `Enviado ${auditDate(event.sentAt)}`
-              : "Ainda nao enviado"}
+              : "Ainda não enviado"}
           </span>
         </div>
         <AuditCampaign event={event} />
@@ -377,14 +377,14 @@ export default async function EventsPage({
       value: summary.queued,
     },
     {
-      detail: "Dependem de configuracao",
+      detail: "Dependem de configuração",
       icon: ShieldAlert,
       label: "Bloqueados",
       tone: "blocked",
       value: summary.blocked,
     },
     {
-      detail: "Envio nao concluido",
+      detail: "Envio não concluído",
       icon: AlertTriangle,
       label: "Falhas",
       tone: "failed",
@@ -394,7 +394,7 @@ export default async function EventsPage({
   const classifiedMetrics = [
     {
       icon: Ban,
-      label: "Nao elegiveis",
+      label: "Não elegíveis",
       tone: "not_eligible",
       value: summary.notEligible,
     },
@@ -406,7 +406,7 @@ export default async function EventsPage({
     },
     {
       icon: Archive,
-      label: "Historicos",
+      label: "Históricos",
       tone: "historical",
       value: summary.historical,
     },
@@ -423,17 +423,17 @@ export default async function EventsPage({
       <header className="page-header audit-page-header">
         <div>
           <span className="eyebrow">Eventos Meta</span>
-          <h1>Auditoria de conversoes</h1>
+          <h1>Auditoria de conversões</h1>
           <p>
-            Acompanhe o que foi enviado, o que esta aguardando e o que precisa
-            de atencao antes de chegar a Meta.
+            Acompanhe o que foi enviado, o que está aguardando e o que precisa
+            de atenção antes de chegar a Meta.
           </p>
         </div>
         <div className="header-actions">
           {result.state === "error" ? (
-            <span className="status-chip bad">API indisponivel</span>
+            <span className="status-chip bad">API indisponível</span>
           ) : hasAttention ? (
-            <span className="status-chip warn">Requer atencao</span>
+            <span className="status-chip warn">Requer atenção</span>
           ) : (
             <span className="status-chip">Fluxo acompanhado</span>
           )}
@@ -442,12 +442,12 @@ export default async function EventsPage({
 
       <nav
         className="report-view-tabs audit-view-tabs"
-        aria-label="Visoes de eventos Meta"
+        aria-label="Visões de eventos Meta"
       >
         <Link className="active" href="/events">
-          Conversoes
+          Conversões
         </Link>
-        <Link href="/events/purchase-reviews">Revisao de compras</Link>
+        <Link href="/events/purchase-reviews">Revisão de compras</Link>
       </nav>
 
       <section
@@ -463,12 +463,12 @@ export default async function EventsPage({
           <div className="audit-period-context">
             <CalendarRange aria-hidden="true" size={18} strokeWidth={2.1} />
             <span>
-              <strong>Periodo da auditoria</strong>
+              <strong>Período da auditoria</strong>
               <small>{report?.rangeLabel ?? `${since} a ${until}`}</small>
             </span>
           </div>
           <label className="filter-field">
-            <span>Inicio</span>
+            <span>Início</span>
             <input type="date" name="since" defaultValue={since} />
           </label>
           <label className="filter-field">
@@ -521,9 +521,9 @@ export default async function EventsPage({
                   <option value="queued">Aguardando envio</option>
                   <option value="blocked">Bloqueados</option>
                   <option value="failed">Falhas</option>
-                  <option value="not_eligible">Nao elegiveis</option>
+                  <option value="not_eligible">Não elegíveis</option>
                   <option value="shadow">Observados em sombra</option>
-                  <option value="historical">Historicos</option>
+                  <option value="historical">Históricos</option>
                   <option value="discarded">Descartados</option>
                 </select>
               </label>
@@ -536,12 +536,12 @@ export default async function EventsPage({
                 >
                   <option value="">Todas as origens</option>
                   <option value="external_integration">
-                    Integracao externa
+                    Integração externa
                   </option>
                   <option value="whatsapp_automation">
-                    Automacao do WhatsApp
+                    Automação do WhatsApp
                   </option>
-                  <option value="system">Regra automatica</option>
+                  <option value="system">Regra automática</option>
                   <option value="manual_test">Teste manual</option>
                   <option value="other">Outra origem</option>
                 </select>
@@ -550,8 +550,8 @@ export default async function EventsPage({
             <footer className="audit-filter-footer">
               <span>
                 {activeFilterCount > 0
-                  ? "A lista esta usando filtros personalizados."
-                  : "Todos os tipos, estados e origens estao incluidos."}
+                  ? "A lista está usando filtros personalizados."
+                  : "Todos os tipos, estados e origens estão incluídos."}
               </span>
               {activeFilterCount > 0 ? (
                 <Link className="button ghost" href={clearFiltersHref}>
@@ -573,13 +573,13 @@ export default async function EventsPage({
               <ShieldAlert size={18} strokeWidth={2.1} />
             </span>
             <div>
-              <span className="eyebrow">Saude da entrega</span>
+              <span className="eyebrow">Saúde da entrega</span>
               <h2 id="audit-health-title">Fluxo para a Meta</h2>
-              <p>Estados operacionais primeiro; classificacoes em seguida.</p>
+              <p>Estados operacionais primeiro; classificações em seguida.</p>
             </div>
           </div>
           <span className="status-chip neutral">
-            {summary.total} eventos no periodo
+            {summary.total} eventos no período
           </span>
         </header>
 
@@ -618,8 +618,8 @@ export default async function EventsPage({
             <History size={18} strokeWidth={2.1} />
           </span>
           <div>
-            <span className="eyebrow">Historico de entrega</span>
-            <h2>Eventos do periodo</h2>
+            <span className="eyebrow">Histórico de entrega</span>
+            <h2>Eventos do período</h2>
           </div>
         </div>
         <div className="audit-history-context">
@@ -642,8 +642,8 @@ export default async function EventsPage({
                 }}
               />
               <span className="muted">
-                Ate 500 por vez, com os filtros atuais. Eventos ja enviados nao
-                sao reenviados.
+                Até 500 por vez, com os filtros atuais. Eventos já enviados não
+                são reenviados.
               </span>
             </>
           ) : null}
@@ -684,7 +684,7 @@ export default async function EventsPage({
                     <span>
                       {event.sentAt
                         ? `Enviado ${auditDate(event.sentAt)}`
-                        : "Ainda nao enviado"}
+                        : "Ainda não enviado"}
                     </span>
                   </td>
                   <td>
@@ -702,13 +702,13 @@ export default async function EventsPage({
                 <td colSpan={5}>
                   <strong>
                     {result.state === "error"
-                      ? "Nao foi possivel carregar a auditoria"
+                      ? "Não foi possível carregar a auditoria"
                       : "Nenhum evento encontrado"}
                   </strong>
                   <span>
                     {result.state === "error"
                       ? "A leitura falhou. Tente novamente depois que a API responder."
-                      : "Ajuste o periodo ou aguarde a chegada de novos eventos."}
+                      : "Ajuste o período ou aguarde a chegada de novos eventos."}
                   </span>
                 </td>
               </tr>
@@ -726,21 +726,21 @@ export default async function EventsPage({
           <div className="audit-mobile-empty">
             <strong>
               {result.state === "error"
-                ? "Nao foi possivel carregar a auditoria"
+                ? "Não foi possível carregar a auditoria"
                 : "Nenhum evento encontrado"}
             </strong>
             <span>
               {result.state === "error"
                 ? "A leitura falhou. Tente novamente depois que a API responder."
-                : "Ajuste o periodo ou aguarde a chegada de novos eventos."}
+                : "Ajuste o período ou aguarde a chegada de novos eventos."}
             </span>
           </div>
         )}
       </div>
 
-      <nav className="report-pagination" aria-label="Paginacao de eventos Meta">
+      <nav className="report-pagination" aria-label="Paginação de eventos Meta">
         <span>
-          Pagina {pagination.page} de {Math.max(pagination.totalPages, 1)} /{" "}
+          Página {pagination.page} de {Math.max(pagination.totalPages, 1)} /{" "}
           {pagination.totalItems} eventos
         </span>
         <div>
@@ -761,11 +761,11 @@ export default async function EventsPage({
               className="button ghost"
               href={`/events?${auditQuery(filters, pagination.page + 1)}`}
             >
-              Proxima
+              Próxima
             </Link>
           ) : (
             <span className="button ghost disabled" aria-disabled="true">
-              Proxima
+              Próxima
             </span>
           )}
         </div>

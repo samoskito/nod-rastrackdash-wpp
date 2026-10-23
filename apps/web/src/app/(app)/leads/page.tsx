@@ -290,7 +290,7 @@ export default async function LeadsPage({
   );
   const emptyTitle =
     result.state === "error"
-      ? "Nao foi possivel carregar leads"
+      ? "Não foi possível carregar leads"
       : "Nenhum lead encontrado";
   const emptyDescription =
     result.state === "error"
@@ -303,7 +303,7 @@ export default async function LeadsPage({
             ? "Escolha o período para ver quem conversou mais de uma vez por anúncio."
             : base === "repeat"
               ? "Ninguém iniciou mais de uma conversa por anúncio neste período."
-              : "Quando uma integracao ativa receber conversas, elas aparecem aqui.";
+              : "Quando uma integração ativa receber conversas, elas aparecem aqui.";
   const attributionCounts = result.attributionCounts;
   // Organic leads get their own count so the paid one matches the overview.
   const showAttributionSplit =
@@ -319,13 +319,13 @@ export default async function LeadsPage({
           <span className="eyebrow">Leads</span>
           <h1>Leads rastreados pelo WhatsApp</h1>
           <p>
-            Encontre conversas, confirme a atribuicao e acompanhe a etapa atual
+            Encontre conversas, confirme a atribuição e acompanhe a etapa atual
             de cada lead.
           </p>
         </div>
         <div className="header-actions">
           {result.state === "error" ? (
-            <span className="status-chip warn">API indisponivel</span>
+            <span className="status-chip warn">API indisponível</span>
           ) : null}
           <span className="status-chip">
             {leadCountBadge(
@@ -394,10 +394,10 @@ export default async function LeadsPage({
           <select
             className="filter-control"
             name="status"
-            aria-label="Situacao operacional"
+            aria-label="Situação operacional"
             defaultValue={status ?? ""}
           >
-            <option value="">Toda situacao</option>
+            <option value="">Toda situação</option>
             <option value="active">Em atendimento</option>
             <option value="qualified">Qualificados</option>
             <option value="converted">Compradores</option>
@@ -412,7 +412,7 @@ export default async function LeadsPage({
             <option value="">Todas as etapas</option>
             <option value="LeadSubmitted">Conversa iniciada</option>
             <option value="QualifiedLead">Lead qualificado</option>
-            <option value="Purchase">Compra atribuida</option>
+            <option value="Purchase">Compra atribuída</option>
           </select>
           <button className="button primary" type="submit">
             <Filter aria-hidden="true" size={17} strokeWidth={2.2} />
@@ -430,14 +430,14 @@ export default async function LeadsPage({
           <summary>
             <span>
               <SlidersHorizontal aria-hidden="true" size={17} strokeWidth={2} />
-              Filtros avancados
+              Filtros avançados
             </span>
             {advancedFilterCount > 0 ? (
               <span className="lead-active-filter-count">
                 {advancedFilterCount} ativo(s)
               </span>
             ) : (
-              <span>Origem, etiqueta, periodo e exibicao</span>
+              <span>Origem, etiqueta, período e exibição</span>
             )}
           </summary>
           <div className="lead-filter-advanced-grid">
@@ -464,7 +464,7 @@ export default async function LeadsPage({
               />
             </label>
             <label className="filter-field">
-              <span>Inicio</span>
+              <span>Início</span>
               <span className="lead-date-control">
                 <CalendarDays aria-hidden="true" size={16} strokeWidth={2} />
                 <input type="date" name="since" defaultValue={since} />
@@ -478,7 +478,7 @@ export default async function LeadsPage({
               </span>
             </label>
             <label className="filter-field">
-              <span>Por pagina</span>
+              <span>Por página</span>
               <select
                 className="filter-control"
                 name="pageSize"
@@ -511,10 +511,10 @@ export default async function LeadsPage({
                   : attribution === "paid"
                     ? "Leads novos vindos de anúncio"
                     : hasReportFilter
-                      ? "Filtro do relatorio aplicado"
+                      ? "Filtro do relatório aplicado"
                       : "Leads novos (1º contato no período)"}
             {since || until
-              ? `: ${since ?? "inicio"} ate ${until ?? "hoje"}`
+              ? `: ${since ?? "início"} até ${until ?? "hoje"}`
               : "."}
           </span>
         </div>
@@ -523,25 +523,25 @@ export default async function LeadsPage({
       <section className="lead-results-section" aria-labelledby="lead-results">
         <header className="lead-results-header">
           <div>
-            <span className="eyebrow">Historico</span>
+            <span className="eyebrow">Histórico</span>
             <h2 id="lead-results">Conversas recebidas</h2>
             <p>
               {result.pagination.totalItems > 0
                 ? `Mostrando ${pageStart}-${pageEnd} de ${result.pagination.totalItems} leads.`
-                : "Nenhuma conversa disponivel neste recorte."}
+                : "Nenhuma conversa disponível neste recorte."}
             </p>
           </div>
           {leads.length > 0 ? (
             <div className="lead-results-actions">
               <div className="lead-results-summary">
                 <span className="status-chip">
-                  Pagina {result.pagination.page} de{" "}
+                  Página {result.pagination.page} de{" "}
                   {Math.max(result.pagination.totalPages, 1)}
                 </span>
                 <span
                   className={`status-chip${pendingCount > 0 ? " warn" : ""}`}
                 >
-                  {pendingCount} sem etapa nesta pagina
+                  {pendingCount} sem etapa nesta página
                 </span>
               </div>
               <LeadExportMenu applied={appliedFilters} />
@@ -559,7 +559,7 @@ export default async function LeadsPage({
                     <th>Campanha / origem</th>
                     <th>Etapa atual</th>
                     <th>Recebido</th>
-                    <th>Ultima atividade</th>
+                    <th>Última atividade</th>
                     <th>
                       <span className="sr-only">Abrir lead</span>
                     </th>
@@ -576,7 +576,7 @@ export default async function LeadsPage({
                       <td className="lead-source-cell">
                         <strong>
                           <PresentationMask placeholder="Campanha oculta">
-                            {lead.campaignName ?? "Campanha nao resolvida"}
+                            {lead.campaignName ?? "Campanha não resolvida"}
                           </PresentationMask>
                         </strong>
                         <span>{sourceLabel(lead.source, lead.adId)}</span>
@@ -636,7 +636,7 @@ export default async function LeadsPage({
                     <span className="micro-label">Campanha / origem</span>
                     <strong>
                       <PresentationMask placeholder="Campanha oculta">
-                        {lead.campaignName ?? "Campanha nao resolvida"}
+                        {lead.campaignName ?? "Campanha não resolvida"}
                       </PresentationMask>
                     </strong>
                     <span>{sourceLabel(lead.source, lead.adId)}</span>
@@ -654,7 +654,7 @@ export default async function LeadsPage({
                       <dd>{lastTouchLabel(lead.firstMessageAt)}</dd>
                     </div>
                     <div>
-                      <dt>Ultima atividade</dt>
+                      <dt>Última atividade</dt>
                       <dd>{lastTouchLabel(lead.lastMessageAt)}</dd>
                     </div>
                   </dl>
@@ -662,9 +662,9 @@ export default async function LeadsPage({
               ))}
             </div>
 
-            <nav className="report-pagination" aria-label="Paginacao de leads">
+            <nav className="report-pagination" aria-label="Paginação de leads">
               <span>
-                Pagina {result.pagination.page} de{" "}
+                Página {result.pagination.page} de{" "}
                 {Math.max(result.pagination.totalPages, 1)} -{" "}
                 {result.pagination.totalItems} leads
               </span>
@@ -686,11 +686,11 @@ export default async function LeadsPage({
                     className="button ghost"
                     href={`/leads?${leadQuery(leadFilters, result.pagination.page + 1)}`}
                   >
-                    Proxima
+                    Próxima
                   </Link>
                 ) : (
                   <span className="button ghost disabled" aria-disabled="true">
-                    Proxima
+                    Próxima
                   </span>
                 )}
               </div>

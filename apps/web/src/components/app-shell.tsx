@@ -56,11 +56,11 @@ const navigationIconById: Record<ClientNavigationId, LucideIcon> = {
 
 const navigationGroupDefinitions = [
   {
-    label: "Operacao",
+    label: "Operação",
     ids: ["overview", "leads", "reports", "events"],
   },
   {
-    label: "Gestao",
+    label: "Gestão",
     ids: ["integrations", "conversions", "settings"],
   },
 ] as const;
@@ -90,7 +90,7 @@ function workspaceAccessLabel(workspace: CurrentWorkspaceDto): string {
 
 function workspaceRoleLabel(role: WorkspaceListEntryDto["role"]): string {
   if (role === "owner") {
-    return "responsavel da conta";
+    return "responsável da conta";
   }
 
   return role === "admin" ? "administrador" : "analista";
@@ -261,7 +261,7 @@ export function AppShell({
         <Link
           className="brand"
           href="/overview"
-          aria-label={`${brand.name} - ir para a Visao geral`}
+          aria-label={`${brand.name} - ir para a Visão geral`}
           onClick={closeMobileMenu}
         >
           <BrandMark brand={brand} />
@@ -295,7 +295,7 @@ export function AppShell({
           <Link
             className="brand"
             href="/overview"
-            aria-label={`${brand.name} - ir para a Visao geral`}
+            aria-label={`${brand.name} - ir para a Visão geral`}
             onClick={closeMobileMenu}
           >
             <BrandMark brand={brand} />
@@ -364,7 +364,7 @@ export function AppShell({
                     <PresentationMask placeholder="acesso demonstrativo">
                       {workspace
                         ? `${workspace.slug} - ${workspaceAccessLabel(workspace)}`
-                        : `${workspaces.length} ${workspaces.length === 1 ? "empresa disponivel" : "empresas disponiveis"}`}
+                        : `${workspaces.length} ${workspaces.length === 1 ? "empresa disponível" : "empresas disponíveis"}`}
                     </PresentationMask>
                   </small>
                 </span>
@@ -414,7 +414,7 @@ export function AppShell({
                 })}
                 {workspaceSwitchError ? (
                   <p className="workspace-selector-error" role="alert">
-                    Nao foi possivel abrir esta empresa.
+                    Não foi possível abrir esta empresa.
                   </p>
                 ) : null}
               </div>
@@ -424,14 +424,14 @@ export function AppShell({
               <span>Workspace</span>
               <strong>
                 <PresentationMask placeholder="Workspace demonstrativo">
-                  {workspace?.name ?? "Workspace indisponivel"}
+                  {workspace?.name ?? "Workspace indisponível"}
                 </PresentationMask>
               </strong>
               <small>
                 <PresentationMask placeholder="acesso demonstrativo">
                   {workspace
                     ? `${workspace.slug} - ${workspaceAccessLabel(workspace)}`
-                    : "Sessao autenticada"}
+                    : "Sessão autenticada"}
                 </PresentationMask>
               </small>
             </>
@@ -475,7 +475,7 @@ export function AppShell({
         {workspace?.platformRole ? (
           <nav
             className="sidebar-nav platform-sidebar-nav"
-            aria-label="Administracao da plataforma"
+            aria-label="Administração da plataforma"
           >
             <p className="nav-label">Plataforma</p>
             <Link

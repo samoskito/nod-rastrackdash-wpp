@@ -262,11 +262,11 @@ function LegacyOAuthMigrationCard({
           <ShieldCheck size={18} />
         </div>
         <div>
-          <span className="micro-label">Conexao alternativa</span>
+          <span className="micro-label">Conexão alternativa</span>
           <strong>Token permanente</strong>
           <p className="muted">
-            O OAuth continua ativo ate uma desconexao confirmada neste
-            workspace. O historico permanece preservado durante a troca.
+            O OAuth continua ativo até uma desconexão confirmada neste
+            workspace. O histórico permanece preservado durante a troca.
           </p>
         </div>
         {canManage ? (
@@ -297,13 +297,13 @@ function LegacyOAuthMigrationCard({
       >
         <div className="meta-action-dialog-header">
           <div>
-            <span className="micro-label">Troca de conexao</span>
+            <span className="micro-label">Troca de conexão</span>
             <h3>Desconectar a Meta deste workspace?</h3>
           </div>
           <button
             className="meta-dialog-close"
             type="button"
-            aria-label="Fechar confirmacao"
+            aria-label="Fechar confirmação"
             title="Fechar"
             onClick={closeDialog}
             disabled={pending}
@@ -316,7 +316,7 @@ function LegacyOAuthMigrationCard({
           <div className="meta-disconnect-warning">
             <TriangleAlert size={20} aria-hidden="true" />
             <div>
-              <strong>Reporting e CAPI serao interrompidos</strong>
+              <strong>Reporting e CAPI serão interrompidos</strong>
               <p>
                 O envio volta somente depois que o token permanente, a BM, as
                 contas e o destino forem validados.
@@ -325,9 +325,9 @@ function LegacyOAuthMigrationCard({
           </div>
 
           <ul className="meta-disconnect-preserved">
-            <li>Eventos, campanhas e auditorias ja registrados permanecem.</li>
-            <li>Snapshots, contas e destinos salvos nao serao apagados.</li>
-            <li>Outros workspaces e a autorizacao no Facebook nao mudam.</li>
+            <li>Eventos, campanhas e auditorias já registrados permanecem.</li>
+            <li>Snapshots, contas e destinos salvos não serão apagados.</li>
+            <li>Outros workspaces e a autorização no Facebook não mudam.</li>
           </ul>
 
           <label
@@ -682,7 +682,7 @@ export function MetaManualConnectionPanel({
     setNotice({
       tone: "success",
       message:
-        "IDs adicionados. O acesso a cada conta sera validado antes da ativacao.",
+        "IDs adicionados. O acesso a cada conta será validado antes da ativação.",
     });
   }
 
@@ -726,7 +726,7 @@ export function MetaManualConnectionPanel({
         "destinationLabel",
         destinationMode === "direct"
           ? "Destino informado por ID"
-          : `${selectedPixel?.name ?? "Pixel"} / ${selectedPage?.name ?? "Pagina"}`,
+          : `${selectedPixel?.name ?? "Pixel"} / ${selectedPage?.name ?? "Página"}`,
       );
 
       if (ownerBusinessManagerId.trim()) {
@@ -764,8 +764,8 @@ export function MetaManualConnectionPanel({
 
   async function handleOAuthRouting(enabled: boolean) {
     const confirmation = enabled
-      ? "Ativar o roteamento por BM? Relatorios e novos eventos passarao a usar os vinculos revisados."
-      : "Voltar ao destino principal? Os vinculos ficarao salvos para uma nova ativacao.";
+      ? "Ativar o roteamento por BM? Relatórios e novos eventos passarão a usar os vínculos revisados."
+      : "Voltar ao destino principal? Os vínculos ficarão salvos para uma nova ativação.";
 
     if (!window.confirm(confirmation)) {
       return;
@@ -821,7 +821,7 @@ export function MetaManualConnectionPanel({
       setEditingConnectionId(connection.id);
       setNotice({
         tone: "success",
-        message: "Estrutura carregada. Revise e salve as alteracoes.",
+        message: "Estrutura carregada. Revise e salve as alterações.",
       });
     } else {
       showResult(result);
@@ -886,7 +886,7 @@ export function MetaManualConnectionPanel({
   ) {
     const confirmation =
       status === "paused"
-        ? "Pausar esta BM? Somente as contas desta conexao deixarao de sincronizar e enviar eventos."
+        ? "Pausar esta BM? Somente as contas desta conexão deixarão de sincronizar e enviar eventos."
         : "Reativar esta BM com o token e o destino atuais?";
 
     if (!window.confirm(confirmation)) {
@@ -912,7 +912,7 @@ export function MetaManualConnectionPanel({
 
     if (
       !window.confirm(
-        "Substituir o token desta credencial? A troca so sera aplicada se toda a estrutura continuar acessivel.",
+        "Substituir o token desta credencial? A troca so será aplicada se toda a estrutura continuar acessível.",
       )
     ) {
       return;
@@ -1131,7 +1131,7 @@ export function MetaManualConnectionPanel({
             Conectar Meta (PalmUP)
           </button>
           <p className="action-note">
-            Login social PalmUP nao configurado neste servidor. Defina
+            Login social PalmUP não configurado neste servidor. Defina
             PALMUP_META_BROKER_URL na API ou use o token permanente abaixo.
           </p>
         </div>
@@ -1160,7 +1160,7 @@ export function MetaManualConnectionPanel({
               <ShieldCheck size={16} aria-hidden="true" />
               {pendingAction === "palmup"
                 ? "Concluindo..."
-                : "Ja autorizei, concluir"}
+                : "Já autorizei, concluir"}
             </button>
             <button
               className="button ghost"
@@ -1194,7 +1194,7 @@ export function MetaManualConnectionPanel({
         </button>
         <p className="action-note">
           Entre com o Facebook pelo app da PalmUP, sem criar um app Meta
-          proprio. Prefere token permanente? Cole abaixo.
+          próprio. Prefere token permanente? Cole abaixo.
         </p>
       </div>
     );
@@ -1226,7 +1226,7 @@ export function MetaManualConnectionPanel({
                   <History size={16} />
                   {pendingAction === "history"
                     ? "Enfileirando..."
-                    : "Importar historico inicial"}
+                    : "Importar histórico inicial"}
                 </button>
               ) : null}
               {palmupReady ? (
@@ -1244,7 +1244,7 @@ export function MetaManualConnectionPanel({
                 type="button"
                 onClick={startNewConnection}
               >
-                <Plus size={16} /> Nova conexao
+                <Plus size={16} /> Nova conexão
               </button>
             </div>
           ) : null}
@@ -1311,7 +1311,7 @@ export function MetaManualConnectionPanel({
                     <button
                       className="icon-button"
                       type="button"
-                      title="Testar conexao"
+                      title="Testar conexão"
                       aria-label={`Testar ${connection.businessManagerName}`}
                       disabled={pendingAction !== null}
                       onClick={() => void handleConnectionTest(connection.id)}
@@ -1323,8 +1323,8 @@ export function MetaManualConnectionPanel({
                       type="button"
                       title={
                         connection.status === "paused"
-                          ? "Reativar conexao"
-                          : "Pausar conexao"
+                          ? "Reativar conexão"
+                          : "Pausar conexão"
                       }
                       aria-label={
                         connection.status === "paused"
@@ -1377,7 +1377,7 @@ export function MetaManualConnectionPanel({
                   <small>Credencial</small>
                   <strong>
                     <PresentationMask placeholder="Credencial oculta">
-                      {credential?.label ?? "Indisponivel"}
+                      {credential?.label ?? "Indisponível"}
                     </PresentationMask>
                   </strong>
                 </span>
@@ -1387,17 +1387,17 @@ export function MetaManualConnectionPanel({
                     <PresentationMask placeholder="Token protegido">
                       {credential
                         ? `final ${credential.tokenLast4}`
-                        : "Indisponivel"}
+                        : "Indisponível"}
                     </PresentationMask>
                   </strong>
                 </span>
                 <span>
-                  <small>Destino padrao</small>
+                  <small>Destino padrão</small>
                   <strong>
                     <PresentationMask placeholder="Destino oculto">
                       {destination?.label ??
                         destination?.pixelName ??
-                        "Nao configurado"}
+                        "Não configurado"}
                     </PresentationMask>
                   </strong>
                 </span>
@@ -1451,7 +1451,7 @@ export function MetaManualConnectionPanel({
                     <span>
                       <small>Contas e destinos</small>
                       <strong>
-                        {activeConnectionAccounts.length} vinculo(s) ativo(s)
+                        {activeConnectionAccounts.length} vínculo(s) ativo(s)
                       </strong>
                     </span>
                     <span className="event-chip">
@@ -1523,9 +1523,9 @@ export function MetaManualConnectionPanel({
                           key={account.id}
                         >
                           <span className="meta-account-routing-account">
-                            <small>Conta de anuncios</small>
+                            <small>Conta de anúncios</small>
                             <strong>
-                              <PresentationMask placeholder="Conta de anuncios oculta">
+                              <PresentationMask placeholder="Conta de anúncios oculta">
                                 {account.adAccountName}
                               </PresentationMask>
                             </strong>
@@ -1542,7 +1542,7 @@ export function MetaManualConnectionPanel({
                                 {persistedDestinations.length > 1
                                   ? `${new Set(persistedDestinations.map((item) => item.pixelId)).size} vinculados`
                                   : (persistedDestinations[0]?.pixelName ??
-                                    "Nao configurado")}
+                                    "Não configurado")}
                               </PresentationMask>
                             </strong>
                             <small>
@@ -1556,18 +1556,18 @@ export function MetaManualConnectionPanel({
                             </small>
                           </span>
                           <span className="meta-account-routing-asset">
-                            <small>Paginas</small>
+                            <small>Páginas</small>
                             <strong>
-                              <PresentationMask placeholder="Pagina oculta">
+                              <PresentationMask placeholder="Página oculta">
                                 {persistedDestinations.length > 1
                                   ? `${new Set(persistedDestinations.map((item) => item.pageId)).size} vinculadas`
                                   : (persistedDestinations[0]?.pageName ??
-                                    "Nao configurada")}
+                                    "Não configurada")}
                               </PresentationMask>
                             </strong>
                             <small>
                               {persistedDestinations.length > 1 ? (
-                                "Roteamento definido por anuncio"
+                                "Roteamento definido por anúncio"
                               ) : (
                                 <PresentationMask placeholder="ID oculto">
                                   {persistedDestinations[0]?.pageId ?? "-"}
@@ -1576,7 +1576,7 @@ export function MetaManualConnectionPanel({
                             </small>
                           </span>
                           <span className="meta-account-routing-health">
-                            <small>Sincronizacao</small>
+                            <small>Sincronização</small>
                             <span className="event-chip">
                               {syncStatusLabel(account.syncStatus)}
                             </span>
@@ -1584,10 +1584,10 @@ export function MetaManualConnectionPanel({
                           </span>
                           <div className="meta-account-destination-summary">
                             <span className="meta-account-destination-summary-head">
-                              <small>Rotas automaticas por Pagina</small>
+                              <small>Rotas automáticas por Página</small>
                               <strong>
                                 {persistedDestinations.length} par(es){" "}
-                                Pagina/Pixel
+                                Página/Pixel
                               </strong>
                             </span>
                             <div>
@@ -1601,7 +1601,7 @@ export function MetaManualConnectionPanel({
                                     }
                                   >
                                     <strong>
-                                      <PresentationMask placeholder="Pagina oculta">
+                                      <PresentationMask placeholder="Página oculta">
                                         {item.pageName ?? item.pageId}
                                       </PresentationMask>
                                     </strong>
@@ -1614,7 +1614,7 @@ export function MetaManualConnectionPanel({
                                 ))
                               ) : (
                                 <span className="muted">
-                                  Nenhuma rota de Pagina configurada.
+                                  Nenhuma rota de Página configurada.
                                 </span>
                               )}
                             </div>
@@ -1631,7 +1631,7 @@ export function MetaManualConnectionPanel({
                                 </summary>
                                 <div>
                                   <fieldset>
-                                    <legend>Pixels e paginas permitidos</legend>
+                                    <legend>Pixels e páginas permitidos</legend>
                                     {configuration.destinations.map((item) => {
                                       const itemId = item.id ?? "";
                                       const checked =
@@ -1697,11 +1697,11 @@ export function MetaManualConnectionPanel({
                                     })}
                                   </fieldset>
                                   <label htmlFor={`destination-${account.id}`}>
-                                    Destino padrao da conta
+                                    Destino padrão da conta
                                   </label>
                                   <select
                                     id={`destination-${account.id}`}
-                                    aria-label={`Destino padrao de ${account.adAccountName}`}
+                                    aria-label={`Destino padrão de ${account.adAccountName}`}
                                     value={draft.defaultId}
                                     disabled={
                                       draft.allowedIds.length === 0 ||
@@ -1781,11 +1781,11 @@ export function MetaManualConnectionPanel({
                               <div className="meta-ad-routing-editor-head">
                                 <span>
                                   <small>Roteamento fino</small>
-                                  <strong>Anuncios desta conta</strong>
+                                  <strong>Anúncios desta conta</strong>
                                 </span>
                                 {adRouting ? (
                                   <span className="event-chip">
-                                    {adRouting.ads.length} anuncio(s)
+                                    {adRouting.ads.length} anúncio(s)
                                   </span>
                                 ) : null}
                               </div>
@@ -1807,13 +1807,13 @@ export function MetaManualConnectionPanel({
                                           [account.id]: searchValue,
                                         }));
                                       }}
-                                      placeholder="Buscar anuncio por nome ou ID"
-                                      aria-label={`Buscar anuncios de ${account.adAccountName}`}
+                                      placeholder="Buscar anúncio por nome ou ID"
+                                      aria-label={`Buscar anúncios de ${account.adAccountName}`}
                                       data-presentation-sensitive-field="true"
                                     />
                                     <div
                                       className="segmented-control compact meta-ad-routing-filter"
-                                      aria-label="Filtrar auditoria de anuncios"
+                                      aria-label="Filtrar auditoria de anúncios"
                                     >
                                       <button
                                         className={
@@ -1873,9 +1873,9 @@ export function MetaManualConnectionPanel({
                                     </div>
                                   </div>
                                   <p className="meta-ad-routing-guidance">
-                                    A Pagina do anuncio define o Pixel e o
+                                    A Página do anúncio define o Pixel e o
                                     destino automaticamente. Abra um grupo
-                                    apenas para revisar ou criar uma excecao.
+                                    apenas para revisar ou criar uma exceção.
                                   </p>
                                   <div className="meta-ad-routing-groups">
                                     {adRouteGroups.length > 0 ? (
@@ -1906,18 +1906,18 @@ export function MetaManualConnectionPanel({
                                                 />
                                               </span>
                                               <span>
-                                                <small>Pagina detectada</small>
+                                                <small>Página detectada</small>
                                                 <strong>
-                                                  <PresentationMask placeholder="Pagina oculta">
+                                                  <PresentationMask placeholder="Página oculta">
                                                     {groupDestination?.pageName ??
                                                       group.pageId ??
-                                                      "Pagina nao identificada"}
+                                                      "Página não identificada"}
                                                   </PresentationMask>
                                                 </strong>
                                                 <small>
                                                   <PresentationMask placeholder="ID oculto">
                                                     {group.pageId ??
-                                                      "Sem ID de Pagina"}
+                                                      "Sem ID de Página"}
                                                   </PresentationMask>
                                                 </small>
                                               </span>
@@ -1932,13 +1932,13 @@ export function MetaManualConnectionPanel({
                                                 </strong>
                                                 <small>
                                                   {groupDestination
-                                                    ? "Regra automatica da Pagina"
-                                                    : "Configure o par Pagina/Pixel"}
+                                                    ? "Regra automática da Página"
+                                                    : "Configure o par Página/Pixel"}
                                                 </small>
                                               </span>
                                               <span className="meta-ad-routing-group-status">
                                                 <span className="event-chip">
-                                                  {group.ads.length} anuncio(s)
+                                                  {group.ads.length} anúncio(s)
                                                 </span>
                                                 {groupPendingCount > 0 ? (
                                                   <span className="event-chip warning">
@@ -1976,7 +1976,7 @@ export function MetaManualConnectionPanel({
                                                   <div key={ad.adId}>
                                                     <span>
                                                       <strong>
-                                                        <PresentationMask placeholder="Anuncio oculto">
+                                                        <PresentationMask placeholder="Anúncio oculto">
                                                           {ad.adName}
                                                         </PresentationMask>
                                                       </strong>
@@ -2000,10 +2000,10 @@ export function MetaManualConnectionPanel({
                                                       <small>
                                                         {ad.assignmentSource ===
                                                         "manual"
-                                                          ? "Excecao manual"
+                                                          ? "Exceção manual"
                                                           : ad.assignmentSource ===
                                                               "automatic"
-                                                            ? "Regra automatica da Pagina"
+                                                            ? "Regra automática da Página"
                                                             : adRouteStatusLabel(
                                                                 ad.routeStatus,
                                                               )}
@@ -2035,7 +2035,7 @@ export function MetaManualConnectionPanel({
                                                         data-presentation-sensitive-field="true"
                                                       >
                                                         <option value="">
-                                                          Usar regra da Pagina
+                                                          Usar regra da Página
                                                         </option>
                                                         {persistedDestinations.map(
                                                           (item) => (
@@ -2055,7 +2055,7 @@ export function MetaManualConnectionPanel({
                                                       <button
                                                         className="icon-button"
                                                         type="button"
-                                                        title="Salvar excecao do anuncio"
+                                                        title="Salvar exceção do anúncio"
                                                         aria-label={`Salvar destino de ${ad.adName}`}
                                                         disabled={
                                                           pendingAction !== null
@@ -2089,25 +2089,25 @@ export function MetaManualConnectionPanel({
                                         />
                                         <span>
                                           <strong>
-                                            Todos os anuncios foram roteados
+                                            Todos os anúncios foram roteados
                                             automaticamente
                                           </strong>
                                           <small>
-                                            Nenhuma decisao manual e necessaria
+                                            Nenhuma decisão manual é necessária
                                             nesta conta.
                                           </small>
                                         </span>
                                       </div>
                                     ) : (
                                       <p className="muted">
-                                        Nenhum anuncio corresponde a este
+                                        Nenhum anúncio corresponde a este
                                         filtro.
                                       </p>
                                     )}
                                   </div>
                                 </>
                               ) : (
-                                <p className="muted">Carregando anuncios...</p>
+                                <p className="muted">Carregando anúncios...</p>
                               )}
                             </section>
                           ) : null}
@@ -2124,7 +2124,7 @@ export function MetaManualConnectionPanel({
                     <span>
                       Destinos salvos nesta BM
                       <small>
-                        Pixel/Dataset e Pagina preservados para reutilizacao
+                        Pixel/Dataset e Página preservados para reutilização
                       </small>
                     </span>
                     <span>
@@ -2157,9 +2157,9 @@ export function MetaManualConnectionPanel({
                           </small>
                         </span>
                         <span>
-                          <small>Pagina</small>
+                          <small>Página</small>
                           <strong>
-                            <PresentationMask placeholder="Pagina oculta">
+                            <PresentationMask placeholder="Página oculta">
                               {item.pageName ?? item.pageId}
                             </PresentationMask>
                           </strong>
@@ -2249,12 +2249,12 @@ export function MetaManualConnectionPanel({
           </strong>
           <small>
             {enabled
-              ? "Cada conta usa o destino da sua BM ou a excecao configurada."
+              ? "Cada conta usa o destino da sua BM ou a exceção configurada."
               : unmapped > 0
                 ? `${unmapped} conta(s) ativa(s) ainda precisam ser vinculadas ou desativadas.`
                 : !structuresReady
-                  ? "Revalide as BMs e confirme contas e destinos antes da ativacao."
-                  : "A revisao esta completa. O destino principal continua valendo ate a ativacao."}
+                  ? "Revalide as BMs e confirme contas e destinos antes da ativação."
+                  : "A revisão está completa. O destino principal continua valendo até a ativação."}
           </small>
         </span>
         {canManage ? (
@@ -2292,20 +2292,20 @@ export function MetaManualConnectionPanel({
           <span className="meta-manual-entry-copy">
             <span className="micro-label">
               {oauthMode
-                ? "Configuracao avancada OAuth"
+                ? "Configuração avançada OAuth"
                 : "Outra forma de conectar"}
             </span>
             <strong>
               {oauthMode
-                ? "Vincular Pixel e Pagina por BM"
+                ? "Vincular Pixel e Página por BM"
                 : "Usar token permanente"}
             </strong>
             <span className="muted">
               {oauthMode
-                ? "Associe cada BM e suas contas ao destino de conversao correto."
+                ? "Associe cada BM e suas contas ao destino de conversão correto."
                 : palmupReady
-                  ? "Entre com o Facebook pela PalmUP ou cole o token de usuario do sistema."
-                  : "Para estruturas operadas por token de usuario do sistema."}
+                  ? "Entre com o Facebook pela PalmUP ou cole o token de usuário do sistema."
+                  : "Para estruturas operadas por token de usuário do sistema."}
             </span>
           </span>
           <span className="meta-manual-entry-action">
@@ -2327,8 +2327,8 @@ export function MetaManualConnectionPanel({
               <div>
                 <span className="eyebrow">
                   {oauthMode
-                    ? "Login social com multiplos destinos"
-                    : "Conexao por token"}
+                    ? "Login social com múltiplos destinos"
+                    : "Conexão por token"}
                 </span>
                 <h3>
                   {editingConnectionId
@@ -2340,7 +2340,7 @@ export function MetaManualConnectionPanel({
               </div>
               <div
                 className="segmented-control"
-                aria-label="Tipo de configuracao"
+                aria-label="Tipo de configuração"
               >
                 <button
                   type="button"
@@ -2348,7 +2348,7 @@ export function MetaManualConnectionPanel({
                   aria-pressed={setupMode === "quick"}
                   onClick={() => setSetupMode("quick")}
                 >
-                  Rapida
+                  Rápida
                 </button>
                 <button
                   type="button"
@@ -2356,12 +2356,12 @@ export function MetaManualConnectionPanel({
                   aria-pressed={setupMode === "advanced"}
                   onClick={() => setSetupMode("advanced")}
                 >
-                  Avancada
+                  Avançada
                 </button>
               </div>
             </div>
 
-            <ol className="meta-setup-steps" aria-label="Etapas da conexao">
+            <ol className="meta-setup-steps" aria-label="Etapas da conexão">
               <SetupStep
                 active={!credentialId}
                 done={Boolean(credentialId)}
@@ -2385,7 +2385,7 @@ export function MetaManualConnectionPanel({
               <SetupStep
                 active={readyToActivate}
                 done={false}
-                label="Revisao"
+                label="Revisão"
               />
             </ol>
 
@@ -2415,7 +2415,7 @@ export function MetaManualConnectionPanel({
                     ariaLabel="Credencial Meta"
                     placeholder={
                       oauthMode
-                        ? "Escolher autorizacao OAuth"
+                        ? "Escolher autorização OAuth"
                         : "Escolher token salvo"
                     }
                     presentationPlaceholder="Credencial oculta"
@@ -2434,8 +2434,8 @@ export function MetaManualConnectionPanel({
                     {pendingAction === "credential"
                       ? "Validando..."
                       : (configuration?.credentials.length ?? 0) > 0
-                        ? "Atualizar autorizacao"
-                        : "Usar autorizacao OAuth"}
+                        ? "Atualizar autorização"
+                        : "Usar autorização OAuth"}
                   </button>
                 ) : (
                   <>
@@ -2458,7 +2458,7 @@ export function MetaManualConnectionPanel({
                       />
                     </label>
                     <label>
-                      <span>Token do usuario do sistema</span>
+                      <span>Token do usuário do sistema</span>
                       <input
                         name="accessToken"
                         type="password"
@@ -2484,8 +2484,8 @@ export function MetaManualConnectionPanel({
                 )}
                 <p className="action-note">
                   {oauthMode
-                    ? "A autorizacao atual e reutilizada sem exibir o token. Salvar BMs nao altera a rota ate a ativacao final."
-                    : "Depois de salvo, o token nao pode ser visualizado. Uma troca exige informar o novo token e validar novamente toda a conexao."}
+                    ? "A autorização atual é reutilizada sem exibir o token. Salvar BMs não altera a rota até a ativação final."
+                    : "Depois de salvo, o token não pode ser visualizado. Uma troca exige informar o novo token é validar novamente toda a conexão."}
                 </p>
               </section>
 
@@ -2494,7 +2494,7 @@ export function MetaManualConnectionPanel({
                   <Building2 size={17} />
                   <div>
                     <span className="micro-label">2. Estrutura anunciante</span>
-                    <strong>BM e contas de anuncio</strong>
+                    <strong>BM e contas de anúncio</strong>
                   </div>
                 </div>
                 <SearchableSelect
@@ -2515,11 +2515,11 @@ export function MetaManualConnectionPanel({
                 {showBusinessLookup ? (
                   <div className="meta-direct-asset-entry">
                     <div>
-                      <span className="micro-label">BM nao enumerada</span>
+                      <span className="micro-label">BM não enumerada</span>
                       <p className="muted">
                         {oauthMode
-                          ? "Informe o ID da BM acessivel pela autorizacao Meta."
-                          : "Informe o ID da BM vinculada ao usuario do sistema."}
+                          ? "Informe o ID da BM acessível pela autorização Meta."
+                          : "Informe o ID da BM vinculada ao usuário do sistema."}
                       </p>
                     </div>
                     <form
@@ -2576,7 +2576,7 @@ export function MetaManualConnectionPanel({
                           />
                           <span>
                             <strong>
-                              <PresentationMask placeholder="Conta de anuncios oculta">
+                              <PresentationMask placeholder="Conta de anúncios oculta">
                                 {account.name}
                               </PresentationMask>
                             </strong>
@@ -2595,9 +2595,9 @@ export function MetaManualConnectionPanel({
                       {pendingAction === "assets"
                         ? "Consultando ativos..."
                         : businessId
-                          ? "A Meta nao listou contas para esta BM. Informe os IDs abaixo."
+                          ? "A Meta não listou contas para esta BM. Informe os IDs abaixo."
                           : oauthMode
-                            ? "Escolha a autorizacao e uma BM para carregar as contas."
+                            ? "Escolha a autorização e uma BM para carregar as contas."
                             : "Escolha um token e uma BM para carregar as contas."}
                     </p>
                   )}
@@ -2639,7 +2639,7 @@ export function MetaManualConnectionPanel({
                     onSubmit={handleDirectAccounts}
                   >
                     <label>
-                      <span>IDs das contas de anuncio</span>
+                      <span>IDs das contas de anúncio</span>
                       <textarea
                         value={directAccountIds}
                         onChange={(event) =>
@@ -2670,7 +2670,7 @@ export function MetaManualConnectionPanel({
                   <Database size={17} />
                   <div>
                     <span className="micro-label">3. Destino CAPI</span>
-                    <strong>Pixel/Dataset e Pagina</strong>
+                    <strong>Pixel/Dataset e Página</strong>
                   </div>
                 </div>
                 {setupMode === "advanced" ? (
@@ -2739,7 +2739,7 @@ export function MetaManualConnectionPanel({
                       />
                     </label>
                     <label>
-                      <span>ID da Pagina Facebook</span>
+                      <span>ID da Página Facebook</span>
                       <input
                         value={directPageId}
                         onChange={(event) =>
@@ -2750,7 +2750,7 @@ export function MetaManualConnectionPanel({
                       />
                     </label>
                     <label>
-                      <span>BM proprietaria dos ativos</span>
+                      <span>BM proprietária dos ativos</span>
                       <input
                         value={ownerBusinessManagerId}
                         onChange={(event) =>
@@ -2787,9 +2787,9 @@ export function MetaManualConnectionPanel({
                         description: page.id,
                       }))}
                       onValueChange={setPageId}
-                      ariaLabel="Pagina Facebook"
-                      placeholder="Escolher Pagina"
-                      presentationPlaceholder="Pagina oculta"
+                      ariaLabel="Página Facebook"
+                      placeholder="Escolher Página"
+                      presentationPlaceholder="Página oculta"
                       disabled={!businessId}
                       sensitive
                     />
@@ -2801,8 +2801,8 @@ export function MetaManualConnectionPanel({
                 <div className="meta-setup-heading">
                   <CircleCheck size={17} />
                   <div>
-                    <span className="micro-label">4. Revisao</span>
-                    <strong>Ativar conexao</strong>
+                    <span className="micro-label">4. Revisão</span>
+                    <strong>Ativar conexão</strong>
                   </div>
                 </div>
                 <dl className="meta-review-list">
@@ -2854,10 +2854,10 @@ export function MetaManualConnectionPanel({
                     <Link2 size={16} />
                     {pendingAction === "activate"
                       ? editingConnectionId
-                        ? "Salvando alteracoes..."
+                        ? "Salvando alterações..."
                         : "Validando estrutura..."
                       : editingConnectionId
-                        ? "Salvar alteracoes"
+                        ? "Salvar alterações"
                         : "Validar e ativar"}
                   </button>
                 </form>
@@ -2946,14 +2946,14 @@ export function MetaManualConnectionPanel({
               <span className="micro-label">Remover estrutura Meta</span>
               <h3>
                 <PresentationMask placeholder="Business Manager oculto">
-                  {removingConnection?.businessManagerName ?? "Conexao"}
+                  {removingConnection?.businessManagerName ?? "Conexão"}
                 </PresentationMask>
               </h3>
             </div>
             <button
               className="meta-dialog-close"
               type="button"
-              aria-label="Fechar confirmacao"
+              aria-label="Fechar confirmação"
               title="Fechar"
               onClick={closeRemovalDialog}
               disabled={pendingAction?.startsWith("remove:")}
@@ -2967,8 +2967,8 @@ export function MetaManualConnectionPanel({
               <div>
                 <strong>Esta BM deixara de sincronizar</strong>
                 <p>
-                  As contas serao desativadas. Relatorios, eventos e auditorias
-                  historicos permanecem preservados.
+                  As contas serão desativadas. Relatórios, eventos e auditorias
+                  históricos permanecem preservados.
                 </p>
               </div>
             </div>
@@ -3052,10 +3052,10 @@ function statusLabel(status: string) {
     configured: "Configurado",
     pending: "Pendente",
     paused: "Pausada",
-    validation_required: "Requer validacao",
+    validation_required: "Requer validação",
     token_expired: "Token expirado",
-    missing_permission: "Permissao ausente",
-    destination_invalid: "Destino invalido",
+    missing_permission: "Permissão ausente",
+    destination_invalid: "Destino inválido",
     expired: "Expirado",
     revoked: "Revogado",
     error: "Erro",
@@ -3078,7 +3078,7 @@ function syncStatusLabel(status: string) {
 function adRouteStatusLabel(status: string) {
   const labels: Record<string, string> = {
     assigned: "Destino resolvido",
-    ambiguous: "Multiplas correspondencias",
+    ambiguous: "Múltiplas correspondências",
     unresolved: "Destino pendente",
   };
 
@@ -3093,12 +3093,12 @@ function accountSyncDetail(
   }
 
   if (account.lastSyncSince && account.lastSyncUntil) {
-    return `Periodo importado: ${account.lastSyncSince} a ${account.lastSyncUntil}`;
+    return `Período importado: ${account.lastSyncSince} a ${account.lastSyncUntil}`;
   }
 
   if (account.syncStatus === "syncing") {
-    return "Importacao em andamento";
+    return "Importação em andamento";
   }
 
-  return "Aguardando a primeira importacao de Insights";
+  return "Aguardando a primeira importação de Insights";
 }

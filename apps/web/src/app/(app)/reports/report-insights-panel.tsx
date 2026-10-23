@@ -62,17 +62,17 @@ const levelCopy: Record<
     singular: "conjunto",
   },
   ads: {
-    none: "Nenhum anuncio",
-    plural: "anuncios",
-    pluralTitle: "Anuncios",
-    singular: "anuncio",
+    none: "Nenhum anúncio",
+    plural: "anúncios",
+    pluralTitle: "Anúncios",
+    singular: "anúncio",
   },
 };
 
 const namePlaceholders: Record<ReportInsightLevel, string> = {
   campaigns: "Campanha oculta",
   adsets: "Conjunto oculto",
-  ads: "Anuncio oculto",
+  ads: "Anúncio oculto",
 };
 
 function countLabel(count: number, singular: string, plural: string) {
@@ -163,7 +163,7 @@ function InsightItem({
             </span>
           ) : null}
           <small>
-            Posicao {item.position} de{" "}
+            Posição {item.position} de{" "}
             {countLabel(totalItems, copy.singular, copy.plural)} no filtro
           </small>
         </div>
@@ -183,7 +183,7 @@ function InsightItem({
           <dt>Custo por resultado</dt>
           <dd>
             {item.costCents === null ? (
-              <span title="Custo indisponivel">-</span>
+              <span title="Custo indisponível">-</span>
             ) : (
               formatReportInsightMoney(item.costCents, item.row.currency)
             )}
@@ -231,8 +231,8 @@ function InsightRanking({
     kind === "volume" ? `Maior volume de ${label}` : `Menor custo por ${label}`;
   const order =
     kind === "volume"
-      ? `Ordem da API: ${label} do maior para o menor. Itens com 0 ${label} nao entram neste ranking.`
-      : `Ordem da API: custo por resultado do menor para o maior. ${copy.pluralTitle} sem ${label} nao tem custo calculavel e ficam fora deste ranking.`;
+      ? `Ordem da API: ${label} do maior para o menor. Itens com 0 ${label} não entram neste ranking.`
+      : `Ordem da API: custo por resultado do menor para o maior. ${copy.pluralTitle} sem ${label} não tem custo calculável e ficam fora deste ranking.`;
 
   if (fetch.state === "error") {
     return (
@@ -242,7 +242,7 @@ function InsightRanking({
         </header>
         <InsightState
           tone="warn"
-          title="Nao foi possivel carregar o ranking"
+          title="Não foi possível carregar o ranking"
           message="Confira a API e tente novamente. Nenhum valor foi presumido como zero."
         />
       </section>
@@ -279,13 +279,13 @@ function InsightRanking({
         </ol>
       ) : kind === "volume" ? (
         <InsightState
-          title={`${copy.none} registrou ${label} no periodo`}
+          title={`${copy.none} registrou ${label} no período`}
           message={`O total do filtro e 0 ${label}.`}
         />
       ) : (
         <InsightState
-          title="Sem custo calculavel"
-          message={`${copy.none} tem ${label} no periodo; custo por resultado indisponivel.`}
+          title="Sem custo calculável"
+          message={`${copy.none} tem ${label} no período; custo por resultado indisponível.`}
         />
       )}
       <Link
@@ -352,7 +352,7 @@ function InsightTotals({
           {mixedCurrency
             ? "Moedas diferentes"
             : costCents === null
-              ? "Custo indisponivel"
+              ? "Custo indisponível"
               : "Media do filtro"}
         </small>
       </article>
@@ -372,23 +372,23 @@ function InsightMethod({ zeroSpend }: { zeroSpend: string }) {
       <ul>
         <li>
           <strong>Amostra insuficiente:</strong> menos de{" "}
-          {REPORT_INSIGHT_MIN_SAMPLE} resultados no periodo. O item continua no
-          ranking, mas a posicao e instavel.
+          {REPORT_INSIGHT_MIN_SAMPLE} resultados no período. O item continua no
+          ranking, mas a posição é instável.
         </li>
         <li>
-          <strong>Concentracao:</strong> item com{" "}
+          <strong>Concentração:</strong> item com{" "}
           {Math.round(REPORT_INSIGHT_SHARE_THRESHOLD * 100)}% ou mais do volume
           do filtro.
         </li>
         <li>
-          <strong>Custo vs. media:</strong> diferenca de{" "}
+          <strong>Custo vs. media:</strong> diferença de{" "}
           {Math.round(REPORT_INSIGHT_COST_DELTA_THRESHOLD * 100)}% ou mais em
-          relacao ao custo por resultado do filtro inteiro. Nao e calculado com
+          relação ao custo por resultado do filtro inteiro. Não é calculado com
           amostra insuficiente.
         </li>
         <li>
-          <strong>Sem investimento:</strong> gasto {zeroSpend} no periodo. Custo
-          zero nao e eficiencia.
+          <strong>Sem investimento:</strong> gasto {zeroSpend} no período. Custo
+          zero não é eficiência.
         </li>
         <li>
           <strong>Empate:</strong> mesmo valor de um item vizinho. A API
@@ -396,8 +396,8 @@ function InsightMethod({ zeroSpend }: { zeroSpend: string }) {
         </li>
       </ul>
       <p>
-        Sinais deterministicos e heuristicos, calculados somente com os numeros
-        exibidos. Nao indicam causa nem garantem resultado futuro. Nenhuma acao
+        Sinais determinísticos e heurísticos, calculados somente com os números
+        exibidos. Não indicam causa nem garantem resultado futuro. Nenhuma ação
         e executada automaticamente.
       </p>
     </details>
@@ -448,7 +448,7 @@ export function ReportInsightsPanel({
     body = (
       <InsightState
         tone="warn"
-        title="Nao foi possivel carregar o ranking"
+        title="Não foi possível carregar o ranking"
         message="Confira a API antes de analisar os insights. Nenhum valor foi presumido como zero."
       />
     );
@@ -456,15 +456,15 @@ export function ReportInsightsPanel({
     body = (
       <InsightState
         title={`${copy.none} no filtro atual`}
-        message="Ajuste o periodo ou os filtros. Sem dados sincronizados, use Sincronizar Meta."
+        message="Ajuste o período ou os filtros. Sem dados sincronizados, use Sincronizar Meta."
       />
     );
   } else if (!tracked) {
     body = (
       <InsightState
         tone="warn"
-        title={`${label} ainda nao e rastreado neste filtro`}
-        message="O workspace nao tem configuracao nem eventos desta etapa no periodo. Os rankings ficam indisponiveis, o que nao equivale a zero."
+        title={`${label} ainda não é rastreado neste filtro`}
+        message="O workspace não tem configuração nem eventos desta etapa no período. Os rankings ficam indisponíveis, o que não equivale a zero."
       />
     );
   } else {
@@ -480,11 +480,11 @@ export function ReportInsightsPanel({
           />
         ) : null}
         <p className="report-insight-basis">
-          Posicoes calculadas pela API sobre{" "}
+          Posições calculadas pela API sobre{" "}
           {countLabel(totalItems, copy.singular, copy.plural)} do filtro atual
-          (periodo, contas, busca, status e selecao), antes da paginacao. A
-          pagina da tabela nao e usada para ranquear; aqui aparecem ate{" "}
-          {REPORT_INSIGHT_TOP_N} posicoes.
+          (período, contas, busca, status e seleção), antes da paginação. A
+          página da tabela não é usada para ranquear; aqui aparecem até{" "}
+          {REPORT_INSIGHT_TOP_N} posições.
         </p>
         <div className="report-insight-grid">
           <InsightRanking
@@ -514,7 +514,7 @@ export function ReportInsightsPanel({
 
   return (
     <section
-      aria-label="Insights do relatorio"
+      aria-label="Insights do relatório"
       className="report-results-overview report-insights"
     >
       <div className="report-results-heading">

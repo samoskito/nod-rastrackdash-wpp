@@ -190,7 +190,7 @@ export function MetaConversionDestinationForm({
           description: business.id,
         }))}
         onValueChange={handleBusinessChange}
-        ariaLabel="Business Manager do destino de conversao"
+        ariaLabel="Business Manager do destino de conversão"
         placeholder="Buscar BM"
         presentationPlaceholder="BM oculto"
         disabled={isLoadingBusinessAssets}
@@ -205,7 +205,7 @@ export function MetaConversionDestinationForm({
           description: pixel.id,
         }))}
         onValueChange={setPixelId}
-        ariaLabel="Pixel do destino de conversao"
+        ariaLabel="Pixel do destino de conversão"
         placeholder="Buscar Pixel"
         presentationPlaceholder="Pixel oculto"
         disabled={isLoadingBusinessAssets}
@@ -220,16 +220,16 @@ export function MetaConversionDestinationForm({
           description: page.id,
         }))}
         onValueChange={setPageId}
-        ariaLabel="Pagina Facebook principal"
-        placeholder="Buscar pagina"
-        presentationPlaceholder="Pagina oculta"
+        ariaLabel="Página Facebook principal"
+        placeholder="Buscar página"
+        presentationPlaceholder="Página oculta"
         disabled={isLoadingBusinessAssets}
         sensitive
       />
       <SubmitButton
         disabled={isLoadingBusinessAssets || !businessId || !pixelId || !pageId}
         pendingLabel="Salvando destino..."
-        statusText="Salvando Pixel e pagina principal."
+        statusText="Salvando Pixel e página principal."
       >
         {isLoadingBusinessAssets ? "Carregando ativos" : "Salvar destino"}
       </SubmitButton>

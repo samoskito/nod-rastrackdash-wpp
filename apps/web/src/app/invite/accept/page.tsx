@@ -56,9 +56,9 @@ export default async function WorkspaceInviteAcceptPage({
               W
             </span>
             <p className="eyebrow">Convite de workspace</p>
-            <h1 id="invite-title">Convite indisponivel</h1>
+            <h1 id="invite-title">Convite indisponível</h1>
             <p>
-              Este link e invalido, expirou, foi revogado ou ja foi utilizado.
+              Este link é inválido, expirou, foi revogado ou já foi utilizado.
             </p>
           </div>
           <div className="login-form">
@@ -94,7 +94,7 @@ export default async function WorkspaceInviteAcceptPage({
               <strong>{inspection.workspaceName}</strong>
             </div>
             <div className="quality-card">
-              <span className="micro-label">Nivel de acesso</span>
+              <span className="micro-label">Nível de acesso</span>
               <strong>{roleLabel(inspection.role)}</strong>
             </div>
           </div>

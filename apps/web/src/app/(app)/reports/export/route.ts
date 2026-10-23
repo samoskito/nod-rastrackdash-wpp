@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
   if (!response.ok) {
     return NextResponse.json(
-      { message: "Nao foi possivel exportar relatorios" },
+      { message: "Não foi possível exportar relatórios" },
       { status: response.status },
     );
   }

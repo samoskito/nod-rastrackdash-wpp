@@ -23,22 +23,22 @@ const destinations: Array<{
     href: "/backoffice/inbound-webhooks",
     icon: Webhook,
     label: "Webhooks WhatsApp",
-    meta: "Observacao de provedores",
+    meta: "Observação de provedores",
   },
   {
     description:
-      "Crie workspaces, gerencie responsaveis e acompanhe conectores dos clientes.",
+      "Crie workspaces, gerencie responsáveis e acompanhe conectores dos clientes.",
     href: "/backoffice/clients",
     icon: UsersRound,
     label: "Clientes e acessos",
     meta: "Contas da plataforma",
   },
   {
-    description: "Consulte o status somente leitura da licenca local.",
+    description: "Consulte o status somente leitura da licença local.",
     href: "/backoffice/license",
     icon: ShieldCheck,
     label: "Licença",
-    meta: "Status da instancia",
+    meta: "Status da instância",
   },
 ];
 
@@ -53,9 +53,9 @@ export function BackofficeHome({
 
       <header className="page-header">
         <div>
-          <span className="eyebrow">Operacao da plataforma</span>
+          <span className="eyebrow">Operação da plataforma</span>
           <h1>Central do backoffice</h1>
-          <p>Escolha uma area para trabalhar sem misturar dados e filtros.</p>
+          <p>Escolha uma área para trabalhar sem misturar dados e filtros.</p>
         </div>
         <span className="status-chip">
           <Wrench aria-hidden="true" size={14} strokeWidth={2} />
@@ -68,8 +68,8 @@ export function BackofficeHome({
       <section className="backoffice-command-section">
         <div className="section-heading-row">
           <div>
-            <span className="eyebrow">Areas de trabalho</span>
-            <h2>O que voce precisa fazer?</h2>
+            <span className="eyebrow">Áreas de trabalho</span>
+            <h2>O que você precisa fazer?</h2>
           </div>
         </div>
 

@@ -11,10 +11,10 @@ export function InboundProviderConversionRecoveryButton() {
       className="button ghost compact-button inbound-replay-link"
       type="submit"
       disabled={pending}
-      title="Ler novamente este payload e recuperar conversoes ausentes"
+      title="Ler novamente este payload e recuperar conversões ausentes"
     >
       <RotateCcw aria-hidden="true" size={16} strokeWidth={2} />
-      {pending ? "Reprocessando..." : "Reprocessar conversao"}
+      {pending ? "Reprocessando..." : "Reprocessar conversão"}
     </button>
   );
 }

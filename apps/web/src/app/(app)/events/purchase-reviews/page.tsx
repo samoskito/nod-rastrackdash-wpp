@@ -91,28 +91,28 @@ export default async function PurchaseReviewsPage({
       <header className="page-header audit-page-header">
         <div>
           <span className="eyebrow">Eventos Meta</span>
-          <h1>Auditoria de conversoes</h1>
+          <h1>Auditoria de conversões</h1>
           <p>
             Revise compras reconhecidas antes do envio e corrija valores do
-            painel com historico.
+            painel com histórico.
           </p>
         </div>
         <span
           className={data?.pendingCount ? "status-chip warn" : "status-chip"}
         >
           {data
-            ? `${data.pendingCount} aguardando decisao`
-            : "API indisponivel"}
+            ? `${data.pendingCount} aguardando decisão`
+            : "API indisponível"}
         </span>
       </header>
 
       <nav
         className="report-view-tabs audit-view-tabs"
-        aria-label="Visoes de eventos Meta"
+        aria-label="Visões de eventos Meta"
       >
-        <Link href="/events">Conversoes</Link>
+        <Link href="/events">Conversões</Link>
         <Link className="active" href="/events/purchase-reviews">
-          Revisao de compras
+          Revisão de compras
         </Link>
       </nav>
 
@@ -125,11 +125,11 @@ export default async function PurchaseReviewsPage({
             <ShoppingCart aria-hidden="true" size={18} />
             <span>
               <strong>Fila operacional</strong>
-              <small>{pagination.totalItems} compra(s) no periodo</small>
+              <small>{pagination.totalItems} compra(s) no período</small>
             </span>
           </div>
           <label className="filter-field">
-            <span>Inicio</span>
+            <span>Início</span>
             <input
               className="input-field"
               defaultValue={since}
@@ -147,10 +147,10 @@ export default async function PurchaseReviewsPage({
             />
           </label>
           <label className="filter-field">
-            <span>Visualizacao</span>
+            <span>Visualização</span>
             <select className="filter-control" defaultValue={view} name="view">
-              <option value="actionable">Pendencias</option>
-              <option value="history">Historico concluido</option>
+              <option value="actionable">Pendências</option>
+              <option value="history">Histórico concluído</option>
               <option value="all">Todas</option>
             </select>
           </label>
@@ -162,7 +162,7 @@ export default async function PurchaseReviewsPage({
               name="status"
             >
               <option value="">Todos</option>
-              <option value="review_required">Revisao necessaria</option>
+              <option value="review_required">Revisão necessária</option>
               <option value="awaiting_data">Aguardando dados</option>
               <option value="recognized">Reconhecidas</option>
               <option value="approved">Na fila</option>
@@ -205,19 +205,19 @@ export default async function PurchaseReviewsPage({
         />
       ) : (
         <div className="surface-panel purchase-review-empty">
-          <strong>Nao foi possivel carregar a revisao</strong>
+          <strong>Não foi possível carregar a revisão</strong>
           <span>
-            A API nao respondeu. Atualize a pagina depois de conferir o deploy.
+            A API não respondeu. Atualize a página depois de conferir o deploy.
           </span>
         </div>
       )}
 
       <nav
         className="report-pagination"
-        aria-label="Paginacao da revisao de compras"
+        aria-label="Paginação da revisão de compras"
       >
         <span>
-          Pagina {pagination.page} de {Math.max(pagination.totalPages, 1)} /{" "}
+          Página {pagination.page} de {Math.max(pagination.totalPages, 1)} /{" "}
           {pagination.totalItems} compras
         </span>
         <div>
@@ -236,10 +236,10 @@ export default async function PurchaseReviewsPage({
               className="button ghost"
               href={`/events/purchase-reviews?${new URLSearchParams({ ...Object.fromEntries(query), page: String(pagination.page + 1) })}`}
             >
-              Proxima
+              Próxima
             </Link>
           ) : (
-            <span className="button ghost disabled">Proxima</span>
+            <span className="button ghost disabled">Próxima</span>
           )}
         </div>
       </nav>

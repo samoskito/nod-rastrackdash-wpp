@@ -21,7 +21,7 @@ type ReportBudget = NonNullable<CampaignReportRowDto["budget"]>;
 const levelCopy: Record<MetaLevel, { article: string; label: string }> = {
   campaign: { article: "a", label: "campanha" },
   adset: { article: "o", label: "conjunto" },
-  ad: { article: "o", label: "anuncio" },
+  ad: { article: "o", label: "anúncio" },
 };
 
 const currencyAmountLabels: Record<CurrencyCode, string> = {
@@ -36,7 +36,7 @@ function statusLabel(status: string): string {
     ADSET_PAUSED: "Conjunto pausado",
     ARCHIVED: "Arquivado",
     CAMPAIGN_PAUSED: "Campanha pausada",
-    DELETED: "Excluido",
+    DELETED: "Excluído",
     IN_PROCESS: "Em processamento",
     PAUSED: "Pausado",
     WITH_ISSUES: "Com problemas",
@@ -132,10 +132,10 @@ export function MetaEntityControls({
         {budget ? (
           budgetIsEditable ? (
             <button
-              aria-label={`Alterar orcamento d${copy.article} ${copy.label} ${name}`}
+              aria-label={`Alterar orçamento d${copy.article} ${copy.label} ${name}`}
               className="meta-budget-control"
               onClick={() => budgetDialogRef.current?.showModal()}
-              title="Alterar orcamento"
+              title="Alterar orçamento"
               type="button"
             >
               <Wallet aria-hidden="true" size={13} strokeWidth={2} />
@@ -146,7 +146,7 @@ export function MetaEntityControls({
               className="meta-budget-control readonly"
               title={
                 budget.owner === "campaign" && level === "adset"
-                  ? "Orcamento controlado pela campanha"
+                  ? "Orçamento controlado pela campanha"
                   : undefined
               }
             >
@@ -162,7 +162,7 @@ export function MetaEntityControls({
         ) : level === "campaign" ? (
           <span className="meta-budget-control readonly">
             <Wallet aria-hidden="true" size={13} strokeWidth={2} />
-            Orcamento nos conjuntos
+            Orçamento nos conjuntos
           </span>
         ) : null}
       </div>
@@ -171,7 +171,7 @@ export function MetaEntityControls({
         <dialog className="meta-action-dialog" ref={statusDialogRef}>
           <div className="meta-action-dialog-header">
             <div>
-              <span className="micro-label">Confirmar alteracao</span>
+              <span className="micro-label">Confirmar alteração</span>
               <h3>
                 {statusVerb} {copy.label}?
               </h3>
@@ -193,7 +193,7 @@ export function MetaEntityControls({
                   ? "Campanha oculta"
                   : level === "adset"
                     ? "Conjunto oculto"
-                    : "Anuncio oculto"
+                    : "Anúncio oculto"
               }
             >
               {name}
@@ -224,7 +224,7 @@ export function MetaEntityControls({
               <SubmitButton
                 className={`button${isActive ? " danger" : " primary"}`}
                 pendingLabel="Salvando..."
-                statusText="Enviando alteracao para a Meta."
+                statusText="Enviando alteração para a Meta."
               >
                 {isActive ? (
                   <Pause aria-hidden="true" size={15} />
@@ -242,9 +242,9 @@ export function MetaEntityControls({
         <dialog className="meta-action-dialog" ref={budgetDialogRef}>
           <div className="meta-action-dialog-header">
             <div>
-              <span className="micro-label">Orcamento Meta</span>
+              <span className="micro-label">Orçamento Meta</span>
               <h3>
-                Alterar valor {budget.type === "daily" ? "diario" : "total"}
+                Alterar valor {budget.type === "daily" ? "diário" : "total"}
               </h3>
             </div>
             <button
@@ -264,7 +264,7 @@ export function MetaEntityControls({
                   ? "Campanha oculta"
                   : level === "adset"
                     ? "Conjunto oculto"
-                    : "Anuncio oculto"
+                    : "Anúncio oculto"
               }
             >
               {name}
@@ -311,10 +311,10 @@ export function MetaEntityControls({
               <SubmitButton
                 className="button primary"
                 pendingLabel="Salvando..."
-                statusText="Enviando novo orcamento para a Meta."
+                statusText="Enviando novo orçamento para a Meta."
               >
                 <Wallet aria-hidden="true" size={15} />
-                Salvar orcamento
+                Salvar orçamento
               </SubmitButton>
             </div>
           </BackofficeActionForm>

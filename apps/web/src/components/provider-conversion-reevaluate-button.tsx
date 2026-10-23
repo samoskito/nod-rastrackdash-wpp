@@ -11,10 +11,10 @@ export function ProviderConversionReevaluateButton() {
       className="button ghost compact-button"
       type="submit"
       disabled={pending}
-      title="Recalcular esta decisao com as regras e o catalogo atuais"
+      title="Recalcular esta decisão com as regras e o catálogo atuais"
     >
       <ScanSearch aria-hidden="true" size={16} strokeWidth={2} />
-      {pending ? "Reavaliando..." : "Reavaliar decisao"}
+      {pending ? "Reavaliando..." : "Reavaliar decisão"}
     </button>
   );
 }

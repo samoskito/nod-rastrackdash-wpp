@@ -139,16 +139,16 @@ function workspaceRoleDescription(
   canManageMembers = false,
 ): string {
   if (role === "owner") {
-    return "Equipe, integracoes e cobranca";
+    return "Equipe, integrações e cobrança";
   }
 
   if (role === "admin") {
     return canManageMembers
-      ? "Operacao, integracoes e gestao da equipe"
-      : "Operacao e integracoes";
+      ? "Operação, integrações e gestão da equipe"
+      : "Operação e integrações";
   }
 
-  return "Leads e relatorios";
+  return "Leads e relatórios";
 }
 
 function initials(name: string | null, email: string): string {
@@ -351,7 +351,7 @@ async function saveFunnelConfiguration(
 
     return settingsActionState("success", "Jornada do funil atualizada.");
   } catch {
-    return settingsActionState("error", "Nao foi possivel salvar o funil.");
+    return settingsActionState("error", "Não foi possível salvar o funil.");
   }
 }
 
@@ -385,7 +385,7 @@ async function createWorkspaceInvite(
       acceptUrl: invite.acceptUrl,
     };
   } catch {
-    return settingsActionState("error", "Nao foi possivel criar o convite.");
+    return settingsActionState("error", "Não foi possível criar o convite.");
   }
 }
 
@@ -399,7 +399,7 @@ async function updateWorkspaceMemberRole(
   const role = String(formData.get("role") ?? "member");
 
   if (!memberId) {
-    return settingsActionState("error", "Membro nao identificado.");
+    return settingsActionState("error", "Membro não identificado.");
   }
 
   try {
@@ -408,9 +408,9 @@ async function updateWorkspaceMemberRole(
       body: JSON.stringify({ role }),
     });
     revalidatePath("/settings");
-    return settingsActionState("success", "Nivel de acesso atualizado.");
+    return settingsActionState("success", "Nível de acesso atualizado.");
   } catch {
-    return settingsActionState("error", "Nao foi possivel alterar o acesso.");
+    return settingsActionState("error", "Não foi possível alterar o acesso.");
   }
 }
 
@@ -424,7 +424,7 @@ async function updateWorkspaceMemberManager(
   const canManageMembers = formData.get("canManageMembers") === "on";
 
   if (!memberId) {
-    return settingsActionState("error", "Membro nao identificado.");
+    return settingsActionState("error", "Membro não identificado.");
   }
 
   try {
@@ -436,11 +436,11 @@ async function updateWorkspaceMemberManager(
       },
     );
     revalidatePath("/settings");
-    return settingsActionState("success", "Gestao da equipe atualizada.");
+    return settingsActionState("success", "Gestão da equipe atualizada.");
   } catch {
     return settingsActionState(
       "error",
-      "Nao foi possivel alterar a gestao da equipe.",
+      "Não foi possível alterar a gestão da equipe.",
     );
   }
 }
@@ -454,7 +454,7 @@ async function removeWorkspaceMember(
   const memberId = String(formData.get("memberId") ?? "").trim();
 
   if (!memberId) {
-    return settingsActionState("error", "Membro nao identificado.");
+    return settingsActionState("error", "Membro não identificado.");
   }
 
   try {
@@ -464,7 +464,7 @@ async function removeWorkspaceMember(
     revalidatePath("/settings");
     return settingsActionState("success", "Membro removido do workspace.");
   } catch {
-    return settingsActionState("error", "Nao foi possivel remover o membro.");
+    return settingsActionState("error", "Não foi possível remover o membro.");
   }
 }
 
@@ -477,7 +477,7 @@ async function resendWorkspaceInvite(
   const inviteId = String(formData.get("inviteId") ?? "").trim();
 
   if (!inviteId) {
-    return settingsActionState("error", "Convite nao identificado.");
+    return settingsActionState("error", "Convite não identificado.");
   }
 
   try {
@@ -494,7 +494,7 @@ async function resendWorkspaceInvite(
       acceptUrl: invite.acceptUrl,
     };
   } catch {
-    return settingsActionState("error", "Nao foi possivel renovar o convite.");
+    return settingsActionState("error", "Não foi possível renovar o convite.");
   }
 }
 
@@ -507,7 +507,7 @@ async function revokeWorkspaceInvite(
   const inviteId = String(formData.get("inviteId") ?? "").trim();
 
   if (!inviteId) {
-    return settingsActionState("error", "Convite nao identificado.");
+    return settingsActionState("error", "Convite não identificado.");
   }
 
   try {
@@ -517,7 +517,7 @@ async function revokeWorkspaceInvite(
     revalidatePath("/settings");
     return settingsActionState("success", "Convite revogado.");
   } catch {
-    return settingsActionState("error", "Nao foi possivel revogar o convite.");
+    return settingsActionState("error", "Não foi possível revogar o convite.");
   }
 }
 
@@ -594,9 +594,9 @@ export default async function SettingsPage() {
     opsAlertSettings.settings ?? opsAlertSettingsDefaults;
   const opsAlertStatusLabel =
     opsAlertSettings.state === "forbidden"
-      ? "Sem permissao"
+      ? "Sem permissão"
       : opsAlertSettings.state === "error"
-        ? "Indisponivel"
+        ? "Indisponível"
         : opsAlertFormValues.enabled
           ? "Ativado"
           : "Desativado";
@@ -610,7 +610,7 @@ export default async function SettingsPage() {
     ? "Suporte da plataforma"
     : workspace
       ? workspaceRoleLabel(workspace.role)
-      : "Acesso indisponivel";
+      : "Acesso indisponível";
   const currentAccessDescription = isPlatformSupport
     ? "Acesso interno ao workspace do cliente"
     : workspace
@@ -618,16 +618,16 @@ export default async function SettingsPage() {
           workspace.role,
           workspace.permissions.canManageMembers,
         )
-      : "Nao foi possivel consultar as permissoes";
+      : "Não foi possível consultar as permissões";
 
   return (
     <section className="page-stack page-standard settings-page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Configuracoes</span>
-          <h1>Central de configuracoes</h1>
+          <span className="eyebrow">Configurações</span>
+          <h1>Central de configurações</h1>
           <p>
-            Identidade, equipe e automacoes organizadas por responsabilidade.
+            Identidade, equipe e automações organizadas por responsabilidade.
           </p>
         </div>
         <div className="header-actions">
@@ -636,7 +636,7 @@ export default async function SettingsPage() {
           >
             {workspaceSettings.state === "error" ||
             funnelConfiguration.state === "error"
-              ? "API indisponivel"
+              ? "API indisponível"
               : "API conectada"}
           </span>
         </div>
@@ -649,13 +649,13 @@ export default async function SettingsPage() {
         <div className="settings-overview-heading">
           <div>
             <span className="eyebrow">Estado do workspace</span>
-            <h2 id="settings-overview-title">Mapa das configuracoes</h2>
+            <h2 id="settings-overview-title">Mapa das configurações</h2>
           </div>
           <span
             className={`status-chip${workspaceSettings.state === "error" ? " warn" : ""}`}
           >
             {workspaceSettings.state === "error"
-              ? "Dados indisponiveis"
+              ? "Dados indisponíveis"
               : "Acessos protegidos"}
           </span>
         </div>
@@ -680,7 +680,7 @@ export default async function SettingsPage() {
                 {members.length} membro{members.length === 1 ? "" : "s"}
               </strong>
               <span>
-                {canManageTeam ? "Gestao disponivel" : "Somente leitura"}
+                {canManageTeam ? "Gestão disponível" : "Somente leitura"}
               </span>
             </span>
           </article>
@@ -706,7 +706,7 @@ export default async function SettingsPage() {
             </span>
             <span>
               <small>Jornada</small>
-              <strong>{visibleFunnelStageCount} etapas visiveis</strong>
+              <strong>{visibleFunnelStageCount} etapas visíveis</strong>
               <span>As regras de conversão ficam em Conversões</span>
             </span>
           </article>
@@ -715,7 +715,7 @@ export default async function SettingsPage() {
 
       <nav
         className="settings-domain-nav"
-        aria-label="Atalhos das configuracoes"
+        aria-label="Atalhos das configurações"
       >
         <a href="#configuracao-conta">
           <Building2 size={16} aria-hidden="true" />
@@ -735,7 +735,7 @@ export default async function SettingsPage() {
         </a>
         <a href="#configuracao-operacao">
           <Bell size={16} aria-hidden="true" />
-          Operacao
+          Operação
         </a>
       </nav>
 
@@ -752,7 +752,7 @@ export default async function SettingsPage() {
             <span className="eyebrow">Conta e workspace</span>
             <h2 id="settings-account-title">Identidade e acesso</h2>
             <p>
-              Confira a identidade publica do workspace e o acesso da conta
+              Confira a identidade pública do workspace e o acesso da conta
               atual.
             </p>
           </div>
@@ -768,12 +768,12 @@ export default async function SettingsPage() {
                 <span className="micro-label">Workspace</span>
                 <strong>
                   <PresentationMask placeholder="Workspace demonstrativo">
-                    {workspace?.name ?? "Workspace indisponivel"}
+                    {workspace?.name ?? "Workspace indisponível"}
                   </PresentationMask>
                 </strong>
                 <small>
                   <PresentationMask placeholder="workspace-demonstrativo">
-                    {workspace ? workspace.slug : "Dados indisponiveis"}
+                    {workspace ? workspace.slug : "Dados indisponíveis"}
                   </PresentationMask>
                 </small>
               </div>
@@ -783,7 +783,7 @@ export default async function SettingsPage() {
                 data-presentation-sensitive-action="true"
               >
                 <label>
-                  <span>Nome publico</span>
+                  <span>Nome público</span>
                   <input
                     defaultValue={workspace?.name ?? ""}
                     name="workspaceName"
@@ -815,13 +815,13 @@ export default async function SettingsPage() {
                 </span>
                 <span>
                   <strong>
-                    <PresentationMask placeholder="Usuario oculto">
-                      {accountUser?.name ?? "Conta do usuario"}
+                    <PresentationMask placeholder="Usuário oculto">
+                      {accountUser?.name ?? "Conta do usuário"}
                     </PresentationMask>
                   </strong>
                   <small>
-                    <PresentationMask placeholder="usuario@exemplo.com">
-                      {accountUser?.email ?? "Conta indisponivel"}
+                    <PresentationMask placeholder="usuário@exemplo.com">
+                      {accountUser?.email ?? "Conta indisponível"}
                     </PresentationMask>
                   </small>
                 </span>
@@ -832,7 +832,7 @@ export default async function SettingsPage() {
                   <dd>
                     {accountUser?.authProvider === "email"
                       ? "Email e senha"
-                      : (accountUser?.authProvider ?? "Indisponivel")}
+                      : (accountUser?.authProvider ?? "Indisponível")}
                   </dd>
                 </div>
                 <div>
@@ -854,7 +854,7 @@ export default async function SettingsPage() {
                     disabled={!accountUser}
                     type="submit"
                   >
-                    Enviar verificacao
+                    Enviar verificação
                   </button>
                 </form>
               ) : null}
@@ -877,12 +877,12 @@ export default async function SettingsPage() {
             <h2 id="settings-team-title">Membros e acessos</h2>
             <p>
               {workspaceSettings.state === "error"
-                ? "Nao foi possivel carregar a equipe."
-                : `${members.length} usuario${members.length === 1 ? "" : "s"} ativo${members.length === 1 ? "" : "s"}`}
+                ? "Não foi possível carregar a equipe."
+                : `${members.length} usuário${members.length === 1 ? "" : "s"} ativo${members.length === 1 ? "" : "s"}`}
             </p>
           </div>
           <span className={`status-chip${canManageTeam ? "" : " neutral"}`}>
-            {canManageTeam ? "Gestao da equipe" : "Somente leitura"}
+            {canManageTeam ? "Gestão da equipe" : "Somente leitura"}
           </span>
         </div>
 
@@ -908,12 +908,12 @@ export default async function SettingsPage() {
                       </span>
                       <span className="member-identity">
                         <strong>
-                          <PresentationMask placeholder="Usuario oculto">
-                            {member.name ?? "Usuario sem nome"}
+                          <PresentationMask placeholder="Usuário oculto">
+                            {member.name ?? "Usuário sem nome"}
                           </PresentationMask>
                         </strong>
                         <small>
-                          <PresentationMask placeholder="usuario@exemplo.com">
+                          <PresentationMask placeholder="usuário@exemplo.com">
                             {member.email}
                           </PresentationMask>
                         </small>
@@ -948,10 +948,10 @@ export default async function SettingsPage() {
                             />
                             <label>
                               <span className="sr-only">
-                                Nivel de acesso de {member.email}
+                                Nível de acesso de {member.email}
                               </span>
                               <select
-                                aria-label={`Nivel de acesso de ${member.email}`}
+                                aria-label={`Nível de acesso de ${member.email}`}
                                 defaultValue={member.role}
                                 name="role"
                               >
@@ -961,7 +961,7 @@ export default async function SettingsPage() {
                             </label>
                             <TeamActionButton
                               kind="save"
-                              label={`Salvar nivel de ${member.email}`}
+                              label={`Salvar nível de ${member.email}`}
                             />
                           </BackofficeActionForm>
                           {canGrantMemberManager && member.role === "admin" ? (
@@ -984,7 +984,7 @@ export default async function SettingsPage() {
                               </label>
                               <TeamActionButton
                                 kind="shield"
-                                label={`Salvar gestao de equipe de ${member.email}`}
+                                label={`Salvar gestão de equipe de ${member.email}`}
                               />
                             </BackofficeActionForm>
                           ) : null}
@@ -1037,7 +1037,7 @@ export default async function SettingsPage() {
                       />
                     </label>
                     <label>
-                      <span>Nivel de acesso</span>
+                      <span>Nível de acesso</span>
                       <select name="role" defaultValue="member">
                         <option value="member">Analista</option>
                         <option value="admin">Administrador</option>
@@ -1061,7 +1061,7 @@ export default async function SettingsPage() {
                     <div key={invite.id}>
                       <span>
                         <strong>
-                          <PresentationMask placeholder="usuario@exemplo.com">
+                          <PresentationMask placeholder="usuário@exemplo.com">
                             {invite.email}
                           </PresentationMask>
                         </strong>
@@ -1169,16 +1169,16 @@ export default async function SettingsPage() {
                 <span className="eyebrow">Jornada do funil</span>
                 <strong>Etapas exibidas nos indicadores</strong>
                 <small>
-                  Defina a ordem e o nome que o cliente ve em Visao geral e
-                  Relatorios.
+                  Defina a ordem e o nome que o cliente ve em Visão geral e
+                  Relatórios.
                 </small>
               </span>
               <span
                 className={`status-chip${funnelConfiguration.state === "error" ? " warn" : ""}`}
               >
                 {funnelConfiguration.state === "error"
-                  ? "Configuracao indisponivel"
-                  : `${visibleFunnelStageCount} etapas visiveis`}
+                  ? "Configuração indisponível"
+                  : `${visibleFunnelStageCount} etapas visíveis`}
               </span>
               <span className="settings-automation-action">
                 Configurar
@@ -1224,7 +1224,7 @@ export default async function SettingsPage() {
                         {eventSupportsCommercialValue(stage.eventName) ? (
                           <div className="funnel-commercial-fields">
                             <label>
-                              <span>Produto ou servico</span>
+                              <span>Produto ou serviço</span>
                               <input
                                 defaultValue={stage.defaultContentName ?? ""}
                                 name={`stageProduct:${stage.eventName}`}
@@ -1232,7 +1232,7 @@ export default async function SettingsPage() {
                               />
                             </label>
                             <label>
-                              <span>Valor medio</span>
+                              <span>Valor médio</span>
                               <input
                                 defaultValue={moneyInputValue(
                                   stage.defaultValueCents,
@@ -1268,14 +1268,14 @@ export default async function SettingsPage() {
                             name={`stageVisible:${stage.eventName}`}
                             type="checkbox"
                           />
-                          <span>Visivel</span>
+                          <span>Visível</span>
                         </label>
                       </div>
                     ))}
                   </div>
                   <div className="form-command-row">
                     <span>
-                      As alteracoes atualizam os indicadores do workspace.
+                      As alterações atualizam os indicadores do workspace.
                     </span>
                     <PendingSubmitButton
                       className="button primary"
@@ -1287,8 +1287,8 @@ export default async function SettingsPage() {
               ) : (
                 <p className="muted">
                   {canManageConversionRules
-                    ? "Nao foi possivel carregar as etapas do funil."
-                    : "Sem permissao para editar a jornada."}
+                    ? "Não foi possível carregar as etapas do funil."
+                    : "Sem permissão para editar a jornada."}
                 </p>
               )}
             </div>
@@ -1313,10 +1313,10 @@ export default async function SettingsPage() {
             05
           </span>
           <div>
-            <span className="eyebrow">Operacao</span>
+            <span className="eyebrow">Operação</span>
             <h2 id="settings-ops-alerts-title">Alertas WhatsApp</h2>
             <p>
-              Aviso no celular se a instancia NOD desconectar ou o webhook ficar
+              Aviso no celular se a instância NOD desconectar ou o webhook ficar
               sem entrega.
             </p>
           </div>
@@ -1334,12 +1334,12 @@ export default async function SettingsPage() {
         <div className="surface-panel ops-alert-settings-panel">
           {opsAlertSettings.state === "forbidden" ? (
             <p className="muted">
-              Sem permissao para gerenciar alertas operacionais.
+              Sem permissão para gerenciar alertas operacionais.
             </p>
           ) : opsAlertSettings.state === "error" ||
             !opsAlertSettings.workspaceId ? (
             <p className="muted">
-              Nao foi possivel carregar as configuracoes de alerta.
+              Não foi possível carregar as configurações de alerta.
             </p>
           ) : (
             <div data-presentation-sensitive-action="true">
@@ -1376,7 +1376,7 @@ export default async function SettingsPage() {
                         name="disconnectAlerts"
                         type="checkbox"
                       />
-                      <span>Desconexao da instancia WhatsApp</span>
+                      <span>Desconexão da instância WhatsApp</span>
                     </label>
                     <label>
                       <input
@@ -1384,15 +1384,15 @@ export default async function SettingsPage() {
                         name="webhookSilenceAlerts"
                         type="checkbox"
                       />
-                      <span>Silencio de webhook</span>
+                      <span>Silêncio de webhook</span>
                     </label>
                   </div>
                 </div>
                 <details className="ops-alert-advanced">
-                  <summary>Configuracoes avancadas</summary>
+                  <summary>Configurações avançadas</summary>
                   <div className="ops-alert-advanced-fields">
                     <label>
-                      <span className="field-label">Horas de silencio</span>
+                      <span className="field-label">Horas de silêncio</span>
                       <input
                         defaultValue={opsAlertFormValues.silenceThresholdHours}
                         min={1}
@@ -1413,7 +1413,7 @@ export default async function SettingsPage() {
                 </details>
                 <div className="form-command-row">
                   <span>
-                    Silencio padrao 24h. Nao dispara se o telefone estiver vazio
+                    Silêncio padrão 24h. Não dispara se o telefone estiver vazio
                     ou os alertas estiverem desligados.
                   </span>
                   <PendingSubmitButton

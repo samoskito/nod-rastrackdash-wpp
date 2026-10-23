@@ -51,11 +51,11 @@ export function PresentationModeToggle() {
 
   return (
     <button
-      aria-label={active ? "Exibir dados reais" : "Ocultar dados sensiveis"}
+      aria-label={active ? "Exibir dados reais" : "Ocultar dados sensíveis"}
       aria-pressed={active}
       className={`presentation-mode-toggle${active ? " active" : ""}`}
       onClick={() => setPresentationMode(!active)}
-      title={active ? "Exibir dados reais" : "Ocultar dados sensiveis"}
+      title={active ? "Exibir dados reais" : "Ocultar dados sensíveis"}
       type="button"
     >
       {active ? (

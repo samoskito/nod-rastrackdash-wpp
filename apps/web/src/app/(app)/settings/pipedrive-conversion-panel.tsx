@@ -1801,7 +1801,7 @@ function PipedriveConnectionCard({
 
       {canManage && confirmingKey === rotateKey ? (
         <InlineConfirm
-          message="Gerar uma nova URL de webhook invalida qualquer URL anterior desta conexão: o Pipedrive para de ser aceito até você colar a nova. A URL aparece uma única vez."
+          message="Gerar uma nova URL de webhook inválida qualquer URL anterior desta conexão: o Pipedrive para de ser aceito até você colar a nova. A URL aparece uma única vez."
           confirmLabel="Gerar nova URL"
           tone="primary"
           disabled={Boolean(pending) || locked}

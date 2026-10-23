@@ -10,12 +10,12 @@ import {
 import type { WhatsappClassification } from "./whatsapp-review-state";
 
 const classificationLabels: Record<WhatsappClassification, string> = {
-  auto_whatsapp: "WhatsApp automatico",
+  auto_whatsapp: "WhatsApp automático",
   creative_whatsapp: "WhatsApp pelo criativo",
   detected_by_leads: "WhatsApp pelos leads",
-  manual_include: "Incluido manualmente",
-  manual_exclude: "Excluido manualmente",
-  needs_review: "Revisao necessaria",
+  manual_include: "Incluído manualmente",
+  manual_exclude: "Excluído manualmente",
+  needs_review: "Revisão necessária",
   not_whatsapp: "Fora do WhatsApp",
 };
 
@@ -114,7 +114,7 @@ export function WhatsappReviewActions({
       >
         {currentClassification
           ? classificationLabels[currentClassification]
-          : "Classificacao automatica"}
+          : "Classificação automática"}
       </span>
       <BackofficeActionForm
         action={action}

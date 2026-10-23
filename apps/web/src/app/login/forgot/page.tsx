@@ -11,8 +11,8 @@ export default async function ForgotPasswordPage() {
           <p className="eyebrow">Acesso seguro</p>
           <h1 id="forgot-password-title">Recuperar senha</h1>
           <p>
-            Informe o email da sua conta. O backend registra um token de recuperacao e envia as
-            instrucoes quando o provedor de email estiver configurado.
+            Informe o email da sua conta. O backend registra um token de recuperação e envia as
+            instruções quando o provedor de email estiver configurado.
           </p>
         </div>
 

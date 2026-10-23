@@ -60,7 +60,7 @@ function eventStatusLabel(status: string) {
     error: "Falhou",
     imported: "Importado",
     shadow_observed: "Observado em sombra",
-    not_eligible: "Nao elegivel para CAPI",
+    not_eligible: "Não elegível para CAPI",
   };
 
   return labels[status] ?? status;
@@ -70,7 +70,7 @@ function eventNameLabel(eventName: string) {
   const labels: Record<string, string> = {
     LeadSubmitted: "Conversa iniciada",
     QualifiedLead: "Lead qualificado",
-    Purchase: "Compra atribuida",
+    Purchase: "Compra atribuída",
   };
 
   return labels[eventName] ?? eventName;
@@ -78,7 +78,7 @@ function eventNameLabel(eventName: string) {
 
 function triggerLabel(trigger: string) {
   const labels: Record<string, string> = {
-    conversation_started: "Inicio de conversa",
+    conversation_started: "Início de conversa",
     keyword: "Palavra-chave",
     whatsapp_label: "Etiqueta do WhatsApp",
   };
@@ -88,7 +88,7 @@ function triggerLabel(trigger: string) {
 
 function sourceLabel(source: string | null) {
   const labels: Record<string, string> = {
-    external_mysql: "Integracao externa",
+    external_mysql: "Integração externa",
     umbler_talk: "Umbler Talk",
     uazapi: "NOD API",
   };
@@ -101,7 +101,7 @@ function leadStatusLabel(status: string) {
     new: "Novo",
     active: "Atendimento ativo",
     qualified: "Lead qualificado",
-    converted: "Compra atribuida",
+    converted: "Compra atribuída",
     lost: "Perdido",
   };
 
@@ -147,13 +147,13 @@ function AttributionStep({
   label: string;
   name: string | null;
 }) {
-  const resolvedName = name ?? "Nao resolvido";
+  const resolvedName = name ?? "Não resolvido";
   const hiddenName =
     label === "Campanha"
       ? "Campanha oculta"
       : label === "Conjunto"
         ? "Conjunto oculto"
-        : "Anuncio oculto";
+        : "Anúncio oculto";
 
   return (
     <li className="lead-attribution-step">
@@ -168,7 +168,7 @@ function AttributionStep({
       </strong>
       <small>
         <PresentationMask placeholder="ID oculto">
-          {id ? `ID ${id}` : "ID indisponivel"}
+          {id ? `ID ${id}` : "ID indisponível"}
         </PresentationMask>
       </small>
     </li>
@@ -190,11 +190,11 @@ export default async function LeadDetailPage({
         <header className="page-header">
           <div>
             <span className="eyebrow">Leads</span>
-            <h1>Nao foi possivel carregar o lead</h1>
+            <h1>Não foi possível carregar o lead</h1>
             <p>Confira a API antes de analisar a jornada deste contato.</p>
           </div>
           <div className="header-actions">
-            <span className="status-chip warn">API indisponivel</span>
+            <span className="status-chip warn">API indisponível</span>
             <Link className="button" href="/leads">
               <ArrowLeft aria-hidden="true" size={17} strokeWidth={2.2} />
               Voltar
@@ -237,8 +237,8 @@ export default async function LeadDetailPage({
       >
         <section className="lead-attribution-panel">
           <header className="lead-attribution-heading">
-            <span className="eyebrow">Atribuicao</span>
-            <h2>Origem do anuncio</h2>
+            <span className="eyebrow">Atribuição</span>
+            <h2>Origem do anúncio</h2>
           </header>
 
           <ol className="lead-attribution-path">
@@ -257,13 +257,13 @@ export default async function LeadDetailPage({
             <AttributionStep
               id={lead.adId}
               index="03"
-              label="Anuncio"
+              label="Anúncio"
               name={detail.attribution.adName ?? lead.adId}
             />
           </ol>
 
           <footer className="lead-latest-event">
-            <span className="micro-label">Ultimo evento</span>
+            <span className="micro-label">Último evento</span>
             <strong>
               {lead.lastEventName
                 ? eventNameLabel(lead.lastEventName)
@@ -296,7 +296,7 @@ export default async function LeadDetailPage({
             <dd>{dateTime(lead.firstMessageAt)}</dd>
           </div>
           <div>
-            <dt>Ultima mensagem</dt>
+            <dt>Última mensagem</dt>
             <dd>{dateTime(lead.lastMessageAt)}</dd>
           </div>
           <div>
@@ -314,7 +314,7 @@ export default async function LeadDetailPage({
 
       <section className="lead-detail-section">
         <header className="lead-detail-section-header">
-          <span className="eyebrow">Conversoes</span>
+          <span className="eyebrow">Conversões</span>
           <h2>Eventos do Pixel/CAPI</h2>
         </header>
         {detail.conversionEvents.length > 0 ? (
@@ -405,8 +405,8 @@ export default async function LeadDetailPage({
           </>
         ) : (
           <div className="lead-detail-empty-state">
-            <strong>Nenhum evento de conversao</strong>
-            <span>Eventos por palavra-chave ou etiqueta aparecerao aqui.</span>
+            <strong>Nenhum evento de conversão</strong>
+            <span>Eventos por palavra-chave ou etiqueta aparecerão aqui.</span>
           </div>
         )}
       </section>
@@ -414,7 +414,7 @@ export default async function LeadDetailPage({
       <section className="lead-detail-section">
         <header className="lead-detail-section-header">
           <span className="eyebrow">Webhooks</span>
-          <h2>Webhooks e diagnosticos vinculados</h2>
+          <h2>Webhooks e diagnósticos vinculados</h2>
         </header>
         {detail.webhookEvents.length > 0 ? (
           <>
@@ -496,7 +496,7 @@ export default async function LeadDetailPage({
           <div className="lead-detail-empty-state">
             <strong>Nenhum webhook vinculado</strong>
             <span>
-              Quando houver logs com este lead/telefone, eles aparecerao aqui.
+              Quando houver logs com este lead/telefone, eles aparecerão aqui.
             </span>
           </div>
         )}

@@ -42,7 +42,7 @@ export function InviteAcceptForm({
       window.location.assign("/overview");
     } catch {
       setError(
-        "Nao foi possivel aceitar este convite. Entre com o email convidado ou solicite um novo link.",
+        "Não foi possível aceitar este convite. Entre com o email convidado ou solicite um novo link.",
       );
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export function InviteAcceptForm({
       window.location.assign("/overview");
     } catch {
       setError(
-        "Nao foi possivel concluir este convite. O link pode ter expirado ou ja ter sido utilizado.",
+        "Não foi possível concluir este convite. O link pode ter expirado ou já ter sido utilizado.",
       );
       setLoading(false);
     }
@@ -133,7 +133,7 @@ export function InviteAcceptForm({
       <button type="submit" disabled={loading}>
         {loading ? "Criando acesso..." : "Criar acesso e entrar"}
       </button>
-      <a href="/login">Ja tenho uma conta</a>
+      <a href="/login">Já tenho uma conta</a>
     </form>
   );
 }

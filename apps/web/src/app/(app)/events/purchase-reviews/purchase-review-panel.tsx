@@ -42,7 +42,7 @@ function ReviewRow({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [reason, setReason] = useState("Revisao operacional da compra");
+  const [reason, setReason] = useState("Revisão operacional da compra");
   const rule = providerRules.find(
     (candidate) => candidate.id === review.providerRuleId,
   );
@@ -99,7 +99,7 @@ function ReviewRow({
       router.refresh();
     } catch {
       setFeedback(
-        "Nao foi possivel concluir. Atualize a pagina e tente novamente.",
+        "Não foi possível concluir. Atualize a página e tente novamente.",
       );
     } finally {
       setBusy(null);
@@ -130,7 +130,7 @@ function ReviewRow({
       },
       sent
         ? "Valor corrigido no painel sem reenviar para a Meta."
-        : "Itens revisados. A compra ja pode ser aprovada.",
+        : "Itens revisados. A compra já pode ser aprovada.",
     );
   }
 
@@ -151,7 +151,7 @@ function ReviewRow({
       router.refresh();
     } catch {
       setFeedback(
-        "A compra permanece pendente. Atualize a pagina e tente novamente.",
+        "A compra permanece pendente. Atualize a página e tente novamente.",
       );
     } finally {
       setBusy(null);
@@ -174,7 +174,7 @@ function ReviewRow({
             </h3>
             <span>
               <PresentationMask placeholder="(00) 00000-0000">
-                {review.phoneDisplay ?? "Telefone indisponivel"}
+                {review.phoneDisplay ?? "Telefone indisponível"}
               </PresentationMask>
             </span>
           </div>
@@ -192,19 +192,19 @@ function ReviewRow({
       <div className="purchase-review-facts">
         <div>
           <span>Canal</span>
-          <strong>{review.channelName ?? "Canal nao identificado"}</strong>
+          <strong>{review.channelName ?? "Canal não identificado"}</strong>
         </div>
         <div>
           <span>Origem</span>
           <strong>
             {review.sourceType === "provider_automation"
-              ? "Automacao Umbler"
+              ? "Automação Umbler"
               : "Mensagem Umbler"}
           </strong>
         </div>
         <div>
           <span>Frase gatilho</span>
-          <strong>{review.matchedTriggerPhrase ?? "Nao reconhecida"}</strong>
+          <strong>{review.matchedTriggerPhrase ?? "Não reconhecida"}</strong>
         </div>
         <div>
           <span>Valor efetivo</span>
@@ -214,7 +214,7 @@ function ReviewRow({
 
       <div className="purchase-review-trace">
         <div>
-          <span className="micro-label">Diagnostico</span>
+          <span className="micro-label">Diagnóstico</span>
           <strong>{purchaseReviewReasonLabel(review.reasonCode)}</strong>
         </div>
         {review.conversionEventLogId ? (
@@ -225,7 +225,7 @@ function ReviewRow({
           />
         ) : (
           <span className="purchase-review-event-pending">
-            Evento Meta ainda nao criado
+            Evento Meta ainda não criado
           </span>
         )}
       </div>
@@ -242,7 +242,7 @@ function ReviewRow({
               </strong>
             </div>
             <span className="purchase-review-total">
-              Edicao: {money(editedTotal, review.currency)}
+              Edição: {money(editedTotal, review.currency)}
             </span>
           </div>
 
@@ -346,9 +346,9 @@ function ReviewRow({
         </div>
       ) : (
         <div className="purchase-review-average-value">
-          <span className="micro-label">Regra de valor medio</span>
+          <span className="micro-label">Regra de valor médio</span>
           <strong>{money(review.effectiveValueCents, review.currency)}</strong>
-          <span>Valor fixo configurado para esta conversao.</span>
+          <span>Valor fixo configurado para esta conversão.</span>
         </div>
       )}
 
@@ -356,14 +356,14 @@ function ReviewRow({
         <p className="purchase-review-note">
           A mensagem mencionou{" "}
           {money(review.observedPaymentValueCents, review.currency)}. O valor do
-          catalogo continua sendo a fonte oficial.
+          catálogo continua sendo a fonte oficial.
         </p>
       ) : null}
 
       {canManage ? (
         <footer className="purchase-review-actions">
           <label>
-            <span>Motivo da decisao</span>
+            <span>Motivo da decisão</span>
             <input
               maxLength={500}
               minLength={3}
@@ -442,7 +442,7 @@ export function PurchaseReviewPanel(props: PurchaseReviewPanelProps) {
         <ShoppingCart aria-hidden="true" size={22} />
         <strong>Nenhuma compra encontrada</strong>
         <span>
-          Ajuste o periodo ou aguarde uma mensagem com a frase gatilho.
+          Ajuste o período ou aguarde uma mensagem com a frase gatilho.
         </span>
       </div>
     );
@@ -451,7 +451,7 @@ export function PurchaseReviewPanel(props: PurchaseReviewPanelProps) {
   return (
     <section
       className="surface-panel purchase-review-list"
-      aria-label="Compras para revisao"
+      aria-label="Compras para revisão"
     >
       {props.reviews.map((review) => (
         <ReviewRow key={review.id} {...props} review={review} />

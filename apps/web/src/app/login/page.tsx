@@ -16,22 +16,22 @@ function loginErrorMessage(error: string | undefined): string | null {
   }
 
   if (error === "google_env") {
-    return "Login com Google ainda nao esta configurado.";
+    return "Login com Google ainda não está configurado.";
   }
 
   if (error === "google_pending") {
-    return "Este email ainda nao foi liberado para acessar o WppTrack.";
+    return "Este email ainda não foi liberado para acessar o WppTrack.";
   }
 
   if (error === "google_exchange") {
-    return "Nao foi possivel concluir o login com Google.";
+    return "Não foi possível concluir o login com Google.";
   }
 
   if (error === "google_disabled") {
-    return "Login com Google nao esta disponivel neste ambiente.";
+    return "Login com Google não está disponível neste ambiente.";
   }
 
-  return "Nao foi possivel autenticar. Tente novamente.";
+  return "Não foi possível autenticar. Tente novamente.";
 }
 
 function safeRedirectPath(value: string | undefined): string | null {
@@ -66,7 +66,7 @@ export default async function LoginPage({
   );
   const swappedNotice =
     asStringParam(resolvedSearchParams.swapped) === "1"
-      ? "Troca de cliente concluida. Entre novamente para continuar com o workspace limpo."
+      ? "Troca de cliente concluída. Entre novamente para continuar com o workspace limpo."
       : null;
   const googleEnabled =
     process.env.AUTH_GOOGLE_ENABLED?.trim().toLowerCase() === "true";
@@ -85,11 +85,11 @@ export default async function LoginPage({
               {brand.name.trim().charAt(0).toUpperCase() || "R"}
             </span>
           )}
-          <p className="eyebrow">Telemetria de conversoes</p>
+          <p className="eyebrow">Telemetria de conversões</p>
           <h1 id="login-title">Entrar no {brand.name}</h1>
           <p>
             Acesse o painel para acompanhar leads, campanhas, eventos Pixel e
-            diagnosticos da sua operacao em uma unica tela de controle.
+            diagnósticos da sua operação em uma única tela de controle.
           </p>
           {swappedNotice ? (
             <p className="form-success" role="status">
@@ -103,7 +103,7 @@ export default async function LoginPage({
           >
             <div className="quality-card">
               <span className="micro-label">Leads rastreados</span>
-              <strong>Atribuicao por origem</strong>
+              <strong>Atribuição por origem</strong>
             </div>
             <div className="quality-card">
               <span className="micro-label">Campanhas Meta</span>
@@ -114,8 +114,8 @@ export default async function LoginPage({
               <strong>Envio server-side</strong>
             </div>
             <div className="quality-card">
-              <span className="micro-label">Diagnostico</span>
-              <strong>Logs auditaveis</strong>
+              <span className="micro-label">Diagnóstico</span>
+              <strong>Logs auditáveis</strong>
             </div>
           </div>
         </div>

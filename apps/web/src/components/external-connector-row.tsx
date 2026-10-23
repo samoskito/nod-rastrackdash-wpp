@@ -22,18 +22,18 @@ type ExternalConnectorRowProps = {
 };
 
 function formatDate(value: string | null): string {
-  return value ? formatDateTime(value) : "Ainda nao executado";
+  return value ? formatDateTime(value) : "Ainda não executado";
 }
 
 function connectionStatusLabel(health: ExternalConnectorHealthDto): string {
   const connector = health.connector;
 
   if (connector.lastConnectionStatus === "connected") {
-    return connector.status === "active" ? "Ativo" : "Conexao validada";
+    return connector.status === "active" ? "Ativo" : "Conexão validada";
   }
 
   if (connector.lastConnectionStatus === "failed") {
-    return "Falha na conexao";
+    return "Falha na conexão";
   }
 
   return "Aguardando teste";
@@ -56,7 +56,7 @@ function reconciliationStateLabel(
 function n8nDeliveryNodeLabel(eventType: string): string {
   const labels: Record<string, string> = {
     conversation_started: "node HTTP de envio LeadSubmitted",
-    qualified_lead: 'node "Envia conversao de Lead Qualificado"',
+    qualified_lead: 'node "Envia conversão de Lead Qualificado"',
     purchase: "node HTTP de envio Purchase"
   };
 
@@ -166,12 +166,12 @@ export function ExternalConnectorRow({
       return "Sincronizando";
     }
     if (connector.lastSyncStatus === "completed") {
-      return "Sincronizacao concluida";
+      return "Sincronização concluída";
     }
     if (connector.lastSyncStatus === "failed") {
-      return "Falha na sincronizacao";
+      return "Falha na sincronização";
     }
-    return "Ainda nao sincronizado";
+    return "Ainda não sincronizado";
   }, [connector.lastSyncStartedAt, connector.lastSyncStatus, syncRequestedAt]);
 
   const handleSyncQueued = useCallback((state: BackofficeActionState) => {
@@ -208,13 +208,13 @@ export function ExternalConnectorRow({
           </strong>
         </div>
         <small>Teste: {formatDate(connector.lastConnectionTestAt)}</small>
-        <small>Ultima sync: {formatDate(connector.lastSyncCompletedAt)}</small>
+        <small>Última sync: {formatDate(connector.lastSyncCompletedAt)}</small>
         {connector.lastSyncErrorCode ? (
-          <small className="sync-error-code">Codigo: {connector.lastSyncErrorCode}</small>
+          <small className="sync-error-code">Código: {connector.lastSyncErrorCode}</small>
         ) : null}
         {pollTimedOut ? (
           <small className="sync-error-code">
-            A fila ainda esta processando. Atualize o status em alguns instantes.
+            A fila ainda está processando. Atualize o status em alguns instantes.
           </small>
         ) : null}
         <div className="connector-sync-totals" aria-label="Totais importados">
@@ -240,7 +240,7 @@ export function ExternalConnectorRow({
           </span>
         </div>
         {health.reconciliation ? (
-          <div className="connector-reconciliation" aria-label="Gate de reconciliacao CAPI">
+          <div className="connector-reconciliation" aria-label="Gate de reconciliação CAPI">
             <div className="connector-reconciliation-heading">
               <span className="micro-label">Gate de corte CAPI</span>
               <span
@@ -258,17 +258,17 @@ export function ExternalConnectorRow({
                 <div className="connector-reconciliation-event" key={event.eventType}>
                   <strong>{reconciliationEventLabel(event.eventType)}</strong>
                   <span>
-                    {event.operationalRows} reais validos / {event.historicalRows} historicos
+                    {event.operationalRows} reais válidos / {event.historicalRows} históricos
                   </span>
                   <small>
-                    {event.matchedRows}/{event.expectedMatchedRows} conversoes vinculadas
+                    {event.matchedRows}/{event.expectedMatchedRows} conversões vinculadas
                   </small>
                   <small>
-                    {event.duplicateDeliveries} repeticoes / {event.quarantinedRows} descartados
+                    {event.duplicateDeliveries} repetições / {event.quarantinedRows} descartados
                   </small>
                   {event.notEligibleRows > 0 ? (
                     <small>
-                      {event.notEligibleRows} sem identificador de clique (nao elegiveis ao CAPI)
+                      {event.notEligibleRows} sem identificador de clique (não elegíveis ao CAPI)
                     </small>
                   ) : null}
                   {event.blockingRejectedRows > 0 || event.pendingRows > 0 ? (
@@ -363,13 +363,13 @@ export function ExternalConnectorRow({
                   <li key={blocker.code}>{blocker.message}</li>
                 ))}
                 {health.reconciliation.blockers.length > 3 ? (
-                  <li>Mais {health.reconciliation.blockers.length - 3} verificacao(oes).</li>
+                  <li>Mais {health.reconciliation.blockers.length - 3} verificação(oes).</li>
                 ) : null}
               </ul>
             ) : (
               <small className="reconciliation-ready-copy">
                 {health.reconciliation.events.some((event) => event.capiActive)
-                  ? "Corte parcial ativo. Valide cada evento antes de assumir o proximo."
+                  ? "Corte parcial ativo. Valide cada evento antes de assumir o próximo."
                   : "Eventos reais reconciliados. O envio WppTrack continua desligado."}
               </small>
             )}

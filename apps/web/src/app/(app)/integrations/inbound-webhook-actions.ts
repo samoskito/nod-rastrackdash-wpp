@@ -31,14 +31,14 @@ export type InboundWebhookActionResult = {
 const integrationsPath = "/integrations";
 const invalidFormMessage = "Revise os dados informados e tente novamente.";
 const connectionStatusOperationalErrors = new Set([
-  "Configure META_APP_SECRET do seu proprio app Meta no ambiente da API antes de enviar. Nao use o segredo PalmUP nem cole segredos no chat.",
-  "Certifique o parser antes de ativar o envio automatico. Esta versao da integracao nao e nativa validada ou foi retirada.",
-  "Ative ao menos um canal validado antes da producao",
-  "Certifique o parser antes de ativar o envio automatico",
-  "Controle de vagas dos canais externos indisponivel",
+  "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
+  "Certifique o parser antes de ativar o envio automático. Esta versão da integração não é nativa validada ou foi retirada.",
+  "Ative ao menos um canal validado antes da produção",
+  "Certifique o parser antes de ativar o envio automático",
+  "Controle de vagas dos canais externos indisponível",
   "Envio automatico de webhooks ainda nao esta habilitado",
-  "Finalize o replay em andamento antes de ativar a producao",
-  "Todas as vagas do pacote estao ocupadas",
+  "Finalize o replay em andamento antes de ativar a produção",
+  "Todas as vagas do pacote estão ocupadas",
   "Todo canal ativo precisa de uma rota Meta valida",
   "Workspace sem contrato com acesso ativo",
 ]);
@@ -46,7 +46,7 @@ const connectionCreateOperationalErrors = new Set([
   "Conexões Unnichat exigem o número de WhatsApp do cliente",
 ]);
 const providerObservationUnavailableApiMessage =
-  "Versao de observacao do provedor indisponivel";
+  "Versão de observação do provedor indisponível";
 
 function providerObservationUnavailableMessage(provider: string): string {
   const name = provider === "unnichat" ? "O Unnichat" : "Este provedor";
@@ -56,8 +56,8 @@ function providerObservationUnavailableMessage(provider: string): string {
 const channelStatusOperationalErrors = new Set([
   "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal",
   "Configure uma rota Meta valida antes de ativar o canal",
-  "Controle de vagas dos canais externos indisponivel",
-  "Todas as vagas do pacote estao ocupadas",
+  "Controle de vagas dos canais externos indisponível",
+  "Todas as vagas do pacote estão ocupadas",
   "Workspace sem contrato com acesso ativo",
 ]);
 
@@ -121,7 +121,7 @@ export async function createInboundWebhookConnectionAction(
     return {
       ok: true,
       message:
-        "Conexao de webhook criada. Copie a URL agora; ela nao sera exibida novamente.",
+        "Conexão de webhook criada. Copie a URL agora; ela não será exibida novamente.",
       oneTimeSecret: oneTimeSecretForProvider({
         connectionId: result.data.connection.id,
         provider: result.data.connection.provider,
@@ -168,14 +168,14 @@ export async function rotateInboundWebhookSecretAction(
       inboundWebhookConnectionRotateSecretResultSchema.safeParse(response);
 
     if (!result.success || result.data.connectionId !== connectionId) {
-      return failure("Nao foi possivel rotacionar o segredo desta conexao.");
+      return failure("Não foi possível rotacionar o segredo desta conexão.");
     }
 
     revalidatePath(integrationsPath);
     return {
       ok: true,
       message:
-        "Segredo rotacionado. Copie a nova URL agora; ela nao sera exibida novamente.",
+        "Segredo rotacionado. Copie a nova URL agora; ela não será exibida novamente.",
       oneTimeSecret: oneTimeSecretForProvider({
         connectionId: result.data.connectionId,
         provider: result.data.provider,
@@ -184,7 +184,7 @@ export async function rotateInboundWebhookSecretAction(
       }),
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel rotacionar o segredo desta conexao.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível rotacionar o segredo desta conexão.");
   }
 }
 
@@ -214,15 +214,15 @@ export async function setInboundWebhookConnectionStatusAction(
       ok: true,
       message:
         input.data.status === "paused"
-          ? "Conexao pausada. Novas entregas nao serao processadas."
+          ? "Conexão pausada. Novas entregas não serão processadas."
           : input.data.status === "production"
-            ? "Envio automatico ativado nos canais habilitados."
-            : "Conexao mantida em modo de observacao.",
+            ? "Envio automático ativado nos canais habilitados."
+            : "Conexão mantida em modo de observação.",
     };
   } catch (error) {
     return failure(
       knownOperationalError(error, connectionStatusOperationalErrors) ??
-        "Nao foi possivel alterar o status desta conexao.",
+        "Não foi possível alterar o status desta conexão.",
     );
   }
 }
@@ -244,10 +244,10 @@ export async function removeInboundWebhookConnectionAction(
     revalidatePath(integrationsPath);
     return {
       ok: true,
-      message: "Conexao removida. O historico de observacao foi preservado.",
+      message: "Conexão removida. O histórico de observação foi preservado.",
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel remover esta conexao.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível remover esta conexão.");
   }
 }
 
@@ -277,10 +277,10 @@ export async function createInboundWebhookChannelAction(
     return {
       ok: true,
       message:
-        "Canal cadastrado. Ja e possivel criar regras de conversao para ele antes de qualquer mensagem chegar.",
+        "Canal cadastrado. Já é possível criar regras de conversão para ele antes de qualquer mensagem chegar.",
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel cadastrar o canal.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível cadastrar o canal.");
   }
 }
 
@@ -311,12 +311,12 @@ export async function setInboundWebhookChannelStatusAction(
       message:
         input.data.status === "paused"
           ? "Canal pausado. Os demais canais continuam inalterados."
-          : "Canal habilitado para envio quando a conexao estiver em producao.",
+          : "Canal habilitado para envio quando a conexão estiver em produção.",
     };
   } catch (error) {
     return failure(
       knownOperationalError(error, channelStatusOperationalErrors) ??
-        "Nao foi possivel alterar o status deste canal.",
+        "Não foi possível alterar o status deste canal.",
     );
   }
 }
@@ -343,11 +343,11 @@ export async function saveInboundWebhookChannelRoutesAction(
     revalidatePath(integrationsPath);
     return {
       ok: true,
-      message: "Rotas do canal salvas e validadas.",
+      message: "Rotas do canal salvas é validadas.",
     };
   } catch (error) {
     return failure(
-      knownRouteError(error) ?? "Nao foi possivel salvar as rotas deste canal.",
+      knownRouteError(error) ?? "Não foi possível salvar as rotas deste canal.",
     );
   }
 }
@@ -373,7 +373,7 @@ export async function removeInboundWebhookChannelRouteAction(
       message: "Rota removida do canal.",
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel remover esta rota.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível remover esta rota.");
   }
 }
 

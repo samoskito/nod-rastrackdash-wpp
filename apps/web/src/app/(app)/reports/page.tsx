@@ -276,7 +276,7 @@ function metaStatusLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
     ACTIVE: "Ativo",
     PAUSED: "Pausado",
-    DELETED: "Excluido",
+    DELETED: "Excluído",
     ARCHIVED: "Arquivado",
     IN_PROCESS: "Em processamento",
     WITH_ISSUES: "Com problemas",
@@ -311,7 +311,7 @@ async function getCampaignReports(
     return {
       report: {
         workspaceId: "unavailable",
-        rangeLabel: "API indisponivel",
+        rangeLabel: "API indisponível",
         campaigns: [],
       },
       state: "error",
@@ -336,7 +336,7 @@ async function getAdSetReports(
     return {
       report: {
         workspaceId: "unavailable",
-        rangeLabel: "API indisponivel",
+        rangeLabel: "API indisponível",
         adSets: [],
       },
       state: "error",
@@ -359,7 +359,7 @@ async function getAdReports(filters: ReportFilters): Promise<AdReportsResult> {
     return {
       report: {
         workspaceId: "unavailable",
-        rangeLabel: "API indisponivel",
+        rangeLabel: "API indisponível",
         ads: [],
       },
       state: "error",
@@ -682,7 +682,7 @@ async function saveWhatsappClassification(
   if (!["campaign", "adset", "ad"].includes(level) || !id) {
     return {
       status: "error",
-      message: "Item do relatorio nao identificado.",
+      message: "Item do relatório não identificado.",
       nonce,
     };
   }
@@ -700,10 +700,10 @@ async function saveWhatsappClassification(
       status: "success",
       message:
         override === "manual_include"
-          ? "Item incluido nos relatorios de WhatsApp."
+          ? "Item incluído nos relatórios de WhatsApp."
           : override === "manual_exclude"
-            ? "Item marcado como excluido. Ele continua disponivel no filtro Excluidas."
-            : "Classificacao automatica restaurada.",
+            ? "Item marcado como excluído. Ele continua disponível no filtro Excluídas."
+            : "Classificação automática restaurada.",
       nonce,
       ...resolveWhatsappReviewActionState(
         override,
@@ -713,7 +713,7 @@ async function saveWhatsappClassification(
   } catch {
     return {
       status: "error",
-      message: "Nao foi possivel salvar a revisao. Tente novamente.",
+      message: "Não foi possível salvar a revisão. Tente novamente.",
       nonce,
     };
   }
@@ -733,7 +733,7 @@ async function updateMetaEntity(
   if (!id || !["campaign", "adset", "ad"].includes(level)) {
     return {
       status: "error",
-      message: "Item Meta nao identificado.",
+      message: "Item Meta não identificado.",
       nonce,
     };
   }
@@ -749,7 +749,7 @@ async function updateMetaEntity(
       ) {
         return {
           status: "error",
-          message: "Status Meta invalido.",
+          message: "Status Meta inválido.",
           nonce,
         };
       }
@@ -786,7 +786,7 @@ async function updateMetaEntity(
       ) {
         return {
           status: "error",
-          message: "Informe um orcamento valido.",
+          message: "Informe um orçamento válido.",
           nonce,
         };
       }
@@ -805,14 +805,14 @@ async function updateMetaEntity(
 
       return {
         status: "success",
-        message: "Orcamento atualizado na Meta.",
+        message: "Orçamento atualizado na Meta.",
         nonce,
       };
     }
 
     return {
       status: "error",
-      message: "Alteracao Meta invalida.",
+      message: "Alteração Meta inválida.",
       nonce,
     };
   } catch (error) {
@@ -820,7 +820,7 @@ async function updateMetaEntity(
       status: "error",
       message: isApiRequestError(error)
         ? error.message
-        : "Nao foi possivel concluir a alteracao na Meta.",
+        : "Não foi possível concluir a alteração na Meta.",
       nonce,
     };
   }
@@ -897,15 +897,15 @@ function reportsNotice(notice?: string): ReportNotice | null {
   const notices: Record<string, ReportNotice> = {
     "meta-sync-queued": {
       tone: "success",
-      title: "Sincronizacao iniciada",
+      title: "Sincronização iniciada",
       message:
         "A leitura dos dados Meta foi enviada para a fila. Atualize em alguns segundos para ver as campanhas.",
     },
     "meta-sync-error": {
       tone: "warn",
-      title: "Sincronizacao nao iniciada",
+      title: "Sincronização não iniciada",
       message:
-        "Nao foi possivel iniciar a leitura dos dados Meta agora. Confira as contas ativas e os diagnosticos.",
+        "Não foi possível iniciar a leitura dos dados Meta agora. Confira as contas ativas e os diagnósticos.",
     },
   };
 
@@ -1156,8 +1156,8 @@ const campaignSummaryCopy: ReportEntityCopy = {
   activePlural: "ativas",
   pausedSingular: "pausada",
   pausedPlural: "pausadas",
-  deletedSingular: "excluida",
-  deletedPlural: "excluidas",
+  deletedSingular: "excluída",
+  deletedPlural: "excluídas",
   unknownSingular: "sem status",
   unknownPlural: "sem status",
 };
@@ -1170,22 +1170,22 @@ const adSetSummaryCopy: ReportEntityCopy = {
   activePlural: "ativos",
   pausedSingular: "pausado",
   pausedPlural: "pausados",
-  deletedSingular: "excluido",
-  deletedPlural: "excluidos",
+  deletedSingular: "excluído",
+  deletedPlural: "excluídos",
   unknownSingular: "sem status",
   unknownPlural: "sem status",
 };
 
 const adSummaryCopy: ReportEntityCopy = {
-  title: "Resumo anuncios",
-  singular: "anuncio",
-  plural: "anuncios",
+  title: "Resumo anúncios",
+  singular: "anúncio",
+  plural: "anúncios",
   activeSingular: "ativo",
   activePlural: "ativos",
   pausedSingular: "pausado",
   pausedPlural: "pausados",
-  deletedSingular: "excluido",
-  deletedPlural: "excluidos",
+  deletedSingular: "excluído",
+  deletedPlural: "excluídos",
   unknownSingular: "sem status",
   unknownPlural: "sem status",
 };
@@ -1254,7 +1254,7 @@ function PerformanceMetricsCells({
         </td>
       ) : null}
       {showOverview || showRevenue ? (
-        <td data-label="Receita de trafego">
+        <td data-label="Receita de tráfego">
           {money(row.trafficRevenueCents)}
           <UnconvertedRevenueSpan unconverted={row.unconvertedRevenue} />
         </td>
@@ -1274,7 +1274,7 @@ function PerformanceMetricsCells({
         </>
       ) : null}
       {showOverview || showRevenue ? (
-        <td data-label="ROAS de aquisicao">
+        <td data-label="ROAS de aquisição">
           {roasOrMissing(row.roasAcquisition, rateMissing)}
         </td>
       ) : null}
@@ -1326,7 +1326,7 @@ function EmptyPerformanceCells({
         </td>
       ) : null}
       {showOverview || showRevenue ? (
-        <td data-label="Receita de trafego">{money(0)}</td>
+        <td data-label="Receita de tráfego">{money(0)}</td>
       ) : null}
       {showRevenue ? (
         <>
@@ -1336,7 +1336,7 @@ function EmptyPerformanceCells({
         </>
       ) : null}
       {showOverview || showRevenue ? (
-        <td data-label="ROAS de aquisicao">-</td>
+        <td data-label="ROAS de aquisição">-</td>
       ) : null}
       {showRevenue ? <td data-label="ROAS com recompra">-</td> : null}
     </>
@@ -1580,7 +1580,7 @@ function metaStructureRows(
 
       rows.push({
         adId: null,
-        adName: "Sem anuncios sincronizados",
+        adName: "Sem anúncios sincronizados",
         adSetId: adSet.id,
         adSetName: adSet.name,
         campaignName: campaign.name,
@@ -1655,7 +1655,7 @@ function syncDateLabel(value: string | null): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "data indisponivel";
+    return "data indisponível";
   }
 
   return new Intl.DateTimeFormat("pt-BR", {
@@ -1768,7 +1768,7 @@ function SummaryMetricsCells({
         </td>
       ) : null}
       {showOverview || showRevenue ? (
-        <td data-label="Receita de trafego">
+        <td data-label="Receita de tráfego">
           {money(totals.trafficRevenueCents)}
           <UnconvertedRevenueSpan unconverted={rateGap.unconvertedRevenue} />
         </td>
@@ -1788,7 +1788,7 @@ function SummaryMetricsCells({
         </>
       ) : null}
       {showOverview || showRevenue ? (
-        <td data-label="ROAS de aquisicao">
+        <td data-label="ROAS de aquisição">
           {roasOrMissing(totals.roasAcquisition, rateGap.exchangeRateMissing)}
         </td>
       ) : null}
@@ -1855,7 +1855,7 @@ function PerformanceMetricHeaders({
         );
       })}
       {showTraffic ? <th>Total recebido</th> : null}
-      {showOverview || showRevenue ? <th>Receita trafego</th> : null}
+      {showOverview || showRevenue ? <th>Receita tráfego</th> : null}
       {showRevenue ? (
         <>
           <th>Receita primeira compra</th>
@@ -1863,7 +1863,7 @@ function PerformanceMetricHeaders({
           <th>Receita total</th>
         </>
       ) : null}
-      {showOverview || showRevenue ? <th>ROAS aquisicao</th> : null}
+      {showOverview || showRevenue ? <th>ROAS aquisição</th> : null}
       {showRevenue ? <th>ROAS com recompra</th> : null}
     </>
   );
@@ -1952,7 +1952,7 @@ function PerformanceSummaryFooter({
               {hasFilteredTotals
                 ? "Total do filtro"
                 : pagination
-                  ? `Subtotal da pagina ${pagination.page}`
+                  ? `Subtotal da página ${pagination.page}`
                   : copy.title}
               {perCurrency ? ` · ${line.currency}` : ""}
             </strong>
@@ -1960,7 +1960,7 @@ function PerformanceSummaryFooter({
               {perCurrency
                 ? "Contas nesta moeda; moedas diferentes não são somadas"
                 : pagination
-                  ? `${rows.length} nesta pagina de ${countLabel(pagination.totalItems, copy.singular, copy.plural)} no filtro`
+                  ? `${rows.length} nesta página de ${countLabel(pagination.totalItems, copy.singular, copy.plural)} no filtro`
                   : reportEntitySummary(rows, copy)}
             </span>
           </td>
@@ -1970,7 +1970,7 @@ function PerformanceSummaryFooter({
             rateGap={line.rateGap}
             totals={line.totals}
           />
-          <td className="performance-review-cell" data-label="Revisao WhatsApp">
+          <td className="performance-review-cell" data-label="Revisão WhatsApp">
             <span className="tag">{perCurrency ? line.currency : "Total"}</span>
           </td>
         </tr>
@@ -1997,10 +1997,10 @@ function ReportPagination({
   return (
     <nav
       className="report-pagination"
-      aria-label={`Paginacao de ${copy.plural}`}
+      aria-label={`Paginação de ${copy.plural}`}
     >
       <span>
-        Pagina {pagination.page} de {Math.max(pagination.totalPages, 1)} -{" "}
+        Página {pagination.page} de {Math.max(pagination.totalPages, 1)} -{" "}
         {pagination.totalItems} {copy.plural}
       </span>
       <div>
@@ -2021,11 +2021,11 @@ function ReportPagination({
             className="button ghost"
             href={reportPageHref(view, filters, pagination.page + 1)}
           >
-            Proxima
+            Próxima
           </Link>
         ) : (
           <span className="button ghost disabled" aria-disabled="true">
-            Proxima
+            Próxima
           </span>
         )}
       </div>
@@ -2074,7 +2074,7 @@ function ComparisonMetric({
       <span className="micro-label">{label}</span>
       <strong>{currentValue}</strong>
       <span>
-        Periodo comparado {previousValue} /{" "}
+        Período comparado {previousValue} /{" "}
         {comparisonDeltaLabel(current, previous)}
       </span>
     </div>
@@ -2181,7 +2181,7 @@ function ReportComparisonMetrics({
           format={money}
         />
         <ComparisonMetric
-          label="Receita trafego"
+          label="Receita tráfego"
           current={current.trafficRevenueCents}
           previous={previous.trafficRevenueCents}
           format={money}
@@ -2199,7 +2199,7 @@ function ReportComparisonMetrics({
           format={money}
         />
         <ComparisonMetric
-          label="ROAS aquisicao"
+          label="ROAS aquisição"
           current={current.roasAcquisition}
           previous={previous.roasAcquisition}
           format={roas}
@@ -2227,13 +2227,13 @@ function ReportComparisonMetrics({
         previous={previous.realConversations}
       />
       <ComparisonMetric
-        label="Receita trafego"
+        label="Receita tráfego"
         current={current.trafficRevenueCents}
         previous={previous.trafficRevenueCents}
         format={money}
       />
       <ComparisonMetric
-        label="ROAS aquisicao"
+        label="ROAS aquisição"
         current={current.roasAcquisition}
         previous={previous.roasAcquisition}
         format={roas}
@@ -2262,7 +2262,7 @@ function reportSummaryMetrics(
   if (metricGroup === "traffic") {
     return [
       {
-        detail: "Periodo filtrado",
+        detail: "Período filtrado",
         label: "Investimento",
         value: money(totals.spendCents),
       },
@@ -2292,12 +2292,12 @@ function reportSummaryMetrics(
         value: String(totals.realConversations),
       },
       {
-        detail: "Avancaram no funil",
+        detail: "Avançaram no funil",
         label: "Leads qualificados",
         value: String(totals.qualifiedLead),
       },
       {
-        detail: "Conversoes registradas",
+        detail: "Conversões registradas",
         label: "Compras",
         value: String(totals.purchases),
       },
@@ -2312,22 +2312,22 @@ function reportSummaryMetrics(
   if (metricGroup === "revenue") {
     return [
       {
-        detail: "Midia no periodo",
+        detail: "Mídia no período",
         label: "Investimento",
         value: money(totals.spendCents),
       },
       {
-        detail: "Atribuida ao trafego",
+        detail: "Atribuída ao tráfego",
         label: "Receita",
         value: money(totals.trafficRevenueCents),
       },
       {
-        detail: "Receita de aquisicao",
+        detail: "Receita de aquisição",
         label: "Primeira compra",
         value: money(totals.firstPurchaseRevenueCents),
       },
       {
-        detail: "Retorno de aquisicao",
+        detail: "Retorno de aquisição",
         label: "ROAS",
         value: roas(totals.roasAcquisition),
       },
@@ -2336,7 +2336,7 @@ function reportSummaryMetrics(
 
   return [
     {
-      detail: "Periodo filtrado",
+      detail: "Período filtrado",
       label: "Investimento",
       value: money(totals.spendCents),
     },
@@ -2351,7 +2351,7 @@ function reportSummaryMetrics(
       value: String(totals.realConversations),
     },
     {
-      detail: "Retorno de aquisicao",
+      detail: "Retorno de aquisição",
       label: "ROAS",
       value: roas(totals.roasAcquisition),
     },
@@ -2535,7 +2535,7 @@ export default async function ReportsPage({
       ? { label: "Campanha", value: selectedCampaignName }
       : null,
     selectedAdSetName ? { label: "Conjunto", value: selectedAdSetName } : null,
-    selectedAdName ? { label: "Anuncio", value: selectedAdName } : null,
+    selectedAdName ? { label: "Anúncio", value: selectedAdName } : null,
   ].filter((item): item is { label: string; value: string } => Boolean(item));
   const clearHierarchyHref = reportViewHref("campaigns", {
     ...reportFilters,
@@ -2563,7 +2563,7 @@ export default async function ReportsPage({
     adSetReports?.report.rangeLabel ??
     adReports?.report.rangeLabel ??
     insightReports?.report?.rangeLabel ??
-    "API indisponivel";
+    "API indisponível";
   const pagination: ReportPaginationDto | undefined =
     campaignReports?.report.pagination ??
     adSetReports?.report.pagination ??
@@ -2622,28 +2622,28 @@ export default async function ReportsPage({
   const syncCampaignHint = canSyncMetaReports
     ? "Use Sincronizar Meta para carregar campanhas reais."
     : workspacePermissionsUnavailable
-      ? "Nao foi possivel confirmar as permissoes agora."
-      : "A sincronizacao Meta depende de owner ou admin.";
+      ? "Não foi possível confirmar as permissões agora."
+      : "A sincronização Meta depende de owner ou admin.";
   const syncAdSetHint = canSyncMetaReports
     ? "Use Sincronizar Meta para carregar conjuntos reais."
     : workspacePermissionsUnavailable
-      ? "Nao foi possivel confirmar as permissoes agora."
-      : "A sincronizacao Meta depende de owner ou admin.";
+      ? "Não foi possível confirmar as permissões agora."
+      : "A sincronização Meta depende de owner ou admin.";
   const syncAdHint = canSyncMetaReports
-    ? "Use Sincronizar Meta para carregar anuncios reais."
+    ? "Use Sincronizar Meta para carregar anúncios reais."
     : workspacePermissionsUnavailable
-      ? "Nao foi possivel confirmar as permissoes agora."
-      : "A sincronizacao Meta depende de owner ou admin.";
+      ? "Não foi possível confirmar as permissões agora."
+      : "A sincronização Meta depende de owner ou admin.";
   const syncStructureHint = canSyncMetaReports
-    ? "Use o botao Sincronizar Meta para enfileirar a leitura."
+    ? "Use o botão Sincronizar Meta para enfileirar a leitura."
     : workspacePermissionsUnavailable
-      ? "Nao foi possivel confirmar as permissoes agora."
+      ? "Não foi possível confirmar as permissões agora."
       : "A leitura da estrutura Meta depende de owner ou admin.";
   const emptyStructureTitle = rawMetaStructureRows.length
     ? "Nenhuma estrutura encontrada"
     : "Nenhuma estrutura Meta sincronizada";
   const emptyStructureHint = rawMetaStructureRows.length
-    ? "Ajuste os filtros da estrutura tecnica para ver outros itens sincronizados."
+    ? "Ajuste os filtros da estrutura técnica para ver outros itens sincronizados."
     : syncStructureHint;
   const clearStructureParams = applyReportUiParams(
     new URLSearchParams(reportQuery(reportFilters, true)),
@@ -2654,17 +2654,17 @@ export default async function ReportsPage({
   const clearStructureHref = `/reports?${clearStructureParams.toString()}`;
   const diagnosticHref = clearStructureHref;
   const noReviewPermission = workspacePermissionsUnavailable
-    ? "Permissoes indisponiveis"
-    : "Sem permissao para revisar";
+    ? "Permissões indisponíveis"
+    : "Sem permissão para revisar";
   const reportTitle = (
     showTable
       ? {
-          ads: "Performance por anuncio",
+          ads: "Performance por anúncio",
           adsets: "Performance por conjunto",
           campaigns: "Performance por campanha",
         }
       : {
-          ads: "Insights por anuncio",
+          ads: "Insights por anúncio",
           adsets: "Insights por conjunto",
           campaigns: "Insights por campanha",
         }
@@ -2716,9 +2716,9 @@ export default async function ReportsPage({
   });
   const activeMetricLabel = {
     funnel: "Funil",
-    overview: "Visao geral",
+    overview: "Visão geral",
     revenue: "Receita",
-    traffic: "Trafego",
+    traffic: "Tráfego",
   }[activeMetricGroup];
   const metaPeriodWarning: ReportNotice | null =
     metaSyncPeriod.kind === "none" || metaPeriodProvidesReport
@@ -2726,32 +2726,32 @@ export default async function ReportsPage({
       : metaSyncPeriod.kind === "single"
         ? {
             tone: "warn",
-            title: "Periodo Meta diferente do relatorio",
-            message: `O relatorio esta em ${requestedPeriodLabel}, mas o investimento salvo veio de ${periodLabel(metaSyncPeriod.since, metaSyncPeriod.until)}. Sincronize a Meta para alinhar os valores.`,
+            title: "Período Meta diferente do relatório",
+            message: `O relatório está em ${requestedPeriodLabel}, mas o investimento salvo veio de ${periodLabel(metaSyncPeriod.since, metaSyncPeriod.until)}. Sincronize a Meta para alinhar os valores.`,
           }
         : metaSyncPeriod.kind === "mixed"
           ? {
               tone: "warn",
-              title: "Contas Meta com periodos diferentes",
+              title: "Contas Meta com períodos diferentes",
               message:
-                "Sincronize a Meta neste periodo para alinhar todas as contas antes de comparar os totais.",
+                "Sincronize a Meta neste período para alinhar todas as contas antes de comparar os totais.",
             }
           : {
               tone: "warn",
-              title: "Periodo da ultima sincronizacao ainda nao registrado",
+              title: "Período da última sincronização ainda não registrado",
               message: `Sincronize a Meta para confirmar o investimento de ${requestedPeriodLabel}.`,
             };
 
   return (
     <section className="page-stack page-wide reports-page">
       <header className="page-header reports-page-header">
-        <span className="eyebrow">Relatorios</span>
+        <span className="eyebrow">Relatórios</span>
         <h1>{reportTitle}</h1>
         <p>
-          Metricas Meta Ads combinadas com leads reais e eventos de conversao.
+          Métricas Meta Ads combinadas com leads reais e eventos de conversão.
         </p>
         <nav
-          aria-label="Modo do relatorio"
+          aria-label="Modo do relatório"
           className="report-view-tabs report-mode-tabs"
         >
           {(
@@ -2774,7 +2774,7 @@ export default async function ReportsPage({
 
       <section
         className="surface-panel report-control-center"
-        aria-label="Controles do relatorio"
+        aria-label="Controles do relatório"
       >
         <div className="report-command-body">
           <form className="report-period-form" action="/reports">
@@ -2818,12 +2818,12 @@ export default async function ReportsPage({
             <div className="report-period-context">
               <CalendarRange aria-hidden="true" size={17} />
               <span>
-                <strong>Periodo de analise</strong>
+                <strong>Período de análise</strong>
                 <small>{requestedPeriodLabel}</small>
               </span>
             </div>
             <label className="filter-field">
-              <span>Inicio</span>
+              <span>Início</span>
               <input type="date" name="since" defaultValue={since} />
             </label>
             <label className="filter-field">
@@ -2831,7 +2831,7 @@ export default async function ReportsPage({
               <input type="date" name="until" defaultValue={until} />
             </label>
             <button className="button" type="submit">
-              Aplicar periodo
+              Aplicar período
             </button>
           </form>
 
@@ -2844,7 +2844,7 @@ export default async function ReportsPage({
                 </span>
               ) : null}
               {reportState === "error" ? (
-                <span className="tag">API indisponivel</span>
+                <span className="tag">API indisponível</span>
               ) : null}
             </div>
             <div className="report-command-actions">
@@ -2930,8 +2930,8 @@ export default async function ReportsPage({
               ) : (
                 <span className="tag">
                   {workspacePermissionsUnavailable
-                    ? "Permissoes indisponiveis"
-                    : "Sem permissao para sincronizar Meta"}
+                    ? "Permissões indisponíveis"
+                    : "Sem permissão para sincronizar Meta"}
                 </span>
               )}
             </div>
@@ -2940,12 +2940,12 @@ export default async function ReportsPage({
 
         <div className="report-analysis-controls">
           <div className="report-analysis-switcher">
-            <nav className="report-view-tabs" aria-label="Nivel do relatorio">
+            <nav className="report-view-tabs" aria-label="Nível do relatório">
               {(
                 [
                   ["campaigns", "Campanhas"],
                   ["adsets", "Conjuntos"],
-                  ["ads", "Anuncios"],
+                  ["ads", "Anúncios"],
                 ] as const
               ).map(([view, label]) => (
                 <Link
@@ -3027,7 +3027,7 @@ export default async function ReportsPage({
       {hierarchySelection.length > 0 ? (
         <div className="report-scope-bar" aria-label="Hierarquia selecionada">
           <div>
-            <span className="micro-label">Selecao atual</span>
+            <span className="micro-label">Seleção atual</span>
             {hierarchySelection.map((item) => (
               <span className="report-scope-item" key={item.label}>
                 <small>{item.label}</small>
@@ -3038,7 +3038,7 @@ export default async function ReportsPage({
                         ? "Campanha oculta"
                         : item.label === "Conjunto"
                           ? "Conjunto oculto"
-                          : "Anuncio oculto"
+                          : "Anúncio oculto"
                     }
                   >
                     {item.value}
@@ -3048,7 +3048,7 @@ export default async function ReportsPage({
             ))}
           </div>
           <Link className="button ghost" href={clearHierarchyHref}>
-            Limpar selecao
+            Limpar seleção
           </Link>
         </div>
       ) : null}
@@ -3088,11 +3088,11 @@ export default async function ReportsPage({
                 <h2>{activeMetricLabel}</h2>
               </div>
             </div>
-            <nav className="report-metric-tabs" aria-label="Grupo de metricas">
+            <nav className="report-metric-tabs" aria-label="Grupo de métricas">
               {(
                 [
-                  ["overview", "Visao geral"],
-                  ["traffic", "Trafego"],
+                  ["overview", "Visão geral"],
+                  ["traffic", "Tráfego"],
                   ["funnel", "Funil"],
                   ["revenue", "Receita"],
                 ] as const
@@ -3141,12 +3141,12 @@ export default async function ReportsPage({
         <details className="surface-panel report-comparison-panel">
           <summary>
             <span>
-              <span className="eyebrow">Comparacao entre periodos</span>
+              <span className="eyebrow">Comparação entre períodos</span>
               <strong>
-                Periodo atual vs. {comparisonReports.report.rangeLabel}
+                Período atual vs. {comparisonReports.report.rangeLabel}
               </strong>
             </span>
-            <span className="tag">Abrir comparacao</span>
+            <span className="tag">Abrir comparação</span>
           </summary>
           <div className="metric-grid compact report-comparison-grid">
             <ReportComparisonMetrics
@@ -3193,7 +3193,7 @@ export default async function ReportsPage({
                   metricGroup={activeMetricGroup}
                   sortColumn={sortColumn}
                 />
-                <th className="performance-review-column">Revisao WhatsApp</th>
+                <th className="performance-review-column">Revisão WhatsApp</th>
               </tr>
             </thead>
             <tbody>
@@ -3262,7 +3262,7 @@ export default async function ReportsPage({
                     />
                     <td
                       className="performance-review-cell"
-                      data-label="Revisao WhatsApp"
+                      data-label="Revisão WhatsApp"
                     >
                       {canSyncMetaReports ? (
                         <WhatsappReviewActions
@@ -3282,7 +3282,7 @@ export default async function ReportsPage({
                   <td className="performance-name-cell" data-label="Campanha">
                     <strong>
                       {reportState === "error"
-                        ? "Nao foi possivel carregar campanhas"
+                        ? "Não foi possível carregar campanhas"
                         : "Nenhuma campanha sincronizada"}
                     </strong>
                     <span>
@@ -3298,7 +3298,7 @@ export default async function ReportsPage({
                   />
                   <td
                     className="performance-review-cell"
-                    data-label="Revisao WhatsApp"
+                    data-label="Revisão WhatsApp"
                   >
                     -
                   </td>
@@ -3345,7 +3345,7 @@ export default async function ReportsPage({
                   metricGroup={activeMetricGroup}
                   sortColumn={sortColumn}
                 />
-                <th className="performance-review-column">Revisao WhatsApp</th>
+                <th className="performance-review-column">Revisão WhatsApp</th>
               </tr>
             </thead>
             <tbody>
@@ -3418,7 +3418,7 @@ export default async function ReportsPage({
                     />
                     <td
                       className="performance-review-cell"
-                      data-label="Revisao WhatsApp"
+                      data-label="Revisão WhatsApp"
                     >
                       {canSyncMetaReports ? (
                         <WhatsappReviewActions
@@ -3438,7 +3438,7 @@ export default async function ReportsPage({
                   <td className="performance-name-cell" data-label="Conjunto">
                     <strong>
                       {adSetReports?.state === "error"
-                        ? "Nao foi possivel carregar conjuntos"
+                        ? "Não foi possível carregar conjuntos"
                         : "Nenhum conjunto sincronizado"}
                     </strong>
                     <span>
@@ -3454,7 +3454,7 @@ export default async function ReportsPage({
                   />
                   <td
                     className="performance-review-cell"
-                    data-label="Revisao WhatsApp"
+                    data-label="Revisão WhatsApp"
                   >
                     -
                   </td>
@@ -3488,12 +3488,12 @@ export default async function ReportsPage({
                     <ReportPageSelectionCheckbox
                       activeSelectedIds={activeSelectedIds}
                       entityIds={adRows.map((row) => row.id)}
-                      entityLabel="anuncios"
+                      entityLabel="anúncios"
                       filterActive={Boolean(selectedIds)}
                       level="ad"
                       workspaceId={currentWorkspaceId}
                     />
-                    Anuncio
+                    Anúncio
                   </span>
                 </th>
                 <PerformanceMetricHeaders
@@ -3501,7 +3501,7 @@ export default async function ReportsPage({
                   metricGroup={activeMetricGroup}
                   sortColumn={sortColumn}
                 />
-                <th className="performance-review-column">Revisao WhatsApp</th>
+                <th className="performance-review-column">Revisão WhatsApp</th>
               </tr>
             </thead>
             <tbody>
@@ -3511,7 +3511,7 @@ export default async function ReportsPage({
                     className={adId === row.id ? "is-selected" : undefined}
                     key={row.id}
                   >
-                    <td className="performance-name-cell" data-label="Anuncio">
+                    <td className="performance-name-cell" data-label="Anúncio">
                       <div className="report-ad-entity">
                         <ReportSelectionCheckbox
                           activeSelectedIds={activeSelectedIds}
@@ -3538,7 +3538,7 @@ export default async function ReportsPage({
                                 selectedIds: undefined,
                               })}
                             >
-                              <PresentationMask placeholder="Anuncio oculto">
+                              <PresentationMask placeholder="Anúncio oculto">
                                 {row.name}
                               </PresentationMask>
                             </Link>
@@ -3581,7 +3581,7 @@ export default async function ReportsPage({
                     />
                     <td
                       className="performance-review-cell"
-                      data-label="Revisao WhatsApp"
+                      data-label="Revisão WhatsApp"
                     >
                       {canSyncMetaReports ? (
                         <WhatsappReviewActions
@@ -3598,15 +3598,15 @@ export default async function ReportsPage({
                 ))
               ) : (
                 <tr>
-                  <td className="performance-name-cell" data-label="Anuncio">
+                  <td className="performance-name-cell" data-label="Anúncio">
                     <strong>
                       {adReports?.state === "error"
-                        ? "Nao foi possivel carregar anuncios"
-                        : "Nenhum anuncio sincronizado"}
+                        ? "Não foi possível carregar anúncios"
+                        : "Nenhum anúncio sincronizado"}
                     </strong>
                     <span>
                       {adReports?.state === "error"
-                        ? "Confira a API antes de analisar anuncios."
+                        ? "Confira a API antes de analisar anúncios."
                         : syncAdHint}
                     </span>
                   </td>
@@ -3617,7 +3617,7 @@ export default async function ReportsPage({
                   />
                   <td
                     className="performance-review-cell"
-                    data-label="Revisao WhatsApp"
+                    data-label="Revisão WhatsApp"
                   >
                     -
                   </td>
@@ -3651,16 +3651,16 @@ export default async function ReportsPage({
         <details className="surface-panel meta-diagnostic-panel" open>
           <summary className="meta-diagnostic-summary">
             <span className="meta-diagnostic-copy">
-              <span className="eyebrow">Diagnostico da sincronizacao Meta</span>
-              <strong>Estrutura tecnica recolhida</strong>
+              <span className="eyebrow">Diagnóstico da sincronização Meta</span>
+              <strong>Estrutura técnica recolhida</strong>
               <span>
-                A hierarquia bruta da Meta fica aqui para conferencia tecnica.
-                Os relatorios principais acima continuam sendo a fonte de
-                analise.
+                A hierarquia bruta da Meta fica aqui para conferência técnica.
+                Os relatórios principais acima continuam sendo a fonte de
+                análise.
               </span>
             </span>
             <span className="button ghost meta-diagnostic-action">
-              Ver estrutura tecnica
+              Ver estrutura técnica
             </span>
           </summary>
 
@@ -3693,8 +3693,8 @@ export default async function ReportsPage({
               <small>
                 {syncedCountLabel(
                   metaSummary.ads,
-                  "anuncio sincronizado",
-                  "anuncios sincronizados",
+                  "anúncio sincronizado",
+                  "anúncios sincronizados",
                 )}
               </small>
             </span>
@@ -3710,13 +3710,13 @@ export default async function ReportsPage({
             </span>
             <span>
               <strong>{syncDateLabel(metaSummary.lastSyncedAt)}</strong>
-              <small>ultima sincronizacao</small>
+              <small>última sincronização</small>
             </span>
           </div>
 
           <form
             className="filter-bar meta-structure-filters"
-            aria-label="Filtros da estrutura tecnica Meta"
+            aria-label="Filtros da estrutura técnica Meta"
             action="/reports"
           >
             <input type="hidden" name="since" value={since ?? ""} />
@@ -3760,12 +3760,12 @@ export default async function ReportsPage({
             <select
               className="filter-control"
               name="structureNameScope"
-              aria-label="Tipo de filtro da estrutura tecnica"
+              aria-label="Tipo de filtro da estrutura técnica"
               defaultValue={structureFilters.nameScope}
             >
-              <option value="campaign">Campanha contem</option>
-              <option value="adset">Conjunto contem</option>
-              <option value="ad">Anuncio contem</option>
+              <option value="campaign">Campanha contém</option>
+              <option value="adset">Conjunto contém</option>
+              <option value="ad">Anúncio contém</option>
             </select>
             <input
               className="filter-control"
@@ -3777,7 +3777,7 @@ export default async function ReportsPage({
             <select
               className="filter-control"
               name="structureStatus"
-              aria-label="Filtrar status da estrutura tecnica"
+              aria-label="Filtrar status da estrutura técnica"
               defaultValue={structureFilters.status}
             >
               <option value="all">Todos os status</option>
@@ -3800,7 +3800,7 @@ export default async function ReportsPage({
                 <tr>
                   <th>Campanha</th>
                   <th>Conjunto</th>
-                  <th>Anuncio</th>
+                  <th>Anúncio</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -3830,13 +3830,13 @@ export default async function ReportsPage({
                       </td>
                       <td>
                         <strong>
-                          <PresentationMask placeholder="Anuncio oculto">
+                          <PresentationMask placeholder="Anúncio oculto">
                             {row.adName}
                           </PresentationMask>
                         </strong>
                         <span>
                           <PresentationMask placeholder="ID oculto">
-                            {row.adId ?? "sem anuncio"}
+                            {row.adId ?? "sem anúncio"}
                           </PresentationMask>
                         </span>
                       </td>
@@ -3858,7 +3858,7 @@ export default async function ReportsPage({
                       <span>{emptyStructureHint}</span>
                     </td>
                     <td>sem conjunto</td>
-                    <td>sem anuncio</td>
+                    <td>sem anúncio</td>
                     <td>
                       <span className="event-chip warn">aguardando sync</span>
                     </td>
@@ -3871,15 +3871,15 @@ export default async function ReportsPage({
       ) : (
         <section className="surface-panel meta-diagnostic-collapsed">
           <div className="meta-diagnostic-copy">
-            <span className="eyebrow">Diagnostico da sincronizacao Meta</span>
-            <strong>Estrutura tecnica sob demanda</strong>
+            <span className="eyebrow">Diagnóstico da sincronização Meta</span>
+            <strong>Estrutura técnica sob demanda</strong>
             <span>
               Carregue a hierarquia bruta somente quando precisar auditar a
-              sincronizacao. Ela nao bloqueia mais a abertura dos relatorios.
+              sincronização. Ela não bloqueia mais a abertura dos relatórios.
             </span>
           </div>
           <Link className="button ghost" href={diagnosticHref}>
-            Carregar diagnostico
+            Carregar diagnóstico
           </Link>
         </section>
       )}

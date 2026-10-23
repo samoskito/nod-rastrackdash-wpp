@@ -10,7 +10,7 @@ const sections: Array<{
   section: BackofficeClientsSection;
 }> = [
   {
-    description: "Ambientes e responsaveis",
+    description: "Ambientes e responsáveis",
     href: "/backoffice/clients?section=workspaces",
     icon: UsersRound,
     label: "Workspaces",
@@ -40,7 +40,7 @@ export function BackofficeClientsNavigation({
   return (
     <nav
       className="client-area-navigation"
-      aria-label="Areas de clientes e acessos"
+      aria-label="Áreas de clientes e acessos"
     >
       {sections.map((item) => {
         const Icon = item.icon;

@@ -14,26 +14,26 @@ const classificationLabels: Record<
 > = {
   recognized: "Variante reconhecida",
   awaiting_data: "Aguardando dados",
-  review_required: "Revisao necessaria",
+  review_required: "Revisão necessária",
   ignored: "Mensagem ignorada",
 };
 
 const reasonLabels: Record<StructuredCatalogMatchReasonCodeDto, string> = {
-  matched: "Combinacao e preco conferidos.",
-  rule_inactive: "A regra esta pausada.",
-  catalog_inactive: "O catalogo esta inativo.",
-  missing_attribute: "A mensagem nao contem todos os atributos.",
+  matched: "Combinação e preço conferidos.",
+  rule_inactive: "A regra está pausada.",
+  catalog_inactive: "O catálogo está inativo.",
+  missing_attribute: "A mensagem não contém todos os atributos.",
   ambiguous_attribute: "Um atributo apareceu com mais de um valor.",
-  unknown_combination: "A combinacao nao existe no catalogo.",
+  unknown_combination: "A combinação não existe no catálogo.",
   ambiguous_variant: "Mais de uma variante corresponde a mensagem.",
-  missing_price: "Nenhum preco foi encontrado na mensagem.",
-  ambiguous_price: "Mais de um preco foi encontrado na mensagem.",
-  price_mismatch: "O preco da mensagem difere do catalogo.",
-  trigger_missing: "A frase gatilho nao foi encontrada.",
-  empty_template: "O template ainda nao possui dados preenchidos.",
-  awaiting_data: "A mensagem ainda nao contem os dados da compra.",
-  incomplete_item: "Um produto esta sem todos os atributos.",
-  invalid_quantity: "A quantidade informada nao e valida.",
+  missing_price: "Nenhum preço foi encontrado na mensagem.",
+  ambiguous_price: "Mais de um preço foi encontrado na mensagem.",
+  price_mismatch: "O preço da mensagem difere do catálogo.",
+  trigger_missing: "A frase gatilho não foi encontrada.",
+  empty_template: "O template ainda não possui dados preenchidos.",
+  awaiting_data: "A mensagem ainda não contém os dados da compra.",
+  incomplete_item: "Um produto está sem todos os atributos.",
+  invalid_quantity: "A quantidade informada não é válida.",
 };
 
 export function ProviderCatalogTestResult({
@@ -51,7 +51,7 @@ export function ProviderCatalogTestResult({
     >
       <header className="provider-catalog-test-result-heading">
         <div>
-          <span className="micro-label">Decisao do simulador</span>
+          <span className="micro-label">Decisão do simulador</span>
           <strong>{classificationLabels[result.classification]}</strong>
         </div>
         <span className="provider-catalog-test-result-reason">
@@ -80,7 +80,7 @@ export function ProviderCatalogTestResult({
       {result.items.length > 0 ? (
         <div className="provider-catalog-test-items">
           <span className="micro-label">
-            {result.items.length === 1 ? "Item extraido" : "Itens extraidos"}
+            {result.items.length === 1 ? "Item extraído" : "Itens extraídos"}
           </span>
           {result.items.map((item) => (
             <div className="provider-catalog-test-item" key={item.position}>
@@ -112,7 +112,7 @@ export function ProviderCatalogTestResult({
         <dl className="provider-catalog-test-values">
           {calculatedValueCents ? (
             <div>
-              <dt>Valor pelo catalogo</dt>
+              <dt>Valor pelo catálogo</dt>
               <dd>{formatMoney(calculatedValueCents, currency)}</dd>
             </div>
           ) : null}

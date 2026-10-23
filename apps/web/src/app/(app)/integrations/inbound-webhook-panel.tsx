@@ -107,7 +107,7 @@ export function inboundWebhookProviderLabel(provider: string): string {
 
 const inboundPasteInstructions: Record<string, string> = {
   data_crazy:
-    "No Data Crazy, crie uma automacao de mensagem recebida com requisicao HTTP POST (JSON) e cole esta URL.",
+    "No Data Crazy, crie uma automação de mensagem recebida com requisição HTTP POST (JSON) e cole esta URL.",
   gupshup: "Cole esta URL no painel/webhook da Gupshup.",
   meta_cloud:
     "Cole URL e token em App Meta → Configurar webhooks → Verificar e salvar.",
@@ -281,7 +281,7 @@ export function InboundWebhookPanel({
     } catch {
       setNotice({
         tone: "error",
-        message: "Nao foi possivel copiar automaticamente. Selecione a URL.",
+        message: "Não foi possível copiar automaticamente. Selecione a URL.",
       });
     }
   }
@@ -295,12 +295,12 @@ export function InboundWebhookPanel({
       await navigator.clipboard.writeText(oneTimeSecret.verifyToken ?? "");
       setNotice({
         tone: "success",
-        message: "Token de verificacao copiado.",
+        message: "Token de verificação copiado.",
       });
     } catch {
       setNotice({
         tone: "error",
-        message: "Nao foi possivel copiar automaticamente. Selecione o token.",
+        message: "Não foi possível copiar automaticamente. Selecione o token.",
       });
     }
   }
@@ -327,8 +327,8 @@ export function InboundWebhookPanel({
             <h2>Webhooks de entrada</h2>
             <p className="muted">
               Configure Umbler Talk, Gupshup, Data Crazy ou Meta WhatsApp (Cloud
-              API). Cada conexao gera uma URL propria; so mensagens vindas de
-              anuncio (CTWA) viram lead.
+              API). Cada conexão gera uma URL própria; só mensagens vindas de
+              anúncio (CTWA) viram lead.
             </p>
           </div>
         )}
@@ -353,7 +353,7 @@ export function InboundWebhookPanel({
         ) : canCreate ? null : (
           <span className="status-chip">
             {!capabilities.enabled
-              ? "Indisponivel"
+              ? "Indisponível"
               : canManage && !allowCreate
                 ? "Gerenciar"
                 : "Somente leitura"}
@@ -489,7 +489,7 @@ export function InboundWebhookPanel({
                     />
                     <div>
                       <strong>
-                        <PresentationMask placeholder="Conexao WhatsApp">
+                        <PresentationMask placeholder="Conexão WhatsApp">
                           {connection.displayName}
                         </PresentationMask>
                       </strong>
@@ -521,14 +521,14 @@ export function InboundWebhookPanel({
                     <div className="feedback-banner success" role="status">
                       <Send size={16} aria-hidden="true" />
                       <span>
-                        Envio automatico ativo somente nos canais habilitados.
+                        Envio automático ativo somente nos canais habilitados.
                       </span>
                     </div>
                   ) : null}
                   {detailState === "error" ? (
                     <p className="action-note warn">
-                      Parte dos dados desta conexao esta temporariamente
-                      indisponivel.
+                      Parte dos dados desta conexão está temporariamente
+                      indisponível.
                     </p>
                   ) : null}
                   <div className="inbound-counter-grid">
@@ -551,13 +551,13 @@ export function InboundWebhookPanel({
                       value={overview.counters.duplicate}
                     />
                     <ObservationCounter
-                      label="Invalidos"
+                      label="Inválidos"
                       value={overview.counters.invalid}
                       tone="error"
                     />
                   </div>
 
-                  {connection.provider === "meta_cloud" ? <p>Canal habilitado recebe eventos; a conexao precisa de envios automaticos ativos para enviar novos CTWAs. CTWA roteado nao significa enviado. Ativar envios automaticos nao recupera o historico.</p> : null}
+                  {connection.provider === "meta_cloud" ? <p>Canal habilitado recebe eventos; a conexão precisa de envios automáticos ativos para enviar novos CTWAs. CTWA roteado não significa enviado. Ativar envios automáticos não recupera o histórico.</p> : null}
                   {canManage ? (
                     <div className="inbound-connection-actions">
                       {connection.status === "observation" &&
@@ -569,7 +569,7 @@ export function InboundWebhookPanel({
                           onClick={() => {
                             if (
                               window.confirm(
-                                "Ativar o envio automatico? Apenas canais habilitados e com rota valida enviarao novos eventos.",
+                                "Ativar o envio automático? Apenas canais habilitados e com rota válida enviarão novos eventos.",
                               )
                             ) {
                               void runConnectionAction(
@@ -584,7 +584,7 @@ export function InboundWebhookPanel({
                           }}
                         >
                           <Send size={15} aria-hidden="true" />
-                          Ativar envios automaticos
+                          Ativar envios automáticos
                         </button>
                       ) : null}
                       {connection.status === "production" ? (
@@ -595,7 +595,7 @@ export function InboundWebhookPanel({
                           onClick={() => {
                             if (
                               window.confirm(
-                                "Voltar para observacao? Novas mensagens continuarao registradas, mas nao gerarao conversoes automaticas.",
+                                "Voltar para observação? Novas mensagens continuarão registradas, mas não gerarão conversões automáticas.",
                               )
                             ) {
                               void runConnectionAction(
@@ -610,7 +610,7 @@ export function InboundWebhookPanel({
                           }}
                         >
                           <Pause size={15} aria-hidden="true" />
-                          Voltar para observacao
+                          Voltar para observação
                         </button>
                       ) : null}
                       <button
@@ -637,7 +637,7 @@ export function InboundWebhookPanel({
                           <Pause size={15} aria-hidden="true" />
                         )}
                         {connection.status === "paused"
-                          ? "Retomar observacao"
+                          ? "Retomar observação"
                           : "Pausar conexão"}
                       </button>
                       <button
@@ -647,7 +647,7 @@ export function InboundWebhookPanel({
                         onClick={() => {
                           if (
                             window.confirm(
-                              "Gerar uma nova URL invalida a URL atual. Continuar?",
+                              "Gerar uma nova URL inválida a URL atual. Continuar?",
                             )
                           ) {
                             void runConnectionAction(
@@ -668,7 +668,7 @@ export function InboundWebhookPanel({
                         onClick={() => {
                           if (
                             window.confirm(
-                              "Remover a conexao? O historico observado sera preservado.",
+                              "Remover a conexão? O histórico observado será preservado.",
                             )
                           ) {
                             void runConnectionAction(
@@ -688,9 +688,9 @@ export function InboundWebhookPanel({
                   <div className="inbound-channel-list">
                     <div className="inbound-channel-heading">
                       <span>Canal</span>
-                      <span>Numero conectado</span>
-                      <span>Prontidao</span>
-                      <span>Ultimo evento</span>
+                      <span>Número conectado</span>
+                      <span>Prontidão</span>
+                      <span>Último evento</span>
                     </div>
                     {canManage &&
                     allowsManualChannelRegistration(connection.provider) ? (
@@ -729,7 +729,7 @@ export function InboundWebhookPanel({
                                 </PresentationMask>
                               </strong>
                               <span>
-                                <PresentationMask placeholder="Numero oculto">
+                                <PresentationMask placeholder="Número oculto">
                                   {channel.connectedPhone}
                                 </PresentationMask>
                               </span>
@@ -763,7 +763,7 @@ export function InboundWebhookPanel({
                                         activating &&
                                         connection.status === "production" &&
                                         !window.confirm(
-                                          "Ativar o envio deste canal? Novos CTWA com rota valida poderao ser enviados automaticamente.",
+                                          "Ativar o envio deste canal? Novos CTWA com rota válida poderão ser enviados automaticamente.",
                                         )
                                       ) {
                                         return;
@@ -825,14 +825,14 @@ export function InboundWebhookPanel({
                         <Settings2 size={18} aria-hidden="true" />
                       </div>
                       <div className="provider-conversion-summary-copy">
-                        <span className="eyebrow">Gatilhos de conversao</span>
+                        <span className="eyebrow">Gatilhos de conversão</span>
                         <strong>
                           {
                             providerRules.filter(
                               (rule) => rule.connectionId === connection.id,
                             ).length
                           }{" "}
-                          regra(s) nesta conexao
+                          regra(s) nesta conexão
                         </strong>
                         <span>
                           Crie e revise as regras na tela Conversões.
@@ -845,7 +845,7 @@ export function InboundWebhookPanel({
                       >
                         {providerRulesEnabled
                           ? "Regras disponíveis"
-                          : "Regras indisponiveis"}
+                          : "Regras indisponíveis"}
                       </span>
                       <Link
                         className="button"
@@ -935,13 +935,13 @@ export function InboundWebhookOneTimeSecretPanel({
       {showVerifyToken ? (
         <div className="inbound-webhook-secret-field">
           <span className="micro-label">
-            Verify token (token de verificacao)
+            Verify token (token de verificação)
           </span>
           <div className="inbound-webhook-secret-field-row">
             <input
               readOnly
               value={secret.verifyToken ?? ""}
-              aria-label="Token de verificacao Meta"
+              aria-label="Token de verificação Meta"
               data-presentation-sensitive-field="true"
             />
             <button
@@ -980,7 +980,7 @@ function ChannelCreateForm({
         onClick={() => setOpen(true)}
       >
         <Plus size={15} aria-hidden="true" />
-        Cadastrar canal/numero
+        Cadastrar canal/número
       </button>
     );
   }
@@ -997,7 +997,7 @@ function ChannelCreateForm({
       }}
     >
       <label>
-        <span className="field-label">Numero conectado</span>
+        <span className="field-label">Número conectado</span>
         <input
           value={connectedPhone}
           onChange={(event) => setConnectedPhone(event.target.value)}
@@ -1065,7 +1065,7 @@ function ChannelReadiness({
   return (
     <section
       className="inbound-readiness"
-      aria-label="Prontidao operacional do canal"
+      aria-label="Prontidão operacional do canal"
     >
       <div className="inbound-readiness-heading">
         <div className="inbound-readiness-title">
@@ -1133,7 +1133,7 @@ function ChannelReadiness({
         </ul>
       ) : (
         <p className="inbound-readiness-clear">
-          Rota e payload preservado prontos para a revisao operacional.
+          Rota e payload preservado prontos para a revisão operacional.
         </p>
       )}
       <p className="muted">
@@ -1144,7 +1144,7 @@ function ChannelReadiness({
 
       {readiness.alreadyMaterializedCtwa > 0 ? (
         <p className="muted inbound-readiness-materialized">
-          {readiness.alreadyMaterializedCtwa} CTWA ja materializado(s).
+          {readiness.alreadyMaterializedCtwa} CTWA já materializado(s).
         </p>
       ) : null}
     </section>
@@ -1174,9 +1174,9 @@ function readinessStateLabel(
   const labels = {
     waiting: "Aguardando CTWA",
     blocked: "Bloqueado",
-    partial: "Prontidao parcial",
+    partial: "Prontidão parcial",
     ready: "Rota pronta",
-    complete: "Concluido",
+    complete: "Concluído",
   } as const;
 
   return labels[state];
@@ -1197,8 +1197,8 @@ function readinessBlockerLabel(
   readiness: InboundWebhookChannelDto["readiness"],
 ) {
   const labels = {
-    connection_paused: "A conexao de webhook esta pausada.",
-    channel_paused: "Este canal esta pausado.",
+    connection_paused: "A conexão de webhook está pausada.",
+    channel_paused: "Este canal está pausado.",
     route_not_configured: readiness.routingSource
       ? unnichatRouteNotConfiguredLabel(readiness)
       : "Configure ao menos uma rota Meta para este canal.",
@@ -1210,7 +1210,7 @@ function readinessBlockerLabel(
     ctwa_ad_unavailable: adUnavailableLabel(readiness.adUnavailableCtwa ?? 0),
     payload_unavailable: `${readiness.payloadUnavailableCtwa} CTWA não possuem mais payload disponível.`,
     payload_expiring_soon:
-      "O payload preservado mais proximo expira em menos de 48 horas.",
+      "O payload preservado mais próximo expira em menos de 48 horas.",
   } as const;
 
   return labels[blocker];
@@ -1232,7 +1232,7 @@ function connectionStatusLabel(
   status: InboundWebhookConnectionOverviewDto["connection"]["status"],
 ) {
   if (status === "production") {
-    return "Envio automatico";
+    return "Envio automático";
   }
 
   if (status === "observation") {
@@ -1250,7 +1250,7 @@ function formatDateTime(value: string | null): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "Data indisponivel";
+    return "Data indisponível";
   }
 
   return date.toLocaleString("pt-BR", {

@@ -186,7 +186,7 @@ export function MetaReportingAccountsForm({
             description: business.id,
           }))}
           onValueChange={handleBusinessChange}
-          ariaLabel="Business Manager para relatorios"
+          ariaLabel="Business Manager para relatórios"
           placeholder="Buscar BM"
           presentationPlaceholder="BM oculto"
           disabled={isLoadingBusinessAssets}
@@ -201,7 +201,7 @@ export function MetaReportingAccountsForm({
             description: account.id,
           }))}
           onValueChange={setAdAccountId}
-          ariaLabel="Conta de anuncio para relatorios"
+          ariaLabel="Conta de anúncio para relatórios"
           placeholder="Buscar conta"
           presentationPlaceholder="Conta oculta"
           disabled={isLoadingBusinessAssets}
@@ -210,7 +210,7 @@ export function MetaReportingAccountsForm({
         <SubmitButton
           disabled={isLoadingBusinessAssets || !businessId || !adAccountId}
           pendingLabel="Salvando conta..."
-          statusText="Adicionando conta aos relatorios."
+          statusText="Adicionando conta aos relatórios."
         >
           {isLoadingBusinessAssets ? "Carregando contas" : "Adicionar conta"}
         </SubmitButton>
@@ -224,7 +224,7 @@ export function MetaReportingAccountsForm({
               <th>Moeda / timezone</th>
               <th>Sync</th>
               <th>Status</th>
-              <th>Acao</th>
+              <th>Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -245,7 +245,7 @@ export function MetaReportingAccountsForm({
                   </td>
                   <td>
                     <strong>
-                      <PresentationMask placeholder="Conta de anuncios oculta">
+                      <PresentationMask placeholder="Conta de anúncios oculta">
                         {account.adAccountName}
                       </PresentationMask>
                     </strong>
@@ -303,7 +303,7 @@ export function MetaReportingAccountsForm({
                 <td>
                   <strong>Nenhuma conta configurada</strong>
                   <span>
-                    Adicione contas de anuncio para relatorios multi-conta.
+                    Adicione contas de anúncio para relatórios multi-conta.
                   </span>
                 </td>
                 <td>sem conta</td>

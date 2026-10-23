@@ -54,12 +54,12 @@ function stateChipClass(state: ConversionAuditDeliveryStateDto): string {
 
 function missingFieldLabel(field: string): string {
   const labels: Record<string, string> = {
-    phone_hash: "Telefone identificavel",
-    ad_id: "Anuncio de origem",
+    phone_hash: "Telefone identificável",
+    ad_id: "Anúncio de origem",
     ctwa_clid: "Identificador de clique",
-    value: "Valor da conversao",
+    value: "Valor da conversão",
     pixel_id: "Pixel Meta",
-    page_id: "Pagina Facebook",
+    page_id: "Página Facebook",
   };
 
   return labels[field] ?? field;
@@ -111,8 +111,8 @@ function JsonSnapshot({
       {serialized && presentationMode ? (
         <div className="audit-payload-empty presentation-payload-hidden">
           <ShieldCheck aria-hidden="true" size={24} />
-          <strong>Payload oculto no modo de apresentacao</strong>
-          <span>Desative o modo para inspecionar os dados tecnicos.</span>
+          <strong>Payload oculto no modo de apresentação</strong>
+          <span>Desative o modo para inspecionar os dados técnicos.</span>
         </div>
       ) : serialized ? (
         <pre className="audit-json-viewer">
@@ -121,7 +121,7 @@ function JsonSnapshot({
       ) : (
         <div className="audit-payload-empty">
           <Braces aria-hidden="true" size={24} />
-          <strong>Nenhum payload disponivel</strong>
+          <strong>Nenhum payload disponível</strong>
           <span>{snapshot.label}</span>
         </div>
       )}
@@ -144,8 +144,8 @@ function RetrySubmitButton({
       disabled={pending}
       title={
         blocked
-          ? "Tentar enviar de novo com a conexao Meta atual"
-          : "Reenviar falha de comunicacao com a Meta"
+          ? "Tentar enviar de novo com a conexão Meta atual"
+          : "Reenviar falha de comunicação com a Meta"
       }
       type="submit"
     >
@@ -286,7 +286,7 @@ export function EventAuditDetails({
             <div className="event-audit-loading">Carregando auditoria...</div>
           ) : failed ? (
             <div className="event-audit-loading error">
-              Nao foi possivel carregar os detalhes deste evento.
+              Não foi possível carregar os detalhes deste evento.
             </div>
           ) : detail ? (
             <>
@@ -327,15 +327,15 @@ export function EventAuditDetails({
                         <dt>Pixel</dt>
                         <dd>
                           <PresentationMask placeholder="Pixel oculto">
-                            {detail.pixelId ?? "Nao resolvido"}
+                            {detail.pixelId ?? "Não resolvido"}
                           </PresentationMask>
                         </dd>
                       </div>
                       <div>
-                        <dt>Pagina</dt>
+                        <dt>Página</dt>
                         <dd>
-                          <PresentationMask placeholder="Pagina oculta">
-                            {detail.pageId ?? "Nao resolvida"}
+                          <PresentationMask placeholder="Página oculta">
+                            {detail.pageId ?? "Não resolvida"}
                           </PresentationMask>
                         </dd>
                       </div>
@@ -343,7 +343,7 @@ export function EventAuditDetails({
 
                     {detail.reason ? (
                       <div className="event-audit-reason">
-                        <span className="micro-label">Motivo tecnico</span>
+                        <span className="micro-label">Motivo técnico</span>
                         <strong>{detail.reason}</strong>
                         {detail.reasonCode ? (
                           <code>{detail.reasonCode}</code>
@@ -355,16 +355,16 @@ export function EventAuditDetails({
                       <div className="event-audit-retry">
                         {detail.deliveryState === "blocked" ? (
                           <span>
-                            <strong>Bloqueado pela conexao com a Meta</strong>
+                            <strong>Bloqueado pela conexão com a Meta</strong>
                             <small>
-                              Se a conexao ja foi ajustada, uma nova tentativa
-                              usa a configuracao atual e o mesmo identificador
+                              Se a conexão já foi ajustada, uma nova tentativa
+                              usa a configuração atual e o mesmo identificador
                               do evento.
                             </small>
                           </span>
                         ) : (
                           <span>
-                            <strong>Falha transitoria de comunicacao</strong>
+                            <strong>Falha transitória de comunicação</strong>
                             <small>
                               Uma nova tentativa reutiliza o mesmo
                               identificador do evento.

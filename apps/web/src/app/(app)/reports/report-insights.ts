@@ -208,7 +208,7 @@ function itemSignals({
       key: "low_sample",
       tone: "warn",
       label: "Amostra insuficiente",
-      basis: `${volume} ${label} no periodo, abaixo do minimo de ${REPORT_INSIGHT_MIN_SAMPLE} usado nesta leitura. A posicao pode mudar com poucos eventos.`,
+      basis: `${volume} ${label} no período, abaixo do mínimo de ${REPORT_INSIGHT_MIN_SAMPLE} usado nesta leitura. A posição pode mudar com poucos eventos.`,
     });
   }
 
@@ -217,7 +217,7 @@ function itemSignals({
       key: "no_spend",
       tone: "warn",
       label: "Sem investimento registrado",
-      basis: `Investimento de ${formatReportInsightMoney(0, row.currency)} no periodo: custo zero nao indica eficiencia. Confira a sincronizacao Meta deste periodo.`,
+      basis: `Investimento de ${formatReportInsightMoney(0, row.currency)} no período: custo zero não indica eficiência. Confira a sincronização Meta deste período.`,
     });
   }
 
@@ -257,7 +257,7 @@ function itemSignals({
         key: "cost_vs_filter",
         tone: "neutral",
         label: `Custo ${percentLabel(Math.abs(delta))} ${delta < 0 ? "abaixo" : "acima"} da media do filtro`,
-        basis: `Media do filtro: ${formatReportInsightMoney(averageCents, totals?.currency)} por resultado (${label}). Sinal exibido a partir de ${percentLabel(REPORT_INSIGHT_COST_DELTA_THRESHOLD)} de diferenca.`,
+        basis: `Media do filtro: ${formatReportInsightMoney(averageCents, totals?.currency)} por resultado (${label}). Sinal exibido a partir de ${percentLabel(REPORT_INSIGHT_COST_DELTA_THRESHOLD)} de diferença.`,
       });
     }
   }

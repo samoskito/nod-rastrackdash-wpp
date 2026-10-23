@@ -40,7 +40,7 @@ export function LoginForm({
         (session.user.platformRole ? "/backoffice/clients" : "/overview");
     } catch {
       setError(
-        "Nao foi possivel autenticar. Confira os dados e tente novamente.",
+        "Não foi possível autenticar. Confira os dados e tente novamente.",
       );
       setLoading(false);
     }

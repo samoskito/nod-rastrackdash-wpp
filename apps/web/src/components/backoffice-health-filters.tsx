@@ -72,7 +72,7 @@ function DateFields({
       <FilterField label="Desde">
         <input name="since" type="date" defaultValue={since?.slice(0, 10)} />
       </FilterField>
-      <FilterField label="Ate">
+      <FilterField label="Até">
         <input name="until" type="date" defaultValue={until?.slice(0, 10)} />
       </FilterField>
     </>
@@ -114,8 +114,8 @@ function AttributionFields({
           defaultValue={values.adSetId}
         />
       </FilterField>
-      <FilterField label="Anuncio">
-        <input name="adId" placeholder="ID do anuncio" defaultValue={values.adId} />
+      <FilterField label="Anúncio">
+        <input name="adId" placeholder="ID do anúncio" defaultValue={values.adId} />
       </FilterField>
     </>
   );
@@ -132,11 +132,11 @@ export function BackofficeHealthFilters({
 }) {
   const typeLabel =
     section === "audit"
-      ? "Acao"
+      ? "Ação"
       : section === "conversions"
         ? "Evento CAPI"
         : section === "integrations"
-          ? "Operacao"
+          ? "Operação"
           : "Tipo de evento";
 
   return (
@@ -244,7 +244,7 @@ export function BackofficeHealthFilters({
       </div>
 
       <details className="operations-advanced-filters">
-        <summary>Filtros avancados</summary>
+        <summary>Filtros avançados</summary>
         <div className="operations-filter-grid">
           <DateFields since={values.since} until={values.until} />
 
@@ -286,10 +286,10 @@ export function BackofficeHealthFilters({
           ) : null}
 
           {section !== "audit" && section !== "jobs" ? (
-            <FilterField label="Codigo do erro">
+            <FilterField label="Código do erro">
               <input
                 name="errorCode"
-                placeholder="Codigo do erro"
+                placeholder="Código do erro"
                 defaultValue={values.errorCode}
               />
             </FilterField>

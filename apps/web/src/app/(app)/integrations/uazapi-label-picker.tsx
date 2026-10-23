@@ -80,7 +80,7 @@ export function UazapiLabelPicker({
         <div
           className="provider-conversion-label-chips"
           role="group"
-          aria-label="Etiquetas disponiveis no WhatsApp"
+          aria-label="Etiquetas disponíveis no WhatsApp"
         >
           {state.labels.map((label) => {
             const active = selectedLabels.some((item) => item.id === label.id);
@@ -111,7 +111,7 @@ export function UazapiLabelPicker({
         <div className="provider-conversion-label-fallback">
           <small className="action-note warn">
             <AlertTriangle size={13} aria-hidden="true" />
-            Nenhuma etiqueta encontrada nesta conexao.
+            Nenhuma etiqueta encontrada nesta conexão.
           </small>
           <input
             value={fallbackValue}
@@ -126,7 +126,7 @@ export function UazapiLabelPicker({
         <div className="provider-conversion-label-fallback">
           <small className="action-note warn">
             <AlertTriangle size={13} aria-hidden="true" />
-            Nao foi possivel carregar as etiquetas. Informe o nome manualmente.
+            Não foi possível carregar as etiquetas. Informe o nome manualmente.
           </small>
           <input
             value={fallbackValue}

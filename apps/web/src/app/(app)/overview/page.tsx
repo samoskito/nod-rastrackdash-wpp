@@ -96,7 +96,7 @@ async function getOverviewReport(
     return {
       report: {
         workspaceId: "unavailable",
-        rangeLabel: "API indisponivel",
+        rangeLabel: "API indisponível",
         campaigns: [],
       },
       state: "error",
@@ -327,7 +327,7 @@ function purchaseBreakdownLabel(
   repurchases: number,
 ): string {
   if (firstPurchases === 0 && repurchases === 0) {
-    return "Nenhuma compra no periodo";
+    return "Nenhuma compra no período";
   }
 
   const firstPurchaseLabel = `${firstPurchases} ${firstPurchases === 1 ? "primeira compra" : "primeiras compras"}`;
@@ -348,7 +348,7 @@ function funnelStageCostLabel(stage: ReportFunnelStepDto): string {
     first_purchase: "Custo por primeira compra",
     repurchase: "Custo por recompra",
     event_initiate_checkout: "Custo por checkout iniciado",
-    event_add_to_cart: "Custo por adicao ao carrinho",
+    event_add_to_cart: "Custo por adição ao carrinho",
   };
 
   if (labels[stage.key]) {
@@ -528,14 +528,14 @@ export default async function OverviewPage({
   ];
   const funnelSummary = dataAvailable
     ? `${report.rangeLabel}: ${campaign.metaConversationsStarted} conversas registradas pela Meta chegaram a ${campaign.firstPurchases} ${campaign.firstPurchases === 1 ? "primeira compra" : "primeiras compras"}.`
-    : "A jornada sera exibida quando a API concluir a inicializacao.";
+    : "A jornada será exibida quando a API concluir a inicialização.";
 
   return (
     <section className="page-stack page-wide overview-page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Visao geral</span>
-          <h1>Cockpit da operacao</h1>
+          <span className="eyebrow">Visão geral</span>
+          <h1>Cockpit da operação</h1>
           <p>
             {report.rangeLabel} cruzando investimento, leads novos e eventos
             enviados ao Pixel.
@@ -543,7 +543,7 @@ export default async function OverviewPage({
         </div>
         <div className="header-actions" aria-label="Filtros ativos">
           {reportState === "error" ? (
-            <span className="status-chip warn">API indisponivel</span>
+            <span className="status-chip warn">API indisponível</span>
           ) : (
             <>
               <span className="tag">{report.rangeLabel}</span>
@@ -613,7 +613,7 @@ export default async function OverviewPage({
           unavailable={!dataAvailable}
         />
         <Metric
-          label="Receita trafego"
+          label="Receita tráfego"
           value={
             !dataAvailable
               ? "-"
@@ -692,16 +692,16 @@ export default async function OverviewPage({
             <div className="overview-section-heading">
               <div>
                 <span className="eyebrow">Funil integrado</span>
-                <h2>Conversao por etapas</h2>
+                <h2>Conversão por etapas</h2>
                 <p>{funnelSummary}</p>
               </div>
             </div>
             <div className="overview-unavailable" role="status">
               <span className="status-dot" aria-hidden="true" />
               <div>
-                <strong>Dados temporariamente indisponiveis</strong>
+                <strong>Dados temporariamente indisponíveis</strong>
                 <span>
-                  Tente novamente quando a API concluir a inicializacao.
+                  Tente novamente quando a API concluir a inicialização.
                 </span>
               </div>
             </div>
@@ -773,7 +773,7 @@ function DailyConversationComparison({
   };
   const differenceLabel =
     difference === 0
-      ? "Volumes conciliados no periodo"
+      ? "Volumes conciliados no período"
       : difference > 0
         ? `${difference} ${difference === 1 ? "conversa" : "conversas"} a mais na Meta`
         : `${Math.abs(difference)} ${Math.abs(difference) === 1 ? "lead novo" : "leads novos"} a mais`;
@@ -785,7 +785,7 @@ function DailyConversationComparison({
     >
       <div className="daily-comparison-header">
         <div>
-          <span className="eyebrow">Conciliacao diaria</span>
+          <span className="eyebrow">Conciliação diária</span>
           <h2 id="daily-comparison-title">Meta x leads novos</h2>
           <p>
             A Meta conta cada conversa iniciada. Leads novos contam uma vez, no
@@ -798,7 +798,7 @@ function DailyConversationComparison({
           aria-label="Resumo do comparativo"
         >
           <span>
-            <PresentationMask placeholder="Conta de anuncios oculta">
+            <PresentationMask placeholder="Conta de anúncios oculta">
               {scopeLabel}
             </PresentationMask>
           </span>
@@ -808,17 +808,17 @@ function DailyConversationComparison({
 
       {reportState === "error" ? (
         <div className="daily-comparison-empty" role="status">
-          <strong>Comparativo indisponivel</strong>
-          <span>A API precisa responder para montar a serie diaria.</span>
+          <strong>Comparativo indisponível</strong>
+          <span>A API precisa responder para montar a serie diária.</span>
         </div>
       ) : !available ? (
         <div className="daily-comparison-empty" role="status">
-          <strong>Sincronize este periodo para ver a comparacao diaria</strong>
+          <strong>Sincronize este período para ver a comparação diária</strong>
           <span>
-            A serie historica da Meta sera registrada na proxima sincronizacao.
+            A serie histórica da Meta será registrada na próxima sincronização.
           </span>
           <Link className="button ghost" href={detailHref}>
-            Abrir relatorios
+            Abrir relatórios
           </Link>
         </div>
       ) : (
@@ -843,7 +843,7 @@ function DailyConversationComparison({
               viewBox={`0 0 ${viewWidth} ${viewHeight}`}
               style={{ minWidth: `${viewWidth}px` }}
               role="img"
-              aria-label={`Comparacao diaria. Conversas contadas pela Meta ${metaTotal}, leads novos ${realTotal}, retornos ${returningTotal}.`}
+              aria-label={`Comparação diária. Conversas contadas pela Meta ${metaTotal}, leads novos ${realTotal}, retornos ${returningTotal}.`}
             >
               <title>
                 Conversas contadas pela Meta, leads novos e retornos por dia
@@ -1040,12 +1040,12 @@ function ConversionFunnel({
   return (
     <section
       className="conversion-funnel"
-      aria-label={`Funil de conversao. ${funnelLabel}`}
+      aria-label={`Funil de conversão. ${funnelLabel}`}
     >
       <div className="conversion-funnel-heading">
         <div>
           <span className="micro-label">Funil integrado</span>
-          <h2>Conversao por etapas</h2>
+          <h2>Conversão por etapas</h2>
           <p>{description}</p>
         </div>
         <span className="conversion-funnel-stage-count">

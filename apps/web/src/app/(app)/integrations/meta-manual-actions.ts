@@ -55,7 +55,7 @@ export async function disconnectMetaOAuthAction(
         "OAuth desconectado deste workspace. Agora configure o token permanente.",
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel desconectar a conta Meta.");
+    return failure(error, "Não foi possível desconectar a conta Meta.");
   }
 }
 
@@ -80,11 +80,11 @@ export async function createMetaManualCredentialAction(
       message:
         discovery.businesses.length > 0
           ? "Token validado e protegido. Agora escolha a estrutura Meta."
-          : "Token validado e protegido. A Meta nao listou as BMs; informe o ID da estrutura.",
+          : "Token validado e protegido. A Meta não listou as BMs; informe o ID da estrutura.",
       discovery,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel validar este token na Meta.");
+    return failure(error, "Não foi possível validar este token na Meta.");
   }
 }
 
@@ -107,14 +107,14 @@ export async function startMetaPalmupConnectAction(): Promise<MetaManualActionRe
     if (!pairingId || !authorizeUrl) {
       return {
         ok: false,
-        message: "Nao foi possivel iniciar o login social PalmUP.",
+        message: "Não foi possível iniciar o login social PalmUP.",
       };
     }
 
     return {
       ok: true,
       message:
-        "Autorize a Meta na aba da PalmUP e volte aqui para concluir a conexao.",
+        "Autorize a Meta na aba da PalmUP e volte aqui para concluir a conexão.",
       palmupPairing: { pairingId, authorizeUrl },
     };
   } catch (error) {
@@ -123,12 +123,12 @@ export async function startMetaPalmupConnectAction(): Promise<MetaManualActionRe
       return {
         ok: false,
         message:
-          "Login social PalmUP nao configurado neste servidor. Use o token permanente.",
+          "Login social PalmUP não configurado neste servidor. Use o token permanente.",
         palmupUnconfigured: true,
       };
     }
 
-    return failure(error, "Nao foi possivel iniciar o login social PalmUP.");
+    return failure(error, "Não foi possível iniciar o login social PalmUP.");
   }
 }
 
@@ -138,7 +138,7 @@ export async function completeMetaPalmupConnectAction(
   if (!PALMUP_PAIRING_ID_PATTERN.test(pairingId)) {
     return {
       ok: false,
-      message: "Conexao PalmUP invalida. Inicie novamente.",
+      message: "Conexão PalmUP inválida. Inicie novamente.",
     };
   }
 
@@ -158,7 +158,7 @@ export async function completeMetaPalmupConnectAction(
       return {
         ok: false,
         message:
-          "Meta conectada, mas a resposta nao pode ser exibida. Recarregue a pagina e escolha o token salvo.",
+          "Meta conectada, mas a resposta não pode ser exibida. Recarregue a página e escolha o token salvo.",
       };
     }
 
@@ -169,11 +169,11 @@ export async function completeMetaPalmupConnectAction(
       message:
         discovery.businesses.length > 0
           ? "Meta conectada pela PalmUP e token protegido. Agora escolha a estrutura Meta."
-          : "Meta conectada pela PalmUP e token protegido. A Meta nao listou as BMs; informe o ID da estrutura.",
+          : "Meta conectada pela PalmUP e token protegido. A Meta não listou as BMs; informe o ID da estrutura.",
       discovery,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel concluir o login social PalmUP.");
+    return failure(error, "Não foi possível concluir o login social PalmUP.");
   }
 }
 
@@ -191,11 +191,11 @@ export async function discoverMetaManualAssetsAction(
 
     return {
       ok: true,
-      message: "Ativos acessiveis carregados.",
+      message: "Ativos acessíveis carregados.",
       discovery,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel consultar os ativos deste token.");
+    return failure(error, "Não foi possível consultar os ativos deste token.");
   }
 }
 
@@ -258,12 +258,12 @@ export async function createMetaManualConnectionAction(
     return {
       ok: true,
       message: syncQueued
-        ? `Estrutura ativada. A importacao inicial de ${initialPeriod.since} a ${initialPeriod.until} foi enfileirada.`
-        : "Estrutura ativada, mas o historico nao entrou na fila. Use Sincronizar Meta em Relatorios.",
+        ? `Estrutura ativada. A importação inicial de ${initialPeriod.since} a ${initialPeriod.until} foi enfileirada.`
+        : "Estrutura ativada, mas o histórico não entrou na fila. Use Sincronizar Meta em Relatórios.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel ativar esta estrutura Meta.");
+    return failure(error, "Não foi possível ativar esta estrutura Meta.");
   }
 }
 
@@ -285,13 +285,13 @@ export async function rotateMetaManualCredentialAction(
     revalidatePath("/integrations");
     return {
       ok: true,
-      message: "Token substituido depois da validacao completa.",
+      message: "Token substituído depois da validação completa.",
       configuration,
     };
   } catch (error) {
     return failure(
       error,
-      "O novo token nao acessa toda a estrutura desta conexao.",
+      "O novo token não acessa toda a estrutura desta conexão.",
     );
   }
 }
@@ -314,12 +314,12 @@ export async function setMetaManualConnectionStatusAction(
       ok: true,
       message:
         status === "paused"
-          ? "Conexao pausada. As outras BMs continuam ativas."
-          : "Conexao reativada.",
+          ? "Conexão pausada. As outras BMs continuam ativas."
+          : "Conexão reativada.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar esta conexao.");
+    return failure(error, "Não foi possível alterar esta conexão.");
   }
 }
 
@@ -339,7 +339,7 @@ export async function testMetaManualConnectionAction(
       testResult,
     };
   } catch (error) {
-    return failure(error, "A conexao nao passou na validacao da Meta.");
+    return failure(error, "A conexão não passou na validação da Meta.");
   }
 }
 
@@ -361,11 +361,11 @@ export async function removeMetaManualConnectionAction(
     return {
       ok: true,
       message:
-        "Estrutura removida. O historico foi preservado e as contas deixaram de sincronizar.",
+        "Estrutura removida. O histórico foi preservado e as contas deixaram de sincronizar.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel remover esta estrutura Meta.");
+    return failure(error, "Não foi possível remover esta estrutura Meta.");
   }
 }
 
@@ -381,10 +381,10 @@ export async function syncMetaManualHistoryAction(): Promise<MetaManualActionRes
     revalidatePath("/reports");
     return {
       ok: true,
-      message: `Importacao de ${period.since} a ${period.until} enfileirada. O andamento aparece em cada conta.`,
+      message: `Importação de ${period.since} a ${period.until} enfileirada. O andamento aparece em cada conta.`,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel enfileirar o historico da Meta.");
+    return failure(error, "Não foi possível enfileirar o histórico da Meta.");
   }
 }
 
@@ -410,14 +410,14 @@ export async function setMetaManualAccountDestinationAction(
       ok: true,
       message:
         conversionDestinationIds.length > 1
-          ? `${conversionDestinationIds.length} destinos autorizados. Revise o roteamento por anuncio.`
+          ? `${conversionDestinationIds.length} destinos autorizados. Revise o roteamento por anúncio.`
           : conversionDestinationId
-            ? "Destino especifico aplicado a esta conta."
-            : "A conta voltou a usar o destino padrao da BM.",
+            ? "Destino específico aplicado a esta conta."
+            : "A conta voltou a usar o destino padrão da BM.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar o destino desta conta.");
+    return failure(error, "Não foi possível alterar o destino desta conta.");
   }
 }
 
@@ -431,11 +431,11 @@ export async function getMetaManualAdRoutingAction(
 
     return {
       ok: true,
-      message: "Roteamento dos anuncios carregado.",
+      message: "Roteamento dos anúncios carregado.",
       adRouting,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel carregar os anuncios desta conta.");
+    return failure(error, "Não foi possível carregar os anúncios desta conta.");
   }
 }
 
@@ -457,12 +457,12 @@ export async function setMetaManualAdDestinationAction(
     return {
       ok: true,
       message: conversionDestinationId
-        ? "Destino manual aplicado ao anuncio."
-        : "Excecao removida; a descoberta automatica voltou a valer.",
+        ? "Destino manual aplicado ao anúncio."
+        : "Exceção removida; a descoberta automática voltou a valer.",
       adRouting,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar o destino deste anuncio.");
+    return failure(error, "Não foi possível alterar o destino deste anúncio.");
   }
 }
 
@@ -477,13 +477,13 @@ export async function prepareMetaOAuthAdvancedCredentialAction(): Promise<MetaMa
     return {
       ok: true,
       message:
-        "Login social validado. Agora vincule cada BM as suas contas, Pixel e Pagina.",
+        "Login social validado. Agora vincule cada BM as suas contas, Pixel e Página.",
       discovery,
     };
   } catch (error) {
     return failure(
       error,
-      "Nao foi possivel preparar o login social para destinos por BM.",
+      "Não foi possível preparar o login social para destinos por BM.",
     );
   }
 }
@@ -506,7 +506,7 @@ export async function discoverMetaOAuthAdvancedAssetsAction(
       discovery,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel consultar os ativos desta conta.");
+    return failure(error, "Não foi possível consultar os ativos desta conta.");
   }
 }
 
@@ -527,11 +527,11 @@ export async function createMetaOAuthAdvancedConnectionAction(
       ok: true,
       message: configuration.advancedRoutingEnabled
         ? "Estrutura atualizada e pronta para esta BM."
-        : "Estrutura salva para revisao. A rota atual continua sem alteracoes.",
+        : "Estrutura salva para revisão. A rota atual continua sem alterações.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel salvar esta estrutura OAuth.");
+    return failure(error, "Não foi possível salvar esta estrutura OAuth.");
   }
 }
 
@@ -558,7 +558,7 @@ export async function setMetaOAuthAdvancedConnectionStatusAction(
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar esta estrutura OAuth.");
+    return failure(error, "Não foi possível alterar esta estrutura OAuth.");
   }
 }
 
@@ -578,7 +578,7 @@ export async function testMetaOAuthAdvancedConnectionAction(
       testResult,
     };
   } catch (error) {
-    return failure(error, "A estrutura nao passou na validacao da Meta.");
+    return failure(error, "A estrutura não passou na validação da Meta.");
   }
 }
 
@@ -600,11 +600,11 @@ export async function removeMetaOAuthAdvancedConnectionAction(
     return {
       ok: true,
       message:
-        "Vinculo removido. O destino principal e o historico foram preservados.",
+        "Vínculo removido. O destino principal e o histórico foram preservados.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel remover este vinculo OAuth.");
+    return failure(error, "Não foi possível remover este vínculo OAuth.");
   }
 }
 
@@ -630,14 +630,14 @@ export async function setMetaOAuthAdvancedAccountDestinationAction(
       ok: true,
       message:
         conversionDestinationIds.length > 1
-          ? `${conversionDestinationIds.length} destinos autorizados. Revise o roteamento por anuncio.`
+          ? `${conversionDestinationIds.length} destinos autorizados. Revise o roteamento por anúncio.`
           : conversionDestinationId
-            ? "Destino especifico aplicado a esta conta."
-            : "A conta voltou a usar o destino padrao da BM.",
+            ? "Destino específico aplicado a esta conta."
+            : "A conta voltou a usar o destino padrão da BM.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar o destino desta conta.");
+    return failure(error, "Não foi possível alterar o destino desta conta.");
   }
 }
 
@@ -651,11 +651,11 @@ export async function getMetaOAuthAdvancedAdRoutingAction(
 
     return {
       ok: true,
-      message: "Roteamento dos anuncios carregado.",
+      message: "Roteamento dos anúncios carregado.",
       adRouting,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel carregar os anuncios desta conta.");
+    return failure(error, "Não foi possível carregar os anúncios desta conta.");
   }
 }
 
@@ -677,12 +677,12 @@ export async function setMetaOAuthAdvancedAdDestinationAction(
     return {
       ok: true,
       message: conversionDestinationId
-        ? "Destino manual aplicado ao anuncio."
-        : "Excecao removida; a descoberta automatica voltou a valer.",
+        ? "Destino manual aplicado ao anúncio."
+        : "Exceção removida; a descoberta automática voltou a valer.",
       adRouting,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar o destino deste anuncio.");
+    return failure(error, "Não foi possível alterar o destino deste anúncio.");
   }
 }
 
@@ -717,13 +717,13 @@ export async function setMetaOAuthAdvancedRoutingAction(
       ok: true,
       message: enabled
         ? syncQueued
-          ? "Roteamento por BM ativado. A importacao inicial foi enfileirada."
-          : "Roteamento por BM ativado. Sincronize os relatorios manualmente."
-        : "Roteamento avancado desativado. O destino principal voltou a valer.",
+          ? "Roteamento por BM ativado. A importação inicial foi enfileirada."
+          : "Roteamento por BM ativado. Sincronize os relatórios manualmente."
+        : "Roteamento avançado desativado. O destino principal voltou a valer.",
       configuration,
     };
   } catch (error) {
-    return failure(error, "Nao foi possivel alterar o roteamento OAuth.");
+    return failure(error, "Não foi possível alterar o roteamento OAuth.");
   }
 }
 
@@ -766,7 +766,7 @@ function requiredFormText(formData: FormData, key: string): string {
   const value = optionalFormText(formData, key);
 
   if (!value) {
-    throw new Error(`Campo obrigatorio ausente: ${key}`);
+    throw new Error(`Campo obrigatório ausente: ${key}`);
   }
 
   return value;

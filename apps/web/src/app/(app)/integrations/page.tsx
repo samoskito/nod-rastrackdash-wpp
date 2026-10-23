@@ -704,7 +704,7 @@ async function setMetaReportingAccountStatus(formData: FormData) {
 
 function money(cents: number | null | undefined) {
   if (!cents) {
-    return "Aguardando preco";
+    return "Aguardando preço";
   }
 
   return (cents / 100).toLocaleString("pt-BR", {
@@ -734,17 +734,17 @@ function statusLabel(status: string) {
   const labels: Record<string, string> = {
     connected: "Configurado",
     disconnected: "Configurar",
-    not_connected: "Nao conectado",
+    not_connected: "Não conectado",
     error: "Erro",
     pending_payment: "Aguardando ativação",
     active: "Ativa",
     needs_reconnect: "Reconectar",
-    not_configured: "Nao configurado",
+    not_configured: "Não configurado",
     pending: "Aguardando",
     qr_required: "QR pendente",
     syncing: "Sincronizando",
     completed: "Sincronizado",
-    failed: "Falha na sincronizacao",
+    failed: "Falha na sincronização",
     configured: "Configurado",
     needs_configuration: "Configurar",
   };
@@ -754,7 +754,7 @@ function statusLabel(status: string) {
 
 function sourceSyncLabel(value: string | null | undefined) {
   if (!value) {
-    return "Aguardando primeira sincronizacao";
+    return "Aguardando primeira sincronização";
   }
 
   return new Date(value).toLocaleString("pt-BR", {
@@ -785,7 +785,7 @@ function integrationsNotice(
       tone: "success",
       title: "Meta conectada",
       message:
-        "A conexao foi salva. Selecione BM, Pixel, pagina e contas de relatorio.",
+        "A conexão foi salva. Selecione BM, Pixel, página e contas de relatório.",
     };
   }
 
@@ -794,7 +794,7 @@ function integrationsNotice(
       tone: "warn",
       title: "Falha ao conectar Meta",
       message:
-        "Tente conectar novamente ou revise o retorno do OAuth no diagnostico.",
+        "Tente conectar novamente ou revise o retorno do OAuth no diagnóstico.",
     };
   }
 
@@ -803,54 +803,54 @@ function integrationsNotice(
       tone: "success",
       title: "Destino salvo",
       message:
-        "Pixel e pagina principal foram salvos para o envio de conversoes.",
+        "Pixel e página principal foram salvos para o envio de conversões.",
     },
     "meta-destination-error": {
       tone: "warn",
-      title: "Destino nao salvo",
-      message: "Nao foi possivel salvar Pixel e pagina agora. Tente novamente.",
+      title: "Destino não salvo",
+      message: "Não foi possível salvar Pixel e página agora. Tente novamente.",
     },
     "meta-destination-missing": {
       tone: "warn",
       title: "Destino incompleto",
-      message: "Selecione BM, Pixel e pagina antes de salvar.",
+      message: "Selecione BM, Pixel e página antes de salvar.",
     },
     "meta-assets-refreshed": {
       tone: "success",
       title: "Ativos Meta atualizados",
       message:
-        "BMs, contas, Pixels e paginas foram salvos para carregamento rapido.",
+        "BMs, contas, Pixels e páginas foram salvos para carregamento rápido.",
     },
     "meta-assets-refresh-error": {
       tone: "warn",
-      title: "Ativos nao atualizados",
+      title: "Ativos não atualizados",
       message:
-        "Nao foi possivel sincronizar ativos Meta agora. Tente novamente.",
+        "Não foi possível sincronizar ativos Meta agora. Tente novamente.",
     },
     "meta-reporting-saved": {
       tone: "success",
       title: "Conta adicionada",
-      message: "A conta de anuncio foi adicionada aos relatorios.",
+      message: "A conta de anúncio foi adicionada aos relatórios.",
     },
     "meta-reporting-error": {
       tone: "warn",
-      title: "Conta nao adicionada",
-      message: "Nao foi possivel adicionar a conta aos relatorios agora.",
+      title: "Conta não adicionada",
+      message: "Não foi possível adicionar a conta aos relatórios agora.",
     },
     "meta-reporting-missing": {
       tone: "warn",
       title: "Conta incompleta",
-      message: "Selecione BM e conta de anuncio antes de adicionar.",
+      message: "Selecione BM e conta de anúncio antes de adicionar.",
     },
     "meta-reporting-status-saved": {
       tone: "success",
       title: "Status atualizado",
-      message: "A conta de anuncio foi atualizada nos relatorios.",
+      message: "A conta de anúncio foi atualizada nos relatórios.",
     },
     "meta-reporting-status-error": {
       tone: "warn",
-      title: "Status nao atualizado",
-      message: "Nao foi possivel alterar o status da conta agora.",
+      title: "Status não atualizado",
+      message: "Não foi possível alterar o status da conta agora.",
     },
     "meta-license-locked": {
       tone: "warn",
@@ -882,7 +882,7 @@ function metaConnectionTitle(
     return "Meta com status desconhecido";
   }
 
-  return "Meta nao conectado";
+  return "Meta não conectado";
 }
 
 function metaAssetsDetail(
@@ -891,12 +891,12 @@ function metaAssetsDetail(
 ) {
   if (!metaAssets) {
     return state === "error"
-      ? "Nao foi possivel ler os ativos Meta agora."
+      ? "Não foi possível ler os ativos Meta agora."
       : "Conecte a conta Meta para carregar os ativos.";
   }
 
   if (metaAssets.status === "not_connected") {
-    return "Conecte a conta Meta para carregar BMs, contas de anuncio e Pixels.";
+    return "Conecte a conta Meta para carregar BMs, contas de anúncio e Pixels.";
   }
 
   if (metaAssets.syncError) {
@@ -908,7 +908,7 @@ function metaAssetsDetail(
     metaAssets.status === "connected" &&
     metaAssets.businesses.length === 0
   ) {
-    return "A Meta nao retornou nenhum BM para este usuario. Confirme o acesso ao Business Manager e conecte novamente.";
+    return "A Meta não retornou nenhum BM para este usuário. Confirme o acesso ao Business Manager e conecte novamente.";
   }
 
   if (
@@ -918,7 +918,7 @@ function metaAssetsDetail(
     metaAssets.pixels.length === 0 &&
     (metaAssets.pages ?? []).length === 0
   ) {
-    return "Os BMs foram carregados, mas o BM selecionado nao retornou conta de anuncio, Pixel ou Pagina. Selecione outro BM ou revise as permissoes Meta.";
+    return "Os BMs foram carregados, mas o BM selecionado não retornou conta de anúncio, Pixel ou Página. Selecione outro BM ou revise as permissões Meta.";
   }
 
   if (
@@ -926,15 +926,15 @@ function metaAssetsDetail(
     metaAssets.adAccounts.length === 0 &&
     metaAssets.pixels.length === 0
   ) {
-    return "Conta conectada. Clique em Atualizar ativos Meta para buscar BMs, contas, Pixels e paginas.";
+    return "Conta conectada. Clique em Atualizar ativos Meta para buscar BMs, contas, Pixels e páginas.";
   }
 
-  return "Ativos disponiveis para selecionar no proximo passo do fluxo operacional.";
+  return "Ativos disponíveis para selecionar no próximo passo do fluxo operacional.";
 }
 
 function metaLastSyncedAt(metaAssets: MetaAssetsDto | null) {
   if (!metaAssets?.lastSyncedAt) {
-    return "Ativos ainda nao sincronizados neste workspace.";
+    return "Ativos ainda não sincronizados neste workspace.";
   }
 
   return `Ativos atualizados em ${new Date(
@@ -1091,7 +1091,7 @@ export default async function IntegrationsPage({
       tone: item.status === "connected" ? "" : "warn",
       description:
         item.message ??
-        "Credenciais encontradas. Proxima etapa depende do fluxo operacional do provedor.",
+        "Credenciais encontradas. Próxima etapa depende do fluxo operacional do provedor.",
       detail: `Verificado em ${new Date(item.checkedAt).toLocaleTimeString(
         "pt-BR",
         {
@@ -1103,14 +1103,14 @@ export default async function IntegrationsPage({
     })) ?? [];
   const metaStatusLabel =
     metaAssetsResult.state === "error" && metaConnectionResult.state === "error"
-      ? "API indisponivel"
+      ? "API indisponível"
       : manualConfigured && metaManualResult.data?.connectionMode === "manual"
         ? "Conectado por token"
         : oauthAdvancedEnabled
           ? "OAuth com destinos por BM"
           : metaStatus
             ? statusLabel(metaStatus)
-            : "Meta nao conectado";
+            : "Meta não conectado";
   const inboundConnectionCount =
     inboundWebhookData?.connections.filter(
       ({ overview }) => overview.connection.status !== "paused",
@@ -1446,11 +1446,11 @@ export default async function IntegrationsPage({
       {!usesExternalWhatsapp ? (
         <div className="surface-panel whatsapp-instance-panel">
           <span className="eyebrow">Instância por variável de ambiente</span>
-          <h2>Instancia Uazapi (BYO)</h2>
+          <h2>Instância Uazapi (BYO)</h2>
           <p className="muted">
-            Esta edicao tambem le uma instancia Uazapi configurada por variavel
-            de ambiente (UAZAPI_BASE_URL/UAZAPI_TOKEN). Nao ha marketplace de
-            instancias nem cobranca dentro do painel.
+            Esta edição também le uma instância Uazapi configurada por variável
+            de ambiente (UAZAPI_BASE_URL/UAZAPI_TOKEN). Não há marketplace de
+            instâncias nem cobrança dentro do painel.
           </p>
           <div className="metric-grid compact">
             <div className="metric-card">
@@ -1473,7 +1473,7 @@ export default async function IntegrationsPage({
             </div>
           </div>
           {legacyWhatsappInstancesResult.state === "error" ? (
-            <p className="muted">Nao foi possivel carregar instancias.</p>
+            <p className="muted">Não foi possível carregar instâncias.</p>
           ) : legacyWhatsappInstances.length > 0 ? (
             <div className="inbound-connection-list">
               {legacyWhatsappInstances.map((instance) => (
@@ -1491,7 +1491,7 @@ export default async function IntegrationsPage({
         ? inboundPanel("uazapi", {
             allowCreate: false,
             scopeDescription:
-              "Conexoes recebidas da Uazapi: confira os numeros e escolha quais canais enviam conversoes.",
+              "Conexões recebidas da Uazapi: confira os números e escolha quais canais enviam conversões.",
           })
         : null}
     </div>
@@ -1528,7 +1528,7 @@ export default async function IntegrationsPage({
                     : metaConnectionTitle(metaStatus)}
                 </strong>
                 <p className="muted">
-                  Use o OAuth oficial para autorizar BM, contas de anuncio e
+                  Use o OAuth oficial para autorizar BM, contas de anúncio e
                   Pixels. O token nasce no backend e fica criptografado.
                 </p>
               </div>
@@ -1551,28 +1551,28 @@ export default async function IntegrationsPage({
                     </form>
                   ) : (
                     <span className="action-note warn">
-                      Permissoes temporariamente indisponiveis. A API validara a
-                      acao ao continuar.
+                      Permissões temporariamente indisponíveis. A API validara a
+                      ação ao continuar.
                     </span>
                   )}
                 </div>
               ) : (
                 <span className="event-chip warn">
                   {workspacePermissionsUnavailable
-                    ? "permissoes indisponiveis"
-                    : "sem permissao"}
+                    ? "permissões indisponíveis"
+                    : "sem permissão"}
                 </span>
               )}
             </div>
           ) : manualEnabled ? (
             <div className="connection-callout integration-meta-manual">
               <div>
-                <span className="micro-label">Conexao manual Meta</span>
+                <span className="micro-label">Conexão manual Meta</span>
                 <strong>Configure a estrutura Meta manualmente</strong>
                 <p className="muted">
-                  Use o App ID e o token permanente do usuario do sistema.
-                  Depois informe manualmente o BM, Pixel, Pagina e conta de
-                  anuncios.
+                  Use o App ID e o token permanente do usuário do sistema.
+                  Depois informe manualmente o BM, Pixel, Página e conta de
+                  anúncios.
                 </p>
               </div>
             </div>
@@ -1580,12 +1580,12 @@ export default async function IntegrationsPage({
             <div className="connection-callout integration-meta-unavailable">
               <div>
                 <span className="micro-label">
-                  Configuracao Meta indisponivel
+                  Configuração Meta indisponível
                 </span>
-                <strong>Nao foi possivel confirmar os modos de conexao</strong>
+                <strong>Não foi possível confirmar os modos de conexão</strong>
                 <p className="muted">
-                  Tente novamente quando a configuracao da Meta estiver
-                  disponivel.
+                  Tente novamente quando a configuração da Meta estiver
+                  disponível.
                 </p>
               </div>
             </div>
@@ -1596,8 +1596,8 @@ export default async function IntegrationsPage({
                 <span className="micro-label">Conta Meta</span>
                 <strong>Trocar conta Meta</strong>
                 <p className="muted">
-                  Aguarde a confirmacao das permissoes para trocar a conta. A
-                  API validara a acao antes de qualquer alteracao.
+                  Aguarde a confirmação das permissões para trocar a conta. A
+                  API validara a ação antes de qualquer alteração.
                 </p>
               </div>
             </div>
@@ -1677,11 +1677,11 @@ export default async function IntegrationsPage({
                     ? `${metaManualResult.data?.destinations.length ?? 0} por BM`
                     : metaAssets?.conversionDestination
                       ? statusLabel(metaAssets.conversionDestination.status)
-                      : "Nao configurado"}
+                      : "Não configurado"}
               </strong>
             </div>
             <div className="metric-card">
-              <span className="micro-label">Contas em relatorios</span>
+              <span className="micro-label">Contas em relatórios</span>
               <strong>
                 {manualConfigured
                   ? manualActiveReportingAccounts
@@ -1706,12 +1706,12 @@ export default async function IntegrationsPage({
                   <span className="eyebrow">
                     {oauthAdvancedEnabled
                       ? "Rota de retorno"
-                      : "Destino de conversao"}
+                      : "Destino de conversão"}
                   </span>
                   <h2>
                     {oauthAdvancedEnabled
-                      ? "Pixel e Pagina do destino principal"
-                      : "Pixel e Pagina Facebook principal"}
+                      ? "Pixel e Página do destino principal"
+                      : "Pixel e Página Facebook principal"}
                   </h2>
                 </div>
                 <div className="metric-grid compact">
@@ -1726,12 +1726,12 @@ export default async function IntegrationsPage({
                   </div>
                   <div className="metric-card">
                     <span className="micro-label">
-                      Pagina Facebook principal
+                      Página Facebook principal
                     </span>
                     <strong>
-                      <PresentationMask placeholder="Pagina oculta">
+                      <PresentationMask placeholder="Página oculta">
                         {metaAssets.conversionDestination?.pageName ??
-                          "Sem Pagina"}
+                          "Sem Página"}
                       </PresentationMask>
                     </strong>
                   </div>
@@ -1740,7 +1740,7 @@ export default async function IntegrationsPage({
                     <strong>
                       {metaAssets.conversionDestination
                         ? statusLabel(metaAssets.conversionDestination.status)
-                        : "Nao configurado"}
+                        : "Não configurado"}
                     </strong>
                   </div>
                 </div>
@@ -1753,12 +1753,12 @@ export default async function IntegrationsPage({
                 ) : !oauthAdvancedEnabled ? (
                   <p className="muted">
                     {workspacePermissionsUnavailable
-                      ? "Nao foi possivel confirmar as permissoes agora."
-                      : "Sem permissao para alterar destino Meta"}
+                      ? "Não foi possível confirmar as permissões agora."
+                      : "Sem permissão para alterar destino Meta"}
                   </p>
                 ) : (
                   <p className="muted">
-                    O roteamento por BM esta ativo. Este destino volta a ser
+                    O roteamento por BM está ativo. Este destino volta a ser
                     usado somente ao escolher Usar destino principal.
                   </p>
                 )}
@@ -1767,8 +1767,8 @@ export default async function IntegrationsPage({
               {!oauthAdvancedEnabled ? (
                 <div className="meta-config-section">
                   <div>
-                    <span className="eyebrow">Contas para relatorios</span>
-                    <h2>Contas Meta sincronizadas nos relatorios</h2>
+                    <span className="eyebrow">Contas para relatórios</span>
+                    <h2>Contas Meta sincronizadas nos relatórios</h2>
                   </div>
                   {canManageIntegrations ? (
                     <MetaReportingAccountsForm
@@ -1780,8 +1780,8 @@ export default async function IntegrationsPage({
                   ) : (
                     <p className="muted">
                       {workspacePermissionsUnavailable
-                        ? "Nao foi possivel confirmar as permissoes agora."
-                        : "Sem permissao para alterar contas de relatorio"}
+                        ? "Não foi possível confirmar as permissões agora."
+                        : "Sem permissão para alterar contas de relatório"}
                     </p>
                   )}
                 </div>
@@ -1790,8 +1790,8 @@ export default async function IntegrationsPage({
           ) : null}
           <p className="muted integration-domain-note">
             {oauthAdvancedEnabled
-              ? "A conexao Meta fica protegida no backend. Cada conta ativa usa o Pixel e a Pagina vinculados a sua BM."
-              : "A conexao Meta fica protegida no backend. Esta tela mostra apenas o destino principal e as contas ativas usadas nos relatorios."}
+              ? "A conexão Meta fica protegida no backend. Cada conta ativa usa o Pixel e a Página vinculados a sua BM."
+              : "A conexão Meta fica protegida no backend. Esta tela mostra apenas o destino principal e as contas ativas usadas nos relatórios."}
           </p>
     </div>
   );
@@ -1885,15 +1885,15 @@ export default async function IntegrationsPage({
       {inboundErrorBanner}
       {usesExternalWhatsapp ? (
         <div className="surface-panel whatsapp-instance-panel">
-          <span className="eyebrow">Integracao externa MySQL</span>
-          <h2>Dados recebidos por integracao externa do MySQL</h2>
+          <span className="eyebrow">Integração externa MySQL</span>
+          <h2>Dados recebidos por integração externa do MySQL</h2>
           <p className="muted">
-            Esta fonte e monitorada pelo conector externo; nao ha instancia ou
-            cobranca para configurar neste painel.
+            Esta fonte é monitorada pelo conector externo; não há instância ou
+            cobrança para configurar neste painel.
           </p>
           <div className="metric-grid compact">
             <div className="metric-card">
-              <span className="micro-label">Ultima sincronizacao</span>
+              <span className="micro-label">Última sincronização</span>
               <strong>
                 {sourceSyncLabel(pipeline?.whatsappSource?.lastSyncCompletedAt)}
               </strong>
@@ -1921,12 +1921,12 @@ export default async function IntegrationsPage({
     <section className="page-stack page-standard integrations-page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Integracoes</span>
-          <h1>Central de integracoes</h1>
+          <span className="eyebrow">Integrações</span>
+          <h1>Central de integrações</h1>
           <p>
             {usesExternalWhatsapp
               ? "Acompanhe a origem das conversas, as contas Meta, o CRM e o caminho dos eventos desta conta."
-              : "Conecte seus numeros de WhatsApp, plataformas de atendimento, CRM e a conta de anuncios. Clique em um card para conectar ou gerenciar."}
+              : "Conecte seus números de WhatsApp, plataformas de atendimento, CRM e a conta de anúncios. Clique em um card para conectar ou gerenciar."}
           </p>
         </div>
         {isPlatformOperator ? (
@@ -1934,7 +1934,7 @@ export default async function IntegrationsPage({
             <span
               className={`status-chip${hasIntegrationError ? " warn" : ""}`}
             >
-              {hasIntegrationError ? "API indisponivel" : "API conectada"}
+              {hasIntegrationError ? "API indisponível" : "API conectada"}
             </span>
             <span className="status-chip">
               {integrations.length} provedores
@@ -1945,10 +1945,10 @@ export default async function IntegrationsPage({
 
       {workspacePermissionsUnavailable ? (
         <div className="feedback-banner warn" role="alert">
-          <strong>Permissoes temporariamente indisponiveis</strong>
+          <strong>Permissões temporariamente indisponíveis</strong>
           <span>
-            Nao foi possivel confirmar as permissoes agora. A API validara a
-            acao ao continuar.
+            Não foi possível confirmar as permissões agora. A API validara a
+            ação ao continuar.
           </span>
           <a className="button" href="/integrations">
             Tentar novamente
@@ -1961,7 +1961,7 @@ export default async function IntegrationsPage({
           <summary>
             <span>
               <Activity size={17} aria-hidden="true" />
-              Saude tecnica dos provedores
+              Saúde técnica dos provedores
             </span>
             <small>{integrations.length} provedores monitorados</small>
           </summary>
@@ -1980,7 +1980,7 @@ export default async function IntegrationsPage({
                   </div>
                   <p className="muted">{item.description}</p>
                   <button className="button" type="button">
-                    Ver diagnostico
+                    Ver diagnóstico
                   </button>
                 </article>
               ))
@@ -1988,19 +1988,19 @@ export default async function IntegrationsPage({
               <article className="integration-card">
                 <span className="status-chip warn">
                   {healthResult.state === "error"
-                    ? "API indisponivel"
+                    ? "API indisponível"
                     : "Sem provedores"}
                 </span>
                 <div>
-                  <span className="micro-label">Integracoes</span>
+                  <span className="micro-label">Integrações</span>
                   <strong>
                     {healthResult.state === "error"
-                      ? "Nao foi possivel carregar integracoes"
-                      : "Nenhuma integracao retornada"}
+                      ? "Não foi possível carregar integrações"
+                      : "Nenhuma integração retornada"}
                   </strong>
                 </div>
                 <p className="muted">
-                  A lista sera preenchida somente com provedores retornados pelo
+                  A lista será preenchida somente com provedores retornados pelo
                   backend.
                 </p>
               </article>
@@ -2051,12 +2051,12 @@ export default async function IntegrationsPage({
           <div>
             <span className="eyebrow">Pipeline de sinal</span>
             <h2 id="integration-flow-title">
-              Do clique no anuncio ao evento enviado
+              Do clique no anúncio ao evento enviado
             </h2>
             <p>
               {pipeline
                 ? `${pipeline.rangeLabel} com dados reais do workspace.`
-                : "Nao foi possivel carregar o pipeline operacional agora."}
+                : "Não foi possível carregar o pipeline operacional agora."}
             </p>
           </div>
           <span className="status-chip">
@@ -2069,9 +2069,9 @@ export default async function IntegrationsPage({
           <p className="muted integration-flow-note">
             {pipeline
               ? `${pipeline.rangeLabel} com dados reais do workspace.`
-              : "Nao foi possivel carregar o pipeline operacional agora."}
+              : "Não foi possível carregar o pipeline operacional agora."}
           </p>
-          <div className="funnel-row" aria-label="Pipeline das integracoes">
+          <div className="funnel-row" aria-label="Pipeline das integrações">
             {pipeline?.stages.length ? (
               pipeline.stages.map((stage) => (
                 <div className="funnel-step" key={stage.key}>
@@ -2092,7 +2092,7 @@ export default async function IntegrationsPage({
                 <span>Pipeline</span>
                 <strong>
                   {pipelineResult.state === "error"
-                    ? "API indisponivel"
+                    ? "API indisponível"
                     : "Aguardando eventos reais"}
                 </strong>
                 <div className="signal-bar">

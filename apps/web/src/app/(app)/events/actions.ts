@@ -13,7 +13,7 @@ export async function retryMetaEventAction(
   if (!eventId) {
     return {
       status: "error",
-      message: "Evento Meta nao identificado.",
+      message: "Evento Meta não identificado.",
       nonce: Date.now()
     };
   }
@@ -34,7 +34,7 @@ export async function retryMetaEventAction(
     return {
       status: "error",
       message:
-        "O evento nao pode ser reenviado. Atualize a pagina e confira o motivo tecnico.",
+        "O evento não pode ser reenviado. Atualize a página e confira o motivo técnico.",
       nonce: Date.now()
     };
   }
@@ -62,19 +62,19 @@ function retryBlockedMessage(result: RetryBlockedResult): string {
 
   if (result.skipped > 0) {
     parts.push(
-      `${result.skipped} ${plural(result.skipped, "ja nao estava bloqueado e ficou", "ja nao estavam bloqueados e ficaram")} de fora.`
+      `${result.skipped} ${plural(result.skipped, "já não estava bloqueado e ficou", "já não estavam bloqueados e ficaram")} de fora.`
     );
   }
 
   if (result.failed > 0) {
     parts.push(
-      `${result.failed} ${plural(result.failed, "nao pode ser enfileirado", "nao puderam ser enfileirados")} agora; tente de novo em instantes.`
+      `${result.failed} ${plural(result.failed, "não pode ser enfileirado", "não puderam ser enfileirados")} agora; tente de novo em instantes.`
     );
   }
 
   return parts.length
     ? parts.join(" ")
-    : "Nenhum evento bloqueado para reenviar neste periodo.";
+    : "Nenhum evento bloqueado para reenviar neste período.";
 }
 
 export async function retryBlockedMetaEventsAction(
@@ -109,7 +109,7 @@ export async function retryBlockedMetaEventsAction(
     return {
       status: "error",
       message:
-        "Nao foi possivel reenviar os eventos bloqueados. Atualize a pagina e tente de novo.",
+        "Não foi possível reenviar os eventos bloqueados. Atualize a página e tente de novo.",
       nonce: Date.now()
     };
   }

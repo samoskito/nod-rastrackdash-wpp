@@ -1,7 +1,7 @@
 export function parseMoneyInputToCents(value: string): number {
   const raw = value.trim().replace(/[^\d,.-]/g, "");
   if (!raw || raw.startsWith("-")) {
-    throw new Error("Valor mensal invalido");
+    throw new Error("Valor mensal inválido");
   }
 
   const lastComma = raw.lastIndexOf(",");
@@ -25,7 +25,7 @@ export function parseMoneyInputToCents(value: string): number {
 
   const amount = Number(normalized);
   if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error("Valor mensal invalido");
+    throw new Error("Valor mensal inválido");
   }
 
   return Math.round(amount * 100);

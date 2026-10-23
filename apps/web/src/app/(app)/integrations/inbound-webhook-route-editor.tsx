@@ -198,7 +198,7 @@ export function InboundWebhookRouteEditor({
           <p className="muted">
             {canManage
               ? "Associe uma ou mais BMs. Conta e destino são opcionais."
-              : "Rotas visiveis em modo somente leitura."}
+              : "Rotas visíveis em modo somente leitura."}
           </p>
         </div>
         {canManage ? (
@@ -218,7 +218,7 @@ export function InboundWebhookRouteEditor({
 
       {canManage && businessOptions.length === 0 ? (
         <p className="action-note warn">
-          Configure ao menos uma conexao Meta ativa antes de criar rotas.
+          Configure ao menos uma conexão Meta ativa antes de criar rotas.
         </p>
       ) : null}
 
@@ -286,10 +286,10 @@ export function InboundWebhookRouteEditor({
                   })
                 }
                 ariaLabel={`Destino da rota ${index + 1}`}
-                placeholder="Destino padrao da BM"
+                placeholder="Destino padrão da BM"
                 emptyMessage="Nenhum destino configurado"
                 sensitive
-                presentationPlaceholder="Pixel e Pagina ocultos"
+                presentationPlaceholder="Pixel e Página ocultos"
                 disabled={
                   pending || !canManage || !route.metaBusinessConnectionId
                 }
@@ -324,7 +324,7 @@ export function InboundWebhookRouteEditor({
       <div className="inbound-route-footer">
         <span className="muted">
           {routes.length === 0
-            ? "Sem rota: candidatos CTWA ficam como nao resolvidos."
+            ? "Sem rota: candidatos CTWA ficam como não resolvidos."
             : `${routes.length} rota(s) ${canManage ? "preparada(s)" : "configurada(s)"}.`}
         </span>
         {canManage ? (

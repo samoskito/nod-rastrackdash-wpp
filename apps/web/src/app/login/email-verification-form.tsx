@@ -31,9 +31,9 @@ export function EmailVerificationConfirmForm({ token }: { token: string }) {
           body: JSON.stringify(payload),
         },
       );
-      setMessage("Email confirmado. Voce ja pode voltar para o painel.");
+      setMessage("Email confirmado. Você já pode voltar para o painel.");
     } catch {
-      setError("Este link e invalido, expirou ou ja foi utilizado.");
+      setError("Este link é inválido, expirou ou já foi utilizado.");
     } finally {
       setLoading(false);
     }
@@ -45,9 +45,9 @@ export function EmailVerificationConfirmForm({ token }: { token: string }) {
       {message ? <p className="form-success">{message}</p> : null}
       {error ? <p className="form-error">{error}</p> : null}
       <button type="submit" disabled={loading}>
-        {loading ? "Validando..." : "Validar verificacao"}
+        {loading ? "Validando..." : "Validar verificação"}
       </button>
-      <a href="/settings">Voltar para configuracoes</a>
+      <a href="/settings">Voltar para configurações</a>
     </form>
   );
 }

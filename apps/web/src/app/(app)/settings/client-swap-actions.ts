@@ -25,7 +25,7 @@ export async function clientSwapAction(
     !workspaceId ||
     confirmationName.trim() !== currentWorkspaceName.trim()
   ) {
-    return { ok: false, message: "Confirmacao invalida." };
+    return { ok: false, message: "Confirmação inválida." };
   }
 
   const trimmedNewClientName = newClientName.trim();
@@ -57,24 +57,24 @@ export async function clientSwapAction(
 
 function clientSwapErrorMessage(error: unknown): string {
   if (!isApiRequestError(error)) {
-    return "Nao foi possivel concluir a troca de cliente.";
+    return "Não foi possível concluir a troca de cliente.";
   }
 
   if (error.status === 429) {
-    return "Voce so pode trocar de cliente 1 vez a cada 24 horas.";
+    return "Você só pode trocar de cliente 1 vez a cada 24 horas.";
   }
 
   if (error.status === 403) {
-    return "Apenas o responsavel da conta pode fazer isso.";
+    return "Apenas o responsável da conta pode fazer isso.";
   }
 
   if (error.status === 409) {
-    return "Esta solicitacao ja foi processada ou o nome gerou conflito. Tente novamente.";
+    return "Esta solicitação já foi processada ou o nome gerou conflito. Tente novamente.";
   }
 
   if (error.status === 400) {
-    return "Confirmacao invalida.";
+    return "Confirmação inválida.";
   }
 
-  return "Nao foi possivel concluir a troca de cliente.";
+  return "Não foi possível concluir a troca de cliente.";
 }

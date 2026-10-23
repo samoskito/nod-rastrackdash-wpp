@@ -36,11 +36,11 @@ export function PasswordResetRequestForm() {
       );
 
       setMessage(
-        "Se houver uma conta elegivel para este email, enviaremos as instrucoes de recuperacao.",
+        "Se houver uma conta elegível para este email, enviaremos as instruções de recuperação.",
       );
       setDevToken(result.devToken);
     } catch {
-      setError("Nao foi possivel solicitar a recuperacao agora.");
+      setError("Não foi possível solicitar a recuperação agora.");
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,7 @@ export function PasswordResetRequestForm() {
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}
       <button type="submit" disabled={loading}>
-        {loading ? "Enviando..." : "Enviar link de recuperacao"}
+        {loading ? "Enviando..." : "Enviar link de recuperação"}
       </button>
       <a href="/login">Voltar para login</a>
     </form>
@@ -89,9 +89,9 @@ export function PasswordResetConfirmForm({ token }: { token: string }) {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setMessage("Senha redefinida. Voce ja pode entrar novamente.");
+      setMessage("Senha redefinida. Você já pode entrar novamente.");
     } catch {
-      setError("Este link e invalido, expirou ou ja foi utilizado.");
+      setError("Este link é inválido, expirou ou já foi utilizado.");
     } finally {
       setLoading(false);
     }

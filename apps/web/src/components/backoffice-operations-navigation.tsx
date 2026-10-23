@@ -36,7 +36,7 @@ const areas: Array<{
     area: "overview",
     href: "/backoffice?view=operations",
     icon: LayoutDashboard,
-    label: "Visao geral",
+    label: "Visão geral",
   },
   {
     area: "whatsapp",
@@ -54,7 +54,7 @@ const areas: Array<{
     area: "health",
     href: "/backoffice?view=operations&area=health&section=incidents",
     icon: Activity,
-    label: "Saude",
+    label: "Saúde",
   },
 ];
 
@@ -62,7 +62,7 @@ const financeSections: Array<{
   section: FinanceSection;
   label: string;
 }> = [
-  { section: "charges", label: "Cobrancas" },
+  { section: "charges", label: "Cobranças" },
   { section: "plans", label: "Planos" },
   { section: "customers", label: "Workspaces" },
   { section: "receivers", label: "Recebedores" },
@@ -75,7 +75,7 @@ const healthSections: Array<{
   { section: "incidents", label: "Incidentes" },
   { section: "webhooks", label: "Webhooks" },
   { section: "conversions", label: "CAPI" },
-  { section: "integrations", label: "Integracoes" },
+  { section: "integrations", label: "Integrações" },
   { section: "jobs", label: "Jobs" },
   { section: "audit", label: "Auditoria" },
 ];
@@ -88,7 +88,7 @@ export function BackofficeOperationsNavigation({
   return (
     <nav
       className="operations-area-navigation"
-      aria-label="Areas das operacoes internas"
+      aria-label="Áreas das operações internas"
     >
       {areas.map((item) => {
         const Icon = item.icon;
@@ -118,7 +118,7 @@ export function FinanceOperationsNavigation({
   return (
     <nav
       className="operations-subnavigation"
-      aria-label="Areas financeiras"
+      aria-label="Áreas financeiras"
     >
       {financeSections.map((item) => {
         const active = item.section === activeSection;
@@ -146,7 +146,7 @@ export function HealthOperationsNavigation({
   return (
     <nav
       className="operations-subnavigation"
-      aria-label="Camadas da saude operacional"
+      aria-label="Camadas da saúde operacional"
     >
       {healthSections.map((item) => {
         const active = item.section === activeSection;

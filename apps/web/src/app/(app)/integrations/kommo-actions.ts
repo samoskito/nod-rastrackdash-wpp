@@ -232,7 +232,7 @@ function parseRotateSecretResult(value: unknown): { webhookUrl: string } | null 
 
 const codePattern = /^[A-Za-z0-9_.:-]{1,120}$/;
 const deliveryUnknownMessage =
-  "Resultado da entrega desconhecido. Reenvio bloqueado; investigacao requerida.";
+  "Resultado da entrega desconhecido. Reenvio bloqueado; investigação requerida.";
 
 function optionalCode(value: unknown): string | null | undefined {
   if (value === undefined || value === null) return null;
@@ -366,11 +366,11 @@ const licenseLockedMessage =
 
 // Only exact, locally controlled validation copy may cross this boundary.
 const safeValidationMessages = new Set([
-  "Canal ou rota indisponivel",
-  "Credencial Kommo requer verificacao",
-  "Conexao alterada; tente novamente",
-  "Estagio Kommo indisponivel no catalogo",
-  "Payload invalido",
+  "Canal ou rota indisponível",
+  "Credencial Kommo requer verificação",
+  "Conexão alterada; tente novamente",
+  "Estágio Kommo indisponível no catálogo",
+  "Payload inválido",
 ]);
 
 type DescribedError = {

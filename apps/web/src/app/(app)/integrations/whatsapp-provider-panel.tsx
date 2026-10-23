@@ -275,7 +275,7 @@ export function WhatsappProviderPanel({
       clearCredentials(form);
       setNotice({
         ok: false,
-        message: "Nao foi possivel salvar a conexao WhatsApp.",
+        message: "Não foi possível salvar a conexão WhatsApp.",
       });
     } finally {
       setPending(null);
@@ -307,7 +307,7 @@ export function WhatsappProviderPanel({
     } catch {
       setNotice({
         ok: false,
-        message: "Nao foi possivel concluir a acao da conexao WhatsApp.",
+        message: "Não foi possível concluir a ação da conexão WhatsApp.",
       });
     } finally {
       setPending(null);
@@ -333,7 +333,7 @@ export function WhatsappProviderPanel({
     } catch {
       setNotice({
         ok: false,
-        message: "Nao foi possivel carregar os dados da conexao.",
+        message: "Não foi possível carregar os dados da conexão.",
       });
     } finally {
       setPending(null);
@@ -365,7 +365,7 @@ export function WhatsappProviderPanel({
       clearCredentials(form);
       setNotice({
         ok: false,
-        message: "Nao foi possivel atualizar a conexao WhatsApp.",
+        message: "Não foi possível atualizar a conexão WhatsApp.",
       });
     } finally {
       setPending(null);
@@ -406,7 +406,7 @@ export function WhatsappProviderPanel({
     } catch {
       setNotice({
         ok: false,
-        message: "Nao foi possivel excluir a conexao WhatsApp.",
+        message: "Não foi possível excluir a conexão WhatsApp.",
       });
     } finally {
       setPending(null);
@@ -421,7 +421,7 @@ export function WhatsappProviderPanel({
     } catch {
       setNotice({
         ok: false,
-        message: "Nao foi possivel copiar automaticamente.",
+        message: "Não foi possível copiar automaticamente.",
       });
     }
   }
@@ -433,10 +433,10 @@ export function WhatsappProviderPanel({
     >
       <div className="inbound-webhook-heading">
         <div>
-          <span className="eyebrow">Conexoes WhatsApp</span>
+          <span className="eyebrow">Conexões WhatsApp</span>
           <h2 id={titleId}>
             {scopedProvider
-              ? `Conexoes ${scopedTitle ?? scopedProvider}`
+              ? `Conexões ${scopedTitle ?? scopedProvider}`
               : "Provedores e receivers"}
           </h2>
           <p className="muted">
@@ -455,8 +455,8 @@ export function WhatsappProviderPanel({
       ) : null}
       {scopedProvider ? null : (
         <p className="muted">
-          Usa Umbler Talk ou Gupshup? Essas plataformas sao configuradas no
-          bloco de webhooks logo abaixo, e nao nesta lista.
+          Usa Umbler Talk ou Gupshup? Essas plataformas são configuradas no
+          bloco de webhooks logo abaixo, e não nesta lista.
         </p>
       )}
 
@@ -613,7 +613,7 @@ export function WhatsappProviderPanel({
             disabled={pending === "create"}
           >
             <Webhook size={16} aria-hidden="true" />
-            {pending === "create" ? "Salvando..." : "Salvar conexao"}
+            {pending === "create" ? "Salvando..." : "Salvar conexão"}
           </button>
         </form>
       ) : null}
@@ -624,7 +624,7 @@ export function WhatsappProviderPanel({
           data-presentation-sensitive-action="true"
         >
           <div>
-            <span className="micro-label">Exibido uma unica vez</span>
+            <span className="micro-label">Exibido uma única vez</span>
             <strong>
               {receiverProvider
                 ? receiverInstructionText[receiverProvider]
@@ -658,7 +658,7 @@ export function WhatsappProviderPanel({
 
       <div className="inbound-connection-list">
         {connections.length === 0 ? (
-          <p className="muted">Nenhuma conexao de provider configurada.</p>
+          <p className="muted">Nenhuma conexão de provider configurada.</p>
         ) : (
           connections.map((connection) => (
             <div className="inbound-connection-body" key={connection.id}>
@@ -805,19 +805,19 @@ export function WhatsappProviderPanel({
                   data-testid={`whatsapp-connection-delete-confirm-${connection.id}`}
                 >
                   <p className="action-note warn">
-                    Isso desativa a conexao e ela deixa de aparecer na lista.
+                    Isso desativa a conexão e ela deixa de aparecer na lista.
                     Para confirmar, digite o nome{" "}
                     <strong>{connection.name}</strong> abaixo.
                   </p>
                   <label>
-                    <span className="field-label">Nome da conexao</span>
+                    <span className="field-label">Nome da conexão</span>
                     <input
                       autoComplete="off"
                       value={deleteConfirmText}
                       onChange={(event) =>
                         setDeleteConfirmText(event.target.value)
                       }
-                      aria-label={`Confirmar exclusao da conexao ${connection.name} digitando o nome`}
+                      aria-label={`Confirmar exclusão da conexão ${connection.name} digitando o nome`}
                     />
                   </label>
                   <div className="inbound-connection-actions">
@@ -833,7 +833,7 @@ export function WhatsappProviderPanel({
                       <Trash2 size={15} aria-hidden="true" />
                       {pending === `delete-${connection.id}`
                         ? "Excluindo..."
-                        : "Confirmar exclusao"}
+                        : "Confirmar exclusão"}
                     </button>
                     <button
                       className="button"
@@ -946,7 +946,7 @@ export function WhatsappProviderPanel({
                     >
                       {pending === `edit-${connection.id}`
                         ? "Salvando..."
-                        : "Salvar alteracoes"}
+                        : "Salvar alterações"}
                     </button>
                     <button
                       className="button"

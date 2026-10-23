@@ -156,7 +156,7 @@ export function ReportSelectionToolbar({
   }
 
   return (
-    <div className="report-selection-toolbar" aria-label="Selecao do relatorio">
+    <div className="report-selection-toolbar" aria-label="Seleção do relatório">
       <span className="report-selection-count" aria-live="polite">
         {ids.length} selecionado{ids.length === 1 ? "" : "s"}
       </span>
@@ -168,14 +168,14 @@ export function ReportSelectionToolbar({
         type="button"
       >
         <Filter aria-hidden="true" size={14} />
-        Filtrar por selecao
+        Filtrar por seleção
       </button>
       <button
-        aria-label="Limpar selecao"
+        aria-label="Limpar seleção"
         className="report-selection-clear"
         disabled={ids.length === 0}
         onClick={clearSelection}
-        title="Limpar selecao"
+        title="Limpar seleção"
         type="button"
       >
         <X aria-hidden="true" size={15} />
@@ -275,10 +275,10 @@ export function ReportPageSelectionCheckbox({
   return (
     <label
       className="report-selection-checkbox report-page-selector"
-      title={`Selecionar ${entityLabel} desta pagina`}
+      title={`Selecionar ${entityLabel} desta página`}
     >
       <input
-        aria-label={`Selecionar ${entityLabel} desta pagina`}
+        aria-label={`Selecionar ${entityLabel} desta página`}
         checked={allSelected}
         disabled={entityIds.length === 0}
         onChange={handleChange}

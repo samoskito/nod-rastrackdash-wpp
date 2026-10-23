@@ -102,11 +102,11 @@ export function ReportAdPreview({
     return (
       <span
         aria-label={
-          presentationMode ? "Criativo oculto" : "Miniatura indisponivel"
+          presentationMode ? "Criativo oculto" : "Miniatura indisponível"
         }
         className="report-ad-thumbnail unavailable"
         role="img"
-        title={presentationMode ? "Criativo oculto" : "Miniatura indisponivel"}
+        title={presentationMode ? "Criativo oculto" : "Miniatura indisponível"}
       >
         <ImageOff aria-hidden="true" size={17} strokeWidth={1.7} />
       </span>
@@ -116,7 +116,7 @@ export function ReportAdPreview({
   return (
     <>
       <button
-        aria-label={`Ampliar criativo do anuncio ${adName}`}
+        aria-label={`Ampliar criativo do anúncio ${adName}`}
         className="report-ad-thumbnail"
         data-presentation-sensitive-media="true"
         onBlur={hideHoverPreview}
@@ -162,7 +162,7 @@ export function ReportAdPreview({
       <dialog className="report-ad-preview-dialog" ref={dialogRef}>
         <div className="report-ad-preview-header">
           <div>
-            <span className="micro-label">Criativo do anuncio</span>
+            <span className="micro-label">Criativo do anúncio</span>
             <h3>{adName}</h3>
           </div>
           <button
@@ -177,7 +177,7 @@ export function ReportAdPreview({
         </div>
         <div className="report-ad-preview-stage">
           <img
-            alt={`Criativo do anuncio ${adName}`}
+            alt={`Criativo do anúncio ${adName}`}
             onError={handlePreviewError}
             referrerPolicy="no-referrer"
             src={previewSource ?? undefined}

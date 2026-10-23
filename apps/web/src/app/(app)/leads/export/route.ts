@@ -76,7 +76,7 @@ async function errorMessage(response: Response): Promise<string> {
     // Not JSON: fall through to the generic message.
   }
 
-  return "Nao foi possivel exportar os leads";
+  return "Não foi possível exportar os leads";
 }
 
 async function cookieHeader(): Promise<Record<string, string>> {

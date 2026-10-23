@@ -9,7 +9,7 @@ const refreshIntervalMs = 60_000;
 
 function sourceName(source: WhatsappDataSourceDto | null) {
   if (source?.mode === "external") {
-    return "Integracao externa MySQL";
+    return "Integração externa MySQL";
   }
 
   return source?.mode === "native"
@@ -19,11 +19,11 @@ function sourceName(source: WhatsappDataSourceDto | null) {
 
 function sourceFreshness(source: WhatsappDataSourceDto | null) {
   if (source?.lastSyncStatus === "failed") {
-    return "Falha na ultima sincronizacao";
+    return "Falha na última sincronização";
   }
 
   if (!source?.lastSyncCompletedAt) {
-    return "Atualizacao automatica ativa";
+    return "Atualização automática ativa";
   }
 
   return `Sincronizado em ${new Date(source.lastSyncCompletedAt).toLocaleString(

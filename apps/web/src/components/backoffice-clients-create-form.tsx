@@ -26,7 +26,7 @@ export function BackofficeClientsCreateForm() {
         <span>E-mail do responsável</span>
         <input
           name="responsibleEmail"
-          placeholder="responsavel@cliente.com"
+          placeholder="responsável@cliente.com"
           required
           type="email"
         />

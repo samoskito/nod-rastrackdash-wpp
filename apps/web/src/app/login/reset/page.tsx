@@ -25,8 +25,8 @@ export default async function ResetPasswordPage({
               W
             </span>
             <p className="eyebrow">Acesso seguro</p>
-            <h1 id="reset-token-title">Token invalido</h1>
-            <p>O link de recuperacao nao trouxe um token valido para redefinir a senha.</p>
+            <h1 id="reset-token-title">Token inválido</h1>
+            <p>O link de recuperação não trouxe um token válido para redefinir a senha.</p>
           </div>
 
           <form className="login-form">

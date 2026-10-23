@@ -73,7 +73,7 @@ export async function createWhatsappConnectionAction(
   );
 
   if (!input.success) {
-    return failure("Revise os dados da conexao e tente novamente.");
+    return failure("Revise os dados da conexão e tente novamente.");
   }
 
   try {
@@ -87,11 +87,11 @@ export async function createWhatsappConnectionAction(
       message:
         input.data.provider === "waha"
           ? "Conexão salva. Agora teste a conexão e configure o webhook."
-          : "Conexao salva. Use Testar antes de configurar o receiver.",
+          : "Conexão salva. Use Testar antes de configurar o receiver.",
       connectionId: connection.id,
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel salvar a conexao WhatsApp.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível salvar a conexão WhatsApp.");
   }
 }
 
@@ -99,7 +99,7 @@ export async function testWhatsappConnectionAction(
   formData: FormData,
 ): Promise<WhatsappProviderActionResult> {
   const connectionId = formText(formData, "connectionId");
-  if (!connectionId) return failure("Conexao WhatsApp invalida.");
+  if (!connectionId) return failure("Conexão WhatsApp inválida.");
 
   try {
     const response = await serverApiFetch<unknown>(
@@ -108,7 +108,7 @@ export async function testWhatsappConnectionAction(
     );
     const result = whatsappConnectionTestResultSchema.safeParse(response);
     if (!result.success || result.data.connectionId !== connectionId) {
-      return failure("Nao foi possivel testar a conexao WhatsApp.");
+      return failure("Não foi possível testar a conexão WhatsApp.");
     }
 
     revalidatePath(integrationsPath);
@@ -128,12 +128,12 @@ export async function testWhatsappConnectionAction(
       message:
         result.data.message ??
         (result.data.status === "connected"
-          ? "Conexao testada com sucesso."
-          : `Teste concluido com status ${result.data.status}.`),
+          ? "Conexão testada com sucesso."
+          : `Teste concluído com status ${result.data.status}.`),
       connectionId,
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel testar a conexao WhatsApp.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível testar a conexão WhatsApp.");
   }
 }
 
@@ -141,7 +141,7 @@ export async function rotateWhatsappWebhookTokenAction(
   formData: FormData,
 ): Promise<WhatsappProviderActionResult> {
   const connectionId = formText(formData, "connectionId");
-  if (!connectionId) return failure("Conexao WhatsApp invalida.");
+  if (!connectionId) return failure("Conexão WhatsApp inválida.");
 
   try {
     const response = await serverApiFetch<unknown>(
@@ -151,7 +151,7 @@ export async function rotateWhatsappWebhookTokenAction(
     const result =
       whatsappConnectionWebhookTokenRotateResultSchema.safeParse(response);
     if (!result.success || result.data.connection.id !== connectionId) {
-      return failure("Nao foi possivel gerar o receiver desta conexao.");
+      return failure("Não foi possível gerar o receiver desta conexão.");
     }
 
     revalidatePath(integrationsPath);
@@ -174,14 +174,14 @@ export async function rotateWhatsappWebhookTokenAction(
     return {
       ok: true,
       message:
-        "Receiver rotacionado. Copie a URL completa agora; ela nao sera exibida novamente.",
+        "Receiver rotacionado. Copie a URL completa agora; ela não será exibida novamente.",
       connectionId,
       receiverSecret: {
         webhookUrl: `${result.data.webhookEndpoint}?token=${encodeURIComponent(result.data.webhookToken)}`,
       },
     };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel gerar o receiver desta conexao.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível gerar o receiver desta conexão.");
   }
 }
 
@@ -189,7 +189,7 @@ export async function configureWahaWebhookAction(
   formData: FormData,
 ): Promise<WhatsappProviderActionResult> {
   const connectionId = formText(formData, "connectionId");
-  if (!connectionId) return failure("Conexao WhatsApp invalida.");
+  if (!connectionId) return failure("Conexão WhatsApp inválida.");
 
   try {
     const response = await serverApiFetch<unknown>(
@@ -240,7 +240,7 @@ export async function deleteWhatsappConnectionAction(
   formData: FormData,
 ): Promise<WhatsappProviderActionResult> {
   const connectionId = formText(formData, "connectionId");
-  if (!connectionId) return failure("Conexao WhatsApp invalida.");
+  if (!connectionId) return failure("Conexão WhatsApp inválida.");
 
   try {
     await serverApiFetch(
@@ -248,9 +248,9 @@ export async function deleteWhatsappConnectionAction(
       { method: "DELETE" },
     );
     revalidatePath(integrationsPath);
-    return { ok: true, message: "Conexao excluida.", connectionId };
+    return { ok: true, message: "Conexão excluída.", connectionId };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel excluir a conexao WhatsApp.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível excluir a conexão WhatsApp.");
   }
 }
 
@@ -259,7 +259,7 @@ export async function loadWhatsappConnectionForEditAction(
 ): Promise<WhatsappConnectionEditResult> {
   const id = connectionId.trim();
   if (!id) {
-    return { ok: false, message: "Conexao WhatsApp invalida." };
+    return { ok: false, message: "Conexão WhatsApp inválida." };
   }
 
   try {
@@ -270,14 +270,14 @@ export async function loadWhatsappConnectionForEditAction(
     if (!result.success || result.data.id !== id) {
       return {
         ok: false,
-        message: "Nao foi possivel carregar os dados da conexao.",
+        message: "Não foi possível carregar os dados da conexão.",
       };
     }
     return { ok: true, data: result.data };
   } catch {
     return {
       ok: false,
-      message: "Nao foi possivel carregar os dados da conexao.",
+      message: "Não foi possível carregar os dados da conexão.",
     };
   }
 }
@@ -288,14 +288,14 @@ export async function updateWhatsappConnectionAction(
   const connectionId = formText(formData, "connectionId");
   const provider = formText(formData, "provider");
   if (!connectionId || !isProviderId(provider)) {
-    return failure("Conexao WhatsApp invalida.");
+    return failure("Conexão WhatsApp inválida.");
   }
 
   const input = whatsappConnectionEditInputSchema.safeParse(
     editConnectionInput(provider, formData),
   );
   if (!input.success) {
-    return failure("Revise os dados da conexao e tente novamente.");
+    return failure("Revise os dados da conexão e tente novamente.");
   }
 
   try {
@@ -304,9 +304,9 @@ export async function updateWhatsappConnectionAction(
       { method: "PATCH", body: JSON.stringify(input.data) },
     );
     revalidatePath(integrationsPath);
-    return { ok: true, message: "Conexao atualizada.", connectionId };
+    return { ok: true, message: "Conexão atualizada.", connectionId };
   } catch (error) {
-    return failure(licenseLockedMessageFor(error) ?? "Nao foi possivel atualizar a conexao WhatsApp.");
+    return failure(licenseLockedMessageFor(error) ?? "Não foi possível atualizar a conexão WhatsApp.");
   }
 }
 

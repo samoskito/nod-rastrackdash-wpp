@@ -91,7 +91,7 @@ export function BackofficeActionForm({
           aria-live="polite"
         >
           <strong>
-            {state.status === "error" ? "Acao nao concluida" : "Concluido"}
+            {state.status === "error" ? "Ação não concluída" : "Concluído"}
           </strong>
           <span>{state.message}</span>
         </div>

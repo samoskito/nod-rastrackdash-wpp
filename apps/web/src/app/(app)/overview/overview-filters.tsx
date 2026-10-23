@@ -77,15 +77,15 @@ export function OverviewFilters({
     <form
       action="/overview"
       className="overview-filter-bar"
-      aria-label="Filtros da visao geral"
+      aria-label="Filtros da visão geral"
     >
       <div className="overview-filter-heading">
-        <span className="micro-label">Recorte da analise</span>
-        <strong>Periodo e contas</strong>
+        <span className="micro-label">Recorte da análise</span>
+        <strong>Período e contas</strong>
       </div>
 
       <label className="filter-field">
-        <span>Inicio</span>
+        <span>Início</span>
         <input type="date" name="since" defaultValue={since} />
       </label>
       <label className="filter-field">

@@ -37,7 +37,7 @@ export function InboundReplaySubmitButton({
         : mode === "recovery"
           ? pending
             ? "Recuperando..."
-            : "Autorizar recuperacao"
+            : "Autorizar recuperação"
           : mode === "retry"
             ? pending
               ? "Recuperando..."

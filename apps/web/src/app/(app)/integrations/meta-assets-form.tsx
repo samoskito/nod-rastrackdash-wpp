@@ -167,7 +167,7 @@ export function MetaAssetsForm({
         name="adAccountId"
         value={adAccountId}
         onChange={(event) => setAdAccountId(event.currentTarget.value)}
-        aria-label="Conta de anuncio Meta"
+        aria-label="Conta de anúncio Meta"
         disabled={isLoadingBusinessAssets}
       >
         <option value="">Sem conta</option>
@@ -193,7 +193,7 @@ export function MetaAssetsForm({
         ))}
       </select>
       <button className="button" type="submit">
-        {isLoadingBusinessAssets ? "Carregando ativos" : "Salvar selecao Meta"}
+        {isLoadingBusinessAssets ? "Carregando ativos" : "Salvar seleção Meta"}
       </button>
     </form>
   );

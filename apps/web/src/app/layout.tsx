@@ -20,7 +20,7 @@ export function generateMetadata(): Metadata {
 
   return {
     title: brand.name,
-    description: `${brand.name} - cockpit de WhatsApp, trafego e conversoes para clientes finais.`,
+    description: `${brand.name} - cockpit de WhatsApp, tráfego e conversões para clientes finais.`,
     icons: {
       icon: brand.faviconUrl ?? "/favicon.svg",
     },
