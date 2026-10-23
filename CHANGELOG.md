@@ -3,9 +3,13 @@
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-This is the **initial public release** of the `nod-rastrackdash-wpp` student template — there is no prior public version to diff against, so nothing below is "breaking" for existing consumers.
+Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` student template.
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-10-23
+
+Upgrade notes for students (backup, the 26 migrations in order, environment variables, verification and rollback): [`docs/releases/1.1.0.json`](docs/releases/1.1.0.json).
 
 ### Changed
 
@@ -58,6 +62,16 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   is now labelled "Leads novos"; the campaign CSV gains "Leads que voltaram".
   Leads drill-downs by campaign/ad set/ad follow the first-contact ad. No
   migration, no new env var.
+
+- **License is now required (fail-closed)**: with `LICENSE_SERVER_URL` set and no
+  valid activation, reads keep working but every write answers `423`
+  (`license_required`, `activation_failed`); the API activates the configured
+  license on boot. Clear `LICENSE_SERVER_URL` only for local development: [#21](https://github.com/samoskito/nod-rastrackdash-wpp/pull/21)
+- **Persistent platform admin roles**: backoffice access comes from the role
+  stored in the database. The `WPPTRACK_PLATFORM_ADMIN_EMAILS` allowlist no longer
+  grants access; create or promote the first `platform_owner` with
+  `SETUP_PLATFORM_ADMIN_EMAIL` / `SETUP_PLATFORM_ADMIN_PASSWORD` (plus
+  `SETUP_PLATFORM_ADMIN_CONFIRM_EXISTING=true` for an existing account): [#25](https://github.com/samoskito/nod-rastrackdash-wpp/pull/25)
 
 ### Added
 
@@ -571,6 +585,27 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   change (including the `integrations/page.tsx` and `inbound-webhook-panel.tsx`
   links) and redeploy; no data changes.
 
+- **Data Crazy inbound webhook** support for CTWA messages, including
+  student setup guidance for connection, observation, certification and
+  production activation.
+- **Conectar Meta (PalmUP)** in Integrations → Tokens, BMs e destinos: the
+  workspace owner logs in with Facebook through the PalmUP Meta app, without
+  creating a Meta app of their own. The access token is redeemed and stored
+  by the API only. Needs the new public env `PALMUP_META_BROKER_URL` on the
+  API (example `https://wpptrack-api.rastrack.app`; it is a URL, not a
+  secret). The permanent-token path, **Trocar token** and **Reenviar
+  bloqueados** are unchanged.
+
+- **Multi-client backoffice** (workspaces, manual activation links, entry action, workspace ID, deletion with confirmation): [#26](https://github.com/samoskito/nod-rastrackdash-wpp/pull/26), [#36](https://github.com/samoskito/nod-rastrackdash-wpp/pull/36), [#44](https://github.com/samoskito/nod-rastrackdash-wpp/pull/44), [#46](https://github.com/samoskito/nod-rastrackdash-wpp/pull/46), [#47](https://github.com/samoskito/nod-rastrackdash-wpp/pull/47)
+- **Per-workspace WhatsApp connections** (Uazapi/WAHA/Z-API) with their own webhook receiver, editing, deletion of unused connections and backoffice webhook history; WAHA and Z-API inbound parsers: [#35](https://github.com/samoskito/nod-rastrackdash-wpp/pull/35), [#37](https://github.com/samoskito/nod-rastrackdash-wpp/pull/37), [#38](https://github.com/samoskito/nod-rastrackdash-wpp/pull/38), [#52](https://github.com/samoskito/nod-rastrackdash-wpp/pull/52)
+- **Secure external database connectors**: [#43](https://github.com/samoskito/nod-rastrackdash-wpp/pull/43)
+- **Meta WhatsApp Cloud API** webhook handshake and CTWA parsing: [#53](https://github.com/samoskito/nod-rastrackdash-wpp/pull/53), [#55](https://github.com/samoskito/nod-rastrackdash-wpp/pull/55)
+- **Meta initial sync** period resolved from the earliest connected WhatsApp source: [#58](https://github.com/samoskito/nod-rastrackdash-wpp/pull/58)
+- **Installed version in the backoffice** and the live-instance update guide (`docs/setup/update.md`): [#60](https://github.com/samoskito/nod-rastrackdash-wpp/pull/60), [#61](https://github.com/samoskito/nod-rastrackdash-wpp/pull/61)
+- **Reports**: global column sorting and deterministic insights: [#63](https://github.com/samoskito/nod-rastrackdash-wpp/pull/63), [#64](https://github.com/samoskito/nod-rastrackdash-wpp/pull/64)
+- **Kommo CRM stage conversions** with audited UI: [#65](https://github.com/samoskito/nod-rastrackdash-wpp/pull/65)
+- **Owners can retry blocked Meta CAPI events** (Reenviar / Reenviar bloqueados): [#69](https://github.com/samoskito/nod-rastrackdash-wpp/pull/69)
+
 ### Fixed
 
 - **Textos da tela com acentuação corrigida** (web e mensagens da API; cabeçalhos de CSV e rótulos do pacote shared ficam como estavam).
@@ -694,19 +729,6 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
   sync after boot now runs after a random 10-30 min (values below 600 s in
   `WPPTRACK_META_AUTO_SYNC_INITIAL_DELAY_SECONDS`, like the old `60`, are
   ignored). The 180-min interval is unchanged. API only, no migration.
-
-### Added
-
-- **Data Crazy inbound webhook** support for CTWA messages, including
-  student setup guidance for connection, observation, certification and
-  production activation.
-- **Conectar Meta (PalmUP)** in Integrations → Tokens, BMs e destinos: the
-  workspace owner logs in with Facebook through the PalmUP Meta app, without
-  creating a Meta app of their own. The access token is redeemed and stored
-  by the API only. Needs the new public env `PALMUP_META_BROKER_URL` on the
-  API (example `https://wpptrack-api.rastrack.app`; it is a URL, not a
-  secret). The permanent-token path, **Trocar token** and **Reenviar
-  bloqueados** are unchanged.
 
 ## [1.0.0] - 2026-08-24
 

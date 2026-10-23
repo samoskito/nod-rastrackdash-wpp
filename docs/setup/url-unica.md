@@ -139,4 +139,4 @@ versão anterior). Volte API, shared e web: a versão anterior ignora as tabelas
 **toda URL antiga desativada volta a aceitar postbacks** e **o filtro de produto deixa de valer** (a
 regra passa a aceitar todos os produtos). Pause antes as regras com filtro que não devem receber
 outros produtos. O SQL para desfazer o banco está nas notas da versão
-(`docs/releases/unreleased.json`, campo `rollback`).
+(`docs/releases/1.1.0.json`, campo `rollback`).
