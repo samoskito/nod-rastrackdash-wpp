@@ -832,6 +832,7 @@ export class WebhooksController {
         event,
         phoneHash,
         context,
+        isWahaV2,
       );
     } catch (error) {
       await this.settleProviderDeliveryFailed(
@@ -935,15 +936,29 @@ export class WebhooksController {
     event: ParsedInboundWebhookEvent | null,
     phoneHash: string | undefined,
     context: VerifiedConnectionContext,
+    adWithoutClidCreatesLead = false,
   ) {
     const emptyConversion = { created: [], duplicates: [], queued: [] };
+
+    if (!event || event.message.direction !== "inbound") {
+      return emptyConversion;
+    }
+
+    // WAHA v2 (decisão de produto, igual ao Rastrackapp): um clique de
+    // anúncio que chega só com sourceID, sem ctwa_clid (anúncios no Status
+    // do WhatsApp), também é lead de anúncio, atribuído pelo adId. Sem clid
+    // nada vai à Meta: o LeadSubmitted e as regras exigem ctwa_clid, e o
+    // ctwaPayload nunca é usado no lugar dele (a Meta o rejeita, 2804087).
+    if (!event.ctwaClid && adWithoutClidCreatesLead && event.adId) {
+      return this.recordAdLeadWithoutClid(event, phoneHash, context);
+    }
 
     // Product rule (mirrors Uazapi): only a paid CTWA inbound message
     // creates a platform lead. Organic messages (no ctwaClid) and messages
     // sent from the connected number itself (fromMe) never do; group chats
     // never reach here because the parsers decline to emit an event for
     // them. Nothing left to do is still a processed delivery.
-    if (!event || event.message.direction !== "inbound" || !event.ctwaClid) {
+    if (!event.ctwaClid) {
       return emptyConversion;
     }
 
@@ -1015,6 +1030,40 @@ export class WebhooksController {
       automatic,
       queued,
     };
+  }
+
+  /**
+   * Lead de anúncio sem ctwa_clid (WAHA v2, só sourceID): grava o lead com o
+   * adId (campanha/conjunto resolvidos pelo anúncio sincronizado) e a
+   * sourceURL. Não avalia regras nem envia evento à Meta.
+   */
+  private async recordAdLeadWithoutClid(
+    event: ParsedInboundWebhookEvent,
+    phoneHash: string | undefined,
+    context: VerifiedConnectionContext,
+  ) {
+    const attribution = await this.resolveUazapiMetaAttribution(
+      context.workspaceId,
+      { adId: event.adId ?? undefined },
+    );
+
+    await this.leadsService.upsertFromWhatsappWebhook({
+      workspaceId: context.workspaceId,
+      whatsappInstanceId: context.whatsappInstanceId,
+      name: event.contact.name ?? undefined,
+      preserveExistingName: true,
+      phone: event.contact.phoneNumber,
+      phoneHash,
+      source: event.provider,
+      labels: [],
+      campaignId: attribution.campaignId,
+      adSetId: attribution.adSetId,
+      adId: attribution.adId,
+      ctwaSourceUrl: event.ad?.sourceUrl ?? undefined,
+      occurredAt: event.occurredAt,
+    });
+
+    return { created: [], duplicates: [], queued: [] };
   }
 
   /**

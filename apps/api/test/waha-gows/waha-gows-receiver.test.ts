@@ -211,7 +211,7 @@ describe("POST /webhooks/whatsapp/:id — WAHA GoWS com a release waha/v2 certif
     ).toHaveBeenCalledTimes(1);
   });
 
-  it("Status ad with only sourceID (no clid): logged with the ad id, no lead and nothing sent to Meta — like Uazapi", async () => {
+  it("Status ad with only sourceID (no clid): ad lead attributed by the ad id, nothing sent to Meta (like the Rastrackapp)", async () => {
     const { services, deliverFixture } = harness();
 
     await deliverFixture("message-ctwa-source-id-only");
@@ -222,11 +222,62 @@ describe("POST /webhooks/whatsapp/:id — WAHA GoWS com a release waha/v2 certif
       adId: "120200000000000002",
       phoneHash: hashPhoneIdentity("5500900000102"),
     });
-    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledTimes(1);
+    const leadInput = services.leadsService.upsertFromWhatsappWebhook.mock
+      .calls[0]![0] as Record<string, unknown>;
+    expect(leadInput).toMatchObject({
+      workspaceId: "workspace-a",
+      whatsappInstanceId: "connection-waha",
+      phone: "5500900000102",
+      phoneHash: hashPhoneIdentity("5500900000102"),
+      source: "waha",
+      adId: "120200000000000002",
+      campaignId: "campaign-sintetica",
+      adSetId: "adset-sintetico",
+      ctwaSourceUrl: "https://wa.me/wamo/0Synth2",
+      name: "Contato Sintético 02",
+      preserveExistingName: true,
+    });
+    // No clid is ever invented (the ctwaPayload is never a clid).
+    expect(leadInput.ctwaClid).toBeUndefined();
+    expect(JSON.stringify(leadInput)).not.toContain("c3ludGhldGljLWN0d2Et");
+    // Nothing goes to Meta: no LeadSubmitted, no rule evaluation, no queue.
     expect(
       services.conversionEventsService.recordAutomaticLeadSubmitted,
     ).not.toHaveBeenCalled();
+    expect(services.conversionRulesService.evaluateTriggers).not.toHaveBeenCalled();
+    expect(services.conversionEventsService.recordRuleMatches).not.toHaveBeenCalled();
+    expect(services.conversionEventsQueueService.enqueueSend).not.toHaveBeenCalled();
     expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it("keeps the v1 behavior for sourceID-only when the waha/v2 release is not certified", async () => {
+    const { services, deliverFixture } = harness({ release: null });
+
+    await deliverFixture("message-ctwa-source-id-only");
+
+    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+  });
+
+  it("does not duplicate the lead when a sourceID-only click is followed by a clid click", async () => {
+    const { services, deliver, leadsByPhoneHash } = harness();
+    const sourceOnly = wahaGowsFixture("message-ctwa-source-id-only");
+    const withClid = wahaGowsFixture("message-ctwa-clid");
+    withClid.payload.id = "false_100000000000102@lid_3EB0000000000000000098";
+    withClid.payload.from = "100000000000102@lid";
+    withClid.payload._data.Info.ID = "3EB0000000000000000098";
+    withClid.payload._data.Info.Chat = "100000000000102@lid";
+    withClid.payload._data.Info.Sender = "100000000000102@lid";
+    withClid.payload._data.Info.SenderAlt = "5500900000102@s.whatsapp.net";
+
+    await deliver(sourceOnly);
+    await deliver(withClid);
+
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledTimes(2);
+    expect(leadsByPhoneHash.size).toBe(1);
+    expect(
+      services.conversionEventsService.recordAutomaticLeadSubmitted,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it.each([

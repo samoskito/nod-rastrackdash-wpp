@@ -101,8 +101,11 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
     with 409, left out of the capabilities).
   - **Lead entry:** with a clid, ad lead + `LeadSubmitted` (same path as the
     other providers; the push name only fills an empty lead name). Only
-    `sourceID` (WhatsApp Status ads) or organic: logged with the ad id when
-    present, no lead, nothing sent — the student edition's Uazapi behavior.
+    `sourceID`, no clid (WhatsApp Status ads, ~22% of clicks): ad lead
+    attributed by the ad id with the `sourceURL`, as in the Rastrackapp, and
+    nothing sent to Meta (`LeadSubmitted` and rules need a clid; the
+    `ctwaPayload` is never used as one). Organic: logged, no lead. WAHA only;
+    Uazapi unchanged.
     Idempotency keys include the event (`message` / `message.any`);
     `session.status` updates the connection health; the webhook log keeps a
     structural summary only (no text, name, LID, phone, clid or thumbnail).

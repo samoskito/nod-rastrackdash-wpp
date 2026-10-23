@@ -25,9 +25,10 @@ pelos testes do parser `waha` v2 e do receptor `POST /webhooks/whatsapp/:id`
   anúncios no Status do WhatsApp, em que a Meta omite o clid. Nos registros de
   lead CTWA detectado da janela atual (22/09 a 22/10) a fração foi menor
   (70 de 1.502, ~5%); a diferença entre as duas medidas não foi investigada.
-  Use os 22% da auditoria como referência. O aluno não cria lead nesses
-  casos (segue a Uazapi); o Rastrackapp cria lead de anúncio só com
-  `sourceID`. Decisão de produto pendente com o Samuel.
+  Use os 22% da auditoria como referência. Decisão de produto (Samuel): na
+  WAHA, esses cliques criam lead de anúncio pelo `sourceID`, como no
+  Rastrackapp, sem evento à Meta (não há `ctwa_clid` e o `ctwaPayload` nunca
+  é usado como clid).
 - **Valores:** todos sintéticos. Nenhum payload real foi copiado.
 
 ## Regras de anonimização (conferidas por teste)

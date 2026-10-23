@@ -471,7 +471,7 @@ no painel da WAHA; `STARTING` = subindo; `STOPPED` = sessão parada;
 | Chegou | Resultado |
 | --- | --- |
 | Clique em anúncio com `ctwa_clid` (`externalAdReply.ctwaClid`), inclusive quando a 1ª mensagem é foto, vídeo, áudio, temporária ou de visualização única | Lead de anúncio + `LeadSubmitted` à Meta, como nos outros provedores |
-| Anúncio só com `sourceID`, sem `ctwa_clid` (anúncios no **Status** do WhatsApp: a Meta não manda o clid) | Registrado com o ID do anúncio; **não cria lead nem envia evento** (igual à Uazapi). O `ctwaPayload` nunca é usado como clid: a Meta o rejeita |
+| Anúncio só com `sourceID`, sem `ctwa_clid` (anúncios no **Status** do WhatsApp: a Meta não manda o clid; cerca de 22% dos cliques) | **Cria lead de anúncio**, como o Rastrackapp: o lead guarda o ID do anúncio (campanha e conjunto vêm do anúncio sincronizado) e a `sourceURL`. **Nenhum evento vai à Meta**: o `LeadSubmitted` e as regras exigem `ctwa_clid`, e o `ctwaPayload` nunca é usado no lugar dele (a Meta o rejeita, erro 2804087). Se depois chegar um clique com clid do mesmo contato, o mesmo lead recebe o clid e o `LeadSubmitted` |
 | Mensagem orgânica | Registrada; não cria lead (igual à Uazapi) |
 | Mensagem do seu time (`message.any`, `fromMe`) | Registrada como `ignored_outbound`; regras de frase da WAHA ainda não estão liberadas |
 | Cópia `message.any` de mensagem recebida | Descartada (a recebida já veio por `message`; nada conta duas vezes) |
