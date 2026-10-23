@@ -1265,7 +1265,7 @@ export class ConversionEventsService {
       !resolvedDestination.accessToken?.trim() ||
       !(await pipedriveDispatchAuthorized(this.prisma, workspaceId, intent))
     )
-      resolvedDestination.routeError = "Rota Pipedrive autorizada indisponivel";
+      resolvedDestination.routeError = "Rota Pipedrive autorizada indisponível";
     const senderToken = randomUUID();
     const claimed = await this.prisma.$transaction(async (tx) => {
       if (!(await this.kommoLicenseAllows(tx))) return null;
@@ -1507,7 +1507,7 @@ export class ConversionEventsService {
     })) as ConversionEventLogRecord | null;
 
     if (!log && options.workspaceId !== undefined) {
-      throw new NotFoundException("Evento de conversao nao encontrado");
+      throw new NotFoundException("Evento de conversão não encontrado");
     }
 
     if (
@@ -1628,7 +1628,7 @@ export class ConversionEventsService {
           where: { id: log.id, status: "ready_to_send" },
           data: {
             errorCode: "kommo_publication_revoked",
-            errorMessage: "Autorizacao de publicacao indisponivel",
+            errorMessage: "Autorização de publicação indisponível",
           },
         });
         return {
@@ -1656,7 +1656,7 @@ export class ConversionEventsService {
           kommoIntent,
         )))
     )
-      resolvedDestination.routeError = "Rota Kommo autorizada indisponivel";
+      resolvedDestination.routeError = "Rota Kommo autorizada indisponível";
     const adapterInput = {
       accessToken: resolvedDestination.accessToken,
       pixelId: resolvedDestination.pixelId,
@@ -2696,7 +2696,7 @@ export class ConversionEventsService {
           routeError:
             error instanceof Error
               ? error.message
-              : "Nao foi possivel resolver a rota Meta deste evento",
+              : "Não foi possível resolver a rota Meta deste evento",
           legacyShadowParity: null,
         };
       }
@@ -2720,10 +2720,10 @@ export class ConversionEventsService {
         conversionDestinationId: null,
         routeError:
           log.sourceTrigger === "kommo_stage"
-            ? "Rota Kommo autorizada indisponivel"
+            ? "Rota Kommo autorizada indisponível"
             : log.sourceTrigger === PIPEDRIVE_STAGE_TRIGGER
-              ? "Rota Pipedrive autorizada indisponivel"
-              : "Rota Meta normalizada indisponivel",
+              ? "Rota Pipedrive autorizada indisponível"
+              : "Rota Meta normalizada indisponível",
         legacyShadowParity: null,
       };
     }
@@ -2992,12 +2992,12 @@ export class ConversionEventsService {
           severity: isBlocked ? "warning" : "error",
           status: isBlocked ? "blocked" : "error",
           title: isBlocked
-            ? "Envio Meta CAPI bloqueado por configuracao"
+            ? "Envio Meta CAPI bloqueado por configuração"
             : "Falha no envio Meta CAPI",
           message:
             result.errorMessage ??
             (isBlocked
-              ? "Pixel ou token Meta CAPI nao configurado."
+              ? "Pixel ou token Meta CAPI não configurado."
               : "O envio do evento para a Meta falhou."),
           leadId: log.leadId,
           phoneHash: log.phoneHash,

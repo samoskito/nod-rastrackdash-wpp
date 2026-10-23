@@ -328,7 +328,7 @@ export class DiagnosticsService {
       // This should not happen with a durable unique constraint; fail
       // closed instead of silently dropping the delivery.
       throw new ConflictException(
-        "Nao foi possivel resolver a colisao do idempotencyKey"
+        "Não foi possível resolver a colisão do idempotencyKey"
       );
     }
 
@@ -541,7 +541,7 @@ export class DiagnosticsService {
           status,
           title:
             status === "conflict"
-              ? `Webhook ${input.source} em conflito de idempotencia`
+              ? `Webhook ${input.source} em conflito de idempotência`
               : `Webhook ${input.source} recebido`,
           message:
             status === "conflict"
@@ -969,7 +969,7 @@ export class DiagnosticsService {
     })) as WebhookLogRecord | null;
 
     if (!webhook) {
-      throw new NotFoundException("Webhook nao encontrado");
+      throw new NotFoundException("Webhook não encontrado");
     }
 
     const payload = this.toWebhookPayloadDto(webhook);
@@ -1270,7 +1270,7 @@ export class DiagnosticsService {
     })) as DiagnosticEventRecord | null;
 
     if (!event) {
-      throw new NotFoundException("Evento diagnostico nao encontrado");
+      throw new NotFoundException("Evento diagnóstico não encontrado");
     }
 
     return this.toDetailDto(event, await this.buildTimeline(event));
@@ -1285,7 +1285,7 @@ export class DiagnosticsService {
     })) as DiagnosticEventRecord | null;
 
     if (!event) {
-      throw new NotFoundException("Evento diagnostico nao encontrado");
+      throw new NotFoundException("Evento diagnóstico não encontrado");
     }
 
     const auditLog = await this.prisma.auditLog.create({
@@ -1434,14 +1434,14 @@ export class DiagnosticsService {
       (context.workspaceId !== undefined &&
         conversionEvent.workspaceId !== context.workspaceId)
     ) {
-      throw new NotFoundException("Conversao nao encontrada");
+      throw new NotFoundException("Conversão não encontrada");
     }
 
     if (
       progress.configurationBlockedOnly &&
       !isConfigurationBlockedConversionEvent(conversionEvent)
     ) {
-      throw new BadRequestException("Evento nao esta bloqueado por configuracao");
+      throw new BadRequestException("Evento não está bloqueado por configuração");
     }
 
     if (
@@ -1453,8 +1453,8 @@ export class DiagnosticsService {
     ) {
       throw new BadRequestException(
         context.allowConfigurationBlocked
-          ? "Somente falhas transitorias ou bloqueios de configuracao podem ser reenviados"
-          : "Somente falhas transitorias de comunicacao podem ser reenviadas"
+          ? "Somente falhas transitórias ou bloqueios de configuração podem ser reenviados"
+          : "Somente falhas transitórias de comunicação podem ser reenviadas"
       );
     }
 
@@ -1472,13 +1472,13 @@ export class DiagnosticsService {
 
     if (conversionEvent.status === "not_eligible") {
       throw new BadRequestException(
-        "Evento sem identificador de clique nao e elegivel para envio Meta"
+        "Evento sem identificador de clique não é elegível para envio Meta"
       );
     }
 
     if (!conversionEvent.workspaceId) {
       throw new BadRequestException(
-        "Evento sem workspace nao pode ser reenviado"
+        "Evento sem workspace não pode ser reenviado"
       );
     }
 
@@ -1503,7 +1503,7 @@ export class DiagnosticsService {
 
     if (claimed.count !== 1) {
       throw new ConflictException(
-        "O evento ja foi alterado ou esta aguardando reenvio"
+        "O evento já foi alterado ou está aguardando reenvio"
       );
     }
     progress.onClaimed?.();
@@ -1848,7 +1848,7 @@ export class DiagnosticsService {
         items.push({
           id: conversionEvent.id,
           kind: "conversion_event_log",
-          label: `Conversao ${conversionEvent.eventName}`,
+          label: `Conversão ${conversionEvent.eventName}`,
           status: conversionEvent.status,
           occurredAt: (
             conversionEvent.sentAt ?? conversionEvent.createdAt

@@ -3,7 +3,7 @@ import * as bcrypt from "bcryptjs";
 
 const PASSWORD_HASH_ROUNDS = 12;
 export const BCRYPT_MAX_PASSWORD_BYTES = 72;
-export const BCRYPT_PASSWORD_INVALID_MESSAGE = "Senha invalida.";
+export const BCRYPT_PASSWORD_INVALID_MESSAGE = "Senha inválida.";
 
 /** bcrypt truncates after 72 UTF-8 bytes; reject instead of silently truncating. */
 export function assertBcryptCompatiblePassword(password: string): void {

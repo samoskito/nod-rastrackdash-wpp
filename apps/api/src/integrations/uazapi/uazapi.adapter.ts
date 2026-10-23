@@ -205,7 +205,7 @@ export class UazapiAdapter implements IntegrationAdapter {
         return {
           status: "deleted",
           alreadyMissing: true,
-          message: "Instancia ja removida na Uazapi",
+          message: "Instância já removida na Uazapi",
         };
       }
 

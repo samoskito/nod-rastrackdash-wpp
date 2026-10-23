@@ -140,7 +140,7 @@ export class PurchaseReviewsService {
       const correctedAfterSend = review.conversionEventLog?.status === "sent";
       if (review.conversionEventLogId && !correctedAfterSend) {
         throw new ConflictException(
-          "A compra ja esta na fila da Meta e nao pode ser alterada agora",
+          "A compra já está na fila da Meta e não pode ser alterada agora",
         );
       }
       if (
@@ -149,7 +149,7 @@ export class PurchaseReviewsService {
           review.status as (typeof actionableStatuses)[number] | "approved",
         )
       ) {
-        throw new ConflictException("Esta compra nao aceita mais edicao");
+        throw new ConflictException("Esta compra não aceita mais edição");
       }
 
       const resolved = this.resolveItems(review, input);
@@ -175,7 +175,7 @@ export class PurchaseReviewsService {
       if (correctedAfterSend) {
         if (!previousValueCents || !review.conversionEventLogId) {
           throw new ConflictException(
-            "O evento enviado nao possui valor original auditavel",
+            "O evento enviado não possui valor original auditável",
           );
         }
         await transaction.purchaseValueAdjustment.create({
@@ -207,7 +207,7 @@ export class PurchaseReviewsService {
       });
       if (updated.count !== 1) {
         throw new ConflictException(
-          "A revisao mudou enquanto era editada. Atualize a pagina.",
+          "A revisão mudou enquanto era editada. Atualize a página.",
         );
       }
 
@@ -245,7 +245,7 @@ export class PurchaseReviewsService {
           review.status as (typeof actionableStatuses)[number] | "approved",
         )
       ) {
-        throw new ConflictException("Esta compra nao pode mais ser rejeitada");
+        throw new ConflictException("Esta compra não pode mais ser rejeitada");
       }
 
       await transaction.purchaseReview.update({
@@ -308,7 +308,7 @@ export class PurchaseReviewsService {
         transaction,
       );
       if (review.conversionEventLogId) {
-        throw new ConflictException("Esta compra ja possui um evento Meta");
+        throw new ConflictException("Esta compra já possui um evento Meta");
       }
       const catalogReview =
         review.providerRule.conversionRule.triggerType === "structured_catalog";
@@ -345,7 +345,7 @@ export class PurchaseReviewsService {
       });
       if (updated.count !== 1) {
         throw new ConflictException(
-          "A revisao mudou enquanto era aprovada. Atualize a pagina.",
+          "A revisão mudou enquanto era aprovada. Atualize a página.",
         );
       }
       await transaction.providerConversionRuleExecution.update({
@@ -402,7 +402,7 @@ export class PurchaseReviewsService {
       const variant = variants.get(item.catalogVariantId);
       if (!variant) {
         throw new BadRequestException(
-          "Uma das variantes nao pertence ao catalogo desta regra",
+          "Uma das variantes não pertence ao catálogo desta regra",
         );
       }
       const attributeValues = this.stringArray(variant.attributeValues);
@@ -424,7 +424,7 @@ export class PurchaseReviewsService {
       0,
     );
     if (!Number.isSafeInteger(totalValueCents) || totalValueCents <= 0) {
-      throw new BadRequestException("O total da compra e invalido");
+      throw new BadRequestException("O total da compra é inválido");
     }
     return { items, totalValueCents };
   }
@@ -441,7 +441,7 @@ export class PurchaseReviewsService {
       })
       .then((review) => {
         if (!review)
-          throw new NotFoundException("Revisao de compra nao encontrada");
+          throw new NotFoundException("Revisão de compra não encontrada");
         return review;
       });
   }

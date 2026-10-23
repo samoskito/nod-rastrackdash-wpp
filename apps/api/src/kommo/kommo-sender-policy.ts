@@ -2,7 +2,7 @@ import type { KommoConversionDedupe, Prisma } from "@prisma/client";
 
 export const KOMMO_DELIVERY_UNKNOWN = "kommo_delivery_unknown";
 export const KOMMO_DELIVERY_UNKNOWN_MESSAGE =
-  "Resultado da entrega desconhecido. Reenvio bloqueado; investigacao requerida.";
+  "Resultado da entrega desconhecido. Reenvio bloqueado; investigação requerida.";
 
 /** A claim has no expiry: neither elapsed time nor a fetch error proves non-delivery. */
 export function kommoDeliveryUnknown(

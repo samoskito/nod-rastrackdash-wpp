@@ -139,7 +139,7 @@ export class WebhooksController {
       verifyToken !== expectedToken ||
       !challenge
     ) {
-      throw new UnauthorizedException("Meta webhook token invalido");
+      throw new UnauthorizedException("Meta webhook token inválido");
     }
 
     return challenge;
@@ -190,7 +190,7 @@ export class WebhooksController {
       !receivedToken ||
       this.hashToken(receivedToken) !== instance.webhookTokenHash
     ) {
-      throw new UnauthorizedException("Webhook Uazapi nao autorizado");
+      throw new UnauthorizedException("Webhook Uazapi não autorizado");
     }
 
     return this.recordUazapiWebhook(body, {
@@ -240,7 +240,7 @@ export class WebhooksController {
       !receivedToken ||
       !this.matchesTokenHash(receivedToken, instance.webhookTokenHash)
     ) {
-      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+      throw new UnauthorizedException("Webhook WhatsApp não autorizado");
     }
 
     const payloadWorkspaceId = this.firstString(body.workspaceId);
@@ -249,7 +249,7 @@ export class WebhooksController {
       (payloadWorkspaceId && payloadWorkspaceId !== instance.workspaceId) ||
       (payloadConnectionId && payloadConnectionId !== instance.id)
     ) {
-      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+      throw new UnauthorizedException("Webhook WhatsApp não autorizado");
     }
 
     if (instance.provider === "uazapi_byo") {
@@ -281,7 +281,7 @@ export class WebhooksController {
     }
 
     throw new NotImplementedException(
-      `Receiver inbound para ${instance.provider} ainda nao esta disponivel`,
+      `Receiver inbound para ${instance.provider} ainda não está disponível`,
     );
   }
 
@@ -339,7 +339,7 @@ export class WebhooksController {
     );
 
     if (!providerInstanceId || !claimed || claimed !== providerInstanceId) {
-      throw new UnauthorizedException("Webhook WhatsApp nao autorizado");
+      throw new UnauthorizedException("Webhook WhatsApp não autorizado");
     }
   }
 
@@ -355,7 +355,7 @@ export class WebhooksController {
     const context = await this.resolveMetaContext(body);
 
     if (workspaceId && workspaceId !== context.workspaceId) {
-      throw new UnauthorizedException("Webhook Meta nao autorizado");
+      throw new UnauthorizedException("Webhook Meta não autorizado");
     }
 
     return this.recordMetaWebhook(body, context);
@@ -471,7 +471,7 @@ export class WebhooksController {
       !signatureHex ||
       !/^[a-f0-9]{64}$/i.test(signatureHex)
     ) {
-      throw new UnauthorizedException("Webhook Meta nao autorizado");
+      throw new UnauthorizedException("Webhook Meta não autorizado");
     }
 
     const expectedSignature = createHmac("sha256", appSecret)
@@ -483,7 +483,7 @@ export class WebhooksController {
       receivedSignature.length !== expectedSignature.length ||
       !timingSafeEqual(receivedSignature, expectedSignature)
     ) {
-      throw new UnauthorizedException("Webhook Meta nao autorizado");
+      throw new UnauthorizedException("Webhook Meta não autorizado");
     }
   }
 
@@ -500,7 +500,7 @@ export class WebhooksController {
     );
 
     if (pageIds.length !== 1) {
-      throw new UnauthorizedException("Webhook Meta nao autorizado");
+      throw new UnauthorizedException("Webhook Meta não autorizado");
     }
 
     const destinations = await this.prisma.metaConversionDestination.findMany({
@@ -514,7 +514,7 @@ export class WebhooksController {
     });
 
     if (destinations.length !== 1) {
-      throw new UnauthorizedException("Webhook Meta nao autorizado");
+      throw new UnauthorizedException("Webhook Meta não autorizado");
     }
 
     return {
@@ -531,7 +531,7 @@ export class WebhooksController {
       !receivedToken ||
       this.hashToken(receivedToken) !== this.hashToken(expectedToken)
     ) {
-      throw new UnauthorizedException("Webhook Uazapi nao autorizado");
+      throw new UnauthorizedException("Webhook Uazapi não autorizado");
     }
   }
 
@@ -568,7 +568,7 @@ export class WebhooksController {
       (await this.resolveUazapiContext(parsed.providerInstanceId));
 
     if (!resolvedContext) {
-      throw new UnauthorizedException("Webhook Uazapi nao autorizado");
+      throw new UnauthorizedException("Webhook Uazapi não autorizado");
     }
 
     this.assertUazapiContextMatches(
@@ -1150,7 +1150,7 @@ export class WebhooksController {
     });
 
     throw new ConflictException(
-      "Entrega de webhook nao pode ser concluida: a reivindicacao do registro foi perdida",
+      "Entrega de webhook não pode ser concluída: a reivindicação do registro foi perdida",
     );
   }
 
@@ -1375,7 +1375,7 @@ export class WebhooksController {
       ) ||
       (providerInstanceId && providerInstanceId !== context.providerInstanceId)
     ) {
-      throw new UnauthorizedException("Webhook Uazapi nao autorizado");
+      throw new UnauthorizedException("Webhook Uazapi não autorizado");
     }
   }
 

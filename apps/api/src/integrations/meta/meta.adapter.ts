@@ -563,10 +563,10 @@ export class MetaAdapter implements IntegrationAdapter {
       ).catch(() => []),
     ]);
     const id = this.asString(profile.id);
-    const name = this.asString(profile.name) ?? "Usuario do sistema Meta";
+    const name = this.asString(profile.name) ?? "Usuário do sistema Meta";
 
     if (!id) {
-      throw new Error("A Meta nao confirmou a identidade deste token");
+      throw new Error("A Meta não confirmou a identidade deste token");
     }
 
     return {
@@ -595,7 +595,7 @@ export class MetaAdapter implements IntegrationAdapter {
     const name = this.asString(item.name);
 
     if (!id || !name) {
-      throw new Error("A Meta nao confirmou o Business Manager informado");
+      throw new Error("A Meta não confirmou o Business Manager informado");
     }
 
     return {
@@ -619,7 +619,7 @@ export class MetaAdapter implements IntegrationAdapter {
     const name = this.asString(item.name);
 
     if (!id || !name) {
-      throw new Error("A Meta nao confirmou a conta de anuncios informada");
+      throw new Error("A Meta não confirmou a conta de anúncios informada");
     }
 
     return {
@@ -646,7 +646,7 @@ export class MetaAdapter implements IntegrationAdapter {
     const name = this.asString(item.name);
 
     if (!id || !name) {
-      throw new Error("A Meta nao confirmou o Pixel/Dataset informado");
+      throw new Error("A Meta não confirmou o Pixel/Dataset informado");
     }
 
     return {
@@ -671,7 +671,7 @@ export class MetaAdapter implements IntegrationAdapter {
     const name = this.asString(item.name);
 
     if (!id || !name) {
-      throw new Error("A Meta nao confirmou a Pagina informada");
+      throw new Error("A Meta não confirmou a Página informada");
     }
 
     return {

@@ -62,8 +62,8 @@ import {
 } from "./providers/unnichat/unnichat-automation-v1.parser";
 
 /** Same generic answer for a wrong token, an unknown or removed URL. */
-const notFoundMessage = "Webhook nao encontrado";
-const unavailableMessage = "Webhook temporariamente indisponivel";
+const notFoundMessage = "Webhook não encontrado";
+const unavailableMessage = "Webhook temporariamente indisponível";
 const fallbackDedupeWindowMs = 5 * 60 * 1_000;
 const AUTOMATION_PARSER_VERSION = "automation-v1";
 const SECRET_CONTEXT = "integration-endpoint-secret";
@@ -246,11 +246,11 @@ export class IntegrationEndpointsService {
       include: { integrationEndpoint: { include: { parserRelease: true } } },
     });
     if (!event || event.integrationEndpoint.removedAt) {
-      throw new NotFoundException("Evento nao encontrado");
+      throw new NotFoundException("Evento não encontrado");
     }
     if (event.status === "routed") {
       throw new ConflictException(
-        "Este evento ja foi entregue a uma regra; reprocesse pela regra",
+        "Este evento já foi entregue a uma regra; reprocesse pela regra",
       );
     }
     const rawBody = this.decryptEventPayload(event);
@@ -259,7 +259,7 @@ export class IntegrationEndpointsService {
     const parsed = this.parse(endpoint, payload);
     if (!parsed.ok) {
       throw new ConflictException(
-        "O payload guardado nao corresponde a um evento suportado",
+        "O payload guardado não corresponde a um evento suportado",
       );
     }
     const routed = await this.routeAndHandOff({
@@ -364,7 +364,7 @@ export class IntegrationEndpointsService {
       });
     if (!parserRelease) {
       throw new ConflictException(
-        "Esta integracao ainda nao esta disponivel nesta instalacao",
+        "Esta integração ainda não está disponível nesta instalacao",
       );
     }
     const id = randomUUID();
@@ -1071,7 +1071,7 @@ export class IntegrationEndpointsService {
       event.encryptionKeyVersion === null
     ) {
       throw new ConflictException(
-        "O payload deste evento nao esta mais disponivel",
+        "O payload deste evento não está mais disponível",
       );
     }
     try {
@@ -1089,7 +1089,7 @@ export class IntegrationEndpointsService {
         },
       );
     } catch {
-      throw new ConflictException("O payload deste evento nao pode ser lido");
+      throw new ConflictException("O payload deste evento não pode ser lido");
     }
   }
 
@@ -1140,7 +1140,7 @@ export class IntegrationEndpointsService {
       );
     }
     if (!rawBody || rawBody.length === 0) {
-      throw new BadRequestException("Payload JSON obrigatorio");
+      throw new BadRequestException("Payload JSON obrigatório");
     }
     if (rawBody.length > MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES) {
       throw new PayloadTooLargeException("Payload do webhook excede o limite");
@@ -1148,7 +1148,7 @@ export class IntegrationEndpointsService {
     try {
       JSON.parse(rawBody.toString("utf8"));
     } catch {
-      throw new BadRequestException("Payload JSON invalido");
+      throw new BadRequestException("Payload JSON inválido");
     }
     return rawBody;
   }
@@ -1287,7 +1287,7 @@ export class IntegrationEndpointsService {
       where: { id: endpointId, workspaceId, removedAt: null },
       include: { parserRelease: true },
     });
-    if (!endpoint) throw new NotFoundException("Endereco nao encontrado");
+    if (!endpoint) throw new NotFoundException("Endereço não encontrado");
     return endpoint;
   }
 

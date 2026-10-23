@@ -120,8 +120,8 @@ export class ExternalMysqlAdapter {
             eventsViewAvailable,
             errorCode: ok ? null : "RequiredViewsMissing",
             message: ok
-              ? "Conexao e views obrigatorias validadas"
-              : "Conexao estabelecida, mas faltam views obrigatorias",
+              ? "Conexão e views obrigatórias validadas"
+              : "Conexão estabelecida, mas faltam views obrigatórias",
           };
         },
       );
@@ -443,14 +443,14 @@ export class ExternalMysqlAdapter {
       case "ER_ACCESS_DENIED_ERROR":
         return "Acesso negado pelo MySQL";
       case "ECONNREFUSED":
-        return "O servidor MySQL recusou a conexao";
+        return "O servidor MySQL recusou a conexão";
       case "ETIMEDOUT":
       case "PROTOCOL_SEQUENCE_TIMEOUT":
-        return "A conexao MySQL excedeu o tempo limite";
+        return "A conexão MySQL excedeu o tempo limite";
       case "ENOTFOUND":
-        return "O host MySQL nao foi encontrado";
+        return "O host MySQL não foi encontrado";
       default:
-        return "Nao foi possivel validar a conexao MySQL";
+        return "Não foi possível validar a conexão MySQL";
     }
   }
 }

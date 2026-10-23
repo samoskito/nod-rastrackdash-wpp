@@ -98,7 +98,7 @@ export class ExternalSyncService {
     })) as ConnectorRecord | null;
 
     if (!connector) {
-      throw new NotFoundException("Conector externo nao encontrado");
+      throw new NotFoundException("Conector externo não encontrado");
     }
 
     if (connector.status !== "active") {
@@ -527,7 +527,7 @@ export class ExternalSyncService {
           status: "skipped",
           leadId: null,
           errorCode: "ExternalLeadRemovedAtSource",
-          errorMessage: "O lead nao existe mais na origem externa"
+          errorMessage: "O lead não existe mais na origem externa"
         }
       });
       await this.prisma.externalIngestionRecord.updateMany({
@@ -540,7 +540,7 @@ export class ExternalSyncService {
           status: "removed",
           leadId: null,
           errorCode: "ExternalLeadRemovedAtSource",
-          errorMessage: "O lead nao existe mais na origem externa",
+          errorMessage: "O lead não existe mais na origem externa",
           lastReceivedAt: new Date()
         }
       });
@@ -554,7 +554,7 @@ export class ExternalSyncService {
         status: "removed",
         leadId: null,
         errorCode: "ExternalLeadRemovedAtSource",
-        errorMessage: "O lead nao existe mais na origem externa",
+        errorMessage: "O lead não existe mais na origem externa",
         lastReceivedAt: new Date()
       }
     });
@@ -861,16 +861,16 @@ export class ExternalSyncService {
   private safeErrorMessage(error: unknown): string {
     switch (this.errorCode(error)) {
       case "ExternalConnectorNotActive":
-        return "O conector externo nao esta ativo";
+        return "O conector externo não está ativo";
       case "ExternalRowTimestampInvalid":
-        return "A origem retornou uma data invalida";
+        return "A origem retornou uma data inválida";
       case "ER_ACCESS_DENIED_ERROR":
         return "O MySQL recusou as credenciais do conector";
       case "ETIMEDOUT":
       case "PROTOCOL_SEQUENCE_TIMEOUT":
         return "A consulta ao MySQL excedeu o tempo limite";
       default:
-        return "A sincronizacao externa nao foi concluida";
+        return "A sincronização externa não foi concluída";
     }
   }
 }

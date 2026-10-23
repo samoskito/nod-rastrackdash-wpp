@@ -134,7 +134,7 @@ export class InboundWebhookDiagnosticsService {
           severity: "info",
           status: "received",
           title: `Webhook ${input.provider} recebido`,
-          message: `Evento ${input.eventType} recebido para observacao`,
+          message: `Evento ${input.eventType} recebido para observação`,
           webhookLogId: webhook.id,
           summaryPayload,
         },

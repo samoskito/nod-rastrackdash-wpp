@@ -53,7 +53,7 @@ export function validatePlatformAdminBootstrapInput(
   const email = normalizeEmail(input.email);
 
   if (!isEmail(email) || input.password.length < 8) {
-    throw new Error("Informe email valido e senha com 8+ caracteres.");
+    throw new Error("Informe email válido e senha com 8+ caracteres.");
   }
   assertBcryptCompatiblePassword(input.password);
 
@@ -90,7 +90,7 @@ export async function bootstrapPlatformAdminUser(
 
     if (ownerCount > 1) {
       throw new Error(
-        "Invariante de proprietarios invalida. Corrija a plataforma antes do bootstrap.",
+        "Invariante de proprietários inválida. Corrija a plataforma antes do bootstrap.",
       );
     }
 
@@ -106,14 +106,14 @@ export async function bootstrapPlatformAdminUser(
       }
 
       throw new Error(
-        "Bootstrap fechado: ja existe um proprietario de plataforma. Use a administracao autenticada para alterar papeis.",
+        "Bootstrap fechado: já existe um proprietário de plataforma. Use a administração autenticada para alterar papéis.",
       );
     }
 
     if (existing) {
       if (!input.confirmExisting) {
         throw new Error(
-          "Usuario existente nao alterado. Confirme explicitamente a promocao.",
+          "Usuário existente não alterado. Confirme explicitamente a promoção.",
         );
       }
 

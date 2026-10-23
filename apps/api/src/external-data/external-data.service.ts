@@ -103,7 +103,7 @@ export class ExternalDataService {
     actorUserId: string,
   ): Promise<ExternalDataConnectorDto> {
     if (input.workspaceId !== workspaceId) {
-      throw new BadRequestException("Workspace do conector invalido");
+      throw new BadRequestException("Workspace do conector inválido");
     }
     if (input.syncEnabled || !input.shadowMode || input.capiSendEnabled) {
       throw new BadRequestException(
@@ -195,7 +195,7 @@ export class ExternalDataService {
     });
 
     if (!workspace) {
-      throw new NotFoundException("Workspace nao encontrado");
+      throw new NotFoundException("Workspace não encontrado");
     }
 
     const encrypted = this.credentialEncryption.encrypt(input.credentials);
@@ -255,7 +255,7 @@ export class ExternalDataService {
 
     if (enablesReading && current.lastConnectionStatus !== "connected") {
       throw new BadRequestException(
-        "Teste a conexao e as views antes de ativar a sincronizacao",
+        "Teste a conexão e as views antes de ativar a sincronização",
       );
     }
 
@@ -408,7 +408,7 @@ export class ExternalDataService {
     }
 
     if (connector.lastSyncStatus === "running") {
-      throw new BadRequestException("Aguarde a sincronizacao atual terminar");
+      throw new BadRequestException("Aguarde a sincronização atual terminar");
     }
 
     const result = await this.syncQueue.enqueueSync({
@@ -455,12 +455,12 @@ export class ExternalDataService {
 
     if (!event) {
       throw new BadRequestException(
-        "Evento externo nao encontrado no gate CAPI",
+        "Evento externo não encontrado no gate CAPI",
       );
     }
     if (event.capiActive) {
       throw new BadRequestException(
-        "O WppTrack ja assumiu este tipo de evento",
+        "O WppTrack já assumiu este tipo de evento",
       );
     }
     if (!event.readyForCutover) {
@@ -488,7 +488,7 @@ export class ExternalDataService {
 
       if (existing) {
         throw new BadRequestException(
-          "O WppTrack ja assumiu este tipo de evento",
+          "O WppTrack já assumiu este tipo de evento",
         );
       }
 
@@ -589,7 +589,7 @@ export class ExternalDataService {
 
       if (!active) {
         throw new BadRequestException(
-          "Este tipo de evento nao esta ativo no WppTrack",
+          "Este tipo de evento não está ativo no WppTrack",
         );
       }
 
@@ -968,19 +968,19 @@ export class ExternalDataService {
       if (!connector.syncEnabled) {
         addBlocker(
           "SYNC_DISABLED",
-          "Ative a sincronizacao automatica do conector.",
+          "Ative a sincronização automática do conector.",
         );
       }
       if (connector.lastConnectionStatus !== "connected") {
         addBlocker(
           "CONNECTION_NOT_VALIDATED",
-          "Valide novamente a conexao MySQL.",
+          "Valide novamente a conexão MySQL.",
         );
       }
       if (connector.lastSyncStatus !== "completed") {
         addBlocker(
           "SYNC_NOT_COMPLETED",
-          "Conclua uma sincronizacao sem falhas.",
+          "Conclua uma sincronização sem falhas.",
         );
       }
       if (
@@ -1005,7 +1005,7 @@ export class ExternalDataService {
       ) {
         addBlocker(
           "CAPI_MODE_INCONSISTENT",
-          "O modo CAPI nao corresponde aos tipos de evento assumidos pelo WppTrack.",
+          "O modo CAPI não corresponde aos tipos de evento assumidos pelo WppTrack.",
         );
       }
 
@@ -1032,7 +1032,7 @@ export class ExternalDataService {
       if (!destinationConfigured) {
         addBlocker(
           "META_DESTINATION_MISSING",
-          "Configure Pixel e Pagina do destino CAPI.",
+          "Configure Pixel e Página do destino CAPI.",
         );
       }
 
@@ -1060,13 +1060,13 @@ export class ExternalDataService {
         if (event.blockingRejectedRows > 0) {
           addBlocker(
             `REJECTED_${event.eventType.toUpperCase()}`,
-            `${event.blockingRejectedRows} evento(s) de ${eventLabel} falharam na ingestao.`,
+            `${event.blockingRejectedRows} evento(s) de ${eventLabel} falharam na ingestão.`,
           );
         }
         if (event.pendingRows > 0) {
           addBlocker(
             `PENDING_${event.eventType.toUpperCase()}`,
-            `${event.pendingRows} evento(s) de ${eventLabel} estao pendentes.`,
+            `${event.pendingRows} evento(s) de ${eventLabel} estão pendentes.`,
           );
         }
 
@@ -1074,13 +1074,13 @@ export class ExternalDataService {
         if (event.matchedRows < expectedMatches) {
           addBlocker(
             `UNMATCHED_${event.eventType.toUpperCase()}`,
-            `${expectedMatches - event.matchedRows} evento(s) de ${eventLabel} nao possuem conversao vinculada.`,
+            `${expectedMatches - event.matchedRows} evento(s) de ${eventLabel} não possuem conversão vinculada.`,
           );
         }
         if (event.blockedDeliveryRows > 0) {
           addBlocker(
             `DELIVERY_BLOCKED_${event.eventType.toUpperCase()}`,
-            `${event.blockedDeliveryRows} evento(s) pagos de ${eventLabel} nao estao prontos para CAPI.`,
+            `${event.blockedDeliveryRows} evento(s) pagos de ${eventLabel} não estão prontos para CAPI.`,
           );
         }
 
@@ -1247,7 +1247,7 @@ export class ExternalDataService {
     })) as ConnectorWithCursors | null;
 
     if (!connector) {
-      throw new NotFoundException("Conector externo nao encontrado");
+      throw new NotFoundException("Conector externo não encontrado");
     }
 
     return connector;
@@ -1269,7 +1269,7 @@ export class ExternalDataService {
     })) as ConnectorWithCursors | null;
 
     if (!connector)
-      throw new NotFoundException("Conector externo nao encontrado");
+      throw new NotFoundException("Conector externo não encontrado");
     return connector;
   }
 

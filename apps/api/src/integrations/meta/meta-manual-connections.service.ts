@@ -260,7 +260,7 @@ export class MetaManualConnectionsService {
     } catch (error) {
       throw this.publicBadRequest(
         error,
-        "Nao foi possivel preparar o login social para o roteamento por BM",
+        "Não foi possível preparar o login social para o roteamento por BM",
       );
     }
   }
@@ -444,7 +444,7 @@ export class MetaManualConnectionsService {
     } catch (error) {
       throw this.publicBadRequest(
         error,
-        "Nao foi possivel validar o token permanente na Meta",
+        "Não foi possível validar o token permanente na Meta",
       );
     }
   }
@@ -518,7 +518,7 @@ export class MetaManualConnectionsService {
     } catch (error) {
       throw this.publicBadRequest(
         error,
-        "Nao foi possivel consultar os ativos acessiveis por este token",
+        "Não foi possível consultar os ativos acessíveis por este token",
       );
     }
   }
@@ -601,7 +601,7 @@ export class MetaManualConnectionsService {
 
       if (conflictingAccount) {
         throw new ConflictException(
-          `A conta ${conflictingAccount.adAccountId} ja pertence a outra conexao Meta deste workspace`,
+          `A conta ${conflictingAccount.adAccountId} já pertence a outra conexão Meta deste workspace`,
         );
       }
 
@@ -806,7 +806,7 @@ export class MetaManualConnectionsService {
     } catch (error) {
       throw this.publicBadRequest(
         error,
-        "Nao foi possivel ativar esta estrutura Meta",
+        "Não foi possível ativar esta estrutura Meta",
       );
     }
   }
@@ -919,7 +919,7 @@ export class MetaManualConnectionsService {
     } catch (error) {
       throw this.publicBadRequest(
         error,
-        "O novo token nao acessa toda a estrutura desta conexao",
+        "O novo token não acessa toda a estrutura desta conexão",
       );
     }
   }
@@ -938,7 +938,7 @@ export class MetaManualConnectionsService {
     });
 
     if (!connection || connection.credential.source !== source) {
-      throw new NotFoundException("Conexao Meta nao encontrada");
+      throw new NotFoundException("Conexão Meta não encontrada");
     }
 
     if (
@@ -946,7 +946,7 @@ export class MetaManualConnectionsService {
       connection.credential.status !== "active"
     ) {
       throw new ConflictException(
-        "Valide ou troque o token antes de reativar esta conexao",
+        "Valide ou troque o token antes de reativar esta conexão",
       );
     }
 
@@ -1003,7 +1003,7 @@ export class MetaManualConnectionsService {
     });
 
     if (!connection || connection.credential.source !== source) {
-      throw new NotFoundException("Conexao Meta nao encontrada");
+      throw new NotFoundException("Conexão Meta não encontrada");
     }
 
     if (input.businessManagerId !== connection.businessManagerId) {
@@ -1118,7 +1118,7 @@ export class MetaManualConnectionsService {
       !connection?.defaultConversionDestination ||
       connection.credential.source !== source
     ) {
-      throw new NotFoundException("Conexao Meta nao encontrada");
+      throw new NotFoundException("Conexão Meta não encontrada");
     }
 
     const accessToken = this.decryptCredential(
@@ -1198,7 +1198,7 @@ export class MetaManualConnectionsService {
         data: {
           status: "validation_required",
           lastValidatedAt: now,
-          validationError: "A Meta recusou a validacao desta conexao",
+          validationError: "A Meta recusou a validação desta conexão",
         },
       });
       await this.recordAudit({
@@ -1216,7 +1216,7 @@ export class MetaManualConnectionsService {
 
       throw this.publicBadRequest(
         error,
-        "A Meta recusou a validacao desta conexao",
+        "A Meta recusou a validação desta conexão",
       );
     }
   }
@@ -1253,7 +1253,7 @@ export class MetaManualConnectionsService {
       !account?.businessConnection ||
       account.businessConnection.credential.source !== source
     ) {
-      throw new NotFoundException("Conta Meta normalizada nao encontrada");
+      throw new NotFoundException("Conta Meta normalizada não encontrada");
     }
 
     const requestedDestinationIds = [
@@ -1268,7 +1268,7 @@ export class MetaManualConnectionsService {
 
     if (destinations.length !== requestedDestinationIds.length) {
       throw new NotFoundException(
-        "Um ou mais destinos Meta nao foram encontrados",
+        "Um ou mais destinos Meta não foram encontrados",
       );
     }
 
@@ -1279,7 +1279,7 @@ export class MetaManualConnectionsService {
 
       if (existing && existing.id !== destination.id) {
         throw new BadRequestException(
-          "Cada Pagina Meta pode apontar para apenas um Pixel nesta conta",
+          "Cada Página Meta pode apontar para apenas um Pixel nesta conta",
         );
       }
 
@@ -1297,7 +1297,7 @@ export class MetaManualConnectionsService {
     } catch (error) {
       throw this.publicBadRequest(
         error,
-        "O token desta BM nao acessa todos os destinos selecionados",
+        "O token desta BM não acessa todos os destinos selecionados",
       );
     }
 
@@ -1401,7 +1401,7 @@ export class MetaManualConnectionsService {
       !account?.businessConnection ||
       account.businessConnection.credential.source !== source
     ) {
-      throw new NotFoundException("Conta Meta normalizada nao encontrada");
+      throw new NotFoundException("Conta Meta normalizada não encontrada");
     }
 
     let destinations = account.allowedDestinations.map(
@@ -1528,7 +1528,7 @@ export class MetaManualConnectionsService {
       !account?.businessConnection ||
       account.businessConnection.credential.source !== source
     ) {
-      throw new NotFoundException("Conta Meta normalizada nao encontrada");
+      throw new NotFoundException("Conta Meta normalizada não encontrada");
     }
 
     const ad = await this.prisma.metaAd.findFirst({
@@ -1545,7 +1545,7 @@ export class MetaManualConnectionsService {
     });
 
     if (!ad) {
-      throw new NotFoundException("Anuncio Meta nao encontrado nesta conta");
+      throw new NotFoundException("Anúncio Meta não encontrado nesta conta");
     }
 
     let destinations = account.allowedDestinations.map(
@@ -1568,7 +1568,7 @@ export class MetaManualConnectionsService {
       )
     ) {
       throw new BadRequestException(
-        "O destino escolhido nao esta autorizado para esta conta",
+        "O destino escolhido não está autorizado para esta conta",
       );
     }
 
@@ -1720,7 +1720,7 @@ export class MetaManualConnectionsService {
 
       if (configuration.unmappedActiveAccountCount > 0) {
         throw new ConflictException(
-          `${configuration.unmappedActiveAccountCount} conta(s) ativa(s) ainda nao possuem uma BM e um destino. Vincule ou desative essas contas antes de ativar`,
+          `${configuration.unmappedActiveAccountCount} conta(s) ativa(s) ainda não possuem uma BM e um destino. Vincule ou desative essas contas antes de ativar`,
         );
       }
 
@@ -1732,7 +1732,7 @@ export class MetaManualConnectionsService {
 
       if (activeConnections.length === 0) {
         throw new ConflictException(
-          "Configure ao menos uma BM com contas e destino antes de ativar o roteamento avancado",
+          "Configure ao menos uma BM com contas e destino antes de ativar o roteamento avançado",
         );
       }
 
@@ -1788,7 +1788,7 @@ export class MetaManualConnectionsService {
       })) as DestinationRecord | null;
 
       if (!record) {
-        throw new NotFoundException("Destino Meta nao encontrado");
+        throw new NotFoundException("Destino Meta não encontrado");
       }
 
       await this.validateDestinationAccess(input.accessToken, record);
@@ -1850,7 +1850,7 @@ export class MetaManualConnectionsService {
     })) as CredentialRecord | null;
 
     if (!credential) {
-      throw new NotFoundException("Credencial Meta nao encontrada");
+      throw new NotFoundException("Credencial Meta não encontrada");
     }
 
     if (
@@ -1875,7 +1875,7 @@ export class MetaManualConnectionsService {
       });
     } catch {
       throw new ConflictException(
-        "Nao foi possivel abrir a credencial Meta armazenada",
+        "Não foi possível abrir a credencial Meta armazenada",
       );
     }
   }
@@ -1888,7 +1888,7 @@ export class MetaManualConnectionsService {
 
     if (legacy) {
       throw new ConflictException(
-        "Este workspace ja usa a conexao OAuth legada. A configuracao manual exige uma migracao separada e aprovada",
+        "Este workspace já usa a conexão OAuth legada. A configuração manual exige uma migração separada e aprovada",
       );
     }
   }
@@ -1919,7 +1919,7 @@ export class MetaManualConnectionsService {
       });
     } catch {
       throw new ConflictException(
-        "Nao foi possivel abrir a credencial do login social",
+        "Não foi possível abrir a credencial do login social",
       );
     }
   }
@@ -1941,13 +1941,13 @@ export class MetaManualConnectionsService {
 
   private requireManualEnabled(): void {
     if (!this.getCapabilities().manualEnabled) {
-      throw new NotFoundException("Conexao manual Meta nao habilitada");
+      throw new NotFoundException("Conexão manual Meta não habilitada");
     }
   }
 
   private requireOAuthEnabled(): void {
     if (!this.getCapabilities().oauthEnabled) {
-      throw new NotFoundException("Login social Meta nao habilitado");
+      throw new NotFoundException("Login social Meta não habilitado");
     }
   }
 

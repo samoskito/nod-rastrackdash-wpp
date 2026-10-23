@@ -196,14 +196,14 @@ export class MetaConnectionResolverService {
     });
 
     if (!account) {
-      throw new NotFoundException("Conta Meta ativa nao encontrada");
+      throw new NotFoundException("Conta Meta ativa não encontrada");
     }
 
     if (
       input.businessConnectionId &&
       account.businessConnectionId !== input.businessConnectionId
     ) {
-      throw new NotFoundException("Conta Meta ativa nao encontrada");
+      throw new NotFoundException("Conta Meta ativa não encontrada");
     }
 
     if (
@@ -216,7 +216,7 @@ export class MetaConnectionResolverService {
         account.businessConnectionId !== input.businessConnectionId
       ) {
         throw new ConflictException(
-          "A sincronizacao configurada exige a conta e a conexao Meta exatas",
+          "A sincronização configurada exige a conta e a conexão Meta exatas",
         );
       }
 
@@ -229,7 +229,7 @@ export class MetaConnectionResolverService {
       });
 
       if (!connection) {
-        throw new NotFoundException("Conexao Meta nao encontrada");
+        throw new NotFoundException("Conexão Meta não encontrada");
       }
 
       this.assertNormalizedConnectionActive(connection);
@@ -306,7 +306,7 @@ export class MetaConnectionResolverService {
         input.businessConnectionId &&
         account.businessConnectionId !== input.businessConnectionId
       ) {
-        throw new NotFoundException("Rota Meta nao encontrada");
+        throw new NotFoundException("Rota Meta não encontrada");
       }
 
       const connection = await this.prisma.metaBusinessConnection.findFirst({
@@ -318,7 +318,7 @@ export class MetaConnectionResolverService {
       });
 
       if (!connection) {
-        throw new NotFoundException("Rota Meta nao encontrada");
+        throw new NotFoundException("Rota Meta não encontrada");
       }
 
       this.assertNormalizedConnectionActive(connection);
@@ -353,7 +353,7 @@ export class MetaConnectionResolverService {
 
       if (!destinationId) {
         throw new ConflictException(
-          "Nenhum destino de conversao foi associado a esta conta Meta",
+          "Nenhum destino de conversão foi associado a esta conta Meta",
         );
       }
 
@@ -369,7 +369,7 @@ export class MetaConnectionResolverService {
 
       if (!destination) {
         throw new ConflictException(
-          "O destino de conversao desta conta precisa ser validado",
+          "O destino de conversão desta conta precisa ser validado",
         );
       }
 
@@ -380,7 +380,7 @@ export class MetaConnectionResolverService {
         input.conversionDestinationId !== destinationId
       )
         throw new ConflictException(
-          "O destino explicito difere da rota do anuncio",
+          "O destino explícito difere da rota do anúncio",
         );
       const allowed =
         await this.prisma.metaReportingAccountDestination.findMany({
@@ -400,7 +400,7 @@ export class MetaConnectionResolverService {
             destinationId === connection.defaultConversionDestinationId;
       if (!destinationAuthorized)
         throw new ConflictException(
-          "Destino nao autorizado para esta conta Meta",
+          "Destino não autorizado para esta conta Meta",
         );
 
       let accessToken = this.decrypt(connection.credential);
@@ -415,7 +415,7 @@ export class MetaConnectionResolverService {
         legacy.capiAccessTokenEncrypted
       ) {
         if (legacy.status !== "connected")
-          throw new ConflictException("Meta nao conectada");
+          throw new ConflictException("Meta não conectada");
         const dedicated = this.decrypt({
           encryptedAccessToken: legacy.capiAccessTokenEncrypted,
           tokenIv: legacy.capiTokenIv ?? "",
@@ -441,8 +441,8 @@ export class MetaConnectionResolverService {
 
     throw new ConflictException(
       adAccountId
-        ? "A conta atribuida ao evento nao possui uma rota Meta ativa"
-        : "Nao foi possivel determinar com seguranca qual conexao Meta deve enviar este evento",
+        ? "A conta atribuída ao evento não possui uma rota Meta ativa"
+        : "Não foi possível determinar com segurança qual conexão Meta deve enviar este evento",
     );
   }
 
@@ -562,7 +562,7 @@ export class MetaConnectionResolverService {
     })) as LegacyIntegration | null;
 
     if (!legacy || legacy.status !== "connected") {
-      throw new NotFoundException("Meta nao conectada");
+      throw new NotFoundException("Meta não conectada");
     }
 
     return legacy;
@@ -619,7 +619,7 @@ export class MetaConnectionResolverService {
   }): void {
     if (connection.status !== "active") {
       throw new ConflictException(
-        "A conexao Meta desta conta esta pausada ou requer validacao",
+        "A conexão Meta desta conta está pausada ou requer validação",
       );
     }
 
@@ -630,7 +630,7 @@ export class MetaConnectionResolverService {
         connection.credential.expiresAt <= new Date())
     ) {
       throw new ConflictException(
-        "O token desta conexao Meta esta pausado ou requer validacao",
+        "O token desta conexão Meta está pausado ou requer validação",
       );
     }
   }
@@ -640,7 +640,7 @@ export class MetaConnectionResolverService {
       return this.encryption.decrypt(input);
     } catch {
       throw new BadRequestException(
-        "Nao foi possivel abrir a credencial Meta armazenada",
+        "Não foi possível abrir a credencial Meta armazenada",
       );
     }
   }

@@ -33,8 +33,8 @@ import { MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES } from "./inbound-webhook-limits";
 
 export { MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES } from "./inbound-webhook-limits";
 
-const publicConnectionNotFoundMessage = "Webhook nao encontrado";
-const publicPersistenceFailureMessage = "Webhook temporariamente indisponivel";
+const publicConnectionNotFoundMessage = "Webhook não encontrado";
+const publicPersistenceFailureMessage = "Webhook temporariamente indisponível";
 const dummySecretHash = Buffer.alloc(32);
 const CONNECTION_TELEMETRY_INTERVAL_MS = 30_000;
 
@@ -297,7 +297,7 @@ export class InboundWebhookIngestionService {
     }
 
     if (!rawBody || rawBody.length === 0) {
-      throw new BadRequestException("Payload JSON obrigatorio");
+      throw new BadRequestException("Payload JSON obrigatório");
     }
 
     if (rawBody.length > MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES) {
@@ -307,7 +307,7 @@ export class InboundWebhookIngestionService {
     try {
       JSON.parse(rawBody.toString("utf8"));
     } catch {
-      throw new BadRequestException("Payload JSON invalido");
+      throw new BadRequestException("Payload JSON inválido");
     }
 
     return rawBody;

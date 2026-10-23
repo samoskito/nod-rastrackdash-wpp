@@ -89,41 +89,41 @@ export class EmailMessageRenderer {
       return {
         subject: `Crie seu acesso a ${envelope.data.workspaceName} no WppTrack`,
         body: {
-          preheader: `Seu acesso ao workspace ${envelope.data.workspaceName} esta pronto para ser ativado.`,
+          preheader: `Seu acesso ao workspace ${envelope.data.workspaceName} está pronto para ser ativado.`,
           heading: this.personalizedHeading(
             envelope.data.recipientName,
             "Crie sua senha de acesso",
           ),
           paragraphs: [
-            `Voce foi definido como responsavel pelo workspace ${envelope.data.workspaceName}.`,
-            `Seu login e ${envelope.to.address}. Por seguranca, nenhuma senha foi criada ou enviada pela plataforma.`,
-            `Este link expira em ${this.formatExpiry(envelope.data.expiresAt)} e so pode ser usado uma vez.`,
+            `Você foi definido como responsável pelo workspace ${envelope.data.workspaceName}.`,
+            `Seu login e ${envelope.to.address}. Por segurança, nenhuma senha foi criada ou enviada pela plataforma.`,
+            `Este link expira em ${this.formatExpiry(envelope.data.expiresAt)} e só pode ser usado uma vez.`,
           ],
           actionLabel: "Criar senha e acessar",
           actionUrl: this.actionUrl("/login/activate", envelope.data.token),
           footerNote:
-            "Se voce nao esperava este acesso, ignore esta mensagem ou fale com nosso suporte.",
+            "Se você não esperava este acesso, ignore esta mensagem ou fale com nosso suporte.",
         },
       };
     }
 
     if (envelope.template === "workspace_access_granted") {
       return {
-        subject: `Novo workspace disponivel no WppTrack: ${envelope.data.workspaceName}`,
+        subject: `Novo workspace disponível no WppTrack: ${envelope.data.workspaceName}`,
         body: {
           preheader: `O workspace ${envelope.data.workspaceName} foi adicionado a sua conta.`,
           heading: this.personalizedHeading(
             envelope.data.recipientName,
-            "um novo workspace esta disponivel",
+            "um novo workspace está disponível",
           ),
           paragraphs: [
             `O workspace ${envelope.data.workspaceName} foi adicionado a sua conta WppTrack.`,
-            `Entre com ${envelope.to.address} e a senha que voce ja utiliza. Suas credenciais nao foram alteradas.`,
+            `Entre com ${envelope.to.address} e a senha que você já utiliza. Suas credenciais não foram alteradas.`,
           ],
           actionLabel: "Entrar no WppTrack",
           actionUrl: this.loginUrl(),
           footerNote:
-            "Se voce nao reconhece este acesso, entre em contato com nosso suporte.",
+            "Se você não reconhece este acesso, entre em contato com nosso suporte.",
         },
       };
     }
@@ -132,20 +132,20 @@ export class EmailMessageRenderer {
       return {
         subject: "Ative seu acesso de operador da plataforma WppTrack",
         body: {
-          preheader: "Seu acesso de operador esta pronto para ser ativado.",
+          preheader: "Seu acesso de operador está pronto para ser ativado.",
           heading: this.personalizedHeading(
             envelope.data.recipientName,
             "Ative seu acesso de operador",
           ),
           paragraphs: [
-            "Voce recebeu acesso operacional ao backoffice da plataforma WppTrack.",
-            `Este link expira em ${this.formatExpiry(envelope.data.expiresAt)} e so pode ser usado uma vez.`,
+            "Você recebeu acesso operacional ao backoffice da plataforma WppTrack.",
+            `Este link expira em ${this.formatExpiry(envelope.data.expiresAt)} e só pode ser usado uma vez.`,
             "Crie sua senha pelo link. Nenhuma senha foi criada ou enviada pela plataforma.",
           ],
           actionLabel: "Criar senha e acessar",
           actionUrl: this.actionUrl("/login/activate", envelope.data.token),
           footerNote:
-            "Se voce nao esperava este acesso, ignore esta mensagem e fale com o proprietario da plataforma.",
+            "Se você não esperava este acesso, ignore esta mensagem e fale com o proprietário da plataforma.",
         },
       };
     }

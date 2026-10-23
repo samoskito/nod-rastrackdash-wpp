@@ -59,7 +59,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: SessionCookieResponse,
   ): Promise<AuthSessionResult> {
     if (!this.isPublicRegistrationEnabled()) {
-      throw new ForbiddenException("Cadastro publico desabilitado");
+      throw new ForbiddenException("Cadastro público desabilitado");
     }
 
     const input = this.parseBody(registerSchema.safeParse(body));
@@ -205,7 +205,7 @@ export class AuthController {
     result: { success: true; data: T } | { success: false },
   ): T {
     if (!result.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return result.data;

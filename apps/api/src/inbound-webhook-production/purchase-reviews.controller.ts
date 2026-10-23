@@ -171,7 +171,7 @@ export class PurchaseReviewsController {
   }> {
     const context = await this.getWorkspaceContext(refreshToken);
     if (!context.canManageIntegrations) {
-      throw new ForbiddenException("Sem permissao para revisar compras");
+      throw new ForbiddenException("Sem permissão para revisar compras");
     }
     return context;
   }

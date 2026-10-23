@@ -135,7 +135,7 @@ export class PlatformWorkspaceAccessService {
     });
 
     if (!workspace) {
-      throw new NotFoundException("Workspace nao encontrado");
+      throw new NotFoundException("Workspace não encontrado");
     }
   }
 
@@ -145,14 +145,14 @@ export class PlatformWorkspaceAccessService {
   ): Promise<BackofficeWorkspaceCreateResultDto> {
     if (actor.role !== "platform_owner") {
       throw new ForbiddenException(
-        "Acao restrita ao proprietario da plataforma",
+        "Ação restrita ao proprietário da plataforma",
       );
     }
 
     const parsed = backofficeWorkspaceCreateInputSchema.safeParse(rawInput);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const input = parsed.data;
@@ -371,13 +371,13 @@ export class PlatformWorkspaceAccessService {
   ): Promise<BackofficeWorkspaceDeleteResultDto> {
     if (actor.role !== "platform_owner") {
       throw new ForbiddenException(
-        "Acao restrita ao proprietario da plataforma",
+        "Ação restrita ao proprietário da plataforma",
       );
     }
 
     const parsed = backofficeWorkspaceDeleteInputSchema.safeParse(rawInput);
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const deleted = await this.prisma.$transaction(async (tx) => {
@@ -399,11 +399,11 @@ export class PlatformWorkspaceAccessService {
 
       // Keep not-found uniform. The request body never chooses the target.
       if (!workspace) {
-        throw new NotFoundException("Workspace nao encontrado");
+        throw new NotFoundException("Workspace não encontrado");
       }
 
       if (parsed.data.confirmation !== workspace.slug) {
-        throw new BadRequestException("Confirmacao do workspace invalida");
+        throw new BadRequestException("Confirmação do workspace inválida");
       }
 
       await this.clearWorkspaceSessionContext(tx, workspace.id);
@@ -591,7 +591,7 @@ export class PlatformWorkspaceAccessService {
   ): Promise<BackofficeWorkspaceActivationReissueResultDto> {
     if (actor.role !== "platform_owner") {
       throw new ForbiddenException(
-        "Acao restrita ao proprietario da plataforma",
+        "Ação restrita ao proprietário da plataforma",
       );
     }
 
@@ -621,18 +621,18 @@ export class PlatformWorkspaceAccessService {
 
         if (!membership) {
           throw new NotFoundException(
-            "Responsavel do workspace nao encontrado",
+            "Responsável do workspace não encontrado",
           );
         }
 
         if (membership.user.platformRole) {
           throw new ForbiddenException(
-            "Um administrador da plataforma nao pode receber ativacao de cliente",
+            "Um administrador da plataforma não pode receber ativação de cliente",
           );
         }
 
         if (membership.user.passwordHash) {
-          throw new ConflictException("A conta do responsavel ja foi ativada");
+          throw new ConflictException("A conta do responsável já foi ativada");
         }
 
         const token = randomBytes(32).toString("hex");
@@ -713,7 +713,7 @@ export class PlatformWorkspaceAccessService {
         true,
       );
       throw new ServiceUnavailableException(
-        "Entrega de ativacao indisponivel. Reemita o link mais tarde.",
+        "Entrega de ativação indisponível. Reemita o link mais tarde.",
       );
     }
 
@@ -731,7 +731,7 @@ export class PlatformWorkspaceAccessService {
   ): Promise<ClientOwnerActivationLinkResult> {
     if (actor.role !== "platform_owner") {
       throw new ForbiddenException(
-        "Acao restrita ao proprietario da plataforma",
+        "Ação restrita ao proprietário da plataforma",
       );
     }
 
@@ -764,17 +764,17 @@ export class PlatformWorkspaceAccessService {
       });
 
       if (!membership) {
-        throw new NotFoundException("Responsavel do workspace nao encontrado");
+        throw new NotFoundException("Responsável do workspace não encontrado");
       }
 
       if (membership.user.platformRole) {
         throw new ForbiddenException(
-          "Um administrador da plataforma nao pode receber ativacao de cliente",
+          "Um administrador da plataforma não pode receber ativação de cliente",
         );
       }
 
       if (membership.user.passwordHash) {
-        throw new ConflictException("A conta do responsavel ja foi ativada");
+        throw new ConflictException("A conta do responsável já foi ativada");
       }
 
       const token = randomBytes(32).toString("hex");
@@ -840,13 +840,13 @@ export class PlatformWorkspaceAccessService {
 
     if (existing.platformRole) {
       throw new ConflictException(
-        "Um administrador da plataforma nao pode ser responsavel de cliente",
+        "Um administrador da plataforma não pode ser responsável de cliente",
       );
     }
 
     if (!reuseExistingUser) {
       throw new ConflictException(
-        "Usuario existente exige confirmacao explicita de reutilizacao",
+        "Usuário existente exige confirmação explícita de reutilização",
       );
     }
   }

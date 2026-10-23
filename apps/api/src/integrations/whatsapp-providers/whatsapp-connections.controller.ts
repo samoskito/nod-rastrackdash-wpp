@@ -184,7 +184,7 @@ export class WhatsappConnectionsController {
     const previous = this.lastMutationAtByUser.get(userId) ?? 0;
     if (now - previous < CONNECTION_MUTATION_MIN_INTERVAL_MS) {
       throw new HttpException(
-        "Muitas alteracoes de conexao WhatsApp. Aguarde alguns segundos.",
+        "Muitas alterações de conexão WhatsApp. Aguarde alguns segundos.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }

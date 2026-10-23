@@ -56,13 +56,13 @@ export class ExternalConnectorEgressPolicyService {
       .replace(/^\[|\]$/g, "");
 
     if (credentials.port !== 3306 || this.isBlockedHostname(hostname)) {
-      throw new BadRequestException("Destino MySQL nao permitido");
+      throw new BadRequestException("Destino MySQL não permitido");
     }
 
     const literalFamily = isIP(hostname);
     if (literalFamily) {
       if (this.isBlockedAddress(hostname, literalFamily)) {
-        throw new BadRequestException("Destino MySQL nao permitido");
+        throw new BadRequestException("Destino MySQL não permitido");
       }
       return { ...credentials, host: hostname };
     }
@@ -71,7 +71,7 @@ export class ExternalConnectorEgressPolicyService {
     try {
       addresses = await this.lookupWithDeadline(hostname);
     } catch {
-      throw new BadRequestException("Destino MySQL nao permitido");
+      throw new BadRequestException("Destino MySQL não permitido");
     }
 
     if (
@@ -80,7 +80,7 @@ export class ExternalConnectorEgressPolicyService {
         this.isBlockedAddress(address, family),
       )
     ) {
-      throw new BadRequestException("Destino MySQL nao permitido");
+      throw new BadRequestException("Destino MySQL não permitido");
     }
 
     return { ...credentials, host: addresses[0]!.address };

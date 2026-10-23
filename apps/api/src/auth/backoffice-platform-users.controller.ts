@@ -31,7 +31,7 @@ export class BackofficePlatformUsersController {
     const parsed = platformUserProvisionInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return this.platformAdmin.invitePlatformOperator(parsed.data, owner);
@@ -47,7 +47,7 @@ export class BackofficePlatformUsersController {
     const parsed = platformUserRoleUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return this.platformAdmin.updatePlatformUserRole(
@@ -69,7 +69,7 @@ export class BackofficePlatformUsersController {
     );
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return this.platformAdmin.reissuePlatformOperatorInvitation(userId, owner);

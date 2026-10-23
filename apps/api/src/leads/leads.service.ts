@@ -696,7 +696,7 @@ export class LeadsService {
         lastActivityAt: lead.lastMessageAt,
         campaign: maskSensitive
           ? maskedLeadCampaign
-          : (campaignName ?? "Campanha nao resolvida"),
+          : (campaignName ?? "Campanha não resolvida"),
         adSet: maskSensitive
           ? maskedLeadAdSet
           : adSetId
@@ -755,7 +755,7 @@ export class LeadsService {
     })) as LeadRecord | null;
 
     if (!lead) {
-      throw new NotFoundException("Lead nao encontrado");
+      throw new NotFoundException("Lead não encontrado");
     }
 
     const [conversionLogs, webhookLogs, campaigns, adSets, ads] =

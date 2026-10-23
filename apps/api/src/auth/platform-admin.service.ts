@@ -240,7 +240,7 @@ export class PlatformAdminService {
         target.platformRole !== "platform_operator" ||
         target.passwordHash !== null
       ) {
-        throw new NotFoundException("Convite de operador nao encontrado");
+        throw new NotFoundException("Convite de operador não encontrado");
       }
 
       const issued = await this.issueOperatorInvitation(
@@ -284,12 +284,12 @@ export class PlatformAdminService {
       });
 
       if (!target || !target.platformRole) {
-        throw new NotFoundException("Usuario de plataforma nao encontrado");
+        throw new NotFoundException("Usuário de plataforma não encontrado");
       }
 
       if (target.id === actor.id && input.role !== "platform_owner") {
         throw new ForbiddenException(
-          "O proprietario nao pode remover o proprio acesso",
+          "O proprietário não pode remover o próprio acesso",
         );
       }
 
@@ -303,7 +303,7 @@ export class PlatformAdminService {
 
         if (ownerCount <= 1) {
           throw new ForbiddenException(
-            "A plataforma precisa manter ao menos um proprietario",
+            "A plataforma precisa manter ao menos um proprietário",
           );
         }
       }
@@ -314,7 +314,7 @@ export class PlatformAdminService {
         target.passwordHash === null
       ) {
         throw new BadRequestException(
-          "Ative o operador antes de promove-lo a proprietario",
+          "Ative o operador antes de promove-lo a proprietário",
         );
       }
 
@@ -395,7 +395,7 @@ export class PlatformAdminService {
 
   private assertInvitationDeliveryAvailable(): void {
     if (!this.emailQueue?.isEnabled()) {
-      throw new ServiceUnavailableException("Entrega de convite indisponivel");
+      throw new ServiceUnavailableException("Entrega de convite indisponível");
     }
   }
 
@@ -426,7 +426,7 @@ export class PlatformAdminService {
     } catch {
       await this.recordDeliveryFailure(invitation.user.id);
       throw new ServiceUnavailableException(
-        "Entrega de convite indisponivel. Reemita o convite mais tarde.",
+        "Entrega de convite indisponível. Reemita o convite mais tarde.",
       );
     }
   }
@@ -455,7 +455,7 @@ export class PlatformAdminService {
 
     if (recentMutations >= limit) {
       throw new HttpException(
-        "Muitas alteracoes administrativas. Tente novamente em alguns minutos.",
+        "Muitas alterações administrativas. Tente novamente em alguns minutos.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -513,7 +513,7 @@ export class PlatformAdminService {
   ): PlatformUserProvisionInputDto {
     const parsed = platformUserProvisionInputSchema.safeParse(input);
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
     return parsed.data;
   }
@@ -523,7 +523,7 @@ export class PlatformAdminService {
   ): PlatformUserRoleUpdateInputDto {
     const parsed = platformUserRoleUpdateInputSchema.safeParse(input);
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
     return parsed.data;
   }
@@ -531,7 +531,7 @@ export class PlatformAdminService {
   private assertOwnerActor(actor: PlatformAdminUser): void {
     if (actor.role !== "platform_owner") {
       throw new ForbiddenException(
-        "Acao restrita ao proprietario da plataforma",
+        "Ação restrita ao proprietário da plataforma",
       );
     }
   }

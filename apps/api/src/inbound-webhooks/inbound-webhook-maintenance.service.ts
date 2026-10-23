@@ -688,8 +688,8 @@ export class InboundWebhookMaintenanceService
         operation: input.operation,
         severity: "warning",
         status: "requires_review",
-        title: "Inbound webhook requer revisao",
-        message: "Uma entrega aceita nao pode ser processada automaticamente.",
+        title: "Inbound webhook requer revisão",
+        message: "Uma entrega aceita não pode ser processada automaticamente.",
       });
     } catch {
       this.logger.warn(
@@ -705,9 +705,9 @@ export class InboundWebhookMaintenanceService
         operation: "maintenance_cycle",
         severity: "error",
         status: "failed",
-        title: "Manutencao de inbound webhooks falhou",
+        title: "Manutenção de inbound webhooks falhou",
         message:
-          "A manutencao nao foi concluida e sera tentada novamente sem expor detalhes internos.",
+          "A manutenção não foi concluída e será tentada novamente sem expor detalhes internos.",
       });
     } catch {
       this.logger.warn("Inbound webhook maintenance diagnostic unavailable");

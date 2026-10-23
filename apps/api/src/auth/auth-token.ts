@@ -30,7 +30,7 @@ export function extractAuthToken(request: AuthTokenRequest): string {
     return decodeURIComponent(cookieToken);
   }
 
-  throw new UnauthorizedException("Sessao nao encontrada");
+  throw new UnauthorizedException("Sessão não encontrada");
 }
 
 export function firstHeader(value: AuthHeaderValue): string | undefined {

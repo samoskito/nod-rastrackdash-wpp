@@ -804,17 +804,17 @@ export class ExternalEventIngestionService {
 
     switch (code) {
       case "MissingProviderEventIdentity":
-        return "O provider nao forneceu uma identidade estavel para o evento";
+        return "O provider não forneceu uma identidade estável para o evento";
       case "ExternalEventOccurredAtInvalid":
-        return "A data do evento externo e invalida";
+        return "A data do evento externo é inválida";
       case "ExternalLeadPhoneMissing":
-        return "O evento externo nao possui telefone valido";
+        return "O evento externo não possui telefone válido";
       case "ExternalLeadNotMatched":
-        return "O evento externo nao corresponde a um lead importado";
+        return "O evento externo não corresponde a um lead importado";
       case "ExternalCapiQueueFailed":
-        return "O evento foi salvo, mas ainda nao entrou na fila Meta";
+        return "O evento foi salvo, mas ainda não entrou na fila Meta";
       default:
-        return "O evento externo nao pode ser processado";
+        return "O evento externo não pode ser processado";
     }
   }
 }

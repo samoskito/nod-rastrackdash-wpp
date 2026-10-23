@@ -202,7 +202,7 @@ export class ConversionRulesController {
         statusCode: 400,
         error: "Bad Request",
         code: "provider_rule_create_key_invalid",
-        message: "Chave de tentativa invalida",
+        message: "Chave de tentativa inválida",
       });
     }
   }
@@ -370,7 +370,7 @@ export class ConversionRulesController {
     const parsed = funnelConfigurationUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -392,7 +392,7 @@ export class ConversionRulesController {
     const parsed = conversionRuleCreateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
+      throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -418,7 +418,7 @@ export class ConversionRulesController {
     const parsed = conversionRuleUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
+      throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -441,7 +441,7 @@ export class ConversionRulesController {
     const parsed = conversionTriggerEvaluationInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);

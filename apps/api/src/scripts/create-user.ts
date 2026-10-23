@@ -53,7 +53,7 @@ async function main() {
 
   if (!args.email || !args.password) {
     throw new Error(
-      'Uso: pnpm --filter @wpptrack/api create-user -- --email email@dominio.com --password senha-forte --name "Nome" --workspace "Minha Agencia" [--role owner|admin|member] [--force]',
+      'Uso: pnpm --filter @wpptrack/api create-user -- --email email@domínio.com --password senha-forte --name "Nome" --workspace "Minha Agência" [--role owner|admin|member] [--force]',
     );
   }
 
@@ -66,7 +66,7 @@ async function main() {
   const requestedRole = (args.role as WorkspaceRole | undefined) || "owner";
 
   if (!ALLOWED_ROLES.has(requestedRole)) {
-    throw new Error("Role invalida. Use owner, admin ou member.");
+    throw new Error("Role inválida. Use owner, admin ou member.");
   }
 
   const prisma = new PrismaClient();
@@ -94,7 +94,7 @@ async function main() {
         if (user) {
           if (user.passwordHash && args.force !== "true") {
             throw new Error(
-              "Usuario ja possui senha. Use --force para redefinir.",
+              "Usuário já possui senha. Use --force para redefinir.",
             );
           }
 

@@ -104,7 +104,7 @@ export class IntegrationsController {
 
     if (input.expectedWorkspaceId !== workspace.id) {
       throw new ConflictException(
-        "O workspace da sessao mudou. Recarregue a pagina antes de desconectar a Meta",
+        "O workspace da sessão mudou. Recarregue a página antes de desconectar a Meta",
       );
     }
 
@@ -430,7 +430,7 @@ export class IntegrationsController {
 
     if (assets.status === "error") {
       throw new BadGatewayException(
-        assets.syncError ?? "A Meta nao permitiu atualizar os ativos",
+        assets.syncError ?? "A Meta não permitiu atualizar os ativos",
       );
     }
 
@@ -569,7 +569,7 @@ export class IntegrationsController {
     result: { success: true; data: T } | { success: false },
   ): T {
     if (!result.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return result.data;

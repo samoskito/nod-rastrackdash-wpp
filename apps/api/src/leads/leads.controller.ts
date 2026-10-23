@@ -38,7 +38,7 @@ export class LeadsController {
     const parsed = leadListQuerySchema.safeParse(query);
 
     if (!parsed.success) {
-      throw new BadRequestException("Query invalida");
+      throw new BadRequestException("Query inválida");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -52,7 +52,7 @@ export class LeadsController {
     const parsed = leadListQuerySchema.safeParse(query);
 
     if (!parsed.success) {
-      throw new BadRequestException("Query invalida");
+      throw new BadRequestException("Query inválida");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -74,7 +74,7 @@ export class LeadsController {
     const parsed = leadExportQuerySchema.safeParse(query);
 
     if (!parsed.success) {
-      throw new BadRequestException("Query invalida");
+      throw new BadRequestException("Query inválida");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);

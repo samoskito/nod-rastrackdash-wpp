@@ -44,10 +44,10 @@ export class BackofficeExternalDataController {
   ) {
     const actor = await this.platformAdmin.assertPlatformOwner(refreshToken);
     const parsed = externalDataConnectorCreateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException("Payload inválido");
     if (parsed.data.workspaceId !== this.id(workspaceId)) {
       throw new BadRequestException(
-        "Workspace do payload nao corresponde a rota",
+        "Workspace do payload não corresponde a rota",
       );
     }
     this.assertReadOnlyInput(parsed.data);
@@ -89,7 +89,7 @@ export class BackofficeExternalDataController {
   private id(value: string): string {
     const parsed = idSchema.safeParse(value);
     if (!parsed.success)
-      throw new BadRequestException("Identificador invalido");
+      throw new BadRequestException("Identificador inválido");
     return parsed.data;
   }
 

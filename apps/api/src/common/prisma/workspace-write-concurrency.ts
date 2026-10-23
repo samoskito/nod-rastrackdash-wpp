@@ -54,7 +54,7 @@ export async function withWorkspaceUniqueRetry<T>(
       }
 
       if (constraint === "user_email") {
-        throw new ConflictException("Email ja cadastrado");
+        throw new ConflictException("Email já cadastrado");
       }
 
       if (constraint === "workspace_slug") {
@@ -63,7 +63,7 @@ export async function withWorkspaceUniqueRetry<T>(
         }
 
         throw new ConflictException(
-          "Nao foi possivel reservar um identificador unico para o workspace",
+          "Não foi possível reservar um identificador único para o workspace",
         );
       }
     }

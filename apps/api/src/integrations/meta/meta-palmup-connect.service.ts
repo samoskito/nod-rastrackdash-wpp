@@ -26,9 +26,9 @@ export const metaPalmupConnectCompleteSchema = z
   .strict();
 
 const INVALID_PAIRING_MESSAGE =
-  "Conexao PalmUP expirada, invalida ou ja utilizada. Inicie novamente";
+  "Conexão PalmUP expirada, inválida ou já utilizada. Inicie novamente";
 const BROKER_FAILURE_MESSAGE =
-  "Nao foi possivel concluir o login social PalmUP. Inicie novamente";
+  "Não foi possível concluir o login social PalmUP. Inicie novamente";
 
 export type MetaPalmupConnectStart = {
   pairingId: string;
@@ -67,7 +67,7 @@ export class MetaPalmupConnectService {
   ): Promise<MetaManualAssetDiscoveryDto> {
     const broker = this.requireBrokerOrigin();
     if (!metaPalmupConnectCompleteSchema.safeParse({ pairingId }).success) {
-      throw new BadRequestException("pairingId invalido");
+      throw new BadRequestException("pairingId inválido");
     }
     const challenge = await this.pairings.consume(workspaceId, pairingId);
     if (!challenge) throw new BadRequestException(INVALID_PAIRING_MESSAGE);
@@ -130,7 +130,7 @@ export class MetaPalmupConnectService {
       return url.origin;
     } catch {
       throw new ServiceUnavailableException(
-        "Login social PalmUP nao configurado",
+        "Login social PalmUP não configurado",
       );
     }
   }

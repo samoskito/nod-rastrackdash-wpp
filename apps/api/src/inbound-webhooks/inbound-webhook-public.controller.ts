@@ -46,7 +46,7 @@ export class InboundWebhookPublicController {
       typeof challenge !== "string" ||
       !(await this.metaCloudVerification.matches(connectionId, verifyToken))
     ) {
-      throw new UnauthorizedException("Nao autorizado");
+      throw new UnauthorizedException("Não autorizado");
     }
 
     return challenge;

@@ -78,7 +78,7 @@ export class ExternalSyncProcessor extends WorkerHost {
     });
 
     if (!connector) {
-      throw new NotFoundException("Conector externo nao encontrado");
+      throw new NotFoundException("Conector externo não encontrado");
     }
 
     const scopedData: ExternalDataSyncJobPayload = {
@@ -119,7 +119,7 @@ export class ExternalSyncProcessor extends WorkerHost {
           relatedEntityType: "ExternalDataConnector",
           relatedEntityId: job.data.connectorId,
           errorCode: error ? this.errorCode(error) : null,
-          errorMessage: error ? "A sincronizacao externa falhou" : null,
+          errorMessage: error ? "A sincronização externa falhou" : null,
           summaryPayload: JSON.parse(JSON.stringify(summary)) as Prisma.InputJsonValue
         }
       });

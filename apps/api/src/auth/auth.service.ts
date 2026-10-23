@@ -201,7 +201,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException("Email ja cadastrado");
+      throw new ConflictException("Email já cadastrado");
     }
 
     const passwordHash = await this.passwordService.hash(input.password);
@@ -217,7 +217,7 @@ export class AuthService {
         });
 
         if (currentUser) {
-          throw new ConflictException("Email ja cadastrado");
+          throw new ConflictException("Email já cadastrado");
         }
 
         const slug = await this.resolveWorkspaceSlug(workspaceName, tx);
@@ -374,7 +374,7 @@ export class AuthService {
     });
 
     if (!membership) {
-      throw new NotFoundException("Workspace nao encontrado");
+      throw new NotFoundException("Workspace não encontrado");
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -589,7 +589,7 @@ export class AuthService {
         redirectTo,
         message:
           profile.message ??
-          (!profile.emailVerified ? "Email Google nao verificado" : undefined),
+          (!profile.emailVerified ? "Email Google não verificado" : undefined),
       };
     }
 
@@ -610,7 +610,7 @@ export class AuthService {
         missingEnv: [],
         codeReceived: true,
         redirectTo,
-        message: "Usuario ainda nao liberado para acessar a plataforma",
+        message: "Usuário ainda não liberado para acessar a plataforma",
       };
     }
 
@@ -1521,7 +1521,7 @@ export class AuthService {
       targetId: this.hashAuthIdentity(email),
       reason:
         resultStatus === "rate_limited"
-          ? "Limite de recuperacao de senha atingido"
+          ? "Limite de recuperação de senha atingido"
           : null,
       sourceIp: context.ipAddress ?? null,
       resultStatus,
@@ -1572,7 +1572,7 @@ export class AuthService {
       targetId: userId,
       reason:
         resultStatus === "rate_limited"
-          ? "Limite de verificacao de email atingido"
+          ? "Limite de verificação de email atingido"
           : null,
       sourceIp: context.ipAddress ?? null,
       resultStatus,
@@ -1595,7 +1595,7 @@ export class AuthService {
       action: "auth.login_failed",
       targetType: "AuthIdentity",
       targetId: this.hashAuthIdentity(email),
-      reason: "Credenciais invalidas",
+      reason: "Credenciais inválidas",
       sourceIp: context.ipAddress ?? null,
       resultStatus: "failed",
       beforeSummary: null,
@@ -1846,7 +1846,7 @@ export class AuthService {
       record.usedAt ||
       record.expiresAt.getTime() <= now.getTime()
     ) {
-      throw new BadRequestException("Token invalido ou expirado");
+      throw new BadRequestException("Token inválido ou expirado");
     }
 
     const consumed = await tx.authActionToken.updateMany({
@@ -1861,7 +1861,7 @@ export class AuthService {
     });
 
     if (consumed.count !== 1) {
-      throw new BadRequestException("Token invalido ou expirado");
+      throw new BadRequestException("Token inválido ou expirado");
     }
 
     return record;
@@ -1872,7 +1872,7 @@ export class AuthService {
   }
 
   private invalidAccountActivation(): BadRequestException {
-    return new BadRequestException("Link de ativacao invalido ou expirado");
+    return new BadRequestException("Link de ativação inválido ou expirado");
   }
 
   private async assertAccountActivationCandidate(token: string): Promise<void> {
@@ -1934,6 +1934,6 @@ export class AuthService {
   }
 
   private invalidCredentials(): UnauthorizedException {
-    return new UnauthorizedException("Credenciais invalidas");
+    return new UnauthorizedException("Credenciais inválidas");
   }
 }

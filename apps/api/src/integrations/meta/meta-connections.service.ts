@@ -150,7 +150,7 @@ export class MetaConnectionsService {
 
     if (manualCredential) {
       throw new ConflictException(
-        "Este workspace ja iniciou uma conexao por token permanente. Remova a configuracao manual antes de conectar via OAuth",
+        "Este workspace já iniciou uma conexão por token permanente. Remova a configuração manual antes de conectar via OAuth",
       );
     }
 
@@ -217,7 +217,7 @@ export class MetaConnectionsService {
           data: {
             status: "validation_required",
             validationError:
-              "Valide esta BM novamente apos atualizar o login social",
+              "Valide esta BM novamente após atualizar o login social",
           },
         });
       }
@@ -252,12 +252,12 @@ export class MetaConnectionsService {
   }): Promise<MetaOAuthDisconnectResultDto> {
     if (input.request.expectedWorkspaceId !== input.workspaceId) {
       throw new ConflictException(
-        "O workspace da sessao mudou. Recarregue a pagina antes de desconectar a Meta",
+        "O workspace da sessão mudou. Recarregue a página antes de desconectar a Meta",
       );
     }
 
     if (input.request.confirmation !== META_OAUTH_DISCONNECT_CONFIRMATION) {
-      throw new BadRequestException("Confirmacao de desconexao invalida");
+      throw new BadRequestException("Confirmação de desconexão inválida");
     }
 
     const disconnectedAt = new Date();
@@ -279,7 +279,7 @@ export class MetaConnectionsService {
 
       if (!connection) {
         throw new ConflictException(
-          "A conexao OAuth deste workspace ja foi desconectada",
+          "A conexão OAuth deste workspace já foi desconectada",
         );
       }
 
@@ -352,7 +352,7 @@ export class MetaConnectionsService {
 
       if (deleted.count !== 1) {
         throw new ConflictException(
-          "A conexao Meta mudou durante a desconexao. Recarregue a pagina",
+          "A conexão Meta mudou durante a desconexão. Recarregue a página",
         );
       }
 
@@ -549,7 +549,7 @@ export class MetaConnectionsService {
         if (adAccountResult.status === "fulfilled") {
           adAccounts = adAccountResult.value;
         } else {
-          failedAssets.push("contas de anuncio");
+          failedAssets.push("contas de anúncio");
         }
 
         if (pixelResult.status === "fulfilled") {
@@ -561,11 +561,11 @@ export class MetaConnectionsService {
         if (pageResult.status === "fulfilled") {
           pages = pageResult.value;
         } else {
-          failedAssets.push("paginas");
+          failedAssets.push("páginas");
         }
 
         businessSyncError = failedAssets.length
-          ? `A Meta nao permitiu carregar ${failedAssets.join(", ")} para o BM selecionado.`
+          ? `A Meta não permitiu carregar ${failedAssets.join(", ")} para o BM selecionado.`
           : null;
       }
       const status = this.toStatus(connection.status);

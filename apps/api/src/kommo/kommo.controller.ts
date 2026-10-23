@@ -70,7 +70,7 @@ export class KommoController {
       cursor !== undefined &&
       (typeof cursor !== "string" || !cursor || cursor.length > 255)
     )
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     return this.kommo.listEvents(
       workspaceId,
       connectionId,
@@ -86,7 +86,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConnectionCreateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException("Payload inválido");
     return this.kommo.create(
       workspaceId,
       (await this.auth.getSession(token)).user.id,
@@ -104,7 +104,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConnectionCredentialReplaceInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException("Payload inválido");
     return this.kommo.replaceCredential(
       workspaceId,
       connectionId,
@@ -123,7 +123,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConnectionStatusUpdateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException("Payload inválido");
     return this.kommo.setStatus(
       workspaceId,
       connectionId,
@@ -144,7 +144,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConnectionChannelBindingsInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException("Payload invalido");
+    if (!parsed.success) throw new BadRequestException("Payload inválido");
     return this.kommo.setChannelBindings(
       workspaceId,
       connectionId,
@@ -228,7 +228,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConversionRuleCreateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
+    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     return this.kommo.createRule(
       workspaceId,
       connectionId,
@@ -250,7 +250,7 @@ export class KommoController {
     @Req() request: any,
   ) {
     const parsed = kommoConversionRuleUpdateInputSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
+    if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
     return this.kommo.updateRule(
       workspaceId,
       connectionId,

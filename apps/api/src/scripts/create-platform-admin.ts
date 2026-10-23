@@ -15,7 +15,7 @@ async function main(): Promise<void> {
 
   if (!email) {
     throw new Error(
-      "Informe --email email@dominio.com ou defina SETUP_PLATFORM_ADMIN_EMAIL.",
+      "Informe --email email@domínio.com ou defina SETUP_PLATFORM_ADMIN_EMAIL.",
     );
   }
 
@@ -59,7 +59,7 @@ export function parseArgs(args: string[]): ParsedArgs {
 
     if (key === "--password" || key === "--password-stdin") {
       throw new Error(
-        "Senha por argumento nao e aceita. Use SETUP_PLATFORM_ADMIN_PASSWORD ou pipe.",
+        "Senha por argumento não é aceita. Use SETUP_PLATFORM_ADMIN_PASSWORD ou pipe.",
       );
     }
 
@@ -70,7 +70,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     }
 
     if (key?.startsWith("--")) {
-      throw new Error(`Opcao desconhecida: ${key}`);
+      throw new Error(`Opção desconhecida: ${key}`);
     }
   }
 
@@ -97,7 +97,7 @@ export async function resolvePassword(
 
   if (input.isTTY) {
     throw new Error(
-      "Defina SETUP_PLATFORM_ADMIN_PASSWORD ou forneca a senha por pipe; leitura interativa nao e suportada.",
+      "Defina SETUP_PLATFORM_ADMIN_PASSWORD ou forneca a senha por pipe; leitura interativa não é suportada.",
     );
   }
 

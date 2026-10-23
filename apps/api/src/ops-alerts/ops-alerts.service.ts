@@ -139,7 +139,7 @@ export class OpsAlertService {
         }
         const reference = lastAt ?? connection.createdAt;
         const hours = Math.max(1, Math.floor((now.getTime() - reference.getTime()) / 3_600_000));
-        await this.notify(setting, `silence:${connection.id}`, `[WppTrack] Sem webhook ha ${hours}h no workspace "${setting.workspace.name}" (conexao "${connection.displayName}"). Verifique o provedor.`, result, now);
+        await this.notify(setting, `silence:${connection.id}`, `[WppTrack] Sem webhook ha ${hours}h no workspace "${setting.workspace.name}" (conexão "${connection.displayName}"). Verifique o provedor.`, result, now);
       }
     }
     return result;

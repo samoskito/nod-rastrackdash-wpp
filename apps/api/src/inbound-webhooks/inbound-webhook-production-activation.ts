@@ -22,10 +22,10 @@ import { effectiveUnnichatMetaRouting } from "./inbound-webhook-effective-meta-r
  * webhooks module without a cycle.
  */
 
-export const connectionNotFoundMessage = "Conexao de webhook nao encontrada";
+export const connectionNotFoundMessage = "Conexão de webhook não encontrada";
 export const concurrentMutationMessage =
-  "A conexao foi alterada por outra operacao; tente novamente";
-export const resourceNotFoundMessage = "Recurso de webhook nao encontrado";
+  "A conexão foi alterada por outra operação; tente novamente";
+export const resourceNotFoundMessage = "Recurso de webhook não encontrado";
 
 const validRouteStatus = "valid";
 
@@ -403,7 +403,7 @@ async function assertProductionReady(
 ): Promise<void> {
   if (connection.parserRelease.provider !== connection.provider || !inboundParserProductionEligible(connection.parserRelease)) {
     throw new ConflictException(
-      "Certifique o parser antes de ativar o envio automatico. Esta versao da integracao nao e nativa validada ou foi retirada.",
+      "Certifique o parser antes de ativar o envio automático. Esta versão da integração não é nativa validada ou foi retirada.",
     );
   }
 
@@ -427,7 +427,7 @@ async function assertProductionReady(
 
   if (activeChannels.length === 0) {
     throw new ConflictException(
-      "Ative ao menos um canal validado antes da producao",
+      "Ative ao menos um canal validado antes da produção",
     );
   }
 
@@ -466,7 +466,7 @@ async function assertProductionReady(
 
   if (activeReplay > 0 || (connection.provider === "meta_cloud" && await studentReplayDispatchUnsettled(transaction, connection.workspaceId, connection.id))) {
     throw new ConflictException(
-      "Finalize o replay em andamento antes de ativar a producao",
+      "Finalize o replay em andamento antes de ativar a produção",
     );
   }
 }

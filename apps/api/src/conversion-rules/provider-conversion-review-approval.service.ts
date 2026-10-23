@@ -133,7 +133,7 @@ export class ProviderConversionReviewApprovalService {
     });
     if (!latest) {
       throw new ConflictException(
-        "A decisao auditavel desta compra nao foi encontrada",
+        "A decisão auditável desta compra não foi encontrada",
       );
     }
 
@@ -163,7 +163,7 @@ export class ProviderConversionReviewApprovalService {
     });
     if (!orchestration.executionId || !orchestration.eligibleExecutionId) {
       throw new ConflictException(
-        "A compra corrigida nao ficou elegivel para envio",
+        "A compra corrigida não ficou elegível para envio",
       );
     }
 
@@ -233,7 +233,7 @@ export class ProviderConversionReviewApprovalService {
         current.providerExecutionId !== orchestration.executionId
       ) {
         throw new ConflictException(
-          "A revisao mudou enquanto era aprovada. Atualize a pagina.",
+          "A revisão mudou enquanto era aprovada. Atualize a página.",
         );
       }
     }
@@ -276,7 +276,7 @@ export class ProviderConversionReviewApprovalService {
       rule.mode !== "production"
     ) {
       throw new ConflictException(
-        "Ative o envio automatico desta regra antes de aprovar",
+        "Ative o envio automático desta regra antes de aprovar",
       );
     }
     const connection = rule.connection ?? channel?.connection ?? null;
@@ -304,7 +304,7 @@ export class ProviderConversionReviewApprovalService {
       })
     ) {
       throw new ConflictException(
-        "A conexao, o canal ou o parser nao esta pronto para envio",
+        "A conexão, o canal ou o parser não está pronto para envio",
       );
     }
   }
@@ -319,7 +319,7 @@ export class ProviderConversionReviewApprovalService {
       previous.leadResolution.status !== "resolved"
     ) {
       throw new ConflictException(
-        "A revisao nao possui uma decisao de compra com lead pago",
+        "A revisão não possui uma decisão de compra com lead pago",
       );
     }
 
@@ -390,7 +390,7 @@ export class ProviderConversionReviewApprovalService {
         item.subtotalValueCents !== item.unitValueCents * item.quantity
       ) {
         throw new ConflictException(
-          "O catalogo mudou. Revise os itens novamente antes de aprovar.",
+          "O catálogo mudou. Revise os itens novamente antes de aprovar.",
         );
       }
 
@@ -424,11 +424,11 @@ export class ProviderConversionReviewApprovalService {
       triggerType !== "message_phrase"
     ) {
       throw new ConflictException(
-        "O tipo desta regra nao aceita revisao de compra",
+        "O tipo desta regra não aceita revisão de compra",
       );
     }
     if (rule.conversionRule.eventName !== "Purchase") {
-      throw new ConflictException("A regra revisada nao representa uma compra");
+      throw new ConflictException("A regra revisada não representa uma compra");
     }
 
     const messagePhrase =
@@ -501,7 +501,7 @@ export class ProviderConversionReviewApprovalService {
   ): PersistedProviderConversionDecision {
     if (decision.decisionCode !== "eligible") {
       throw new ConflictException(
-        "A reavaliacao existente nao deixou a compra elegivel",
+        "A reavaliação existente não deixou a compra elegível",
       );
     }
     return decision;

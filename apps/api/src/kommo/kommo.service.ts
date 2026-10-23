@@ -231,7 +231,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       const live = await this.lockConnection(tx, workspaceId, connectionId);
       // An omitted origin may never overwrite a concurrent origin change.
       if (!input.accountOrigin && current.accountOrigin !== live.accountOrigin)
-        throw new ConflictException("Conexao alterada; tente novamente");
+        throw new ConflictException("Conexão alterada; tente novamente");
       accountChanged =
         live.verifiedAccountId !== null &&
         live.verifiedAccountId !== account.id;
@@ -289,7 +289,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
         rules: { orderBy: { createdAt: "desc" } },
       },
     });
-    if (!row) throw new NotFoundException("Conexao Kommo nao encontrada");
+    if (!row) throw new NotFoundException("Conexão Kommo não encontrada");
     return this.dto(row);
   }
 
@@ -410,7 +410,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
         status === "active" &&
         (!current.credentialHealthy || !current.verifiedAccountId)
       )
-        throw new ConflictException("Credencial Kommo requer verificacao");
+        throw new ConflictException("Credencial Kommo requer verificação");
       await tx.kommoConnection.update({
         where: { id: connectionId },
         data: { status },
@@ -444,7 +444,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       });
       if (eventCount)
         throw new ConflictException(
-          "Conexao com eventos auditados nao pode ser removida; pause-a",
+          "Conexão com eventos auditados não pode ser removida; pause-a",
         );
       await tx.kommoConversionRule.deleteMany({
         where: { connectionId, workspaceId },
@@ -675,7 +675,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       const current = await tx.kommoConversionRule.findFirst({
         where: { id: ruleId, connectionId, workspaceId },
       });
-      if (!current) throw new NotFoundException("Regra Kommo nao encontrada");
+      if (!current) throw new NotFoundException("Regra Kommo não encontrada");
       // Never merge an ORM row into a strict request schema: it carries id,
       // workspace and timestamp columns that are not part of this contract.
       const candidate = {
@@ -699,7 +699,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
         if (input.contentName === undefined) candidate.contentName = null;
       }
       const parsed = kommoConversionRuleCreateInputSchema.safeParse(candidate);
-      if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload invalido");
+      if (!parsed.success) throw new BadRequestException(hasRuleCurrencyIssue(parsed.error) ? RULE_CURRENCY_INVALID_MESSAGE : "Payload inválido");
       if (input.pipelineId !== undefined || input.statusId !== undefined) {
         await this.assertCatalogStage(
           connectionId,
@@ -740,7 +740,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
         where: { id: ruleId, connectionId, workspaceId },
       });
       if (!result.count)
-        throw new NotFoundException("Regra Kommo nao encontrada");
+        throw new NotFoundException("Regra Kommo não encontrada");
       await this.audit(
         workspaceId,
         actorUserId,
@@ -771,7 +771,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       !connection.verifiedAccountId ||
       connection.status !== "active"
     ) {
-      throw new NotFoundException("Webhook nao encontrado");
+      throw new NotFoundException("Webhook não encontrado");
     }
     if (
       events.some(
@@ -782,7 +782,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
             event.accountSubdomain !== connection.accountSubdomain),
       )
     ) {
-      throw new NotFoundException("Webhook nao encontrado");
+      throw new NotFoundException("Webhook não encontrado");
     }
 
     let accepted = 0;
@@ -852,7 +852,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       const event = await tx.kommoWebhookEvent.findFirst({
         where: { id: eventId, workspaceId },
       });
-      if (!event) throw new NotFoundException("Evento Kommo nao encontrado");
+      if (!event) throw new NotFoundException("Evento Kommo não encontrado");
       if (
         event.status === "processing" &&
         event.leaseExpiresAt &&
@@ -973,7 +973,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       where: { id: eventId, workspaceId },
       include: { connection: true },
     });
-    if (!stored) throw new NotFoundException("Evento Kommo nao encontrado");
+    if (!stored) throw new NotFoundException("Evento Kommo não encontrado");
     if (
       ["observed", "duplicate", "blocked", "sent", "processed"].includes(
         stored.status,
@@ -2483,7 +2483,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     const row = await tx.kommoConnection.findFirst({
       where: { id: connectionId, workspaceId },
     });
-    if (!row) throw new NotFoundException("Conexao Kommo nao encontrada");
+    if (!row) throw new NotFoundException("Conexão Kommo não encontrada");
     return row;
   }
   private async validateBindings(
@@ -2564,7 +2564,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!stage?.available)
-      throw new ConflictException("Estagio Kommo indisponivel no catalogo");
+      throw new ConflictException("Estágio Kommo indisponível no catálogo");
   }
   private ruleData(input: any) {
     const carries = conversionEventCarriesValue(input.eventName);
@@ -2588,7 +2588,7 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
     const row = await this.prisma.kommoConnection.findFirst({
       where: { id, workspaceId },
     });
-    if (!row) throw new NotFoundException("Conexao Kommo nao encontrada");
+    if (!row) throw new NotFoundException("Conexão Kommo não encontrada");
     return row;
   }
   private async complete(

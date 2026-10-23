@@ -51,7 +51,7 @@ export class StudentInboundReplayController {
     const actor = await this.owner(token);
     const parsed = studentInboundReplayAuthorizeSchema.safeParse(body);
     if (!parsed.success)
-      throw new BadRequestException("Revise a confirmacao da recuperacao");
+      throw new BadRequestException("Revise a confirmação da recuperação");
     return this.replay.authorizeStudentReplay(
       actor,
       connectionId,

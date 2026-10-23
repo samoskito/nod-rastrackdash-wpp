@@ -482,7 +482,7 @@ export class MetaReportingService {
       (!input.businessConnectionId || !input.reportingAccountId)
     ) {
       throw new BadRequestException(
-        "A sincronizacao manual exige conta e conexao Meta",
+        "A sincronização manual exige conta e conexão Meta",
       );
     }
 
@@ -492,7 +492,7 @@ export class MetaReportingService {
 
     if (normalizedJob) {
       if (!this.connectionResolver) {
-        throw new NotFoundException("Roteamento Meta indisponivel");
+        throw new NotFoundException("Roteamento Meta indisponível");
       }
 
       const route = await this.connectionResolver.resolveReportingRoute({
@@ -510,7 +510,7 @@ export class MetaReportingService {
       })) as MetaReportingAccountRecord | null;
 
       if (!account) {
-        throw new NotFoundException("Conta Meta ativa nao encontrada");
+        throw new NotFoundException("Conta Meta ativa não encontrada");
       }
 
       accessToken = route.accessToken;
@@ -535,7 +535,7 @@ export class MetaReportingService {
     }
 
     if (accounts.length === 0) {
-      throw new NotFoundException("Nenhuma conta Meta ativa para relatorios");
+      throw new NotFoundException("Nenhuma conta Meta ativa para relatórios");
     }
 
     const result: MetaStructureSyncResult = {
@@ -607,7 +607,7 @@ export class MetaReportingService {
     }
 
     if (result.accountsSynced === 0 && result.accountsFailed > 0) {
-      const error = new Error("Todas as contas Meta falharam na sincronizacao");
+      const error = new Error("Todas as contas Meta falharam na sincronização");
       await this.recordMetaReportingSyncDiagnostics({
         input,
         startedAt,
@@ -1263,7 +1263,7 @@ export class MetaReportingService {
       )
     ) {
       throw new Error(
-        "Meta retornou totais diarios inconsistentes com o investimento agregado",
+        "Meta retornou totais diários inconsistentes com o investimento agregado",
       );
     }
 
@@ -1315,7 +1315,7 @@ export class MetaReportingService {
 
     if (!matchesAggregate(recoveredInsights)) {
       throw new Error(
-        "Meta retornou totais diarios de conjuntos inconsistentes com o investimento agregado",
+        "Meta retornou totais diários de conjuntos inconsistentes com o investimento agregado",
       );
     }
 
@@ -1351,7 +1351,7 @@ export class MetaReportingService {
 
     if (!matchesAggregate(recoveredInsights)) {
       throw new Error(
-        "Meta retornou totais diarios de anuncios inconsistentes com o investimento agregado",
+        "Meta retornou totais diários de anúncios inconsistentes com o investimento agregado",
       );
     }
 
@@ -1739,7 +1739,7 @@ export class MetaReportingService {
       input.error instanceof Error
         ? input.error.message
         : input.error
-          ? "Erro desconhecido ao sincronizar relatorios Meta"
+          ? "Erro desconhecido ao sincronizar relatórios Meta"
           : null;
     const status = input.error ? "error" : "success";
 
@@ -1794,11 +1794,11 @@ export class MetaReportingService {
           status,
           occurredAt: finishedAt,
           title: input.error
-            ? "Falha na sincronizacao de relatorios Meta"
-            : "Sincronizacao de relatorios Meta concluida",
+            ? "Falha na sincronização de relatórios Meta"
+            : "Sincronização de relatórios Meta concluída",
           message: input.error
-            ? (errorMessage ?? "A sincronizacao Meta falhou.")
-            : "Campanhas, conjuntos e anuncios Meta foram sincronizados.",
+            ? (errorMessage ?? "A sincronização Meta falhou.")
+            : "Campanhas, conjuntos e anúncios Meta foram sincronizados.",
           jobId: null,
           errorCode: input.error ? "MetaReportingSyncError" : null,
           integrationLogId: integrationLog.id,
@@ -2407,7 +2407,7 @@ export class MetaReportingService {
     })) as ConversionAuditEventDetailRecord | null;
 
     if (!event) {
-      throw new NotFoundException("Evento de conversao nao encontrado");
+      throw new NotFoundException("Evento de conversão não encontrado");
     }
 
     const [funnelStages, ingestionRecord, context] = await Promise.all([
@@ -2466,12 +2466,12 @@ export class MetaReportingService {
         : reconstructedRequest
           ? {
               mode: "reconstructed",
-              label: "Payload reconstruido a partir do evento historico",
+              label: "Payload reconstruído a partir do evento histórico",
               payload: reconstructedRequest,
             }
           : {
               mode: "unavailable",
-              label: "Payload de envio indisponivel",
+              label: "Payload de envio indisponível",
               payload: null,
             },
       metaResponse: response
@@ -2525,7 +2525,7 @@ export class MetaReportingService {
     }
 
     if (result.count === 0) {
-      throw new NotFoundException("Classificacao Meta nao encontrada");
+      throw new NotFoundException("Classificação Meta não encontrada");
     }
 
     await this.prisma.auditLog.create({
@@ -2581,20 +2581,20 @@ export class MetaReportingService {
     }
 
     if (!entity) {
-      throw new NotFoundException("Item Meta nao encontrado");
+      throw new NotFoundException("Item Meta não encontrado");
     }
 
     const currentStatus = this.mutableMetaStatus(entity.status);
 
     if (!currentStatus) {
       throw new BadRequestException(
-        "Este item nao pode ser ativado ou pausado no estado atual",
+        "Este item não pode ser ativado ou pausado no estado atual",
       );
     }
 
     if (currentStatus !== input.expectedStatus) {
       throw new ConflictException(
-        "O status mudou desde a ultima atualizacao. Sincronize e tente novamente",
+        "O status mudou desde a última atualização. Sincronize e tente novamente",
       );
     }
 
@@ -2625,7 +2625,7 @@ export class MetaReportingService {
         error,
       });
       throw new BadRequestException(
-        "A Meta nao confirmou a alteracao de status. Sincronize e tente novamente",
+        "A Meta não confirmou a alteração de status. Sincronize e tente novamente",
       );
     }
 
@@ -2651,7 +2651,7 @@ export class MetaReportingService {
         `Status alterado na Meta sem atualizar snapshot local: ${this.errorMessage(error)}`,
       );
       throw new ConflictException(
-        "A Meta confirmou a alteracao, mas o painel precisa ser sincronizado",
+        "A Meta confirmou a alteração, mas o painel precisa ser sincronizado",
       );
     }
 
@@ -2688,7 +2688,7 @@ export class MetaReportingService {
       });
 
       if (!campaign) {
-        throw new NotFoundException("Campanha Meta nao encontrada");
+        throw new NotFoundException("Campanha Meta não encontrada");
       }
 
       adAccountId = campaign.adAccountId;
@@ -2708,7 +2708,7 @@ export class MetaReportingService {
       });
 
       if (!adSet) {
-        throw new NotFoundException("Conjunto Meta nao encontrado");
+        throw new NotFoundException("Conjunto Meta não encontrado");
       }
 
       const parentCampaign = await this.prisma.metaCampaign.findFirst({
@@ -2725,7 +2725,7 @@ export class MetaReportingService {
           parentCampaign.lifetimeBudgetCents !== null)
       ) {
         throw new BadRequestException(
-          "O orcamento deste conjunto e controlado pela campanha",
+          "O orçamento deste conjunto é controlado pela campanha",
         );
       }
 
@@ -2738,13 +2738,13 @@ export class MetaReportingService {
 
     if (currentBudgetCents === null) {
       throw new BadRequestException(
-        "Nenhum orcamento editavel foi encontrado neste nivel",
+        "Nenhum orçamento editável foi encontrado neste nível",
       );
     }
 
     if (currentBudgetCents !== input.expectedBudgetCents) {
       throw new ConflictException(
-        "O orcamento mudou desde a ultima atualizacao. Sincronize e tente novamente",
+        "O orçamento mudou desde a última atualização. Sincronize e tente novamente",
       );
     }
 
@@ -2782,7 +2782,7 @@ export class MetaReportingService {
         error,
       });
       throw new BadRequestException(
-        "A Meta nao confirmou a alteracao de orcamento. Sincronize e tente novamente",
+        "A Meta não confirmou a alteração de orçamento. Sincronize e tente novamente",
       );
     }
 
@@ -2808,7 +2808,7 @@ export class MetaReportingService {
         `Orcamento alterado na Meta sem atualizar snapshot local: ${this.errorMessage(error)}`,
       );
       throw new ConflictException(
-        "A Meta confirmou a alteracao, mas o painel precisa ser sincronizado",
+        "A Meta confirmou a alteração, mas o painel precisa ser sincronizado",
       );
     }
 
@@ -2860,7 +2860,7 @@ export class MetaReportingService {
     });
 
     if (!campaign) {
-      throw new NotFoundException("Classificacao Meta nao encontrada");
+      throw new NotFoundException("Classificação Meta não encontrada");
     }
 
     const [adSets, ads] = (await Promise.all([
@@ -2902,7 +2902,7 @@ export class MetaReportingService {
     })) as Pick<MetaAdSetRecord, "destinationType"> | null;
 
     if (!adSet) {
-      throw new NotFoundException("Classificacao Meta nao encontrada");
+      throw new NotFoundException("Classificação Meta não encontrada");
     }
 
     const result = this.whatsappClassifier.classify({
@@ -2936,7 +2936,7 @@ export class MetaReportingService {
     > | null;
 
     if (!ad) {
-      throw new NotFoundException("Classificacao Meta nao encontrada");
+      throw new NotFoundException("Classificação Meta não encontrada");
     }
 
     const parentAdSet = ad.destinationType
@@ -3144,7 +3144,7 @@ export class MetaReportingService {
         ...this.toAdSetReportRow({
           adSet,
           campaignName:
-            campaignNames.get(adSet.campaignId) ?? "Campanha nao resolvida",
+            campaignNames.get(adSet.campaignId) ?? "Campanha não resolvida",
           parentCampaign: campaignById.get(adSet.campaignId),
           conversionLogs: conversionLogsByAdSet.get(adSet.adSetId) ?? [],
           funnelStages,
@@ -3329,8 +3329,8 @@ export class MetaReportingService {
       ...this.toAdReportRow({
         ad,
         campaignName:
-          campaignNames.get(ad.campaignId) ?? "Campanha nao resolvida",
-        adSetName: adSetNames.get(ad.adSetId) ?? "Conjunto nao resolvido",
+          campaignNames.get(ad.campaignId) ?? "Campanha não resolvida",
+        adSetName: adSetNames.get(ad.adSetId) ?? "Conjunto não resolvido",
         conversionLogs: conversionLogsByAd.get(ad.adId) ?? [],
         funnelStages,
         leads: leadsByAd.get(ad.adId) ?? [],
@@ -3803,7 +3803,7 @@ export class MetaReportingService {
   ): Promise<string> {
     if (!adAccountId) {
       throw new BadRequestException(
-        "A conta de anuncios deste item nao foi identificada",
+        "A conta de anúncios deste item não foi identificada",
       );
     }
 
@@ -3814,7 +3814,7 @@ export class MetaReportingService {
 
     if (!activeAccount) {
       throw new BadRequestException(
-        "A conta de anuncios precisa estar ativa antes desta alteracao",
+        "A conta de anúncios precisa estar ativa antes desta alteração",
       );
     }
 
@@ -3907,7 +3907,7 @@ export class MetaReportingService {
     })) as MetaIntegrationRecord | null;
 
     if (!connection) {
-      throw new NotFoundException("Meta nao conectada");
+      throw new NotFoundException("Meta não conectada");
     }
 
     return connection;
@@ -4085,7 +4085,7 @@ export class MetaReportingService {
   private errorMessage(error: unknown): string {
     return error instanceof Error
       ? error.message
-      : "Erro desconhecido ao sincronizar relatorios Meta";
+      : "Erro desconhecido ao sincronizar relatórios Meta";
   }
 
   private toReportRow(
@@ -4955,7 +4955,7 @@ export class MetaReportingService {
     if (nestedSource) {
       return {
         mode: "stored_normalized",
-        label: "Entrada normalizada armazenada na ingestao",
+        label: "Entrada normalizada armazenada na ingestão",
         payload: nestedSource,
       };
     }
@@ -4963,7 +4963,7 @@ export class MetaReportingService {
     if (summary) {
       return {
         mode: "historical_summary",
-        label: "Resumo historico com contexto interno reconstruido",
+        label: "Resumo histórico com contexto interno reconstruído",
         payload: {
           ...summary,
           reconstructedEventContext:
@@ -4974,7 +4974,7 @@ export class MetaReportingService {
 
     return {
       mode: "reconstructed",
-      label: "Registro interno reconstruido; entrada original indisponivel",
+      label: "Registro interno reconstruído; entrada original indisponível",
       payload: this.conversionAuditReconstructedSource(event),
     };
   }
@@ -5147,16 +5147,16 @@ export class MetaReportingService {
 
   private conversionAuditMissingFieldsReason(missingFields: string[]): string {
     const labels: Record<string, string> = {
-      phone_hash: "telefone identificavel",
-      ad_id: "anuncio de origem",
+      phone_hash: "telefone identificável",
+      ad_id: "anúncio de origem",
       ctwa_clid: "identificador de clique",
-      value: "valor da conversao",
+      value: "valor da conversão",
       pixel_id: "pixel Meta",
-      page_id: "pagina Facebook",
+      page_id: "página Facebook",
     };
     const readable = missingFields.map((field) => labels[field] ?? field);
 
-    return `Campos obrigatorios ausentes: ${readable.join(", ")}`;
+    return `Campos obrigatórios ausentes: ${readable.join(", ")}`;
   }
 
   private async conversionAuditContext(
@@ -5370,8 +5370,8 @@ export class MetaReportingService {
       queued: "Na fila",
       sent: "Enviado",
       error: "Falhou",
-      imported: "Historico",
-      not_eligible: "Nao elegivel",
+      imported: "Histórico",
+      not_eligible: "Não elegível",
       shadow_observed: "Observado em sombra",
       not_configured: "Bloqueado",
       skipped: "Descartado",
@@ -5385,19 +5385,19 @@ export class MetaReportingService {
     event?: ConversionAuditEventRecord,
   ): string {
     const details: Record<ConversionEventLogStatusDto, string> = {
-      pending_meta_context: "Aguardando identificacao de anuncio e conversa",
+      pending_meta_context: "Aguardando identificação de anúncio e conversa",
       pending_value: "Aguardando valor do evento",
       ready_to_send: "Pronto para entrar na fila de envio",
       queued: "Aguardando processamento da fila Meta",
       sent: "Recebido pela Meta",
-      error: "O envio nao foi concluido",
-      imported: "Marco historico, sem reenvio para a Meta",
+      error: "O envio não foi concluído",
+      imported: "Marco histórico, sem reenvio para a Meta",
       not_eligible: event
         ? this.conversionAuditNotEligibleDetail(event)
-        : "Sem dados obrigatorios, sem envio para a Meta",
+        : "Sem dados obrigatórios, sem envio para a Meta",
       shadow_observed: "Coletado antes do corte, sem envio pelo WppTrack",
-      not_configured: "Destino Meta ainda nao configurado",
-      skipped: "Descartado pelas regras de validacao",
+      not_configured: "Destino Meta ainda não configurado",
+      skipped: "Descartado pelas regras de validação",
     };
 
     return details[status];
@@ -5410,7 +5410,7 @@ export class MetaReportingService {
 
     return missingFields.length
       ? this.conversionAuditMissingFieldsReason(missingFields)
-      : "Sem dados obrigatorios, sem envio para a Meta";
+      : "Sem dados obrigatórios, sem envio para a Meta";
   }
 
   private conversionAuditSource(
@@ -5437,9 +5437,9 @@ export class MetaReportingService {
 
   private conversionAuditSourceLabel(source: ConversionAuditSourceDto): string {
     const labels: Record<ConversionAuditSourceDto, string> = {
-      external_integration: "Integracao externa",
-      whatsapp_automation: "Automacao do WhatsApp",
-      system: "Regra automatica",
+      external_integration: "Integração externa",
+      whatsapp_automation: "Automação do WhatsApp",
+      system: "Regra automática",
       manual_test: "Teste manual",
       other: "Outra origem",
     };
@@ -5449,14 +5449,14 @@ export class MetaReportingService {
 
   private conversionAuditSafeError(errorCode: string): string {
     const errors: Record<string, string> = {
-      MissingMetaDestination: "Destino Meta nao configurado",
-      MissingAccessToken: "A conexao Meta precisa ser refeita",
-      MissingPhoneHash: "Telefone do lead indisponivel",
-      MissingCtwaClid: "Identificador da conversa de anuncio ausente",
-      MissingAdId: "Anuncio de origem nao identificado",
-      EventValueMissing: "Valor do evento nao configurado",
+      MissingMetaDestination: "Destino Meta não configurado",
+      MissingAccessToken: "A conexão Meta precisa ser refeita",
+      MissingPhoneHash: "Telefone do lead indisponível",
+      MissingCtwaClid: "Identificador da conversa de anúncio ausente",
+      MissingAdId: "Anúncio de origem não identificado",
+      EventValueMissing: "Valor do evento não configurado",
       MetaCapiRejected: "A Meta recusou o evento",
-      MetaCapiNetworkError: "Falha de comunicacao com a Meta",
+      MetaCapiNetworkError: "Falha de comunicação com a Meta",
     };
 
     return errors[errorCode] ?? "Falha no processamento do evento";

@@ -153,7 +153,7 @@ export class InboundWebhookConnectionsController {
       (body as Record<string, unknown>).confirmation !==
         "REPROCESSAR_CALLBACK_OBSERVADO"
     ) {
-      throw new BadRequestException("Confirmacao invalida");
+      throw new BadRequestException("Confirmação inválida");
     }
 
     return this.conversionAutomation.reprocessLatestObserved(

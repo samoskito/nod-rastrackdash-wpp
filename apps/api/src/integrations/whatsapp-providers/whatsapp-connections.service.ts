@@ -168,7 +168,7 @@ export class WhatsappConnectionsService {
     const existing = await this.findForWorkspace(actor.workspaceId, id);
     if (existing.provider !== input.provider) {
       throw new ConflictException(
-        "O provider da conexao nao pode ser alterado",
+        "O provider da conexão não pode ser alterado",
       );
     }
     if (
@@ -238,7 +238,7 @@ export class WhatsappConnectionsService {
     const existing = await this.findForWorkspace(actor.workspaceId, id);
     if (existing.provider !== input.provider) {
       throw new ConflictException(
-        "O provider da conexao nao pode ser alterado",
+        "O provider da conexão não pode ser alterado",
       );
     }
     const previousConfig = this.decryptConfig(existing);
@@ -319,7 +319,7 @@ export class WhatsappConnectionsService {
       message =
         error instanceof Error
           ? error.message
-          : "Erro ao testar conexao WhatsApp";
+          : "Erro ao testar conexão WhatsApp";
     }
 
     const providerInstanceId = uazapiIdentity?.providerInstanceId?.trim();
@@ -561,7 +561,7 @@ export class WhatsappConnectionsService {
       where: { id, workspaceId },
     })) as WhatsappConnectionRecord | null;
     if (!connection || !this.isProvider(connection.provider))
-      throw new NotFoundException("Conexao WhatsApp nao encontrada");
+      throw new NotFoundException("Conexão WhatsApp não encontrada");
     return connection;
   }
 
@@ -618,7 +618,7 @@ export class WhatsappConnectionsService {
         config.provider === "zapi") &&
       !normalizeProviderBaseUrl(config.config.baseUrl)
     ) {
-      throw new BadRequestException("URL base do provider WhatsApp invalida");
+      throw new BadRequestException("URL base do provider WhatsApp inválida");
     }
 
     return config;
@@ -654,7 +654,7 @@ export class WhatsappConnectionsService {
       !connection.configTag
     ) {
       throw new BadRequestException(
-        "Configuracao cifrada da conexao esta incompleta",
+        "Configuração cifrada da conexão está incompleta",
       );
     }
     const value = JSON.parse(
@@ -669,7 +669,7 @@ export class WhatsappConnectionsService {
       value.provider !== connection.provider
     ) {
       throw new BadRequestException(
-        "Configuracao cifrada da conexao e invalida",
+        "Configuração cifrada da conexão é inválida",
       );
     }
     return value;
@@ -690,7 +690,7 @@ export class WhatsappConnectionsService {
         const token = input.credentials.token ?? prevConfig?.token;
         if (!token) {
           throw new BadRequestException(
-            "Token da conexao WhatsApp e obrigatorio",
+            "Token da conexão WhatsApp é obrigatório",
           );
         }
         return {
@@ -705,7 +705,7 @@ export class WhatsappConnectionsService {
         const apiKey = input.credentials.apiKey ?? prevConfig?.apiKey;
         if (!apiKey) {
           throw new BadRequestException(
-            "API key da conexao WhatsApp e obrigatoria",
+            "API key da conexão WhatsApp é obrigatória",
           );
         }
         return {
@@ -720,7 +720,7 @@ export class WhatsappConnectionsService {
         const token = input.credentials.token ?? prevConfig?.token;
         if (!token) {
           throw new BadRequestException(
-            "Token da conexao WhatsApp e obrigatorio",
+            "Token da conexão WhatsApp é obrigatório",
           );
         }
         return {
@@ -736,7 +736,7 @@ export class WhatsappConnectionsService {
           input.credentials.instanceToken ?? prevConfig?.instanceToken;
         if (!instanceToken) {
           throw new BadRequestException(
-            "Instance token da conexao WhatsApp e obrigatorio",
+            "Instance token da conexão WhatsApp é obrigatório",
           );
         }
         return {
@@ -782,7 +782,7 @@ export class WhatsappConnectionsService {
     const trimmed = session?.trim();
     if (!trimmed) {
       throw new BadRequestException(
-        "Sessao da conexao WhatsApp (WAHA) e obrigatoria",
+        "Sessão da conexão WhatsApp (WAHA) é obrigatória",
       );
     }
     return trimmed;
@@ -799,7 +799,7 @@ export class WhatsappConnectionsService {
     const trimmed = value?.trim();
     if (!trimmed) {
       throw new BadRequestException(
-        `Instance ID da conexao WhatsApp (${label}) e obrigatorio`,
+        `Instance ID da conexão WhatsApp (${label}) é obrigatório`,
       );
     }
     return trimmed;
@@ -867,7 +867,7 @@ export class WhatsappConnectionsService {
     try {
       base = new URL(apiPublicUrl);
     } catch {
-      throw new BadRequestException("API_PUBLIC_URL invalida");
+      throw new BadRequestException("API_PUBLIC_URL inválida");
     }
 
     if (base.protocol !== "http:" && base.protocol !== "https:") {
@@ -885,13 +885,13 @@ export class WhatsappConnectionsService {
       !this.accessPolicy.getPermissions(actor.role, actor.canManageMembers)
         .canManageIntegrations
     ) {
-      throw new NotFoundException("Conexao WhatsApp nao encontrada");
+      throw new NotFoundException("Conexão WhatsApp não encontrada");
     }
   }
 
   private requireProvider(provider: string): WhatsappProviderId {
     if (!this.isProvider(provider)) {
-      throw new NotFoundException("Conexao WhatsApp nao encontrada");
+      throw new NotFoundException("Conexão WhatsApp não encontrada");
     }
     return provider;
   }

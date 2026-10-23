@@ -201,7 +201,7 @@ export class IntegrationsService {
   ): Promise<MetaOAuthDisconnectResultDto> {
     if (!this.getMetaConnectionCapabilities().manualEnabled) {
       throw new ConflictException(
-        "A conexao por token permanente nao esta habilitada neste ambiente",
+        "A conexão por token permanente não está habilitada neste ambiente",
       );
     }
 
@@ -408,7 +408,7 @@ export class IntegrationsService {
       label:
         missingEnv.length > 0
           ? "Configurar NOD API"
-          : "NOD API pronta para provisionar instancia",
+          : "NOD API pronta para provisionar instância",
       missingEnv,
     };
   }
@@ -565,7 +565,7 @@ export class IntegrationsService {
 
     return {
       workspaceId,
-      rangeLabel: "Ultimos 7 dias",
+      rangeLabel: "Últimos 7 dias",
       whatsappSource,
       stages: [
         {
@@ -611,7 +611,7 @@ export class IntegrationsService {
   ): IntegrationPipelineOverviewDto {
     return {
       workspaceId,
-      rangeLabel: "Ultimos 7 dias",
+      rangeLabel: "Últimos 7 dias",
       whatsappSource: this.nativeWhatsappDataSource(),
       stages: [
         {
@@ -951,7 +951,7 @@ export class IntegrationsService {
 
   private requireMetaConnectionsService(): MetaConnectionsService {
     if (!this.metaConnectionsService) {
-      throw new Error("MetaConnectionsService indisponivel");
+      throw new Error("MetaConnectionsService indisponível");
     }
 
     return this.metaConnectionsService;
@@ -959,7 +959,7 @@ export class IntegrationsService {
 
   private requireMetaManualConnectionsService(): MetaManualConnectionsService {
     if (!this.metaManualConnectionsService) {
-      throw new Error("MetaManualConnectionsService indisponivel");
+      throw new Error("MetaManualConnectionsService indisponível");
     }
 
     return this.metaManualConnectionsService;
@@ -967,7 +967,7 @@ export class IntegrationsService {
 
   private requirePrisma(): PrismaService {
     if (!this.prisma) {
-      throw new Error("PrismaService indisponivel para OAuth Meta");
+      throw new Error("PrismaService indisponível para OAuth Meta");
     }
 
     return this.prisma;

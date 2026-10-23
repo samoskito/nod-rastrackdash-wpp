@@ -201,7 +201,7 @@ export class InboundWebhookChannelRoutesService {
     const normalizedPhone = normalizePhoneIdentity(input.connectedPhone);
 
     if (!normalizedPhone) {
-      throw new BadRequestException("Numero de telefone invalido");
+      throw new BadRequestException("Número de telefone inválido");
     }
 
     const channelName = input.channelName?.trim() || null;

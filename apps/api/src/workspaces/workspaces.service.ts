@@ -151,7 +151,7 @@ export class WorkspacesService {
         target.userId === authenticated.user.id,
       )
     ) {
-      throw new ForbiddenException("Sem permissao para alterar este membro");
+      throw new ForbiddenException("Sem permissão para alterar este membro");
     }
 
     const updated = await this.prisma.workspaceMember.update({
@@ -194,7 +194,7 @@ export class WorkspacesService {
 
     if (actor.role !== "owner") {
       throw new ForbiddenException(
-        "Somente o owner pode delegar a gestao da equipe",
+        "Somente o owner pode delegar a gestão da equipe",
       );
     }
 
@@ -202,7 +202,7 @@ export class WorkspacesService {
 
     if (target.role !== "admin") {
       throw new BadRequestException(
-        "A gestao da equipe so pode ser delegada a administradores",
+        "A gestão da equipe só pode ser delegada a administradores",
       );
     }
 
@@ -247,7 +247,7 @@ export class WorkspacesService {
         target.userId === authenticated.user.id,
       )
     ) {
-      throw new ForbiddenException("Sem permissao para remover este membro");
+      throw new ForbiddenException("Sem permissão para remover este membro");
     }
 
     const revokedAt = new Date();
@@ -301,7 +301,7 @@ export class WorkspacesService {
     const workspace = this.getCurrentWorkspace(authenticated);
 
     if (!workspace.permissions.canManageWorkspaceSettings) {
-      throw new ForbiddenException("Sem permissao para atualizar workspace");
+      throw new ForbiddenException("Sem permissão para atualizar workspace");
     }
 
     const updated = await this.prisma.workspace.update({
@@ -392,7 +392,7 @@ export class WorkspacesService {
     const invite = await this.findWorkspaceInvite(workspace.id, inviteId);
 
     if (invite.status === "accepted") {
-      throw new BadRequestException("Convite ja foi aceito");
+      throw new BadRequestException("Convite já foi aceito");
     }
 
     const acceptToken = randomBytes(32).toString("hex");
@@ -445,7 +445,7 @@ export class WorkspacesService {
     const invite = await this.findWorkspaceInvite(workspace.id, inviteId);
 
     if (invite.status === "accepted") {
-      throw new BadRequestException("Convite ja foi aceito");
+      throw new BadRequestException("Convite já foi aceito");
     }
 
     const updated = await this.prisma.workspaceInvite.update({
@@ -932,7 +932,7 @@ export class WorkspacesService {
   }
 
   private invalidInvite(): NotFoundException {
-    return new NotFoundException("Convite invalido ou expirado");
+    return new NotFoundException("Convite inválido ou expirado");
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
@@ -974,7 +974,7 @@ export class WorkspacesService {
       !membership ||
       !workspace.permissions.canManageMembers
     ) {
-      throw new ForbiddenException("Sem permissao para gerenciar membros");
+      throw new ForbiddenException("Sem permissão para gerenciar membros");
     }
 
     return {
@@ -997,7 +997,7 @@ export class WorkspacesService {
     });
 
     if (!member) {
-      throw new NotFoundException("Membro nao encontrado");
+      throw new NotFoundException("Membro não encontrado");
     }
 
     return member;
@@ -1012,7 +1012,7 @@ export class WorkspacesService {
     });
 
     if (!invite) {
-      throw new NotFoundException("Convite nao encontrado");
+      throw new NotFoundException("Convite não encontrado");
     }
 
     return invite;

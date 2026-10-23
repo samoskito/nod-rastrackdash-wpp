@@ -26,7 +26,7 @@ export class OpsAlertsController {
   private async requireManager(token: string, workspaceId: string) {
     const session = await this.auth.getSession(token);
     const workspace = this.workspaces.getCurrentWorkspace(session);
-    if (workspace.id !== workspaceId || !workspace.permissions.canManageWorkspaceSettings) throw new ForbiddenException("Sem permissao para gerenciar alertas operacionais");
+    if (workspace.id !== workspaceId || !workspace.permissions.canManageWorkspaceSettings) throw new ForbiddenException("Sem permissão para gerenciar alertas operacionais");
     return { userId: session.user.id };
   }
 }

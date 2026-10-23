@@ -110,7 +110,7 @@ export class ReportingController {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
     if (!workspace.permissions.canExportReports) {
-      throw new ForbiddenException("Sem permissao para exportar relatorios");
+      throw new ForbiddenException("Sem permissão para exportar relatórios");
     }
 
     const workspaceId = workspace.id;
@@ -309,7 +309,7 @@ export class ReportingController {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
     if (!workspace.permissions.canViewReports) {
-      throw new ForbiddenException("Sem permissao para visualizar relatorios");
+      throw new ForbiddenException("Sem permissão para visualizar relatórios");
     }
 
     const workspaceId = workspace.id;
@@ -324,11 +324,11 @@ export class ReportingController {
       ...(eventNameFilter ? { eventName: eventNameFilter } : {}),
       ...(deliveryState ? { deliveryState } : {}),
       ...(sourceFilter ? { source: sourceFilter } : {}),
-      page: this.parsePositiveInteger(page, 1, "Pagina invalida"),
+      page: this.parsePositiveInteger(page, 1, "Página inválida"),
       pageSize: this.parsePositiveInteger(
         pageSize,
         25,
-        "Tamanho de pagina invalido",
+        "Tamanho de página inválido",
         100,
       ),
     });
@@ -350,7 +350,7 @@ export class ReportingController {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
     if (!workspace.permissions.canViewReports) {
-      throw new ForbiddenException("Sem permissao para visualizar relatorios");
+      throw new ForbiddenException("Sem permissão para visualizar relatórios");
     }
 
     const detail =
@@ -429,7 +429,7 @@ export class ReportingController {
 
     return this.diagnosticsService.retryBlockedConversionEvents(
       eventIds,
-      { reason: "Reenvio manual de eventos Meta bloqueados por configuracao" },
+      { reason: "Reenvio manual de eventos Meta bloqueados por configuração" },
       {
         workspaceId: workspace.id,
         actorUserId: authenticated.user.id,
@@ -452,7 +452,7 @@ export class ReportingController {
     const period = this.parseReportPeriod(since, until);
 
     if (!workspace.permissions.canManageIntegrations) {
-      throw new ForbiddenException("Sem permissao para sincronizar relatorios");
+      throw new ForbiddenException("Sem permissão para sincronizar relatórios");
     }
 
     return this.metaReportSyncQueueService.enqueueWorkspaceSync({
@@ -467,7 +467,7 @@ export class ReportingController {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
     if (!workspace.permissions.canManageIntegrations) {
-      throw new ForbiddenException("Sem permissao para sincronizar relatorios");
+      throw new ForbiddenException("Sem permissão para sincronizar relatórios");
     }
 
     return this.metaInitialSyncPeriodService.resolve({
@@ -490,7 +490,7 @@ export class ReportingController {
     const parsed = metaEntityStatusUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const { authenticated, workspace } =
@@ -515,7 +515,7 @@ export class ReportingController {
     const parsed = metaBudgetUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const { authenticated, workspace } =
@@ -540,7 +540,7 @@ export class ReportingController {
     const parsed = metaWhatsappOverrideInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const { authenticated, workspace } =
@@ -561,7 +561,7 @@ export class ReportingController {
     const workspace = await this.getCurrentWorkspace(refreshToken);
 
     if (!workspace.permissions.canViewReports) {
-      throw new ForbiddenException("Sem permissao para visualizar relatorios");
+      throw new ForbiddenException("Sem permissão para visualizar relatórios");
     }
 
     return workspace.id;
@@ -614,16 +614,16 @@ export class ReportingController {
       return {
         since: this.defaultSince(),
         until: this.defaultUntil(),
-        rangeLabel: "Ultimos 7 dias",
+        rangeLabel: "Últimos 7 dias",
       };
     }
 
     if (!this.isDateOnly(since) || !this.isDateOnly(until)) {
-      throw new BadRequestException("Periodo invalido");
+      throw new BadRequestException("Período inválido");
     }
 
     if (since > until) {
-      throw new BadRequestException("Periodo invalido");
+      throw new BadRequestException("Período inválido");
     }
 
     return {
@@ -642,11 +642,11 @@ export class ReportingController {
     }
 
     return {
-      page: this.parsePositiveInteger(page, 1, "Pagina invalida"),
+      page: this.parsePositiveInteger(page, 1, "Página inválida"),
       pageSize: this.parsePositiveInteger(
         pageSize,
         10,
-        "Tamanho de pagina invalido",
+        "Tamanho de página inválido",
         100,
       ),
     };
@@ -660,13 +660,13 @@ export class ReportingController {
       (sort !== undefined && typeof sort !== "string") ||
       (dir !== undefined && typeof dir !== "string")
     ) {
-      throw new BadRequestException("Ordenacao de relatorio invalida");
+      throw new BadRequestException("Ordenação de relatório inválida");
     }
 
     if (!sort) {
       if (dir) {
         throw new BadRequestException(
-          "Direcao de ordenacao exige campo de ordenacao",
+          "Direção de ordenação exige campo de ordenação",
         );
       }
 
@@ -679,7 +679,7 @@ export class ReportingController {
     });
 
     if (!parsed.success) {
-      throw new BadRequestException("Ordenacao de relatorio invalida");
+      throw new BadRequestException("Ordenação de relatório inválida");
     }
 
     return { sort: parsed.data };
@@ -692,7 +692,7 @@ export class ReportingController {
     max?: number,
   ): number {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     if (value === undefined || value === "") {
@@ -710,7 +710,7 @@ export class ReportingController {
 
   private parseBooleanFlag(value?: string | string[]): boolean {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     return value === "true";
@@ -728,7 +728,7 @@ export class ReportingController {
     const result = conversionAuditDeliveryStateSchema.safeParse(parsed);
 
     if (!result.success) {
-      throw new BadRequestException("Status de auditoria invalido");
+      throw new BadRequestException("Status de auditoria inválido");
     }
 
     return result.data;
@@ -746,7 +746,7 @@ export class ReportingController {
     const result = conversionAuditSourceSchema.safeParse(parsed);
 
     if (!result.success) {
-      throw new BadRequestException("Origem de auditoria invalida");
+      throw new BadRequestException("Origem de auditoria inválida");
     }
 
     return result.data;
@@ -845,7 +845,7 @@ export class ReportingController {
     ];
 
     if (ids.length > 50 || ids.some((id) => id.length > 120)) {
-      throw new BadRequestException("Filtro adAccountIds invalido");
+      throw new BadRequestException("Filtro adAccountIds inválido");
     }
 
     return ids;
@@ -853,7 +853,7 @@ export class ReportingController {
 
   private trimOptional(value?: string | string[]): string | undefined {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     const trimmed = value?.trim();
@@ -883,7 +883,7 @@ export class ReportingController {
     value?: string | string[],
   ): ReportNameScope | undefined {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     const trimmed = value?.trim();
@@ -896,14 +896,14 @@ export class ReportingController {
       return trimmed;
     }
 
-    throw new BadRequestException("Filtro de nome invalido");
+    throw new BadRequestException("Filtro de nome inválido");
   }
 
   private parseStatusFilter(
     value?: string | string[],
   ): ReportStatusFilter | undefined {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     const trimmed = value?.trim();
@@ -916,14 +916,14 @@ export class ReportingController {
       return trimmed;
     }
 
-    throw new BadRequestException("Filtro de status invalido");
+    throw new BadRequestException("Filtro de status inválido");
   }
 
   private parseDeliveryFilter(
     value?: string | string[],
   ): ReportDeliveryFilter | undefined {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     const trimmed = value?.trim();
@@ -936,12 +936,12 @@ export class ReportingController {
       return trimmed;
     }
 
-    throw new BadRequestException("Filtro de veiculacao invalido");
+    throw new BadRequestException("Filtro de veiculação inválido");
   }
 
   private parseSelectedEntityIds(value?: string | string[]): string[] {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de selecao invalido");
+      throw new BadRequestException("Filtro de seleção inválido");
     }
 
     const ids = [
@@ -957,7 +957,7 @@ export class ReportingController {
       ids.length > 200 ||
       ids.some((id) => id.length > 200 || !/^[A-Za-z0-9_.:-]+$/.test(id))
     ) {
-      throw new BadRequestException("Filtro de selecao invalido");
+      throw new BadRequestException("Filtro de seleção inválido");
     }
 
     return ids;
@@ -967,7 +967,7 @@ export class ReportingController {
     value?: string | string[],
   ): WhatsappClassificationFilter | undefined {
     if (Array.isArray(value)) {
-      throw new BadRequestException("Filtro de relatorio invalido");
+      throw new BadRequestException("Filtro de relatório inválido");
     }
 
     const trimmed = value?.trim();
@@ -980,7 +980,7 @@ export class ReportingController {
       return trimmed;
     }
 
-    throw new BadRequestException("Filtro de classificacao invalido");
+    throw new BadRequestException("Filtro de classificação inválido");
   }
 
   private isDateOnly(value?: string): value is string {

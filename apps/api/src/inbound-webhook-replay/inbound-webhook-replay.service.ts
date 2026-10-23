@@ -170,7 +170,7 @@ export class InboundWebhookReplayService {
       channel.workspaceId !== actor.workspaceId ||
       channel.connectionId !== connectionId
     )
-      throw new NotFoundException("Canal nao encontrado nesta conexao");
+      throw new NotFoundException("Canal não encontrado nesta conexão");
     const context = await studentReplayContext(
       this.prisma,
       actor.workspaceId,
@@ -188,13 +188,13 @@ export class InboundWebhookReplayService {
       select: { id: true },
     });
     const unavailableReason = !this.replayEnabled()
-      ? "Recuperacao indisponivel. O operador precisa habilitar INBOUND_WEBHOOKS_ENABLED e INBOUND_WEBHOOK_REPLAY_ENABLED na API e reiniciar o servico."
+      ? "Recuperação indisponível. O operador precisa habilitar INBOUND_WEBHOOKS_ENABLED e INBOUND_WEBHOOK_REPLAY_ENABLED na API e reiniciar o serviço."
       : !this.env.META_APP_SECRET?.trim()
         ? missingMetaSigningSecretMessage
         : !context
-          ? "Habilite o canal, valide a rota Meta e use a integracao Meta Cloud nativa v1 disponivel antes de recuperar."
+          ? "Habilite o canal, valide a rota Meta e use a integração Meta Cloud nativa v1 disponível antes de recuperar."
           : active
-            ? "Esta conexao ja possui uma recuperacao em andamento. Aguarde e atualize o resultado."
+            ? "Esta conexão já possui uma recuperação em andamento. Aguarde e atualize o resultado."
             : null;
     const { events, scanned } = await this.studentCandidates(
       actor,
@@ -284,7 +284,7 @@ export class InboundWebhookReplayService {
       ticket.channelId !== channelId
     )
       throw new BadRequestException(
-        "A previa nao pertence a este owner, conexao e canal",
+        "A prévia não pertence a este owner, conexão e canal",
       );
     const batch = await this.authorizeReplay(
       connectionId,
@@ -331,7 +331,7 @@ export class InboundWebhookReplayService {
       batch.connectionId !== connectionId ||
       batch.channelId !== channelId
     )
-      throw new NotFoundException("Recuperacao nao encontrada neste canal");
+      throw new NotFoundException("Recuperação não encontrada neste canal");
     return this.studentBatchResult(this.prisma, batch);
   }
 
@@ -586,7 +586,7 @@ export class InboundWebhookReplayService {
     const key = this.env.INBOUND_WEBHOOK_ENCRYPTION_KEY;
     if (!key)
       throw new ServiceUnavailableException(
-        "Criptografia de webhooks indisponivel",
+        "Criptografia de webhooks indisponível",
       );
     const body = Buffer.from(JSON.stringify(ticket)).toString("base64url");
     return `${body}.${createHmac("sha256", key).update(`student-replay-v1:${body}`).digest("base64url")}`;
@@ -628,7 +628,7 @@ export class InboundWebhookReplayService {
       return ticket;
     } catch {
       throw new BadRequestException(
-        "A previa expirou ou mudou. Atualize a previa antes de enviar",
+        "A prévia expirou ou mudou. Atualize a prévia antes de enviar",
       );
     }
   }
@@ -924,7 +924,7 @@ export class InboundWebhookReplayService {
     );
     if (!proof || !["canary_1", "remaining"].includes(selection))
       throw new BadRequestException(
-        "Revise a previa antes de confirmar o envio",
+        "Revise a prévia antes de confirmar o envio",
       );
     assertMetaCloudSigningConfigured(connection.provider, this.env);
     const requestedLimit = this.replaySelectionLimit(selection);
@@ -938,13 +938,13 @@ export class InboundWebhookReplayService {
 
     if (confirmation !== connection.displayName) {
       throw new BadRequestException(
-        "Digite exatamente o nome da conexao para autorizar",
+        "Digite exatamente o nome da conexão para autorizar",
       );
     }
 
     if (!["observation", "production"].includes(connection.status)) {
       throw new ConflictException(
-        "A conexao precisa estar em observacao ou producao para o replay controlado",
+        "A conexão precisa estar em observação ou produção para o replay controlado",
       );
     }
 
@@ -968,7 +968,7 @@ export class InboundWebhookReplayService {
     });
 
     if (channelExists !== 1) {
-      throw new BadRequestException("Canal invalido para esta conexao");
+      throw new BadRequestException("Canal inválido para esta conexão");
     }
 
     const now = new Date();
@@ -983,7 +983,7 @@ export class InboundWebhookReplayService {
         await this.assertStudentReplayLicense();
         if (proof.expires <= Date.now())
           throw new BadRequestException(
-            "A previa expirou ou mudou. Atualize a previa antes de enviar",
+            "A prévia expirou ou mudou. Atualize a prévia antes de enviar",
           );
         const currentContext = await studentReplayContext(
           tx,
@@ -993,7 +993,7 @@ export class InboundWebhookReplayService {
         );
         if (!currentContext || currentContext !== proof.context)
           throw new ConflictException(
-            "A conexao ou a rota mudou. Atualize a previa antes de enviar",
+            "A conexão ou a rota mudou. Atualize a prévia antes de enviar",
           );
         if (
           selection === "remaining" &&
@@ -1006,7 +1006,7 @@ export class InboundWebhookReplayService {
           ))
         )
           throw new ConflictException(
-            "Envie um de teste e aguarde a confirmacao de entrega antes de recuperar os demais",
+            "Envie um de teste e aguarde a confirmação de entrega antes de recuperar os demais",
           );
         if (
           await studentReplayDispatchUnsettled(
@@ -1016,7 +1016,7 @@ export class InboundWebhookReplayService {
           )
         )
           throw new ConflictException(
-            "Esta conexao ja possui um replay em andamento",
+            "Esta conexão já possui um replay em andamento",
           );
         const activeBatch = await tx.inboundWebhookReplayBatch.findFirst({
           where: {
@@ -1031,7 +1031,7 @@ export class InboundWebhookReplayService {
 
         if (activeBatch) {
           throw new ConflictException(
-            "Esta conexao ja possui um replay em andamento",
+            "Esta conexão já possui um replay em andamento",
           );
         }
 
@@ -1111,7 +1111,7 @@ export class InboundWebhookReplayService {
 
         if (events.length === 0) {
           throw new BadRequestException(
-            "Nenhum evento possui rota completa e payload disponivel",
+            "Nenhum evento possui rota completa e payload disponível",
           );
         }
 
@@ -1140,7 +1140,7 @@ export class InboundWebhookReplayService {
 
         if (inserted.count === 0) {
           throw new ConflictException(
-            "Os eventos elegiveis ja pertencem a outro replay",
+            "Os eventos elegíveis já pertencem a outro replay",
           );
         }
 
@@ -1181,7 +1181,7 @@ export class InboundWebhookReplayService {
     } catch (error) {
       if (this.prismaErrorCode(error) === "P2002") {
         throw new ConflictException(
-          "Esta conexao ja possui um replay em andamento",
+          "Esta conexão já possui um replay em andamento",
         );
       }
 
@@ -1196,7 +1196,7 @@ export class InboundWebhookReplayService {
     } catch {
       await this.removeUnqueuedBatch(batch.id, batch.workspaceId);
       throw new ServiceUnavailableException(
-        "Nao foi possivel iniciar o replay; tente novamente",
+        "Não foi possível iniciar o replay; tente novamente",
       );
     }
 
@@ -2096,7 +2096,7 @@ export class InboundWebhookReplayService {
     const decision = await this.licenseClient?.getLockState();
     if (!decision || (!decision.inert && decision.locked))
       throw new ConflictException(
-        "A licenca precisa estar utilizavel antes de recuperar CTWAs",
+        "A licença precisa estar utilizável antes de recuperar CTWAs",
       );
   }
 

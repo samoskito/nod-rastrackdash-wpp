@@ -39,7 +39,7 @@ export class MetaReportSyncQueueService {
       }
   > {
     if (!this.connectionResolver) {
-      throw new NotFoundException("Roteamento Meta indisponivel");
+      throw new NotFoundException("Roteamento Meta indisponível");
     }
 
     const targets = await this.connectionResolver.listReportingSyncTargets(
@@ -48,7 +48,7 @@ export class MetaReportSyncQueueService {
 
     if (targets.length === 0) {
       throw new NotFoundException(
-        "Nenhuma conta Meta ativa esta pronta para sincronizacao",
+        "Nenhuma conta Meta ativa está pronta para sincronização",
       );
     }
 

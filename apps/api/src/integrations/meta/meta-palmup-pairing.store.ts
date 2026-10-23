@@ -31,7 +31,7 @@ export class MetaPalmupPairingStore implements OnModuleDestroy {
       if (saved !== "OK") throw new Error("Pairing not saved");
     } catch {
       throw new ServiceUnavailableException(
-        "Login social PalmUP temporariamente indisponivel",
+        "Login social PalmUP temporariamente indisponível",
       );
     }
   }
@@ -45,7 +45,7 @@ export class MetaPalmupPairingStore implements OnModuleDestroy {
       return await this.getRedis().getdel(this.key(workspaceId, pairingId));
     } catch {
       throw new ServiceUnavailableException(
-        "Login social PalmUP temporariamente indisponivel",
+        "Login social PalmUP temporariamente indisponível",
       );
     }
   }

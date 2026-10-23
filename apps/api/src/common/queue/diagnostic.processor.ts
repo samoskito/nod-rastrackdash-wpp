@@ -33,7 +33,7 @@ export class DiagnosticProcessor extends WorkerHost {
       });
 
       if (!diagnosticEvent) {
-        throw new NotFoundException("Evento de diagnostico nao encontrado");
+        throw new NotFoundException("Evento de diagnóstico não encontrado");
       }
 
       if (conversionEventLogId) {

@@ -65,7 +65,7 @@ export class WorkspaceContextService {
     );
 
     if (!workspace) {
-      throw new NotFoundException("Workspace nao encontrado");
+      throw new NotFoundException("Workspace não encontrado");
     }
 
     if (workspace.operationalStatus === "blocked") {

@@ -97,7 +97,7 @@ export class ConversionEventProcessor extends WorkerHost {
     });
 
     if (!log?.workspaceId) {
-      throw new NotFoundException("Evento de conversao nao encontrado");
+      throw new NotFoundException("Evento de conversão não encontrado");
     }
 
     const scopedData: ConversionEventJobPayload = {

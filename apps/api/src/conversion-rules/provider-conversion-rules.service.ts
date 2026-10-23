@@ -104,7 +104,7 @@ import {
 
 const ruleNotFoundMessage = "Regra de conversao do provedor nao encontrada";
 const connectionNotFoundMessage = "Conexao nao encontrada";
-const endpointNotFoundMessage = "Endpoint de automacao nao encontrado";
+const endpointNotFoundMessage = "Endpoint de automação não encontrado";
 
 const providerRuleInclude = {
   conversionRule: true,
@@ -424,7 +424,7 @@ export class ProviderConversionRulesService {
       this.requireCreateRequestKey(requestKey);
       const parsed =
         providerConversionRuleIdempotentCreateInputSchema.safeParse(input);
-      if (!parsed.success) throw new BadRequestException("Payload invalido");
+      if (!parsed.success) throw new BadRequestException("Payload inválido");
       input = parsed.data;
     }
     const requestHash =
@@ -524,7 +524,7 @@ export class ProviderConversionRulesService {
             !["umbler", "uazapi", "unnichat"].includes(connection.provider)
           ) {
             throw new BadRequestException(
-              "Automacao por tag ainda so esta disponivel para este provedor",
+              "Automação por tag ainda só está disponível para este provedor",
             );
           }
           if (isPaytAutomation && connection?.provider === "payt") {
@@ -813,7 +813,7 @@ export class ProviderConversionRulesService {
           error: "Service Unavailable",
           code: "provider_rule_create_unknown",
           message:
-            "Resultado da criacao desconhecido; reconcilie a mesma tentativa",
+            "Resultado da criação desconhecido; reconcilie a mesma tentativa",
         });
       });
 
@@ -869,7 +869,7 @@ export class ProviderConversionRulesService {
         statusCode: 400,
         error: "Bad Request",
         code: "provider_rule_create_key_invalid",
-        message: "Chave de tentativa invalida",
+        message: "Chave de tentativa inválida",
       });
     }
   }
@@ -982,7 +982,7 @@ export class ProviderConversionRulesService {
         statusCode: 503,
         error: "Service Unavailable",
         code: "provider_rule_create_receipt_unknown",
-        message: "Nao foi possivel confirmar a tentativa",
+        message: "Não foi possível confirmar a tentativa",
       });
     }
   }
@@ -1139,7 +1139,7 @@ export class ProviderConversionRulesService {
 
       const origin = providerRuleOrigin(current);
       if (!origin) {
-        throw new ConflictException("Origem da regra nao suportada");
+        throw new ConflictException("Origem da regra não suportada");
       }
       const currentScope = providerRuleScope(current);
       const nextScope = input.scope ?? currentScope;
@@ -1154,7 +1154,7 @@ export class ProviderConversionRulesService {
       if (nextScope === "all_numbers" && input.channelIds) {
         // Never silently drop the chosen numbers of a global rule.
         throw new BadRequestException(
-          'Regra para todos os numeros nao recebe canais; envie scope "specific_numbers" para escolher numeros',
+          'Regra para todos os números não recebe canais; envie scope "specific_numbers" para escolher números',
         );
       }
       // undefined = keep the chosen channels; [] = "all numbers" (no rows).
@@ -1397,7 +1397,7 @@ export class ProviderConversionRulesService {
               });
             if (result.count !== 1) {
               throw new ConflictException(
-                "Uma variante do catalogo mudou durante a atualizacao",
+                "Uma variante do catálogo mudou durante a atualização",
               );
             }
           }
@@ -1408,7 +1408,7 @@ export class ProviderConversionRulesService {
             });
           if (executions > 0) {
             throw new ConflictException(
-              "O catalogo com historico aceita apenas alteracoes de aliases",
+              "O catálogo com histórico aceita apenas alterações de aliases",
             );
           }
           await this.replaceCatalog(
@@ -2156,7 +2156,7 @@ export class ProviderConversionRulesService {
     });
     if (!origin) {
       throw new BadRequestException(
-        "Automacao por tag ainda so esta disponivel para este provedor",
+        "Automação por tag ainda só está disponível para este provedor",
       );
     }
     return origin;
@@ -3288,7 +3288,7 @@ export class ProviderConversionRulesService {
 
     if (hasValueUpdate && !isValuedRule) {
       throw new BadRequestException(
-        "Valores padrao pertencem apenas a regras de compra/checkout com valor",
+        "Valores padrão pertencem apenas a regras de compra/checkout com valor",
       );
     }
     if (input.exampleMessage !== undefined && !isMessagePhraseRule) {
@@ -3346,7 +3346,7 @@ export class ProviderConversionRulesService {
       current.conversionRule.triggerType !== "structured_catalog"
     ) {
       throw new BadRequestException(
-        "Catalogos pertencem apenas a regras de compra estruturada",
+        "Catálogos pertencem apenas a regras de compra estruturada",
       );
     }
     const isMessageRule = ["message_phrase", "structured_catalog"].includes(
@@ -3366,7 +3366,7 @@ export class ProviderConversionRulesService {
       providerRuleOrigin(current) !== "whatsapp_label"
     ) {
       throw new BadRequestException(
-        "Etiquetas pertencem apenas a automacao UAZAPI",
+        "Etiquetas pertencem apenas a automação UAZAPI",
       );
     }
     if (

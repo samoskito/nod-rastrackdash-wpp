@@ -224,7 +224,7 @@ export class InboundWebhookConnectionsService {
       // workspace's WhatsApp instance (see UazapiConversionBridgeService);
       // they never go through the generic secret-based creation flow.
       throw new ConflictException(
-        "Conexoes UAZAPI sao criadas automaticamente a partir da instancia WhatsApp",
+        "Conexões UAZAPI são criadas automaticamente a partir da instância WhatsApp",
       );
     }
     if (input.provider === "payt") {
@@ -269,7 +269,7 @@ export class InboundWebhookConnectionsService {
 
       if (!release) {
         throw new ConflictException(
-          "Versao de observacao do provedor indisponivel",
+          "Versão de observação do provedor indisponível",
         );
       }
 
@@ -559,7 +559,7 @@ export class InboundWebhookConnectionsService {
 
     if (!config.enabled) {
       throw new ServiceUnavailableException(
-        "Conexoes de webhook de entrada ainda nao estao habilitadas",
+        "Conexões de webhook de entrada ainda não estão habilitadas",
       );
     }
 

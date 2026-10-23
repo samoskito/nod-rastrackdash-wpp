@@ -34,7 +34,7 @@ export class BackofficeWorkspacesController {
     const parsed = backofficeWorkspaceCreateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return this.workspaceAccess.createWorkspace(parsed.data, owner);
@@ -50,7 +50,7 @@ export class BackofficeWorkspacesController {
     const parsed = backofficeWorkspaceDeleteInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     return this.workspaceAccess.deleteWorkspace(

@@ -65,8 +65,8 @@ import {
   UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
 } from "./providers/unnichat/unnichat-automation-v1.parser";
 
-const publicEndpointNotFoundMessage = "Webhook nao encontrado";
-const publicPersistenceFailureMessage = "Webhook temporariamente indisponivel";
+const publicEndpointNotFoundMessage = "Webhook não encontrado";
+const publicPersistenceFailureMessage = "Webhook temporariamente indisponível";
 const fallbackDedupeWindowMs = 5 * 60 * 1_000;
 const ignoredUntrackedLeadReason = "ignored_untracked_lead";
 /** Parsed-but-not-for-this-rule callbacks: recorded as ignored, never invalid. */
@@ -966,7 +966,7 @@ export class InboundConversionAutomationIngestionService {
       rule.conversionRule.triggerType !== "provider_automation" ||
       rule.connection.removedAt
     ) {
-      throw new NotFoundException("Regra de automacao Umbler nao encontrada");
+      throw new NotFoundException("Regra de automação Umbler não encontrada");
     }
 
     return endpoint;
@@ -984,7 +984,7 @@ export class InboundConversionAutomationIngestionService {
       !config.conversionProductionEnabled
     ) {
       throw new ServiceUnavailableException(
-        "O processamento de conversoes da Umbler esta desativado",
+        "O processamento de conversões da Umbler está desativado",
       );
     }
     const endpoint = await this.requireAutomationEndpoint(
@@ -1023,7 +1023,7 @@ export class InboundConversionAutomationIngestionService {
       include: automationAuditDeliveryInclude,
     });
     if (!delivery) {
-      throw new NotFoundException("Callback nao encontrado nesta regra");
+      throw new NotFoundException("Callback não encontrado nesta regra");
     }
 
     return delivery;
@@ -1681,7 +1681,7 @@ export class InboundConversionAutomationIngestionService {
       );
     }
     if (!rawBody || rawBody.length === 0) {
-      throw new BadRequestException("Payload JSON obrigatorio");
+      throw new BadRequestException("Payload JSON obrigatório");
     }
     if (rawBody.length > MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES) {
       throw new PayloadTooLargeException("Payload do webhook excede o limite");
@@ -1689,7 +1689,7 @@ export class InboundConversionAutomationIngestionService {
     try {
       JSON.parse(rawBody.toString("utf8"));
     } catch {
-      throw new BadRequestException("Payload JSON invalido");
+      throw new BadRequestException("Payload JSON inválido");
     }
     return rawBody;
   }

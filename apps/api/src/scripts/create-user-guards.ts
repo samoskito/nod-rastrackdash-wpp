@@ -7,7 +7,7 @@ export function assertCliUserIsNotPlatformAdmin(
 ): void {
   if (user?.platformRole) {
     throw new Error(
-      "Usuarios de plataforma devem ser administrados pelo bootstrap ou backoffice.",
+      "Usuários de plataforma devem ser administrados pelo bootstrap ou backoffice.",
     );
   }
 }

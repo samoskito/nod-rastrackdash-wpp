@@ -57,7 +57,7 @@ export function effectiveInboundParserStatus<T extends Release>(
 }
 
 export const missingMetaSigningSecretMessage =
-  "Configure META_APP_SECRET do seu proprio app Meta no ambiente da API antes de enviar. Nao use o segredo PalmUP nem cole segredos no chat.";
+  "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.";
 
 export function assertMetaCloudSigningConfigured(
   provider: string,

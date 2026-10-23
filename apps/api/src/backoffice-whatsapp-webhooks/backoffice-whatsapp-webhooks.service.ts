@@ -141,7 +141,7 @@ export class BackofficeWhatsappWebhooksService {
     })) as WebhookLogRecord | null;
 
     if (!record) {
-      throw new NotFoundException("Webhook nao encontrado");
+      throw new NotFoundException("Webhook não encontrado");
     }
 
     const payload = this.redactPayload(record.summaryPayload);
@@ -173,7 +173,7 @@ export class BackofficeWhatsappWebhooksService {
     })) as WhatsappConnectionRecord | null;
 
     if (!connection) {
-      throw new NotFoundException("Conexao WhatsApp nao encontrada");
+      throw new NotFoundException("Conexão WhatsApp não encontrada");
     }
     return connection;
   }

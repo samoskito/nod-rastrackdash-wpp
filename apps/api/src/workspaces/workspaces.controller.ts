@@ -73,7 +73,7 @@ export class WorkspacesController {
     const parsed = workspaceActiveInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     if (parsed.data.backoffice) {
@@ -104,7 +104,7 @@ export class WorkspacesController {
     const parsed = workspaceUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -137,7 +137,7 @@ export class WorkspacesController {
     const parsed = workspaceMemberRoleUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -157,7 +157,7 @@ export class WorkspacesController {
     const parsed = workspaceMemberManagerUpdateInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -182,7 +182,7 @@ export class WorkspacesController {
     const parsed = workspaceInviteInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -212,7 +212,7 @@ export class WorkspacesController {
     const parsed = workspaceInviteAcceptInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const authenticated = await this.authService.getSession(refreshToken);
@@ -245,7 +245,7 @@ export class WorkspacesController {
     const parsed = workspaceInviteNewUserAcceptInputSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestException("Payload invalido");
+      throw new BadRequestException("Payload inválido");
     }
 
     const result = await this.workspacesService.acceptInviteForNewUser(
