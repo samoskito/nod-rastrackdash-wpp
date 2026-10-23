@@ -228,7 +228,7 @@ describe("resendActivationEmailAction", () => {
 
   it("surfaces the API's error message on failure", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      apiError("Responsavel do workspace nao encontrado", 404),
+      apiError("Responsável do workspace não encontrado", 404),
     );
 
     const result = await resendActivationEmailAction(
@@ -237,7 +237,7 @@ describe("resendActivationEmailAction", () => {
     );
 
     expect(result.status).toBe("error");
-    expect(result.message).toBe("Responsavel do workspace nao encontrado");
+    expect(result.message).toBe("Responsável do workspace não encontrado");
   });
 });
 
@@ -302,7 +302,7 @@ describe("deleteBackofficeWorkspaceAction", () => {
   it("surfaces the API's pt-BR error message and never fabricates success", async () => {
     serverApiFetch.mockRejectedValueOnce(
       apiError(
-        "Workspace possui dados vinculados e nao pode ser excluido",
+        "Workspace possui dados vinculados e não pode ser excluído",
         409,
       ),
     );
@@ -319,7 +319,7 @@ describe("deleteBackofficeWorkspaceAction", () => {
 
     expect(result.status).toBe("error");
     expect(result.message).toBe(
-      "Workspace possui dados vinculados e nao pode ser excluido",
+      "Workspace possui dados vinculados e não pode ser excluído",
     );
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -365,7 +365,7 @@ describe("generateActivationLinkAction", () => {
 
   it("surfaces the API's error message and never fabricates a link on failure", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      apiError("Acao restrita ao proprietario da plataforma", 403),
+      apiError("Ação restrita ao proprietário da plataforma", 403),
     );
 
     const result = await generateActivationLinkAction(
@@ -374,7 +374,7 @@ describe("generateActivationLinkAction", () => {
     );
 
     expect(result.status).toBe("error");
-    expect(result.message).toBe("Acao restrita ao proprietario da plataforma");
+    expect(result.message).toBe("Ação restrita ao proprietário da plataforma");
     expect(result.activationUrl).toBeUndefined();
   });
 });

@@ -332,9 +332,9 @@ describe("Modal", () => {
       createElement(Modal, {
         open,
         onClose: () => setOpen(false),
-        title: "Titulo do modal",
-        description: "Descricao curta",
-        children: createElement("button", { type: "button" }, "Acao interna"),
+        title: "Título do modal",
+        description: "Descrição curta",
+        children: createElement("button", { type: "button" }, "Ação interna"),
       }),
     );
   }
@@ -342,12 +342,12 @@ describe("Modal", () => {
   it("labels the dialog, closes on backdrop click and unmounts by default", async () => {
     render(createElement(Harness));
 
-    expect(screen.queryByText("Acao interna")).toBeNull();
+    expect(screen.queryByText("Ação interna")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
 
-    const dialog = screen.getByRole("dialog", { name: "Titulo do modal" });
+    const dialog = screen.getByRole("dialog", { name: "Título do modal" });
     expect(dialog.getAttribute("aria-describedby")).toBe(
-      screen.getByText("Descricao curta").id,
+      screen.getByText("Descrição curta").id,
     );
     await waitFor(() =>
       expect(dialog.contains(document.activeElement)).toBe(true),
@@ -357,7 +357,7 @@ describe("Modal", () => {
     expect(backdrop).toBeTruthy();
     fireEvent.click(backdrop as Element);
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.queryByText("Acao interna")).toBeNull();
+    expect(screen.queryByText("Ação interna")).toBeNull();
   });
 
   it("keeps Tab inside the dialog", async () => {
@@ -366,13 +366,13 @@ describe("Modal", () => {
         open: true,
         onClose: () => undefined,
         title: "Foco preso",
-        children: createElement("button", { type: "button" }, "Ultimo"),
+        children: createElement("button", { type: "button" }, "Último"),
       }),
     );
 
     const dialog = screen.getByRole("dialog", { name: "Foco preso" });
     const close = within(dialog).getByRole("button", { name: "Fechar" });
-    const last = within(dialog).getByRole("button", { name: "Ultimo" });
+    const last = within(dialog).getByRole("button", { name: "Último" });
 
     last.focus();
     fireEvent.keyDown(last, { key: "Tab" });

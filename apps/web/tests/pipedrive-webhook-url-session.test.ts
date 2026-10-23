@@ -49,7 +49,7 @@ describe("Pipedrive one-time webhook URL (memory only)", () => {
     renderPanel({ rotateWebhookAction });
 
     fireEvent.click(screen.getByRole("button", { name: rotateLabel }));
-    expect(screen.getByText(/invalida qualquer URL anterior/)).toBeTruthy();
+    expect(screen.getByText(/inválida qualquer URL anterior/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
     expect(rotateWebhookAction).not.toHaveBeenCalled();

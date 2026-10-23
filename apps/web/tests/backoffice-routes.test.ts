@@ -102,7 +102,7 @@ describe("/backoffice/clients", () => {
     expect(html).toContain("cliente-exemplo");
     expect(html).toContain("fulano@cliente.com");
     expect(html).toContain('href="/backoffice"');
-    expect(html).toContain('aria-label="Areas do backoffice"');
+    expect(html).toContain('aria-label="Áreas do backoffice"');
     expect(html).toContain('aria-current="page"');
     expect(html).not.toContain("Sem backend multi-cliente neste template");
   });

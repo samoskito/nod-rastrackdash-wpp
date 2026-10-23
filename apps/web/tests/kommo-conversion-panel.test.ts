@@ -86,14 +86,14 @@ const pipelineRow = {
   id: "pipeline_1",
   name: "Vendas",
   sort: 1,
-  status: { id: "status_1", name: "Negociacao", type: "ordinary" },
+  status: { id: "status_1", name: "Negociação", type: "ordinary" },
   available: true,
 };
 
 const observationRule = {
   id: "rule_1",
   connectionId: "kommo_connection_1",
-  name: "Negociacao avancada",
+  name: "Negociação avançada",
   pipelineId: "pipeline_1",
   statusId: "status_1",
   eventName: "QualifiedLead" as const,
@@ -1288,8 +1288,8 @@ describe("Kommo panel: rules", () => {
     expect(screen.getByText("Observação (nada é enviado)")).toBeTruthy();
     expect(screen.getByText("Envio ativo (produção)")).toBeTruthy();
     expect(screen.getByText("Pausada", { selector: ".event-chip" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Pausar regra Negociacao avancada" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Ativar envio automático: Negociacao avancada" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pausar regra Negociação avançada" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ativar envio automático: Negociação avançada" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Voltar para observação: Compra ganha" })).toBeTruthy();
   });
 
@@ -1300,7 +1300,7 @@ describe("Kommo panel: rules", () => {
       rule: { ...observationRule, mode: "production" },
     } satisfies KommoRuleActionResult);
     renderPanel({ updateRuleAction });
-    fireEvent.click(screen.getByRole("button", { name: "Ativar envio automático: Negociacao avancada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ativar envio automático: Negociação avançada" }));
     expect(updateRuleAction).not.toHaveBeenCalled();
     const dialog = screen.getByRole("alertdialog");
     expect(dialog.textContent).toContain("Ativar o envio automático desta regra?");
@@ -1313,7 +1313,7 @@ describe("Kommo panel: rules", () => {
   it("deleting needs a confirmation and Escape cancels it", () => {
     const deleteRuleAction = vi.fn();
     renderPanel({ deleteRuleAction });
-    fireEvent.click(screen.getByRole("button", { name: "Remover regra Negociacao avancada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remover regra Negociação avançada" }));
     const dialog = screen.getByRole("alertdialog");
     expect(dialog.textContent).toContain("Remover esta regra? Esta ação não pode ser desfeita.");
     fireEvent.keyDown(dialog, { key: "Escape" });
@@ -1399,7 +1399,7 @@ describe("Kommo panel: audit authorization loss revokes everything", () => {
       await consultAudit();
       await screen.findByText("Lead Kommo #deal_e1");
       fireEvent.click(
-        screen.getByRole("button", { name: "Ativar envio automático: Negociacao avancada" }),
+        screen.getByRole("button", { name: "Ativar envio automático: Negociação avançada" }),
       );
       expectPositivePreconditions();
 
@@ -1441,7 +1441,7 @@ describe("Kommo panel: audit authorization loss revokes everything", () => {
     await screen.findByText(/Não foi possível carregar a auditoria agora/);
     expect(screen.getByText("Lead Kommo #deal_e1")).toBeTruthy();
     expect(screen.getByLabelText("URL do webhook Kommo")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Ativar envio automático: Negociacao avancada" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ativar envio automático: Negociação avançada" })).toBeTruthy();
     expectNoSecretLeak(view.container);
   });
 
@@ -1501,7 +1501,7 @@ describe("Kommo panel: audit authorization loss revokes everything", () => {
     await screen.findByText("Lead Kommo #deal_e1");
     fireEvent.click(screen.getByRole("button", { name: "Atualizar auditoria" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Remover regra Negociacao avancada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remover regra Negociação avançada" }));
     await act(async () => {
       fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Remover" }));
     });
@@ -1628,7 +1628,7 @@ describe("Kommo rules editor inside the Integrations hub window", () => {
     );
 
     // The rules listed in Conversões are edited here: list, create and edit.
-    expect(screen.getAllByText("Negociacao avancada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Negociação avançada").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Compra ganha").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Nova regra" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
@@ -1640,7 +1640,7 @@ describe("Kommo rules editor inside the Integrations hub window", () => {
     render(
       managerElement(scope, managerActions(), [conn()], { canManage: false }),
     );
-    expect(screen.getAllByText("Negociacao avancada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Negociação avançada").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Nova regra" })).toBeNull();
 
     cleanup();

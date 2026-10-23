@@ -10,7 +10,7 @@ describe("email verification route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Token invalido");
+    expect(html).toContain("Token inválido");
     expect(html).toContain('href="/settings"');
   });
 
@@ -25,6 +25,6 @@ describe("email verification route", () => {
     expect(html).toContain("Confirmar email");
     expect(html).toContain('name="token"');
     expect(html).toContain('value="verify-token-1234567890"');
-    expect(html).toContain("Validar verificacao");
+    expect(html).toContain("Validar verificação");
   });
 });

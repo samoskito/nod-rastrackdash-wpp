@@ -142,7 +142,7 @@ describe("POST /webhooks/inbound/:connectionId Meta Cloud", () => {
         "sha256=" + "0".repeat(64),
         body(),
       ),
-    ).rejects.toMatchObject({ status: 404, message: "Webhook nao encontrado" });
+    ).rejects.toMatchObject({ status: 404, message: "Webhook não encontrado" });
   });
 
   it("accepts a path-scoped observation delivery without a signature when app secret is not configured", async () => {

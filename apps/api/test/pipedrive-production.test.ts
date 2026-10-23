@@ -515,7 +515,7 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     const log = h.state.conversionEventLog![0]!;
     await expect(
       h.conversions.sendReadyEvent(log.id, { workspaceId: "workspace-b" }),
-    ).rejects.toThrow("Evento de conversao nao encontrado");
+    ).rejects.toThrow("Evento de conversão não encontrado");
     expect(
       await h.conversions.preparePipedriveSenderRetry(log.id, "workspace-b"),
     ).toBe("error");

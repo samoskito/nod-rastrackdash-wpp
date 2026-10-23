@@ -181,7 +181,7 @@ describe("platform admin CLI env resolution", () => {
       }),
     ).toBe("owner@example.com");
     expect(() => parseArgs(["--password", "nope"])).toThrow(
-      "Senha por argumento nao e aceita",
+      "Senha por argumento não é aceita",
     );
   });
 

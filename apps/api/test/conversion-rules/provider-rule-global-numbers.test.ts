@@ -1283,7 +1283,7 @@ describe("Todos os números: motivos (Umbler/Unnichat)", () => {
     ).toBe("meta_route_missing");
     expect(
       pendingReasonFromError(
-        new ConflictException("Finalize o replay em andamento antes de ativar a producao"),
+        new ConflictException("Finalize o replay em andamento antes de ativar a produção"),
         "connection_not_production",
       ),
     ).toBe("connection_not_production");

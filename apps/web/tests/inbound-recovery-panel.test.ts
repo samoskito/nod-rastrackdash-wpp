@@ -69,7 +69,7 @@ async function mount() {
   await click("Recuperar CTWAs anteriores");
 }
 function confirmName() {
-  fireEvent.change(screen.getByLabelText("Nome da conexao para confirmar"), {
+  fireEvent.change(screen.getByLabelText("Nome da conexão para confirmar"), {
     target: { value: "Meta oficial" },
   });
 }
@@ -106,7 +106,7 @@ describe("owner recovery clicks and status polling", () => {
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     await click("Enviar um de teste");
     expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining("UMA conversao CTWA real"),
+      expect.stringContaining("UMA conversão CTWA real"),
     );
     expect(authorizeInboundRecoveryAction).not.toHaveBeenCalled();
     await click("Enviar um de teste");
@@ -137,7 +137,7 @@ describe("owner recovery clicks and status polling", () => {
     });
     expect(screen.getByRole("status").textContent).toContain("Processando");
     expect(
-      screen.queryByRole("button", { name: "Recuperar os demais (ate 500)" }),
+      screen.queryByRole("button", { name: "Recuperar os demais (até 500)" }),
     ).toBeNull();
     vi.mocked(previewInboundRecoveryAction).mockResolvedValue({
       ok: true,
@@ -160,7 +160,7 @@ describe("owner recovery clicks and status polling", () => {
       "Entrega confirmada pela Meta",
     );
     confirmName();
-    await click("Recuperar os demais (ate 500)");
+    await click("Recuperar os demais (até 500)");
     expect(authorizeInboundRecoveryAction).toHaveBeenLastCalledWith(
       "connection",
       "channel",
@@ -171,7 +171,7 @@ describe("owner recovery clicks and status polling", () => {
       },
     );
     expect(window.confirm).toHaveBeenLastCalledWith(
-      expect.stringContaining("ate 500"),
+      expect.stringContaining("até 500"),
     );
   });
   it.each(["failed", "delivery_unknown"] as const)(
@@ -200,7 +200,7 @@ describe("owner recovery clicks and status polling", () => {
         state === "delivery_unknown" ? "UNKNOWN" : "Falhou",
       );
       expect(
-        screen.queryByRole("button", { name: "Recuperar os demais (ate 500)" }),
+        screen.queryByRole("button", { name: "Recuperar os demais (até 500)" }),
       ).toBeNull();
       expect(authorizeInboundRecoveryAction).toHaveBeenCalledTimes(1);
       await act(async () => {
@@ -227,8 +227,8 @@ describe("owner recovery clicks and status polling", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "INBOUND_WEBHOOK_REPLAY_ENABLED",
     );
-    await click("Atualizar previa e resultado");
-    expect(screen.getByText(/Nenhum CTWA anterior elegivel/)).toBeTruthy();
+    await click("Atualizar prévia e resultado");
+    expect(screen.getByText(/Nenhum CTWA anterior elegível/)).toBeTruthy();
     expect(authorizeInboundRecoveryAction).not.toHaveBeenCalled();
   });
   it("invalidates an approval on authorization error and requires a fresh preview", async () => {
@@ -236,16 +236,16 @@ describe("owner recovery clicks and status polling", () => {
     confirmName();
     vi.mocked(authorizeInboundRecoveryAction).mockResolvedValue({
       ok: false,
-      message: "A conexao ou a rota mudou. Atualize a previa antes de enviar",
+      message: "A conexão ou a rota mudou. Atualize a prévia antes de enviar",
     });
     await click("Enviar um de teste");
     expect(screen.getByRole("alert").textContent).toContain("rota mudou");
     expect(
-      screen.queryByLabelText("Nome da conexao para confirmar"),
+      screen.queryByLabelText("Nome da conexão para confirmar"),
     ).toBeNull();
-    await click("Atualizar previa e resultado");
+    await click("Atualizar prévia e resultado");
     expect(
-      screen.getByLabelText("Nome da conexao para confirmar"),
+      screen.getByLabelText("Nome da conexão para confirmar"),
     ).toBeTruthy();
   });
   it("continues polling after a transient read error and cancels when closed", async () => {
@@ -255,7 +255,7 @@ describe("owner recovery clicks and status polling", () => {
     vi.mocked(inboundRecoveryResultAction)
       .mockResolvedValueOnce({
         ok: false,
-        message: "API temporariamente indisponivel",
+        message: "API temporariamente indisponível",
       })
       .mockResolvedValue({ ok: true, data: result("processing") });
     await act(async () => {

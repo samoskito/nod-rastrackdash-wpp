@@ -61,7 +61,7 @@ describe("ops alert settings server action", () => {
     );
     expect(result).toEqual({
       status: "success",
-      message: "Alertas de operacao atualizados.",
+      message: "Alertas de operação atualizados.",
       nonce: expect.any(Number),
     });
     expect(revalidatePath).toHaveBeenCalledWith("/settings");
@@ -156,7 +156,7 @@ describe("ops alert settings server action", () => {
 
     expect(result).toEqual({
       status: "error",
-      message: "Sem permissao para gerenciar alertas operacionais.",
+      message: "Sem permissão para gerenciar alertas operacionais.",
       nonce: expect.any(Number),
     });
   });

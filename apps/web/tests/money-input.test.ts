@@ -16,7 +16,7 @@ describe("money input", () => {
 
   it.each(["", "-1", "R$ -50,00"])("rejects invalid value %s", (value) => {
     expect(() => parseMoneyInputToCents(value)).toThrow(
-      "Valor mensal invalido",
+      "Valor mensal inválido",
     );
   });
 });

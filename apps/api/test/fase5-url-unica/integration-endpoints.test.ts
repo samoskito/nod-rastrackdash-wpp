@@ -464,7 +464,7 @@ describe("Payt: one URL per workspace", () => {
     const stored = w.deliveries.size;
     await expect(
       w.postOldUrl("payt_global", paytSale({ order: "L2" })),
-    ).rejects.toThrow("Webhook nao encontrado");
+    ).rejects.toThrow("Webhook não encontrado");
     // Nothing recorded for the closed URL; its "last received" does not move.
     expect(w.deliveries.size).toBe(stored);
     expect(w.endpoints.get("endpoint_payt_global").lastDeliveryAt).toBeNull();
@@ -518,7 +518,7 @@ describe("Payt: one URL per workspace", () => {
     w.paidLeads.resolve.mockRejectedValueOnce(new Error("database down"));
     await expect(
       w.post(endpoint.id, token, paytSale({ order: "P1" })),
-    ).rejects.toThrow("Webhook temporariamente indisponivel");
+    ).rejects.toThrow("Webhook temporariamente indisponível");
     const receipt = [...w.receipts.values()][0];
     expect(receipt).toMatchObject({ status: "pending", reasonCode: "routing_pending" });
     const list = await w.service.listUnattributed(W, "payt");
@@ -535,17 +535,17 @@ describe("Payt: one URL per workspace", () => {
     const w = world({ channels: jeanChannels, rules: paytRules, leads: jeanLeads });
     const { endpoint, token } = await w.connect("payt");
     await expect(w.post(endpoint.id, "wrong", paytSale({}))).rejects.toThrow(
-      "Webhook nao encontrado",
+      "Webhook não encontrado",
     );
     await expect(w.post(endpoint.id, "", paytSale({}))).rejects.toThrow(
-      "Webhook nao encontrado",
+      "Webhook não encontrado",
     );
     await expect(w.post("unknown-id", token, paytSale({}))).rejects.toThrow(
-      "Webhook nao encontrado",
+      "Webhook não encontrado",
     );
     await w.service.remove(W, endpoint.id, "operator");
     await expect(w.post(endpoint.id, token, paytSale({}))).rejects.toThrow(
-      "Webhook nao encontrado",
+      "Webhook não encontrado",
     );
     expect(w.receipts.size).toBe(0);
   });
@@ -556,16 +556,16 @@ describe("Payt: one URL per workspace", () => {
     const result = await w.post(endpoint.id, token, paytSale({ order: "O1" }));
     await expect(
       w.service.reveal(OTHER_WORKSPACE, endpoint.id, "intruder"),
-    ).rejects.toThrow("Endereco nao encontrado");
+    ).rejects.toThrow("Endereço não encontrado");
     await expect(
       w.service.rotate(OTHER_WORKSPACE, endpoint.id, "intruder"),
-    ).rejects.toThrow("Endereco nao encontrado");
+    ).rejects.toThrow("Endereço não encontrado");
     await expect(
       w.service.remove(OTHER_WORKSPACE, endpoint.id, "intruder"),
-    ).rejects.toThrow("Endereco nao encontrado");
+    ).rejects.toThrow("Endereço não encontrado");
     await expect(
       w.service.retryEvent(OTHER_WORKSPACE, result.eventId, "intruder"),
-    ).rejects.toThrow("Evento nao encontrado");
+    ).rejects.toThrow("Evento não encontrado");
     expect((await w.service.list(OTHER_WORKSPACE, true)).endpoints).toEqual([]);
     expect(
       (await w.service.listUnattributed(OTHER_WORKSPACE, null)).total,
@@ -579,7 +579,7 @@ describe("Payt: one URL per workspace", () => {
     const newToken = new URL(rotated.url!).searchParams.get("token")!;
     expect(newToken).not.toBe(token);
     await expect(w.post(endpoint.id, token, paytSale({}))).rejects.toThrow(
-      "Webhook nao encontrado",
+      "Webhook não encontrado",
     );
     await expect(
       w.post(endpoint.id, newToken, paytSale({ order: "ROT1" })),

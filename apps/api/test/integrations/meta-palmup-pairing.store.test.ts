@@ -88,7 +88,7 @@ describe("PalmUP server-side pairing store", () => {
           : store.consume("workspace-1", "pairing-1"),
       ).rejects.toMatchObject({
         status: 503,
-        message: "Login social PalmUP temporariamente indisponivel",
+        message: "Login social PalmUP temporariamente indisponível",
       });
     },
   );

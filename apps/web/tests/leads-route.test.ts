@@ -65,10 +65,10 @@ describe("leads route", () => {
     expect(html).toContain("Etapa atual");
     expect(html).toContain("Lead qualificado");
     expect(html).toContain("Conversas recebidas");
-    expect(html).toContain("Filtros avancados");
+    expect(html).toContain("Filtros avançados");
     expect(html).toContain('name="pageSize"');
     expect(html).toContain("Recebido");
-    expect(html).toContain("Ultima atividade");
+    expect(html).toContain("Última atividade");
     expect(html).toContain('class="lead-mobile-list"');
     expect(html).toContain('aria-label="Abrir Mariana Alves"');
     expect(html).not.toContain("<th>Status</th>");
@@ -187,7 +187,7 @@ describe("leads route", () => {
       "http://localhost:3333/leads/page?campaignId=cmp_1&adSetId=adset_1&adId=ad_1&since=2026-07-01&until=2026-07-02&page=1&pageSize=25",
       expect.objectContaining({ credentials: "include" }),
     );
-    expect(html).toContain("Filtro do relatorio aplicado");
+    expect(html).toContain("Filtro do relatório aplicado");
     expect(html).toContain('name="campaignId"');
     expect(html).toContain('name="adSetId"');
     expect(html).toContain('name="adId"');
@@ -249,8 +249,8 @@ describe("leads route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("API indisponivel");
-    expect(html).toContain("Nao foi possivel carregar leads");
+    expect(html).toContain("API indisponível");
+    expect(html).toContain("Não foi possível carregar leads");
     expect(html).not.toContain("Mariana Alves");
     expect(html).not.toContain("Rafael Costa");
     expect(html).not.toContain("Black Friday WhatsApp");

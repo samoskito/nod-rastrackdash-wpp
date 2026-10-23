@@ -76,8 +76,8 @@ describe("navigation", () => {
       expect(html).toContain(item.label);
     }
 
-    expect(html).toContain('aria-label="Operacao"');
-    expect(html).toContain('aria-label="Gestao"');
+    expect(html).toContain('aria-label="Operação"');
+    expect(html).toContain('aria-label="Gestão"');
     expect(html).toContain('class="active" aria-current="page"');
     expect(html).toContain('class="nav-icon"');
     expect(html).toContain("Panel content");
@@ -107,17 +107,17 @@ describe("navigation", () => {
     expect(analystHtml).not.toContain('href="/integrations"');
     expect(analystHtml).not.toContain('href="/settings"');
     expect(analystHtml).not.toContain('href="/conversions"');
-    expect(analystHtml).not.toContain('aria-label="Gestao"');
+    expect(analystHtml).not.toContain('aria-label="Gestão"');
 
     const unknownHtml = renderToStaticMarkup(
       createElement(AppShell, null, createElement("p", null, "Panel content")),
     );
     expect(unknownHtml).toContain('href="/overview"');
     expect(unknownHtml).not.toContain('href="/integrations"');
-    expect(unknownHtml).not.toContain('aria-label="Gestao"');
+    expect(unknownHtml).not.toContain('aria-label="Gestão"');
   });
 
-  it("shows integrations, conversions and settings to a manager, in that order inside Gestao", () => {
+  it("shows integrations, conversions and settings to a manager, in that order inside Gestão", () => {
     const html = renderToStaticMarkup(
       createElement(AppShell, {
         workspace: {
@@ -140,9 +140,9 @@ describe("navigation", () => {
     expect(html).toContain('href="/integrations"');
     expect(html).toContain('href="/conversions"');
     expect(html).toContain('href="/settings"');
-    expect(html).toContain('aria-label="Gestao"');
+    expect(html).toContain('aria-label="Gestão"');
 
-    const management = html.slice(html.indexOf('aria-label="Gestao"'));
+    const management = html.slice(html.indexOf('aria-label="Gestão"'));
     expect(management.indexOf('href="/integrations"')).toBeLessThan(
       management.indexOf('href="/conversions"'),
     );
@@ -189,12 +189,12 @@ describe("navigation", () => {
           operationalStatus: "active",
           permissions: ownerPermissions,
         },
-        brand: { ...defaultBrandConfig, name: "Minha Agencia" },
+        brand: { ...defaultBrandConfig, name: "Minha Agência" },
         children: createElement("p", null, "Panel content"),
       }),
     );
 
-    expect(html.split("Minha Agencia · RastrackDash · powered by PalmUP")).toHaveLength(3);
+    expect(html.split("Minha Agência · RastrackDash · powered by PalmUP")).toHaveLength(3);
     expect(html).toContain('href="/conversions"');
   });
 
@@ -273,12 +273,12 @@ describe("navigation", () => {
           operationalStatus: "active",
           permissions: ownerPermissions,
         },
-        brand: { ...defaultBrandConfig, name: "Minha Agencia" },
+        brand: { ...defaultBrandConfig, name: "Minha Agência" },
         children: createElement("p", null, "Panel content"),
       }),
     );
     const mainHtml = html.slice(html.indexOf('<main class="content">'));
-    const residual = "Minha Agencia · RastrackDash · powered by PalmUP";
+    const residual = "Minha Agência · RastrackDash · powered by PalmUP";
 
     expect(html.split(residual)).toHaveLength(3);
     expect(html.slice(0, html.indexOf("</aside>"))).toContain(
@@ -326,7 +326,7 @@ describe("navigation", () => {
       }),
     );
 
-    expect(html).toContain('aria-label="Ocultar dados sensiveis"');
+    expect(html).toContain('aria-label="Ocultar dados sensíveis"');
     expect(html).toContain("Ocultar dados");
     expect(html).toContain('class="presentation-mask-value"');
     expect(html).toContain("Workspace demonstrativo");
@@ -350,8 +350,8 @@ describe("navigation", () => {
     expect(html).toContain("Workspace");
     expect(html).toContain("Comunidade NOD");
     expect(html).toContain("comunidade-nod");
-    expect(html).toContain("responsavel da conta");
-    expect(html).not.toContain("Operacao principal");
+    expect(html).toContain("responsável da conta");
+    expect(html).not.toContain("Operação principal");
     expect(html).not.toContain("Meta v21");
     expect(html).not.toContain("WhatsApp fila");
     expect(html).not.toContain("Pixel ativo");
@@ -394,7 +394,7 @@ describe("navigation", () => {
     expect(html).toContain("Selecionar empresa");
     expect(html).toContain("Empresa A");
     expect(html).toContain("Empresa B");
-    expect(html).toContain("responsavel da conta");
+    expect(html).toContain("responsável da conta");
     expect(html).toContain("analista");
     expect(html).not.toContain("Empresa Confidencial");
     expect(html).not.toContain("workspace_secret");

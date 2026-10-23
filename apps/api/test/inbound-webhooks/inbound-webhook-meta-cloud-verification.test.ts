@@ -86,7 +86,7 @@ describe("GET /webhooks/inbound/:connectionId Meta Cloud handshake", () => {
           token,
           challenge,
         ),
-      ).rejects.toMatchObject({ status: 401, message: "Nao autorizado" });
+      ).rejects.toMatchObject({ status: 401, message: "Não autorizado" });
     },
   );
 });

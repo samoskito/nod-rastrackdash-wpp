@@ -17,11 +17,11 @@ describe("BrandFooter", () => {
   it("includes both the custom agency name and the residual brands", () => {
     const html = renderToStaticMarkup(
       createElement(BrandFooter, {
-        brand: { ...defaultBrandConfig, name: "Minha Agencia" },
+        brand: { ...defaultBrandConfig, name: "Minha Agência" },
       }),
     );
 
-    expect(html).toContain("Minha Agencia");
+    expect(html).toContain("Minha Agência");
     expect(html).toContain("RastrackDash");
     expect(html).toContain("powered by PalmUP");
   });

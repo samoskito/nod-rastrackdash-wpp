@@ -746,7 +746,7 @@ describe("provider rules API: workspace scope", () => {
       workspaceId,
       messageInput({
         name: "Qualificado no QR A",
-        triggerPhrases: ["orcamento enviado"],
+        triggerPhrases: ["orçamento enviado"],
         connectionId: "connection_qr_a",
         channelIds: ["channel_qr_a"],
       }),
@@ -1075,7 +1075,7 @@ describe("provider rules API: unify", () => {
       await world.service.createRule(
         workspaceId,
         providerConversionRuleCreateInputSchema.parse({
-          name: "Automacao Umbler",
+          name: "Automação Umbler",
           triggerType: "provider_automation",
           eventName: "QualifiedLead",
           connectionId: "connection_umbler",
@@ -1133,7 +1133,7 @@ describe("provider rules API: unify", () => {
 
     const unified = await world.service.unifyRules(
       workspaceId,
-      { ruleIds, name: "Qualificado (todos os numeros)" },
+      { ruleIds, name: "Qualificado (todos os números)" },
       "user_1",
     );
 
@@ -1150,7 +1150,7 @@ describe("provider rules API: unify", () => {
       },
     });
     expect(unified.rule.conversionRule.name).toBe(
-      "Qualificado (todos os numeros)",
+      "Qualificado (todos os números)",
     );
     for (const id of ruleIds) {
       const original = world.providerRules.find((rule) => rule.id === id)!;
@@ -1344,7 +1344,7 @@ describe("provider rules API: unify", () => {
   });
 });
 
-describe("provider rules API: Conversoes screen support", () => {
+describe("provider rules API: Conversões screen support", () => {
   it("reports the capability matrix without touching the database", () => {
     const world = createWorld();
 

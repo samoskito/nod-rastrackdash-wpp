@@ -11,7 +11,7 @@ describe("password reset routes", () => {
 
     expect(html).toContain("Recuperar senha");
     expect(html).toContain('name="email"');
-    expect(html).toContain("Enviar link de recuperacao");
+    expect(html).toContain("Enviar link de recuperação");
     expect(html).toContain('href="/login"');
   });
 
@@ -21,7 +21,7 @@ describe("password reset routes", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Token invalido");
+    expect(html).toContain("Token inválido");
     expect(html).toContain('href="/login/forgot"');
   });
 

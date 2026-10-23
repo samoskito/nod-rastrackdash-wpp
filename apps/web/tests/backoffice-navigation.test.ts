@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BackofficeNavigation } from "../src/components/backoffice-navigation";
 
 describe("BackofficeNavigation", () => {
-  it("does not render the PalmUP billing or platform-operations areas", () => {
+  it("does not render the PalmUP billing or platform-operations áreas", () => {
     const html = renderToStaticMarkup(
       createElement(BackofficeNavigation, { active: "home" }),
     );
@@ -12,10 +12,10 @@ describe("BackofficeNavigation", () => {
     expect(html).not.toContain("/backoffice/billing");
     expect(html).not.toContain("Assinaturas");
     expect(html).not.toContain("backoffice?view=operations");
-    expect(html).not.toContain("Operacoes internas");
+    expect(html).not.toContain("Operações internas");
   });
 
-  it("keeps the client-relevant areas and adds the read-only license tab", () => {
+  it("keeps the client-relevant áreas and adds the read-only license tab", () => {
     const html = renderToStaticMarkup(
       createElement(BackofficeNavigation, { active: "license" }),
     );

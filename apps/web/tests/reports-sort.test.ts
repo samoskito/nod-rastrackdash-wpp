@@ -95,7 +95,7 @@ const campaignRows = [
 function campaignReport() {
   return {
     workspaceId: "workspace_1",
-    rangeLabel: "Ultimos 7 dias",
+    rangeLabel: "Últimos 7 dias",
     since: "2026-07-06",
     until: "2026-07-12",
     campaigns: campaignRows,
@@ -107,7 +107,7 @@ function campaignReport() {
 function adSetReport() {
   return {
     workspaceId: "workspace_1",
-    rangeLabel: "Ultimos 7 dias",
+    rangeLabel: "Últimos 7 dias",
     since: "2026-07-06",
     until: "2026-07-12",
     adSets: [
@@ -116,7 +116,7 @@ function adSetReport() {
         id: "adset_1",
         campaignId: "cmp_a",
         campaignName: "Campanha A",
-        name: "Publico 1",
+        name: "Público 1",
         ...metrics({ realConversations: 3, qualifiedLead: 2, purchases: 1 }),
       },
     ],
@@ -128,7 +128,7 @@ function adSetReport() {
 function adReport() {
   return {
     workspaceId: "workspace_1",
-    rangeLabel: "Ultimos 7 dias",
+    rangeLabel: "Últimos 7 dias",
     since: "2026-07-06",
     until: "2026-07-12",
     ads: [
@@ -138,7 +138,7 @@ function adReport() {
         campaignId: "cmp_a",
         campaignName: "Campanha A",
         adSetId: "adset_1",
-        adSetName: "Publico 1",
+        adSetName: "Público 1",
         name: "Criativo 1",
         thumbnailUrl: null,
         previewUrl: null,
@@ -272,7 +272,7 @@ describe("reports column sorting", () => {
 
     expect(header(/^Investimento$/).querySelector("button")).toBeNull();
     expect(header(/^Conversas Meta$/).querySelector("button")).toBeNull();
-    expect(header(/^ROAS aquisicao$/).querySelector("button")).toBeNull();
+    expect(header(/^ROAS aquisição$/).querySelector("button")).toBeNull();
   });
 
   it("requests qualified leads descending on first click and resets to page 1", async () => {
@@ -375,7 +375,7 @@ describe("reports column sorting", () => {
   });
 
   it.each([
-    ["adsets", "Publico 1"],
+    ["adsets", "Público 1"],
     ["ads", "Criativo 1"],
   ])("sorts the %s level through its own endpoint", async (view, rowName) => {
     const { apiUrls } = await renderReports({
@@ -430,7 +430,7 @@ describe("reports column sorting", () => {
     });
     const next = within(
       container.querySelector<HTMLElement>(".report-pagination")!,
-    ).getByRole("link", { name: "Proxima" });
+    ).getByRole("link", { name: "Próxima" });
     const url = new URL(next.getAttribute("href")!, "http://web.test");
 
     expect(url.searchParams.get("page")).toBe("2");
@@ -475,7 +475,7 @@ describe("reports column sorting", () => {
   it("keeps the sort when switching report level and resets the page", async () => {
     await renderReports({ sort: "qualifiedLead", dir: "asc", page: "2" });
     const levelLink = within(
-      screen.getByRole("navigation", { name: "Nivel do relatorio" }),
+      screen.getByRole("navigation", { name: "Nível do relatório" }),
     ).getByRole("link", { name: "Conjuntos" });
     const url = new URL(levelLink.getAttribute("href")!, "http://web.test");
 
@@ -498,7 +498,7 @@ describe("reports column sorting", () => {
   it("keeps the sort only for metric groups that show the sorted column", async () => {
     await renderReports({ sort: "qualifiedLead", dir: "desc" });
     const tabs = within(
-      screen.getByRole("navigation", { name: "Grupo de metricas" }),
+      screen.getByRole("navigation", { name: "Grupo de métricas" }),
     );
     const hrefFor = (name: string) =>
       new URL(
@@ -507,7 +507,7 @@ describe("reports column sorting", () => {
       ).searchParams;
 
     expect(hrefFor("Funil").get("sort")).toBe("qualifiedLead");
-    expect(hrefFor("Trafego").has("sort")).toBe(false);
+    expect(hrefFor("Tráfego").has("sort")).toBe(false);
     expect(hrefFor("Receita").has("sort")).toBe(false);
     expect(hrefFor("Receita").has("dir")).toBe(false);
   });

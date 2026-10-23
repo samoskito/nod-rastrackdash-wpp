@@ -39,7 +39,7 @@ export async function controllerHarness() {
   const auth = {
     getSession: vi.fn(async (token: string) => {
       if (token !== "synthetic-session")
-        throw new UnauthorizedException("Sessao invalida");
+        throw new UnauthorizedException("Sessão inválida");
       return session;
     }),
   };

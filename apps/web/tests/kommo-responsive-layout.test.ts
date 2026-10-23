@@ -28,7 +28,7 @@ function blockFor(selectorText: string, from = 0): { body: string; index: number
 const rule = {
   id: "rule_1",
   connectionId: "kommo_connection_1",
-  name: "Negociacao avancada com um nome bem comprido para o card",
+  name: "Negociação avançada com um nome bem comprido para o card",
   pipelineId: "pipeline_1",
   statusId: "status_1",
   eventName: "QualifiedLead" as const,
@@ -63,7 +63,7 @@ function connection(): KommoConnectionDetailDto {
         id: "pipeline_1",
         name: "Vendas",
         sort: 1,
-        status: { id: "status_1", name: "Negociacao", type: "ordinary" },
+        status: { id: "status_1", name: "Negociação", type: "ordinary" },
         available: true,
       },
     ],

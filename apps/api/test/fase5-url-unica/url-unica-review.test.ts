@@ -349,7 +349,7 @@ describe("Low findings", () => {
     await w.service.remove(W, endpoint.id, "operator");
     expect((await w.service.listUnattributed(W, "payt")).items[0]?.retryable).toBe(false);
     await expect(w.service.retryEvent(W, result.eventId, "operator")).rejects.toThrow(
-      "Evento nao encontrado",
+      "Evento não encontrado",
     );
   });
 });

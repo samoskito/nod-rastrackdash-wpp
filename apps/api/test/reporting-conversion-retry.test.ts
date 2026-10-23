@@ -91,7 +91,7 @@ describe("reporting conversion retry routes", () => {
     });
     expect(diagnostics.retryBlockedConversionEvents).toHaveBeenCalledWith(
       ["blocked"],
-      { reason: "Reenvio manual de eventos Meta bloqueados por configuracao" },
+      { reason: "Reenvio manual de eventos Meta bloqueados por configuração" },
       expect.objectContaining({
         workspaceId: "workspace_1",
         actorUserId: "user_1",
@@ -196,7 +196,7 @@ describe("reporting conversion retry routes", () => {
       .expect({ claimed: 3, enqueued: 2, skipped: 4, failed: 2 });
     expect(reporting.getBlockedConversionEventRetryIds).toHaveBeenCalledWith({
       workspaceId: "workspace_1",
-      rangeLabel: "Ultimos 7 dias",
+      rangeLabel: "Últimos 7 dias",
       since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       until: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });

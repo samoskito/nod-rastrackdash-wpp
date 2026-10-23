@@ -20,7 +20,7 @@ function authenticatedUser(overrides: Partial<AuthenticatedUser> = {}): Authenti
     workspaces: [
       {
         id: "workspace-1",
-        name: "Minha Agencia",
+        name: "Minha Agência",
         slug: "minha-agencia",
         role: "owner",
         operationalStatus: "active",
@@ -78,7 +78,7 @@ function fakeWorkspaces(): WorkspacesService {
   return {
     getCurrentWorkspace: vi.fn().mockReturnValue({
       id: "workspace-1",
-      name: "Minha Agencia",
+      name: "Minha Agência",
       slug: "minha-agencia",
       role: "owner",
       operationalStatus: "active",

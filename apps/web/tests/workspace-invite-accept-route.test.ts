@@ -17,9 +17,9 @@ describe("workspace invite accept route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(html).toContain("Convite indisponivel");
+    expect(html).toContain("Convite indisponível");
     expect(html).toContain(
-      "invalido, expirou, foi revogado ou ja foi utilizado",
+      "inválido, expirou, foi revogado ou já foi utilizado",
     );
     expect(html).toContain("suporte@rastrack.app");
   });
@@ -101,7 +101,7 @@ describe("workspace invite accept route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Convite indisponivel");
+    expect(html).toContain("Convite indisponível");
     expect(html).not.toContain("Workspace");
     expect(html).not.toContain("email");
   });

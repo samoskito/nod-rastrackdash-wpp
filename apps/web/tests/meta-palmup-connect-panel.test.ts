@@ -120,7 +120,7 @@ describe("Conectar Meta (PalmUP)", () => {
     expect(document.querySelector('input[name="accessToken"]')).toBeTruthy();
   });
 
-  it("sits next to Nova conexao on saved structures, for owners only", () => {
+  it("sits next to Nova conexão on saved structures, for owners only", () => {
     const savedConfiguration = {
       ...emptyConfiguration,
       credentials: [credential],
@@ -146,7 +146,7 @@ describe("Conectar Meta (PalmUP)", () => {
 
     renderPanel({ initialConfiguration: savedConfiguration });
     const actions = document.querySelector(".meta-advanced-list-actions");
-    expect(actions?.textContent).toContain("Nova conexao");
+    expect(actions?.textContent).toContain("Nova conexão");
     expect(actions?.textContent).toContain("Conectar Meta (PalmUP)");
     expect(
       screen.getByRole("button", { name: /trocar token de bm cliente/i }),
@@ -194,7 +194,7 @@ describe("Conectar Meta (PalmUP)", () => {
     expect(loginLink.getAttribute("rel")).toContain("noopener");
 
     fireEvent.click(
-      screen.getByRole("button", { name: /ja autorizei, concluir/i }),
+      screen.getByRole("button", { name: /já autorizei, concluir/i }),
     );
 
     await waitFor(() => {
@@ -226,7 +226,7 @@ describe("Conectar Meta (PalmUP)", () => {
     const startPalmupConnectAction = vi.fn().mockResolvedValue({
       ok: false,
       message:
-        "Login social PalmUP nao configurado neste servidor. Use o token permanente.",
+        "Login social PalmUP não configurado neste servidor. Use o token permanente.",
       palmupUnconfigured: true,
     });
     renderPanel({ startPalmupConnectAction });
@@ -258,7 +258,7 @@ describe("Conectar Meta (PalmUP)", () => {
     const completePalmupConnectAction = vi.fn().mockResolvedValue({
       ok: false,
       message:
-        "Conexao PalmUP expirada, invalida ou ja utilizada. Inicie novamente",
+        "Conexão PalmUP expirada, inválida ou já utilizada. Inicie novamente",
     });
     renderPanel({ startPalmupConnectAction, completePalmupConnectAction });
     openSetup();
@@ -267,7 +267,7 @@ describe("Conectar Meta (PalmUP)", () => {
       screen.getByRole("button", { name: /conectar meta \(palmup\)/i }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /ja autorizei, concluir/i }),
+      await screen.findByRole("button", { name: /já autorizei, concluir/i }),
     );
 
     await screen.findByText(/inicie novamente/i);

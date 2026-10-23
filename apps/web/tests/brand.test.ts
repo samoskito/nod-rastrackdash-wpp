@@ -67,9 +67,9 @@ describe("getBrandConfig", () => {
   });
 
   it("trims the configured name", () => {
-    process.env.BRAND_NAME = "  Minha Agencia  ";
+    process.env.BRAND_NAME = "  Minha Agência  ";
 
-    expect(getBrandConfig().name).toBe("Minha Agencia");
+    expect(getBrandConfig().name).toBe("Minha Agência");
   });
 
   it("falls back to RastrackDash when the name is empty or whitespace", () => {

@@ -88,7 +88,7 @@ describe("lead detail route", () => {
     expect(html).toContain("Black Friday WhatsApp");
     expect(html).toContain("Publico quente");
     expect(html).toContain("Criativo WhatsApp");
-    expect(html).toContain("Atribuicao");
+    expect(html).toContain("Atribuição");
     expect(html).toContain("https://cdn.example.test/creative.jpg");
     expect(html).toContain("Ver no Instagram");
     expect(html).toContain("https://www.instagram.com/p/creative/");
@@ -97,7 +97,7 @@ describe("lead detail route", () => {
     expect(html).toContain("Palavra-chave");
     expect(html).toContain("Enviado");
     expect(html).toContain("Ocorrido em");
-    expect(html).toContain("Webhooks e diagnosticos vinculados");
+    expect(html).toContain("Webhooks e diagnósticos vinculados");
     expect(html).toContain("Webhook NOD API");
     expect(html).toContain('class="lead-detail-mobile-list"');
     expect(html).toContain("webhook_1");
@@ -116,8 +116,8 @@ describe("lead detail route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Nao foi possivel carregar o lead");
-    expect(html).toContain("API indisponivel");
+    expect(html).toContain("Não foi possível carregar o lead");
+    expect(html).toContain("API indisponível");
     expect(html).not.toContain("Mariana Alves");
     expect(html).not.toContain("Rafael Costa");
   });

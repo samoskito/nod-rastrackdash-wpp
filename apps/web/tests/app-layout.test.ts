@@ -99,13 +99,13 @@ describe("product app layout", () => {
     );
 
     const element = await WorkspaceAccessGate({
-      children: createElement("p", null, "Conteudo privado"),
+      children: createElement("p", null, "Conteúdo privado"),
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("Workspace bloqueado");
     expect(html).toContain("Fale com o suporte da plataforma");
-    expect(html).not.toContain("Conteudo privado");
+    expect(html).not.toContain("Conteúdo privado");
   });
 
   it("renders client content when the workspace is active", async () => {
@@ -124,11 +124,11 @@ describe("product app layout", () => {
     );
 
     const element = await WorkspaceAccessGate({
-      children: createElement("p", null, "Conteudo privado"),
+      children: createElement("p", null, "Conteúdo privado"),
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Conteudo privado");
+    expect(html).toContain("Conteúdo privado");
     expect(html).not.toContain("Workspace bloqueado");
   });
 
@@ -174,13 +174,13 @@ describe("product app layout", () => {
       });
 
     const element = await WorkspaceAccessGate({
-      children: createElement("p", null, "Conteudo privado"),
+      children: createElement("p", null, "Conteúdo privado"),
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     // Student edition uses license soft-lock (banner) instead of PalmUP
     // package/subscription gates — content stays available when workspace is active.
-    expect(html).toContain("Conteudo privado");
+    expect(html).toContain("Conteúdo privado");
     expect(html).not.toContain("Gerenciar assinatura");
     expect(html).not.toContain('href="/subscription"');
     expect(html).toContain("RastrackDash · powered by PalmUP");
@@ -225,11 +225,11 @@ describe("product app layout", () => {
     });
 
     const element = await WorkspaceAccessGate({
-      children: createElement("p", null, "Pagina normal"),
+      children: createElement("p", null, "Página normal"),
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Pagina normal");
+    expect(html).toContain("Página normal");
     expect(html).toContain("RastrackDash");
     expect(html).toContain("powered by PalmUP");
   });
@@ -288,7 +288,7 @@ describe("product app layout", () => {
     });
 
     const element = await WorkspaceAccessGate({
-      children: createElement("p", null, "Conteudo privado"),
+      children: createElement("p", null, "Conteúdo privado"),
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
@@ -429,7 +429,7 @@ describe("product app layout", () => {
 
     await expect(
       WorkspaceAccessGate({
-        children: createElement("p", null, "Conteudo privado"),
+        children: createElement("p", null, "Conteúdo privado"),
       }),
     ).rejects.toThrow("NEXT_REDIRECT:/overview");
     expect(redirectMock).toHaveBeenCalledWith("/overview");

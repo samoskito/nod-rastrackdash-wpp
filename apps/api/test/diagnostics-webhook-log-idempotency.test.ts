@@ -145,7 +145,7 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     );
   });
 
-  it("resolve uma corrida de unique violation (P2002) de forma deterministica, sem propagar o erro bruto", async () => {
+  it("resolve uma corrida de unique violation (P2002) de forma determinística, sem propagar o erro bruto", async () => {
     const existing = {
       id: "webhook-log-1",
       workspaceId: "workspace-a",
@@ -215,7 +215,7 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.diagnosticEvent.create).not.toHaveBeenCalled();
   });
 
-  it("nao reivindica um registro concluido: replay de delivery processado continua duplicate", async () => {
+  it("não reivindica um registro concluído: replay de delivery processado continua duplicate", async () => {
     prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
     prisma.webhookLog.findUnique.mockResolvedValueOnce({
       id: "webhook-log-1",
@@ -234,7 +234,7 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
   });
 
-  it("nao reivindica um registro em voo: entrega concorrente continua duplicate", async () => {
+  it("não reivindica um registro em voo: entrega concorrente continua duplicate", async () => {
     prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
     prisma.webhookLog.findUnique.mockResolvedValueOnce({
       id: "webhook-log-1",
@@ -253,7 +253,7 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
   });
 
-  it("payload divergente sobre um registro failed vira conflito em quarentena, nunca uma reivindicacao", async () => {
+  it("payload divergente sobre um registro failed vira conflito em quarentena, nunca uma reivindicação", async () => {
     prisma.webhookLog.create
       .mockRejectedValueOnce(uniqueConstraintError())
       .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
@@ -306,7 +306,7 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(quarantineCreateData.errorCode).toBe("idempotency_payload_mismatch");
   });
 
-  it("registro legado com payloadHash NULL em estado failed nao e reivindicado: vira conflict", async () => {
+  it("registro legado com payloadHash NULL em estado failed não é reivindicado: vira conflict", async () => {
     prisma.webhookLog.create
       .mockRejectedValueOnce(uniqueConstraintError())
       .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
@@ -327,7 +327,7 @@ describe("DiagnosticsService.recordWebhookLog idempotency hardening", () => {
     expect(prisma.webhookLog.updateMany).not.toHaveBeenCalled();
   });
 
-  it("replay sem fingerprint sobre um registro com payloadHash tambem vira conflict, nunca duplicate", async () => {
+  it("replay sem fingerprint sobre um registro com payloadHash também vira conflict, nunca duplicate", async () => {
     prisma.webhookLog.create
       .mockRejectedValueOnce(uniqueConstraintError())
       .mockResolvedValueOnce({ id: "webhook-log-quarantine-1" });
@@ -437,7 +437,7 @@ describe("DiagnosticsService WebhookLog claim/settle lifecycle", () => {
     });
   }
 
-  it("o retry que perde a corrida pela reivindicacao e respondido como duplicate", async () => {
+  it("o retry que perde a corrida pela reivindicação e respondido como duplicate", async () => {
     prisma.webhookLog.create.mockRejectedValueOnce(uniqueConstraintError());
     prisma.webhookLog.findUnique.mockResolvedValueOnce({
       id: "webhook-log-1",
@@ -476,7 +476,7 @@ describe("DiagnosticsService WebhookLog claim/settle lifecycle", () => {
     expect(call.data.processedAt).toBeInstanceOf(Date);
   });
 
-  it("markWebhookLogProcessed informa que a reivindicacao ja nao era sua", async () => {
+  it("markWebhookLogProcessed informa que a reivindicação já não era sua", async () => {
     prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 0 });
 
     await expect(
@@ -509,7 +509,7 @@ describe("DiagnosticsService WebhookLog claim/settle lifecycle", () => {
     expect(call.data.errorMessage).not.toContain(error.message);
   });
 
-  it("markWebhookLogFailed redige tambem erros nao-Error e nomes exoticos", async () => {
+  it("markWebhookLogFailed redige também erros nao-Error e nomes exoticos", async () => {
     prisma.webhookLog.updateMany.mockResolvedValue({ count: 1 });
 
     await service.markWebhookLogFailed(
@@ -532,7 +532,7 @@ describe("DiagnosticsService WebhookLog claim/settle lifecycle", () => {
     );
   });
 
-  it("markWebhookLogFailed nao sobrescreve uma linha reivindicada por outro retry", async () => {
+  it("markWebhookLogFailed não sobrescreve uma linha reivindicada por outro retry", async () => {
     prisma.webhookLog.updateMany.mockResolvedValueOnce({ count: 0 });
 
     await expect(

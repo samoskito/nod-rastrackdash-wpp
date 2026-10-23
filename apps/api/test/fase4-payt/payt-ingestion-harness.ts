@@ -40,7 +40,7 @@ export function automationPayload(
     automation,
     contact: {
       phone: "+5511999999999",
-      name: "Nome que nao deve ser persistido",
+      name: "Nome que não deve ser persistido",
     },
     conversation: {
       id: "conversation_1",
@@ -102,7 +102,7 @@ export function createHarness(options?: {
       conversionRule: {
         id: "rule_1",
         workspaceId: "workspace_safe",
-        name: "Automacao Umbler",
+        name: "Automação Umbler",
         triggerType: "provider_automation" as const,
         triggerValue: "provider_automation",
         matchMode: "exact" as const,
@@ -110,7 +110,7 @@ export function createHarness(options?: {
         pixelId: null,
         defaultValueCents: eventName === "Purchase" ? 250_000 : null,
         defaultCurrency: eventName === "Purchase" ? "BRL" : null,
-        defaultContentName: eventName === "Purchase" ? "Pedido medio" : null,
+        defaultContentName: eventName === "Purchase" ? "Pedido médio" : null,
         defaultItems: null,
         active: options?.active ?? true,
         createdAt: now,

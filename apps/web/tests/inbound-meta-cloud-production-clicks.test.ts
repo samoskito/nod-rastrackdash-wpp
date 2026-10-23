@@ -65,7 +65,7 @@ function props(): InboundWebhookPanelProps {
             organizationId: "waba",
             providerChannelId: "number",
             connectedPhone: "15550000001",
-            channelName: "Numero",
+            channelName: "Número",
             whatsappInstanceId: null,
             status: "active",
             productionActivatedAt: null,
@@ -116,7 +116,7 @@ describe("Meta Cloud production UI actions", () => {
     const p = props();
     render(createElement(InboundWebhookPanel, p));
     const button = screen.getByRole("button", {
-      name: "Ativar envios automaticos",
+      name: "Ativar envios automáticos",
       hidden: true,
     });
     vi.spyOn(window, "confirm")
@@ -139,21 +139,21 @@ describe("Meta Cloud production UI actions", () => {
       expect.stringContaining("novos eventos"),
     );
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/CTWA roteado nao significa enviado/)).toBeTruthy();
+    expect(screen.getByText(/CTWA roteado não significa enviado/)).toBeTruthy();
   });
   it("shows the actionable signing-secret rejection without changing connection state", async () => {
     const p = props();
     p.setConnectionStatusAction = vi.fn(async () => ({
       ok: false,
       message:
-        "Configure META_APP_SECRET do seu proprio app Meta no ambiente da API antes de enviar.",
+        "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar.",
     }));
     render(createElement(InboundWebhookPanel, p));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", {
-          name: "Ativar envios automaticos",
+          name: "Ativar envios automáticos",
           hidden: true,
         }),
       );
@@ -188,7 +188,7 @@ describe("Meta Cloud production UI actions", () => {
     );
     expect(
       screen.queryByRole("button", {
-        name: "Ativar envios automaticos",
+        name: "Ativar envios automáticos",
         hidden: true,
       }),
     ).toBeNull();

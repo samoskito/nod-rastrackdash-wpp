@@ -169,7 +169,7 @@ describe("leads service", () => {
     ]);
   });
 
-  it("filters leads by attribution and Sao Paulo conversation period", async () => {
+  it("filters leads by attribution and São Paulo conversation period", async () => {
     const { prisma, service } = createHarness();
 
     await service.listLeads("workspace_1", {

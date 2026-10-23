@@ -10,8 +10,8 @@ describe("product route loading", () => {
     );
 
     expect(html).toContain('aria-busy="true"');
-    expect(html).toContain("Carregando pagina");
+    expect(html).toContain("Carregando página");
     expect(html).toContain("route-loading-grid");
-    expect(html).toContain("Carregando dados da pagina");
+    expect(html).toContain("Carregando dados da página");
   });
 });

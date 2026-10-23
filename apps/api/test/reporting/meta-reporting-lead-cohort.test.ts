@@ -401,7 +401,7 @@ describe("meta reporting: leads novos x leads que voltaram", () => {
 
     const report = await service.getCampaignReportOverview({
       workspaceId: WORKSPACE,
-      rangeLabel: "Todo o periodo",
+      rangeLabel: "Todo o período",
       includeSummary: true,
     });
 

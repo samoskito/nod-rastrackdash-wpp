@@ -449,7 +449,7 @@ describe("Nest build CAPI resolver injection", () => {
       expect(await h.sender.resolveDeliveryRoute(h.log)).toMatchObject({
         source: "manual",
         accessToken: null,
-        routeError: "Rota Meta normalizada indisponivel",
+        routeError: "Rota Meta normalizada indisponível",
       });
       expect(h.prisma.metaIntegration.findUnique).not.toHaveBeenCalled();
       expect(h.fetcher).not.toHaveBeenCalled();

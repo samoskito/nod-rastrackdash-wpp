@@ -355,21 +355,21 @@ describe("settings route", () => {
     expect(html).toContain("Analista");
     expect(html).toContain('name="workspaceName"');
     expect(html).toContain("Salvar nome");
-    expect(html).not.toContain("Permissao atual");
+    expect(html).not.toContain("Permissão atual");
     expect(html).toContain("samuel@example.com");
     expect(html).toContain("Email pendente");
-    expect(html).toContain("Enviar verificacao");
+    expect(html).toContain("Enviar verificação");
     expect(html).toContain("trafego@example.com");
     expect(html).toContain("convite@example.com");
     expect(html).toContain("Pendente");
     expect(html).not.toContain("secret-token-not-for-list");
     expect(html).toContain("Convidar membro");
-    expect(html).toContain("Nivel de acesso");
+    expect(html).toContain("Nível de acesso");
     expect(html).toContain("Gerenciar equipe");
-    expect(html).not.toContain("3 usuarios ativos");
-    expect(html).toContain("Central de configuracoes");
-    expect(html).toContain("Mapa das configuracoes");
-    expect(html).toContain('aria-label="Atalhos das configuracoes"');
+    expect(html).not.toContain("3 usuários ativos");
+    expect(html).toContain("Central de configurações");
+    expect(html).toContain("Mapa das configurações");
+    expect(html).toContain('aria-label="Atalhos das configurações"');
     expect(html).toContain('href="#configuracao-conta"');
     expect(html).toContain('href="#configuracao-equipe"');
     expect(html).toContain('href="#configuracao-conversoes"');
@@ -389,9 +389,9 @@ describe("settings route", () => {
     expect(html).toContain('<h2 id="settings-conversion-title">Jornada</h2>');
     expect(html).not.toContain("Jornada e gatilhos");
     expect(html).not.toContain("whatsapp-triggers");
-    expect(html).not.toContain("Regras por conexao e canal");
-    expect(html).not.toContain("Gatilhos de conversao");
-    expect(html).not.toContain("Nenhuma conexao WhatsApp disponivel");
+    expect(html).not.toContain("Regras por conexão e canal");
+    expect(html).not.toContain("Gatilhos de conversão");
+    expect(html).not.toContain("Nenhuma conexão WhatsApp disponível");
     expect(html).toContain('href="/conversions"');
     expect(html).toContain("Jornada do funil");
     expect(html).toContain("Salvar jornada");
@@ -470,7 +470,7 @@ describe("settings route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("Administrador");
-    expect(html).toContain("Operacao e integracoes");
+    expect(html).toContain("Operação e integrações");
     expect(html).toContain("Apenas gestores da equipe podem convidar.");
     expect(html).not.toContain('placeholder="pessoa@empresa.com"');
     expect(html).not.toContain("member-role-form");
@@ -489,7 +489,7 @@ describe("settings route", () => {
     const element = await SettingsPage();
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Operacao, integracoes e gestao da equipe");
+    expect(html).toContain("Operação, integrações e gestão da equipe");
     expect(html).toContain('placeholder="pessoa@empresa.com"');
     expect(html).toContain("member-role-form");
     expect(html).not.toContain("member-manager-toggle");
@@ -552,7 +552,7 @@ describe("settings route", () => {
     expect(html).not.toContain("Umbler Comercial");
     expect(html).not.toContain("quero comprar");
     expect(html).not.toContain("Criar gatilho");
-    expect(html).not.toContain("O Kommo agora fica em Integracoes");
+    expect(html).not.toContain("O Kommo agora fica em Integrações");
     expect(html).not.toContain('data-testid="kommo-crm-manager"');
     expect(html).not.toContain("ativos");
     expect(html).toContain("As regras de conversão ficam em Conversões");
@@ -681,10 +681,10 @@ describe("settings route", () => {
     const element = await SettingsPage();
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Sem permissao para editar a jornada.");
+    expect(html).toContain("Sem permissão para editar a jornada.");
     expect(html).not.toContain("Salvar jornada");
     expect(html).not.toContain("Criar gatilho");
-    expect(html).not.toContain("Regras por conexao e canal");
+    expect(html).not.toContain("Regras por conexão e canal");
   });
 
   it("lets the platform owner manage the team and resend owner access in support mode", async () => {
@@ -732,8 +732,8 @@ describe("settings route", () => {
     const element = await SettingsPage();
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("API indisponivel");
-    expect(html).not.toContain("Regras indisponiveis");
+    expect(html).toContain("API indisponível");
+    expect(html).not.toContain("Regras indisponíveis");
     expect(html).not.toContain("Novo lead");
     expect(html).not.toContain("Compra confirmada");
     expect(html).not.toContain("Venda fechada");
@@ -823,7 +823,7 @@ describe("settings route", () => {
     expect(html).toContain("Salvar alertas");
     expect(html).toContain("Desativado");
     expect(html).not.toContain(
-      "Nao foi possivel carregar as configuracoes de alerta.",
+      "Não foi possível carregar as configurações de alerta.",
     );
   });
 
@@ -834,7 +834,7 @@ describe("settings route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain(
-      "Sem permissao para gerenciar alertas operacionais.",
+      "Sem permissão para gerenciar alertas operacionais.",
     );
     expect(html).not.toContain("Salvar alertas");
     expect(html).not.toContain('name="alertPhones"');

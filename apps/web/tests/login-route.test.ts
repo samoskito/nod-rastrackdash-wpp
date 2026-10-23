@@ -23,7 +23,7 @@ describe("login route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("Entrar no RastrackDash");
-    expect(html).toContain("Telemetria de conversoes");
+    expect(html).toContain("Telemetria de conversões");
     expect(html).not.toContain("Entrar com Google");
     expect(html).not.toContain('href="/login/google"');
     expect(html).toContain('href="/login/forgot"');
@@ -49,7 +49,7 @@ describe("login route", () => {
 
     expect(html).not.toContain("API online");
     expect(html).not.toContain("99.2% aceito");
-    expect(html).not.toContain("Fila estavel");
+    expect(html).not.toContain("Fila estável");
     expect(html).not.toContain("Sinal ativo");
   });
 
@@ -61,6 +61,6 @@ describe("login route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Nao foi possivel concluir o login com Google.");
+    expect(html).toContain("Não foi possível concluir o login com Google.");
   });
 });

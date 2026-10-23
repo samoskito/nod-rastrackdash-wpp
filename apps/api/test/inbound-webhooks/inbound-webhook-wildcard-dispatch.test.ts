@@ -46,7 +46,7 @@ describe("wildcard CTWA dispatch and retained history", () => {
     await expect(
       h.authorize(),
     ).rejects.toThrow(
-      "Nenhum evento possui rota completa e payload disponivel",
+      "Nenhum evento possui rota completa e payload disponível",
     );
     expect(h.replayQueue.enqueueBatch).not.toHaveBeenCalled();
   });
@@ -58,7 +58,7 @@ describe("wildcard CTWA dispatch and retained history", () => {
     });
     await expect(
       h.authorize(),
-    ).rejects.toThrow("Os eventos elegiveis ja pertencem a outro replay");
+    ).rejects.toThrow("Os eventos elegíveis já pertencem a outro replay");
     expect(h.replayQueue.enqueueBatch).not.toHaveBeenCalled();
   });
   it.each(["wildcard", "optional destination", "explicit"])(

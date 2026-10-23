@@ -452,7 +452,7 @@ function input(overrides: Partial<BackofficeWorkspaceCreateInputDto> = {}) {
   return {
     name: "Cliente Real",
     responsible: {
-      name: "Responsavel Real",
+      name: "Responsável Real",
       email: "responsavel@example.com",
     },
     reuseExistingUser: false,
@@ -641,7 +641,7 @@ describe("platform workspace access", () => {
     await expect(service.createWorkspace(input(), owner)).rejects.toMatchObject(
       {
         constructor: ConflictException,
-        message: "Email ja cadastrado",
+        message: "Email já cadastrado",
       },
     );
     expect(harness.state.workspaces).toHaveLength(0);

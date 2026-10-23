@@ -137,7 +137,7 @@ const messageRule = {
   defaultValueCents: 10_000,
 };
 
-describe("conversion rules controller: Conversoes (Fase 3)", () => {
+describe("conversion rules controller: Conversões (Fase 3)", () => {
   it("tells any workspace member the scope capability matrix", async () => {
     const { app, server, providerConversionRulesService } =
       await createApp("member");

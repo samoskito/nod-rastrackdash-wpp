@@ -64,7 +64,7 @@ describe("Pipedrive connect flow", () => {
     renderPanel({ connections: [], loadState: "empty" });
     expect(screen.getAllByText(/observação/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/com confirmação/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Producao ativa/)).toBeNull();
+    expect(screen.queryByText(/Produção ativa/)).toBeNull();
     expect(screen.getByText(/Nenhuma conexão Pipedrive/)).toBeTruthy();
   });
 
@@ -500,7 +500,7 @@ describe("Pipedrive rule CRUD", () => {
       /payload/i,
       /parser/i,
       /certifica/i,
-      /observação tecnica/i,
+      /observação técnica/i,
       /dedupe/i,
       /materializ/i,
       /\blease\b/i,

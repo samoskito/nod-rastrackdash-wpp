@@ -159,7 +159,7 @@ describe("PalmUP student Meta broker consumer", () => {
       ]) {
         await expect(action()).rejects.toMatchObject({
           status: 503,
-          message: "Login social PalmUP nao configurado",
+          message: "Login social PalmUP não configurado",
         });
       }
       expect(pairings.save).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe("PalmUP student Meta broker consumer", () => {
     ).rejects.toMatchObject({
       status: 400,
       message:
-        "Conexao PalmUP expirada, invalida ou ja utilizada. Inicie novamente",
+        "Conexão PalmUP expirada, inválida ou já utilizada. Inicie novamente",
     });
     await expect(
       service.complete("workspace-1", start.pairingId, "owner-1"),
@@ -256,7 +256,7 @@ describe("PalmUP student Meta broker consumer", () => {
       ).rejects.toMatchObject({
         status: 502,
         message:
-          "Nao foi possivel concluir o login social PalmUP. Inicie novamente",
+          "Não foi possível concluir o login social PalmUP. Inicie novamente",
       });
       expect(createCredential).not.toHaveBeenCalled();
     },

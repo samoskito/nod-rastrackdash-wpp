@@ -300,7 +300,7 @@ export function studentReplayFixture() {
     if (!p.previewToken)
       throw new Error(
         (p as any).unavailableReason ??
-          "Nenhum evento possui rota completa e payload disponivel",
+          "Nenhum evento possui rota completa e payload disponível",
       );
     return replay.authorizeStudentReplay(actor, "connection", "channel", {
       confirmation: "fixture",

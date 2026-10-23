@@ -56,7 +56,7 @@ describe("workspace switch action", () => {
       return new Response(
         JSON.stringify({
           statusCode: 404,
-          message: `Workspace ${body.workspaceId} nao encontrado`,
+          message: `Workspace ${body.workspaceId} não encontrado`,
         }),
         { status: 404, headers: { "Content-Type": "application/json" } },
       );

@@ -303,7 +303,7 @@ describe("Pipedrive production opt-in (existing rule)", () => {
 describe("Pipedrive production opt-in (new rule)", () => {
   function fillNew() {
     fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
-    fireEvent.change(screen.getByLabelText("Nome da regra"), { target: { value: "Lead em producao" } });
+    fireEvent.change(screen.getByLabelText("Nome da regra"), { target: { value: "Lead em produção" } });
     fireEvent.change(screen.getByLabelText("Funil e etapa no Pipedrive"), {
       target: { value: "pipeline_1::stage_1" },
     });
@@ -319,7 +319,7 @@ describe("Pipedrive production opt-in (new rule)", () => {
   });
 
   it("creates in production only after review and confirmation", async () => {
-    const created = productionRuleWith({ id: "rule_new", name: "Lead em producao", eventName: "LeadSubmitted" });
+    const created = productionRuleWith({ id: "rule_new", name: "Lead em produção", eventName: "LeadSubmitted" });
     const createRuleAction = vi.fn(async (_: FormData) => ({
       ok: true as const,
       message: "Regra Pipedrive criada.",

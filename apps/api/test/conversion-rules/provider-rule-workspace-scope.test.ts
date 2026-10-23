@@ -1007,7 +1007,7 @@ function labelRule(input: {
 const instanceB = {
   id: "instance_b",
   workspaceId,
-  name: "Numero B",
+  name: "Número B",
   providerInstanceId: "provider_b",
 };
 

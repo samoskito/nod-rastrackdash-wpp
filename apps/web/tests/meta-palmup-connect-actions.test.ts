@@ -95,13 +95,13 @@ describe("PalmUP Meta social login actions", () => {
 
   it("reports an unconfigured broker honestly when the API answers 503", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new FakeApiRequestError("Login social PalmUP nao configurado", 503),
+      new FakeApiRequestError("Login social PalmUP não configurado", 503),
     );
 
     const result = await startMetaPalmupConnectAction();
 
     expect(result).toMatchObject({ ok: false, palmupUnconfigured: true });
-    expect(result.message).toContain("nao configurado");
+    expect(result.message).toContain("não configurado");
   });
 
   it("completes with the pairing id only and never forwards a token to the browser", async () => {
@@ -127,7 +127,7 @@ describe("PalmUP Meta social login actions", () => {
   it("surfaces the sanitized API message for an expired or reused pairing", async () => {
     serverApiFetch.mockRejectedValueOnce(
       new FakeApiRequestError(
-        "Conexao PalmUP expirada, invalida ou ja utilizada. Inicie novamente",
+        "Conexão PalmUP expirada, inválida ou já utilizada. Inicie novamente",
         400,
       ),
     );

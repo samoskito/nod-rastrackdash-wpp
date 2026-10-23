@@ -159,7 +159,7 @@ function buildFixture(specs: EntitySpec[]) {
       campaignId: `${prefix}${campaignId}`,
       adSetId: `${prefix}${adSetId}`,
       adId: `${prefix}${adId}`,
-      name: `Anuncio ${name}`,
+      name: `Anúncio ${name}`,
       thumbnailUrl: null,
       previewUrl: null,
     });
@@ -951,6 +951,6 @@ describe("Reports HTTP sort contract", () => {
       .expect(400);
 
     expect(response.body.statusCode).toBe(400);
-    expect(response.body.message).toMatch(/ordenacao/i);
+    expect(response.body.message).toMatch(/ordenação/i);
   });
 });

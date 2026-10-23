@@ -135,7 +135,7 @@ describe("ExchangeRateTable", () => {
     expect(table.convert(1000, "USD", "BRL", "2026-11-30")).toBeNull();
   });
 
-  it("uses the Sao Paulo calendar day of the sale", () => {
+  it("uses the São Paulo calendar day of the sale", () => {
     expect(saoPauloDate(new Date("2026-10-10T02:00:00.000Z"))).toBe(
       "2026-10-09",
     );

@@ -115,7 +115,7 @@ describe("Meta manual server actions", () => {
       ok: true,
       discovery,
       message:
-        "Token validado e protegido. A Meta nao listou as BMs; informe o ID da estrutura.",
+        "Token validado e protegido. A Meta não listou as BMs; informe o ID da estrutura.",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });

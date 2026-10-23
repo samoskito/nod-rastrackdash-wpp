@@ -133,7 +133,7 @@ describe("Unnichat connection creation", () => {
 
   it("explains the unavailable observation version for Unnichat", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new Error("Versao de observacao do provedor indisponivel"),
+      new Error("Versão de observação do provedor indisponível"),
     );
 
     const result = await createInboundWebhookConnectionAction(
@@ -315,7 +315,7 @@ describe("Unnichat routing mode", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "Nao foi possivel salvar as rotas deste canal.",
+      message: "Não foi possível salvar as rotas deste canal.",
     });
   });
 

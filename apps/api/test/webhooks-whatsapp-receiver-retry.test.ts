@@ -206,7 +206,7 @@ describe("WAHA/Z-API receiver failure accounting", () => {
     it(`marks the delivery failed and propagates when ${stage.name} throws`, async () => {
       const diagnostics = diagnosticsMock();
       const services = downstreamServices();
-      const failure = new Error("downstream indisponivel");
+      const failure = new Error("downstream indisponível");
       stage.fail(services, failure);
       const controller = controllerWith(diagnostics, services);
 
@@ -225,7 +225,7 @@ describe("WAHA/Z-API receiver failure accounting", () => {
   it("marks the delivery failed when Meta attribution lookup throws", async () => {
     const diagnostics = diagnosticsMock();
     const services = downstreamServices();
-    const failure = new Error("meta ad lookup indisponivel");
+    const failure = new Error("meta ad lookup indisponível");
     const controller = controllerWith(
       diagnostics,
       services,
@@ -302,9 +302,9 @@ describe("WAHA/Z-API receiver failure accounting", () => {
     }
   });
 
-  it("nao engole a falha de liquidacao: sinaliza a entrega presa em voo e falha alto, sem vazar o payload", async () => {
+  it("não engole a falha de liquidacao: sinaliza a entrega presa em voo e falha alto, sem vazar o payload", async () => {
     const diagnostics = diagnosticsMock();
-    const settleFailure = new Error("banco indisponivel");
+    const settleFailure = new Error("banco indisponível");
     settleFailure.name = "PrismaClientInitializationError";
     diagnostics.markWebhookLogFailed = vi.fn(async () => {
       throw settleFailure;
@@ -338,7 +338,7 @@ describe("WAHA/Z-API receiver failure accounting", () => {
     expect((thrown as Error).message).not.toContain("5511999999999");
   });
 
-  it("registra a reivindicacao perdida ao marcar falha e mantem o erro downstream propagado", async () => {
+  it("registra a reivindicação perdida ao marcar falha e mantem o erro downstream propagado", async () => {
     const diagnostics = diagnosticsMock();
     // The conditional UPDATE matched nothing: the row was no longer in
     // flight. Nothing is stuck, but it must not pass unnoticed either.
@@ -361,7 +361,7 @@ describe("WAHA/Z-API receiver failure accounting", () => {
     expect(logged[0]).not.toMatch(/token|valid-token/i);
   });
 
-  it("nunca reporta sucesso quando a liquidacao processed nao encontra mais a reivindicacao", async () => {
+  it("nunca reporta sucesso quando a liquidacao processed não encontra mais a reivindicação", async () => {
     const diagnostics = diagnosticsMock();
     // count === 0: the row is not "received" anymore, so this request has no
     // standing to answer 2xx for a delivery it did not settle.
@@ -383,9 +383,9 @@ describe("WAHA/Z-API receiver failure accounting", () => {
     expect(diagnostics.markWebhookLogFailed).not.toHaveBeenCalled();
   });
 
-  it("nao engole uma liquidacao processed que nem chegou a ser escrita", async () => {
+  it("não engole uma liquidacao processed que nem chegou a ser escrita", async () => {
     const diagnostics = diagnosticsMock();
-    const settleFailure = new Error("banco indisponivel");
+    const settleFailure = new Error("banco indisponível");
     settleFailure.name = "PrismaClientInitializationError";
     diagnostics.markWebhookLogProcessed = vi.fn(async () => {
       throw settleFailure;
@@ -558,7 +558,7 @@ describe("WAHA/Z-API receiver bounded retry (controller + DiagnosticsService)", 
 
   it("records a downstream failure as failed and lets the retry reprocess instead of discarding it as duplicate", async () => {
     const services = downstreamServices();
-    const failure = new Error("provider indisponivel");
+    const failure = new Error("provider indisponível");
     services.leadsService.upsertFromWhatsappWebhook.mockRejectedValueOnce(
       failure,
     );
@@ -592,7 +592,7 @@ describe("WAHA/Z-API receiver bounded retry (controller + DiagnosticsService)", 
   it("lets only one of two concurrent retries reprocess a failed delivery", async () => {
     const services = downstreamServices();
     services.leadsService.upsertFromWhatsappWebhook.mockRejectedValueOnce(
-      new Error("provider indisponivel"),
+      new Error("provider indisponível"),
     );
     const { controller, rows } = realStackController(services);
 
@@ -622,7 +622,7 @@ describe("WAHA/Z-API receiver bounded retry (controller + DiagnosticsService)", 
   it("quarantines a divergent payload as conflict without reclaiming the failed delivery", async () => {
     const services = downstreamServices();
     services.leadsService.upsertFromWhatsappWebhook.mockRejectedValueOnce(
-      new Error("provider indisponivel"),
+      new Error("provider indisponível"),
     );
     const { controller, rows } = realStackController(services);
 

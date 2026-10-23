@@ -10,8 +10,8 @@ describe("account activation route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Link indisponivel");
-    expect(html).toContain("invalido, expirou ou ja foi utilizado");
+    expect(html).toContain("Link indisponível");
+    expect(html).toContain("inválido, expirou ou já foi utilizado");
     expect(html).toContain('href="mailto:suporte@rastrack.app"');
     expect(html).not.toContain("workspace_");
   });

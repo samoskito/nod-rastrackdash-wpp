@@ -304,7 +304,7 @@ describe("Meta CAPI connection routing", () => {
         metaAccountId: "act-a",
         businessConnectionId: "connection-b",
       }),
-    ).rejects.toThrow("Rota Meta nao encontrada");
+    ).rejects.toThrow("Rota Meta não encontrada");
   });
 });
 

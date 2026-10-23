@@ -172,7 +172,7 @@ const adSetPopulation = [
     id: "adset_1",
     campaignId: "cmp_a",
     campaignName: "Campanha A",
-    name: "Publico 1",
+    name: "Público 1",
     ...metrics({
       spendCents: 9000,
       realConversations: 3,
@@ -185,7 +185,7 @@ const adSetPopulation = [
     id: "adset_2",
     campaignId: "cmp_a",
     campaignName: "Campanha A",
-    name: "Publico 2",
+    name: "Público 2",
     ...metrics({
       spendCents: 30000,
       realConversations: 20,
@@ -202,7 +202,7 @@ const adPopulation = [
     campaignId: "cmp_a",
     campaignName: "Campanha A",
     adSetId: "adset_1",
-    adSetName: "Publico 1",
+    adSetName: "Público 1",
     name: "Criativo 1",
     thumbnailUrl: null,
     previewUrl: null,
@@ -219,7 +219,7 @@ const adPopulation = [
     campaignId: "cmp_a",
     campaignName: "Campanha A",
     adSetId: "adset_2",
-    adSetName: "Publico 2",
+    adSetName: "Público 2",
     name: "Criativo 2",
     thumbnailUrl: "https://cdn.example.test/ad_2.jpg",
     previewUrl: "https://cdn.example.test/ad_2-full.jpg",
@@ -503,7 +503,7 @@ describe("report insights helpers", () => {
       },
       {
         id: "3",
-        name: "Tres",
+        name: "Três",
         ...metrics({
           spendCents: 1000,
           realConversations: 6,
@@ -741,7 +741,7 @@ describe("reports insights tab", () => {
       view: "adsets",
     });
     const modeNav = screen.getByRole("navigation", {
-      name: "Modo do relatorio",
+      name: "Modo do relatório",
     });
     const tableTab = within(modeNav).getByRole("link", { name: "Tabela" });
     const insightsTab = within(modeNav).getByRole("link", { name: "Insights" });
@@ -798,10 +798,10 @@ describe("reports insights tab", () => {
       "Campanha D",
     ]);
     expect(
-      within(volume).getByText(/Posicao 1 de 11 campanhas no filtro/),
+      within(volume).getByText(/Posição 1 de 11 campanhas no filtro/),
     ).toBeTruthy();
     expect(
-      within(insightsRegion()).getByText(/antes da paginacao/),
+      within(insightsRegion()).getByText(/antes da paginação/),
     ).toBeTruthy();
   });
 
@@ -818,7 +818,7 @@ describe("reports insights tab", () => {
     // generic instead of inventing a count.
     expect(
       within(cost).getByText(
-        /Campanhas sem Conversas reais iniciadas nao tem custo calculavel e ficam fora deste ranking/,
+        /Campanhas sem Conversas reais iniciadas não tem custo calculável e ficam fora deste ranking/,
       ),
     ).toBeTruthy();
 
@@ -827,12 +827,12 @@ describe("reports insights tab", () => {
 
     expect(within(free).getByText("Sem investimento registrado")).toBeTruthy();
     expect(
-      within(free).getByText(/custo zero nao indica eficiencia/),
+      within(free).getByText(/custo zero não indica eficiência/),
     ).toBeTruthy();
     expect(within(single).getByText("Amostra insuficiente")).toBeTruthy();
     expect(
       within(single).getByText(
-        /1 Conversas reais iniciadas no periodo, abaixo do minimo de 5/,
+        /1 Conversas reais iniciadas no período, abaixo do mínimo de 5/,
       ),
     ).toBeTruthy();
     expect(insightsRegion().textContent).not.toMatch(
@@ -882,8 +882,8 @@ describe("reports insights tab", () => {
 
     expect(reportCalls(adSets.apiUrls, "adsets")).toHaveLength(2);
     expect(rankedNames(ranking(/Maior volume/))).toEqual([
-      "Publico 2",
-      "Publico 1",
+      "Público 2",
+      "Público 1",
     ]);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "Insights por conjunto",
@@ -898,12 +898,12 @@ describe("reports insights tab", () => {
     expect(rankedNames(volume)).toEqual(["Criativo 2", "Criativo 1"]);
     expect(
       within(rankedItem(volume, "Criativo 2")).getByRole("button", {
-        name: "Ampliar criativo do anuncio Criativo 2",
+        name: "Ampliar criativo do anúncio Criativo 2",
       }),
     ).toBeTruthy();
     expect(
       within(rankedItem(volume, "Criativo 1")).getByRole("img", {
-        name: "Miniatura indisponivel",
+        name: "Miniatura indisponível",
       }),
     ).toBeTruthy();
   });
@@ -955,10 +955,10 @@ describe("reports insights tab", () => {
       nameContains: "Camp",
     });
     const levelNav = screen.getByRole("navigation", {
-      name: "Nivel do relatorio",
+      name: "Nível do relatório",
     });
     const adsTab = hrefOf(
-      within(levelNav).getByRole("link", { name: "Anuncios" }),
+      within(levelNav).getByRole("link", { name: "Anúncios" }),
     );
 
     expect(adsTab.searchParams.get("mode")).toBe("insights");
@@ -1000,9 +1000,9 @@ describe("reports insights tab", () => {
     const region = insightsRegion();
 
     expect(
-      within(region).getByText(/ainda nao e rastreado neste filtro/),
+      within(region).getByText(/ainda não é rastreado neste filtro/),
     ).toBeTruthy();
-    expect(within(region).getByText(/nao equivale a zero/)).toBeTruthy();
+    expect(within(region).getByText(/não equivale a zero/)).toBeTruthy();
     expect(
       within(region).queryByRole("region", { name: /Maior volume/ }),
     ).toBeNull();
@@ -1034,14 +1034,14 @@ describe("reports insights tab", () => {
     });
 
     expect(within(summary).getByText("0")).toBeTruthy();
-    expect(within(summary).getByText("Custo indisponivel")).toBeTruthy();
+    expect(within(summary).getByText("Custo indisponível")).toBeTruthy();
     expect(
       within(ranking(/Maior volume/)).getByText(
         /Nenhuma campanha registrou Conversas reais iniciadas/,
       ),
     ).toBeTruthy();
     expect(
-      within(ranking(/Menor custo/)).getByText("Sem custo calculavel"),
+      within(ranking(/Menor custo/)).getByText("Sem custo calculável"),
     ).toBeTruthy();
   });
 
@@ -1062,7 +1062,7 @@ describe("reports insights tab", () => {
     const region = insightsRegion();
 
     expect(
-      within(region).getAllByText("Nao foi possivel carregar o ranking").length,
+      within(region).getAllByText("Não foi possível carregar o ranking").length,
     ).toBeGreaterThan(0);
     expect(
       within(region).getAllByText(/Nenhum valor foi presumido como zero/)
@@ -1079,10 +1079,10 @@ describe("reports insights tab", () => {
     const region = insightsRegion();
 
     expect(
-      within(region).getByText(/Nenhuma acao e executada automaticamente/),
+      within(region).getByText(/Nenhuma ação e executada automaticamente/),
     ).toBeTruthy();
     expect(
-      within(region).getByText(/menos de 5 resultados no periodo/),
+      within(region).getByText(/menos de 5 resultados no período/),
     ).toBeTruthy();
     expect(
       within(region).queryByRole("button", {

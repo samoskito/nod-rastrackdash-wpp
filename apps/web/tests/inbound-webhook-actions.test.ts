@@ -65,7 +65,7 @@ describe("inbound webhook server actions", () => {
       ),
     ).toEqual({
       ok: false,
-      message: "Nao foi possivel alterar o status deste canal.",
+      message: "Não foi possível alterar o status deste canal.",
     });
   });
   it("creates an Umbler connection and returns the credential only as an ephemeral result", async () => {
@@ -95,7 +95,7 @@ describe("inbound webhook server actions", () => {
     expect(result).toEqual({
       ok: true,
       message:
-        "Conexao de webhook criada. Copie a URL agora; ela nao sera exibida novamente.",
+        "Conexão de webhook criada. Copie a URL agora; ela não será exibida novamente.",
       oneTimeSecret: {
         connectionId: "connection_1",
         provider: "umbler",
@@ -130,7 +130,7 @@ describe("inbound webhook server actions", () => {
     expect(result).toEqual({
       ok: true,
       message:
-        "Conexao de webhook criada. Copie a URL agora; ela nao sera exibida novamente.",
+        "Conexão de webhook criada. Copie a URL agora; ela não será exibida novamente.",
       oneTimeSecret: {
         connectionId: "connection_meta_1",
         provider: "meta_cloud",
@@ -163,7 +163,7 @@ describe("inbound webhook server actions", () => {
     expect(result).toEqual({
       ok: true,
       message:
-        "Segredo rotacionado. Copie a nova URL agora; ela nao sera exibida novamente.",
+        "Segredo rotacionado. Copie a nova URL agora; ela não será exibida novamente.",
       oneTimeSecret: {
         connectionId: "connection_1",
         provider: "umbler",
@@ -179,9 +179,9 @@ describe("inbound webhook server actions", () => {
   });
 
   it.each([
-    ["paused", "Conexao pausada. Novas entregas nao serao processadas."],
-    ["observation", "Conexao mantida em modo de observacao."],
-    ["production", "Envio automatico ativado nos canais habilitados."],
+    ["paused", "Conexão pausada. Novas entregas não serão processadas."],
+    ["observation", "Conexão mantida em modo de observação."],
+    ["production", "Envio automático ativado nos canais habilitados."],
   ] as const)(
     "updates the connection status to %s",
     async (status, message) => {
@@ -205,7 +205,7 @@ describe("inbound webhook server actions", () => {
 
   it("returns a safe production-readiness reason when activation is blocked", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new Error("Finalize o replay em andamento antes de ativar a producao"),
+      new Error("Finalize o replay em andamento antes de ativar a produção"),
     );
 
     const result = await setInboundWebhookConnectionStatusAction(
@@ -214,7 +214,7 @@ describe("inbound webhook server actions", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "Finalize o replay em andamento antes de ativar a producao",
+      message: "Finalize o replay em andamento antes de ativar a produção",
     });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -232,7 +232,7 @@ describe("inbound webhook server actions", () => {
     );
     expect(result).toEqual({
       ok: true,
-      message: "Conexao removida. O historico de observacao foi preservado.",
+      message: "Conexão removida. O histórico de observação foi preservado.",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });
@@ -269,7 +269,7 @@ describe("inbound webhook server actions", () => {
     expect(result).toEqual({
       ok: true,
       message:
-        "Canal cadastrado. Ja e possivel criar regras de conversao para ele antes de qualquer mensagem chegar.",
+        "Canal cadastrado. Já é possível criar regras de conversão para ele antes de qualquer mensagem chegar.",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });
@@ -292,7 +292,7 @@ describe("inbound webhook server actions", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "Nao foi possivel cadastrar o canal.",
+      message: "Não foi possível cadastrar o canal.",
     });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -300,7 +300,7 @@ describe("inbound webhook server actions", () => {
   it.each([
     [
       "active",
-      "Canal habilitado para envio quando a conexao estiver em producao.",
+      "Canal habilitado para envio quando a conexão estiver em produção.",
     ],
     ["paused", "Canal pausado. Os demais canais continuam inalterados."],
   ] as const)("updates the channel status to %s", async (status, message) => {
@@ -352,7 +352,7 @@ describe("inbound webhook server actions", () => {
     );
     expect(result).toEqual({
       ok: true,
-      message: "Rotas do canal salvas e validadas.",
+      message: "Rotas do canal salvas é validadas.",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });

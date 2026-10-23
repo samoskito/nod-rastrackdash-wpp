@@ -90,7 +90,7 @@ const overview = (
 ) =>
   service.getCampaignReportOverview({
     workspaceId: WORKSPACE,
-    rangeLabel: "Periodo",
+    rangeLabel: "Período",
     ...extra,
   });
 
@@ -195,7 +195,7 @@ describe("relatórios por moeda: duas moedas (portado do SaaS)", () => {
     const { db } = twoCurrencyDb();
     const service = createReportingService(db);
     withRates(service, [{ currency: "USD", date: "2026-07-01", rate: 5 }]);
-    const input = { workspaceId: WORKSPACE, rangeLabel: "Periodo" };
+    const input = { workspaceId: WORKSPACE, rangeLabel: "Período" };
 
     const adSets = await service.getAdSetReportOverview(input);
     expect(adSets.currency).toBeNull();
@@ -227,7 +227,7 @@ describe("relatórios por moeda: duas moedas (portado do SaaS)", () => {
 
     const csv = await service.getCampaignReportCsv({
       workspaceId: WORKSPACE,
-      rangeLabel: "Periodo",
+      rangeLabel: "Período",
     });
     const lines = csv.content.trim().split("\n");
 
@@ -636,7 +636,7 @@ describe("relatórios por moeda: ordenação, isolamento e códigos antigos (rev
 
     const adSets = await service.getAdSetReportOverview({
       workspaceId: WORKSPACE,
-      rangeLabel: "Periodo",
+      rangeLabel: "Período",
       sort: { key: "costPerPurchaseCents", direction: "asc" },
     });
     expect(adSets.adSets.map((row) => row.currency)).toEqual([
@@ -687,7 +687,7 @@ describe("relatórios por moeda: ordenação, isolamento e códigos antigos (rev
 
     const ads = await service.getAdReportOverview({
       workspaceId: WORKSPACE,
-      rangeLabel: "Periodo",
+      rangeLabel: "Período",
       adAccountIds: ["act_other"],
     });
     expect(ads.ads).toEqual([]);
@@ -726,7 +726,7 @@ describe("relatórios por moeda: ordenação, isolamento e códigos antigos (rev
     const report = await overview(service);
     const csv = await service.getCampaignReportCsv({
       workspaceId: WORKSPACE,
-      rangeLabel: "Periodo",
+      rangeLabel: "Período",
     });
 
     expect(loadRateTable).not.toHaveBeenCalled();

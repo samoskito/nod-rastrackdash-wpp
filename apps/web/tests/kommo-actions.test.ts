@@ -67,14 +67,14 @@ const pipelineRow = {
   id: "pipeline_1",
   name: "Vendas",
   sort: 1,
-  status: { id: "status_1", name: "Negociacao", type: "ordinary" },
+  status: { id: "status_1", name: "Negociação", type: "ordinary" },
   available: true,
 };
 
 const ruleRow = {
   id: "rule_1",
   connectionId: "connection_1",
-  name: "Negociacao avancada",
+  name: "Negociação avançada",
   pipelineId: "pipeline_1",
   statusId: "status_1",
   eventName: "QualifiedLead",
@@ -352,12 +352,12 @@ describe("createKommoConnectionAction", () => {
 
   it("passes only allowlisted 400/409 messages", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new ApiRequestErrorStub("Credencial Kommo requer verificacao", 409),
+      new ApiRequestErrorStub("Credencial Kommo requer verificação", 409),
     );
     expect(
       (await createKommoConnectionAction(form({ workspaceId: "workspace_1", payload })))
         .message,
-    ).toBe("Credencial Kommo requer verificacao");
+    ).toBe("Credencial Kommo requer verificação");
 
     serverApiFetch.mockRejectedValueOnce(
       new ApiRequestErrorStub(`SQL error near ${SECRET_TOKEN}`, 400),
@@ -529,7 +529,7 @@ describe("refreshKommoCatalogAction", () => {
 
 describe("Kommo rule actions", () => {
   const validRule = {
-    name: "Negociacao avancada",
+    name: "Negociação avançada",
     pipelineId: "pipeline_1",
     statusId: "status_1",
     eventName: "QualifiedLead",
@@ -784,7 +784,7 @@ describe("listKommoEventsAction", () => {
 
   it("preserves the delivery-unknown message only when it is exactly the known copy", async () => {
     const unknownMessage =
-      "Resultado da entrega desconhecido. Reenvio bloqueado; investigacao requerida.";
+      "Resultado da entrega desconhecido. Reenvio bloqueado; investigação requerida.";
     serverApiFetch.mockResolvedValueOnce({
       events: [
         {

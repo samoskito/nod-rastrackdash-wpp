@@ -72,7 +72,7 @@ function reportMetrics(overrides: Record<string, unknown> = {}) {
 
 const campaignReport = {
   workspaceId: "workspace_1",
-  rangeLabel: "Ultimos 7 dias",
+  rangeLabel: "Últimos 7 dias",
   since: "2026-07-06",
   until: "2026-07-12",
   campaigns: [
@@ -103,7 +103,7 @@ const campaignReport = {
 
 const adSetReport = {
   workspaceId: "workspace_1",
-  rangeLabel: "Ultimos 7 dias",
+  rangeLabel: "Últimos 7 dias",
   since: "2026-07-06",
   until: "2026-07-12",
   adSets: [
@@ -135,7 +135,7 @@ const adSetReport = {
 
 const adReport = {
   workspaceId: "workspace_1",
-  rangeLabel: "Ultimos 7 dias",
+  rangeLabel: "Últimos 7 dias",
   since: "2026-07-06",
   until: "2026-07-12",
   ads: [
@@ -338,10 +338,10 @@ describe("reports route", () => {
     expect(html).toContain("Black Friday WhatsApp");
     expect(html).toContain("Total do filtro");
     expect(html).toContain("21 campanhas");
-    expect(html).toContain("Periodo de analise");
+    expect(html).toContain("Período de análise");
     expect(html).toContain("06/07/2026 a 12/07/2026");
     expect(html).toContain("Meta: 06/07/2026 a 12/07/2026");
-    expect(html).toContain("Proxima");
+    expect(html).toContain("Próxima");
     expect(
       urls.some((url) => url.includes("/reports/campaigns?page=1&pageSize=10")),
     ).toBe(true);
@@ -364,7 +364,7 @@ describe("reports route", () => {
     const urls = fetchMock.mock.calls.map(([input]) => String(input));
 
     expect(html).toContain("Meta: 01/05/2026 a 12/07/2026");
-    expect(html).not.toContain("Periodo Meta diferente do relatorio");
+    expect(html).not.toContain("Período Meta diferente do relatório");
     expect(
       urls.some(
         (url) =>
@@ -381,7 +381,7 @@ describe("reports route", () => {
 
     const html = await renderReports({ view: "adsets" });
 
-    expect(html).toContain("Periodo Meta diferente do relatorio");
+    expect(html).toContain("Período Meta diferente do relatório");
   });
 
   it("keeps the warning when any active Meta account lacks coverage", async () => {
@@ -407,7 +407,7 @@ describe("reports route", () => {
       until: "2026-07-12",
     });
 
-    expect(html).toContain("Contas Meta com periodos diferentes");
+    expect(html).toContain("Contas Meta com períodos diferentes");
   });
 
   it("loads only the selected ad set view", async () => {
@@ -443,7 +443,7 @@ describe("reports route", () => {
     expect(campaignHtml).toContain(
       'class="report-metric-link" href="/leads?campaignId=cmp_1',
     );
-    expect(adSetHtml).toContain("Selecao atual");
+    expect(adSetHtml).toContain("Seleção atual");
     expect(adSetHtml).toContain("Black Friday WhatsApp");
     expect(adSetHtml).toContain(
       "campaignId=cmp_1&amp;adSetId=adset_1&amp;page=1&amp;pageSize=10&amp;view=ads",
@@ -464,7 +464,7 @@ describe("reports route", () => {
     });
 
     expect(campaignHtml).toContain(
-      'aria-label="Alterar orcamento da campanha Black Friday WhatsApp"',
+      'aria-label="Alterar orçamento da campanha Black Friday WhatsApp"',
     );
     expect(campaignHtml).toContain(
       'aria-label="Pausar campanha Black Friday WhatsApp"',
@@ -472,7 +472,7 @@ describe("reports route", () => {
     expect(adHtml).toContain("https://cdn.example.test/ad-1.jpg");
     expect(adHtml).toContain("https://cdn.example.test/ad-1-large.jpg");
     expect(adHtml).toContain(
-      'aria-label="Ampliar criativo do anuncio Criativo WhatsApp"',
+      'aria-label="Ampliar criativo do anúncio Criativo WhatsApp"',
     );
     expect(adHtml).toContain('class="is-selected"');
     expect(adHtml).toContain('name="adId" value="ad_1"');
@@ -482,7 +482,7 @@ describe("reports route", () => {
     mockReportsApi();
     const html = await renderReports();
 
-    expect(html).toContain("Incluido manualmente");
+    expect(html).toContain("Incluído manualmente");
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('class="review-actions"');
   });
@@ -527,12 +527,12 @@ describe("reports route", () => {
     expect(html).toContain('class="report-analysis-switcher"');
     expect(html).toContain('class="report-period-context"');
     expect(html).not.toContain("Estrutura e filtros");
-    expect(html).toContain('aria-label="Grupo de metricas"');
-    expect(html).toContain('aria-label="Filtros avancados"');
+    expect(html).toContain('aria-label="Grupo de métricas"');
+    expect(html).toContain('aria-label="Filtros avançados"');
     expect(html).toContain('name="compareSince"');
     expect(html).toContain('name="compareUntil"');
     expect(html).toContain('data-label="Conversas reais"');
-    expect(html).not.toContain("<th>Leads organicos</th>");
+    expect(html).not.toContain("<th>Leads orgânicos</th>");
     expect(html).not.toContain("<th>Receita organica</th>");
   });
 
@@ -548,10 +548,10 @@ describe("reports route", () => {
 
     expect(campaignCall).toContain("delivery=had_delivery");
     expect(campaignCall).toContain("selectedIds=cmp_1%2Ccmp_2");
-    expect(html).toContain("Teve veiculacao no periodo");
-    expect(html).toContain("Filtrar por selecao");
+    expect(html).toContain("Teve veiculação no período");
+    expect(html).toContain("Filtrar por seleção");
     expect(html).toContain("2 selecionados");
-    expect(html).toContain('aria-label="Selecionar campanhas desta pagina"');
+    expect(html).toContain('aria-label="Selecionar campanhas desta página"');
     expect(html).toMatch(
       /aria-label="Selecionar Black Friday WhatsApp"[^>]*checked=""/,
     );
@@ -608,7 +608,7 @@ describe("reports route", () => {
     mockReportsApi({ campaign: excludedCampaign });
     const html = await renderReports({ whatsappClassification: "excluded" });
 
-    expect(html).toContain("Excluido manualmente");
+    expect(html).toContain("Excluído manualmente");
     expect(html).toContain('class="review-state excluded"');
     expect(html).toMatch(
       /<button[^>]*aria-pressed="true"[^>]*value="manual_exclude"[^>]*>Excluir<\/button>/,
@@ -671,7 +671,7 @@ describe("reports route", () => {
     );
 
     expect(campaignCalls).toHaveLength(2);
-    expect(html).toContain("Comparacao entre periodos");
+    expect(html).toContain("Comparação entre períodos");
     expect(html).toContain("2026-07-01 a 2026-07-07");
   });
 
@@ -683,7 +683,7 @@ describe("reports route", () => {
     expect(urls.some((url) => url.includes("/reports/meta/structure"))).toBe(
       true,
     );
-    expect(html).toContain("Estrutura tecnica recolhida");
+    expect(html).toContain("Estrutura técnica recolhida");
     expect(html).toContain("Status desconhecido");
   });
 
@@ -708,17 +708,17 @@ describe("reports route", () => {
     mockReportsApi({ fail: true });
     const html = await renderReports();
 
-    expect(html).toContain("API indisponivel");
-    expect(html).toContain("Nao foi possivel carregar campanhas");
-    expect(html).not.toContain("Nao foi possivel carregar conjuntos");
-    expect(html).not.toContain("Nao foi possivel carregar anuncios");
+    expect(html).toContain("API indisponível");
+    expect(html).toContain("Não foi possível carregar campanhas");
+    expect(html).not.toContain("Não foi possível carregar conjuntos");
+    expect(html).not.toContain("Não foi possível carregar anúncios");
   });
 
   it("hides Meta synchronization from workspace members", async () => {
     mockReportsApi({ member: true });
     const html = await renderReports();
 
-    expect(html).toContain("Sem permissao para sincronizar Meta");
+    expect(html).toContain("Sem permissão para sincronizar Meta");
     expect(html).not.toContain("Enfileirando leitura dos dados Meta");
   });
 });

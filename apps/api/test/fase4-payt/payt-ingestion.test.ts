@@ -65,7 +65,7 @@ describe("Payt postback on the rule URL (Fase 4a)", () => {
 
     await expect(
       harness.service.ingest(input(paytBody(paid()))),
-    ).rejects.toThrow("Webhook nao encontrado");
+    ).rejects.toThrow("Webhook não encontrado");
     expect(harness.deliveries.size).toBe(0);
   });
 

@@ -394,7 +394,7 @@ describe("Unnichat number management", () => {
     renderPanel();
     fireEvent.click(screen.getByText("Unnichat Loja"));
 
-    expect(screen.getByText("0 regra(s) nesta conexao")).toBeTruthy();
+    expect(screen.getByText("0 regra(s) nesta conexão")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /Abrir Conversões/ }).getAttribute("href"),
     ).toBe("/conversions");
@@ -639,7 +639,7 @@ describe("Unnichat routing mode per number", () => {
 
 describe("Unnichat readiness in plain Portuguese", () => {
   function readinessText() {
-    return screen.getByLabelText("Prontidao operacional do canal").textContent ?? "";
+    return screen.getByLabelText("Prontidão operacional do canal").textContent ?? "";
   }
 
   it.each([

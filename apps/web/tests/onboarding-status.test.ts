@@ -35,7 +35,7 @@ describe("getOnboardingStatus", () => {
   });
 
   it("returns null (fails open) when there is no session", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({ message: "Sessao nao encontrada" }, 401));
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({ message: "Sessão não encontrada" }, 401));
 
     await expect(getOnboardingStatus()).resolves.toBeNull();
   });

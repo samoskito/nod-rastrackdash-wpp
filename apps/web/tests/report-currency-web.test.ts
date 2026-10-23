@@ -170,7 +170,7 @@ async function renderOverview(searchParams: Record<string, string> = {}) {
 
 const baseReport = {
   workspaceId: "workspace_1",
-  rangeLabel: "Ultimos 7 dias",
+  rangeLabel: "Últimos 7 dias",
   since: "2026-07-06",
   until: "2026-07-12",
 };
@@ -369,7 +369,7 @@ describe("sem cotação", () => {
     );
     expect(html).toContain("PTAX_SYNC_ENABLED");
     // O ROAS parcial (3x) não aparece como se fosse completo.
-    expect(html).not.toMatch(/data-label="ROAS de aquisicao">3x</);
+    expect(html).not.toMatch(/data-label="ROAS de aquisição">3x</);
   });
 
   it("Relatórios: em duas moedas, só o bloco sem cotação mostra o aviso", async () => {

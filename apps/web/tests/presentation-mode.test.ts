@@ -46,11 +46,11 @@ describe("presentation mode", () => {
       ["../src/app/(app)/integrations/page.tsx", "Pixel oculto"],
       [
         "../src/app/(app)/integrations/inbound-webhook-panel.tsx",
-        "Conexao WhatsApp",
+        "Conexão WhatsApp",
       ],
       [
         "../src/app/(app)/integrations/inbound-webhook-panel.tsx",
-        "Numero oculto",
+        "Número oculto",
       ],
       [
         "../src/app/(app)/integrations/inbound-webhook-route-editor.tsx",
@@ -62,9 +62,9 @@ describe("presentation mode", () => {
       ],
       [
         "../src/app/(app)/integrations/inbound-webhook-route-editor.tsx",
-        "Pixel e Pagina ocultos",
+        "Pixel e Página ocultos",
       ],
-      ["../src/app/(app)/settings/page.tsx", "Usuario oculto"],
+      ["../src/app/(app)/settings/page.tsx", "Usuário oculto"],
     ] as const;
 
     for (const [path, placeholder] of surfaces) {

@@ -183,7 +183,7 @@ describe("fail-closed Kommo sender outcomes", () => {
       ).toMatchObject({
         status: "blocked",
         errorCode: "kommo_delivery_unknown",
-        errorMessage: expect.stringContaining("investigacao requerida"),
+        errorMessage: expect.stringContaining("investigação requerida"),
         results: [
           expect.objectContaining({ publicationStatus: "delivery_unknown" }),
         ],

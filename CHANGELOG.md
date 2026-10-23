@@ -573,6 +573,8 @@ This is the **initial public release** of the `nod-rastrackdash-wpp` student tem
 
 ### Fixed
 
+- **Textos da tela com acentuação corrigida** (web e mensagens da API; cabeçalhos de CSV e rótulos do pacote shared ficam como estavam).
+
 - **"Todos os números" rules now send (API, shared and web)**, ported from
   the SaaS #152 (merge `b7fbd552`: `d3be95b`, `57e0b6e`, `5f5e7af`, `5df9130`, `90e5cfd`,
   `5f13151`, `6cbdac7`, `394cbb9`, `5c1d209`, `8fe8e9f`, `1882cb2`, `b0df0a4`,

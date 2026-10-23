@@ -65,7 +65,7 @@ describe("shared hardening", () => {
       }),
     ).rejects.toMatchObject({
       constructor: ConflictException,
-      message: "Email ja cadastrado",
+      message: "Email já cadastrado",
     });
   });
 

@@ -187,7 +187,7 @@ describe("ExternalMysqlAdapter", () => {
     ).resolves.toMatchObject({
       ok: false,
       errorCode: "ETIMEDOUT",
-      message: "A conexao MySQL excedeu o tempo limite",
+      message: "A conexão MySQL excedeu o tempo limite",
     });
   });
 });

@@ -164,7 +164,7 @@ describe("overview route", () => {
       "http://localhost:3333/reports/campaigns?includeDaily=true&includeSummary=true&since=2026-07-01&until=2026-07-02&businessId=business_1&adAccountId=act_1",
       expect.objectContaining({ credentials: "include" }),
     );
-    expect(html).toContain("Periodo e contas");
+    expect(html).toContain("Período e contas");
     expect(html).toContain("BM Principal");
     expect(html).toContain("Conta Principal");
     expect(html).toContain("Meta x leads novos");
@@ -253,8 +253,8 @@ describe("overview route", () => {
     expect(html).not.toContain("Resumo do workspace");
     expect(html).toContain(">15<");
     expect(html).toContain(">8<");
-    expect(html).toContain("Receita trafego");
-    expect(html).toContain("Funil de conversao");
+    expect(html).toContain("Receita tráfego");
+    expect(html).toContain("Funil de conversão");
     expect(html).toContain("Base do funil");
     expect(html).toContain("da etapa anterior");
     expect(html).toContain("conversion-funnel-chart");
@@ -275,7 +275,7 @@ describe("overview route", () => {
       new Response(
         JSON.stringify({
           workspaceId: "workspace_1",
-          rangeLabel: "Ultimos 7 dias",
+          rangeLabel: "Últimos 7 dias",
           campaigns: [
             {
               id: "cmp_1",
@@ -318,7 +318,7 @@ describe("overview route", () => {
         new Response(
           JSON.stringify({
             workspaceId: "workspace_1",
-            rangeLabel: "Ultimos 7 dias",
+            rangeLabel: "Últimos 7 dias",
             campaigns: [
               {
                 id: "cmp_1",
@@ -399,7 +399,7 @@ describe("overview route", () => {
       new Response(
         JSON.stringify({
           workspaceId: "workspace_1",
-          rangeLabel: "Ultimos 7 dias",
+          rangeLabel: "Últimos 7 dias",
           campaigns: [],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -419,7 +419,7 @@ describe("overview route", () => {
       new Response(
         JSON.stringify({
           workspaceId: "workspace_1",
-          rangeLabel: "Ultimos 7 dias",
+          rangeLabel: "Últimos 7 dias",
           campaigns: [],
           summary: {
             id: "workspace_summary",
@@ -471,8 +471,8 @@ describe("overview route", () => {
     const element = await OverviewPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("API indisponivel");
-    expect(html).toContain("Dados temporariamente indisponiveis");
+    expect(html).toContain("API indisponível");
+    expect(html).toContain("Dados temporariamente indisponíveis");
     expect(html).toContain("Aguardando resposta da API");
     expect(html).not.toContain("Resumo do workspace");
     expect(html).not.toContain("Qualidade do rastreamento");
@@ -564,12 +564,12 @@ function leadsSummary(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("overview leads no periodo", () => {
+describe("overview leads no período", () => {
   it("always shows the four readings, zeros included, with the Leads lists behind them", async () => {
     const html = await renderOverviewWith(
       {
         workspaceId: "workspace_1",
-        rangeLabel: "Ultimos 7 dias",
+        rangeLabel: "Últimos 7 dias",
         since: "2026-10-08",
         until: "2026-10-14",
         campaigns: [],
@@ -695,7 +695,7 @@ describe("overview daily returns", () => {
     const html = await renderOverviewWith(
       {
         workspaceId: "workspace_1",
-        rangeLabel: "Ultimos 2 dias",
+        rangeLabel: "Últimos 2 dias",
         since: "2026-10-13",
         until: "2026-10-14",
         campaigns: [],

@@ -165,7 +165,7 @@ describe("WhatsApp provider actions", () => {
         JSON.stringify({
           id: "connection_other",
           provider: "waha",
-          name: "Outra conexao",
+          name: "Outra conexão",
           displayName: null,
           baseUrl: null,
           instanceId: null,

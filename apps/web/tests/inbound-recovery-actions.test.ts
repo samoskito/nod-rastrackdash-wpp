@@ -99,7 +99,7 @@ describe("recovery server actions", () => {
   });
   it("preserves safe actionable route-change errors", async () => {
     vi.mocked(serverApiFetch).mockRejectedValue(
-      new Error("A conexao ou a rota mudou. Atualize a previa antes de enviar"),
+      new Error("A conexão ou a rota mudou. Atualize a prévia antes de enviar"),
     );
     expect(
       await authorizeInboundRecoveryAction("connection", "channel", {
@@ -109,7 +109,7 @@ describe("recovery server actions", () => {
       }),
     ).toEqual({
       ok: false,
-      message: "A conexao ou a rota mudou. Atualize a previa antes de enviar",
+      message: "A conexão ou a rota mudou. Atualize a prévia antes de enviar",
     });
   });
 });

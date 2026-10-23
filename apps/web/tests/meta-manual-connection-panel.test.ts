@@ -113,7 +113,7 @@ describe("Meta manual connection panel", () => {
               pixelId: "pixel_1",
               pixelName: "Pixel Cliente",
               pageId: "page_1",
-              pageName: "Pagina Cliente",
+              pageName: "Página Cliente",
               status: "configured",
               lastValidatedAt: "2026-07-17T12:00:00.000Z",
               validationError: null,
@@ -126,7 +126,7 @@ describe("Meta manual connection panel", () => {
               pixelId: "pixel_2",
               pixelName: "Pixel Cliente 2",
               pageId: "page_2",
-              pageName: "Pagina Cliente 2",
+              pageName: "Página Cliente 2",
               status: "configured",
               lastValidatedAt: "2026-07-17T12:00:00.000Z",
               validationError: null,
@@ -179,21 +179,21 @@ describe("Meta manual connection panel", () => {
       }),
     );
 
-    expect(html).toContain("Vincular Pixel e Pagina por BM");
+    expect(html).toContain("Vincular Pixel e Página por BM");
     expect(html).toContain("Estruturas salvas sem alterar a rota atual");
     expect(html).toContain("Ativar roteamento por BM");
     expect(html).not.toContain("Roteamento por BM ativo");
     expect(html).toContain("1 BM");
     expect(html).toContain("2 contas");
     expect(html).toContain("2 destinos");
-    expect(html).toContain("2 vinculo(s) ativo(s)");
+    expect(html).toContain("2 vínculo(s) ativo(s)");
     expect(html).toContain("2 destino(s) salvo(s)");
     expect(html).toContain("Conta Cliente");
     expect(html).toContain("Conta Cliente 2");
     expect(html).toContain("Pixel Cliente");
     expect(html).toContain("Pixel Cliente 2");
-    expect(html).toContain("Pagina Cliente");
-    expect(html).toContain("Pagina Cliente 2");
+    expect(html).toContain("Página Cliente");
+    expect(html).toContain("Página Cliente 2");
     expect(html).toContain("Destinos salvos nesta BM");
   });
 
@@ -279,7 +279,7 @@ describe("Meta manual connection panel", () => {
               pixelId: "pixel_1",
               pixelName: "Pixel cliente",
               pageId: "page_1",
-              pageName: "Pagina cliente",
+              pageName: "Página cliente",
               status: "configured",
               lastValidatedAt: "2026-07-14T12:00:00.000Z",
               validationError: null,
@@ -303,7 +303,7 @@ describe("Meta manual connection panel", () => {
               lastSyncedAt: null,
               lastSyncSince: null,
               lastSyncUntil: null,
-              syncError: "Permissao de Insights ausente",
+              syncError: "Permissão de Insights ausente",
             },
           ],
         },
@@ -320,8 +320,8 @@ describe("Meta manual connection panel", () => {
       '<details class="meta-configured-structures" open="">',
     );
     expect(html).toContain("BM Cliente");
-    expect(html).toContain("Permissao de Insights ausente");
-    expect(html).toContain("Importar historico inicial");
+    expect(html).toContain("Permissão de Insights ausente");
+    expect(html).toContain("Importar histórico inicial");
     expect(html).toContain("Auditar roteamento");
     expect(html).toContain('aria-label="Editar BM Cliente"');
     expect(html).toContain('aria-label="Remover BM Cliente"');

@@ -617,7 +617,7 @@ describe("ReportingMetricsEngine leads novos x leads que voltaram", () => {
     expect(first.returningLeads).toBe(0);
   });
 
-  it("counts organic leads apart and never as leads de anuncio", () => {
+  it("counts organic leads apart and never as leads de anúncio", () => {
     const metrics = engine.calculate({
       events: [],
       insight,
@@ -658,7 +658,7 @@ describe("ReportingMetricsEngine leads novos x leads que voltaram", () => {
     expect(metrics.adConversationEvents).toBe(0);
   });
 
-  it("puts each lead novo on the Sao Paulo day of its first contact", () => {
+  it("puts each lead novo on the São Paulo day of its first contact", () => {
     const saoPauloDay = (date: Date) =>
       new Intl.DateTimeFormat("en-CA", {
         timeZone: "America/Sao_Paulo",
@@ -734,14 +734,14 @@ describe("ReportingMetricsEngine leads novos x leads que voltaram", () => {
     });
     const custom = engine.calculate({
       events: [],
-      funnelStages: stages("Contatos do anuncio"),
+      funnelStages: stages("Contatos do anúncio"),
       insight,
       leads: [],
       scope: {},
     });
 
     expect(legacy.funnelSteps[0]?.label).toBe("Leads novos");
-    expect(custom.funnelSteps[0]?.label).toBe("Contatos do anuncio");
+    expect(custom.funnelSteps[0]?.label).toBe("Contatos do anúncio");
   });
 });
 

@@ -286,7 +286,7 @@ describe("platform admin bootstrap", () => {
 
     await expect(
       bootstrapPlatformAdminUser(harness.prisma as never, input),
-    ).rejects.toThrow("Usuario existente nao alterado");
+    ).rejects.toThrow("Usuário existente não alterado");
     expect(harness.users[0]?.platformRole).toBeNull();
     expect(harness.users[0]?.passwordHash).toBe("existing-hash");
   });

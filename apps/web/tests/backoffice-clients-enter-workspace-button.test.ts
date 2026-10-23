@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe("BackofficeClientsEnterWorkspaceButton", () => {
-  it("switches into the workspace with the backoffice context and redirects to the operational area", async () => {
+  it("switches into the workspace with the backoffice context and redirects to the operational área", async () => {
     switchActiveWorkspace.mockResolvedValueOnce({ ok: true });
 
     render(

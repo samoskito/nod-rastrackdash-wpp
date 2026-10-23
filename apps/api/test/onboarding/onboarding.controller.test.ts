@@ -39,7 +39,7 @@ describe("OnboardingController", () => {
 
   it("propagates UnauthorizedException when the session is invalid", async () => {
     const authService = {
-      getSession: vi.fn().mockRejectedValue(new UnauthorizedException("Sessao invalida")),
+      getSession: vi.fn().mockRejectedValue(new UnauthorizedException("Sessão inválida")),
     } as unknown as AuthService;
     const onboardingService = {
       getStatus: vi.fn(),

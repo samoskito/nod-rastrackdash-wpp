@@ -21,7 +21,7 @@ function auditEvent(overrides: Record<string, unknown>) {
     statusLabel: "Enviado",
     statusDetail: "Recebido pela Meta",
     source: "external_integration",
-    sourceLabel: "Integracao externa",
+    sourceLabel: "Integração externa",
     leadId: null,
     leadName: null,
     phoneDisplay: null,
@@ -82,12 +82,12 @@ function blockedAudit(canRetry: boolean) {
       id: "event_blocked",
       deliveryState: "blocked",
       statusLabel: "Bloqueado",
-      statusDetail: "Depende de configuracao",
+      statusDetail: "Depende de configuração",
       sentAt: null,
       status: "not_configured",
       canRetry,
       errorCode: "MissingAccessToken",
-      errorMessage: "Conexao com a Meta sem acesso",
+      errorMessage: "Conexão com a Meta sem acesso",
     }),
   ]);
 
@@ -136,7 +136,7 @@ describe("events route", () => {
               statusLabel: "Enviado",
               statusDetail: "Recebido pela Meta",
               source: "external_integration",
-              sourceLabel: "Integracao externa",
+              sourceLabel: "Integração externa",
               leadId: "lead_1",
               leadName: "Mariana Alves",
               phoneDisplay: "+55 11 99999-1020",
@@ -145,7 +145,7 @@ describe("events route", () => {
               adSetId: "adset_1",
               adSetName: "Conjunto aberto",
               adId: "ad_1",
-              adName: "Anuncio 1",
+              adName: "Anúncio 1",
               pixelId: "pixel_1",
               pageId: "page_1",
               occurredAt: "2026-07-12T15:00:00.000Z",
@@ -178,16 +178,16 @@ describe("events route", () => {
       "http://localhost:3333/reports/conversions/audit?since=2026-07-06&until=2026-07-12&page=1&pageSize=25&eventName=Purchase&status=sent&source=external_integration",
       expect.objectContaining({ credentials: "include" }),
     );
-    expect(html).toContain("Auditoria de conversoes");
-    expect(html).toContain("Periodo da auditoria");
+    expect(html).toContain("Auditoria de conversões");
+    expect(html).toContain("Período da auditoria");
     expect(html).toContain('class="audit-advanced-filters"');
-    expect(html).toContain("Saude da entrega");
+    expect(html).toContain("Saúde da entrega");
     expect(html).toContain("Fluxo para a Meta");
-    expect(html.indexOf("Periodo da auditoria")).toBeLessThan(
+    expect(html.indexOf("Período da auditoria")).toBeLessThan(
       html.indexOf("Fluxo para a Meta"),
     );
     expect(html.indexOf("Fluxo para a Meta")).toBeLessThan(
-      html.indexOf("Eventos do periodo"),
+      html.indexOf("Eventos do período"),
     );
     expect(html).toContain("audit-mobile-event-card");
     expect(html).toContain("Em sombra");
@@ -216,9 +216,9 @@ describe("events route", () => {
               eventLabel: "Lead qualificado",
               deliveryState: "failed",
               statusLabel: "Falhou",
-              statusDetail: "O envio nao foi concluido",
+              statusDetail: "O envio não foi concluído",
               source: "whatsapp_automation",
-              sourceLabel: "Automacao do WhatsApp",
+              sourceLabel: "Automação do WhatsApp",
               leadId: null,
               leadName: null,
               phoneDisplay: null,
@@ -254,8 +254,8 @@ describe("events route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("A Meta recusou o evento");
-    expect(html).toContain("Lead nao vinculado");
-    expect(html).toContain("Ainda nao enviado");
+    expect(html).toContain("Lead não vinculado");
+    expect(html).toContain("Ainda não enviado");
     expect(html).not.toContain("Reenviar");
   });
 
@@ -270,9 +270,9 @@ describe("events route", () => {
               eventLabel: "Conversas reais iniciadas",
               deliveryState: "failed",
               statusLabel: "Falhou",
-              statusDetail: "O envio nao foi concluido",
+              statusDetail: "O envio não foi concluído",
               source: "external_integration",
-              sourceLabel: "Integracao externa",
+              sourceLabel: "Integração externa",
               leadId: "lead_1",
               leadName: "Mariana Alves",
               phoneDisplay: "+55 11 99999-1020",
@@ -281,7 +281,7 @@ describe("events route", () => {
               adSetId: null,
               adSetName: null,
               adId: "ad_1",
-              adName: "Anuncio 1",
+              adName: "Anúncio 1",
               pixelId: "pixel_1",
               pageId: "page_1",
               occurredAt: "2026-07-12T15:00:00.000Z",
@@ -290,7 +290,7 @@ describe("events route", () => {
               canRetry: true,
               providerResponseSummary: null,
               errorCode: "MetaCapiNetworkError",
-              errorMessage: "Falha de comunicacao com a Meta",
+              errorMessage: "Falha de comunicação com a Meta",
               valueSource: null,
             },
           ]),
@@ -307,7 +307,7 @@ describe("events route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Falha de comunicacao com a Meta");
+    expect(html).toContain("Falha de comunicação com a Meta");
     expect(html).toContain("Reenviar");
     expect(html).toContain('name="eventId"');
     expect(html).toContain('value="event_network_error"');
@@ -327,9 +327,9 @@ describe("events route", () => {
     expect(html).toContain("Bloqueado");
     expect(html).toContain('value="event_blocked"');
     expect(html).toContain(
-      'title="Tentar enviar de novo com a conexao Meta atual"',
+      'title="Tentar enviar de novo com a conexão Meta atual"',
     );
-    expect(html).not.toContain("Reenviar falha de comunicacao com a Meta");
+    expect(html).not.toContain("Reenviar falha de comunicação com a Meta");
   });
 
   it("hides every retry action from a member on blocked rows", async () => {
@@ -375,7 +375,7 @@ describe("events route", () => {
     expect(form).toContain('name="source" value="external_integration"');
     expect(form).not.toContain('name="page"');
     expect(form).not.toContain("disabled");
-    expect(html).toContain("Eventos ja enviados nao sao reenviados.");
+    expect(html).toContain("Eventos já enviados não são reenviados.");
   });
 
   it("disables the bulk retry when the period has no blocked events", async () => {
@@ -420,7 +420,7 @@ describe("events route", () => {
     );
     expect(state.status).toBe("success");
     expect(state.message).toBe(
-      "3 eventos enfileirados para nova tentativa. 2 ja nao estavam bloqueados e ficaram de fora. 1 nao pode ser enfileirado agora; tente de novo em instantes.",
+      "3 eventos enfileirados para nova tentativa. 2 já não estavam bloqueados e ficaram de fora. 1 não pode ser enfileirado agora; tente de novo em instantes.",
     );
   });
 
@@ -439,7 +439,7 @@ describe("events route", () => {
 
     expect(state.status).toBe("success");
     expect(state.message).toBe(
-      "Nenhum evento bloqueado para reenviar neste periodo.",
+      "Nenhum evento bloqueado para reenviar neste período.",
     );
   });
 
@@ -476,8 +476,8 @@ describe("events route", () => {
     });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("API indisponivel");
-    expect(html).toContain("Nao foi possivel carregar a auditoria");
+    expect(html).toContain("API indisponível");
+    expect(html).toContain("Não foi possível carregar a auditoria");
     expect(html).not.toContain("Mariana Alves");
   });
 

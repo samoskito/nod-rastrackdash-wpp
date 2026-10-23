@@ -33,7 +33,7 @@ function ctwaPayload(): Record<string, unknown> {
                     source_url: "https://fb.me/test",
                     source_id: "120250454222470468",
                     source_type: "ad",
-                    body: "Anuncio teste",
+                    body: "Anúncio teste",
                     headline: "Conheca nossa oferta",
                     ctwa_clid: "AfhSuO26CqPSb4E",
                   },

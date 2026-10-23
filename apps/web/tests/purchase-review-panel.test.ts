@@ -17,7 +17,7 @@ const averageRule: ProviderConversionRuleDto = {
   conversionRule: {
     id: "conversion_rule_average",
     workspaceId: "workspace_1",
-    name: "Compra com valor medio",
+    name: "Compra com valor médio",
     triggerType: "message_phrase",
     triggerValue: "message_phrase",
     matchMode: "exact",
@@ -25,7 +25,7 @@ const averageRule: ProviderConversionRuleDto = {
     pixelId: null,
     defaultValueCents: 29_990,
     defaultCurrency: "BRL",
-    defaultContentName: "Pedido medio",
+    defaultContentName: "Pedido médio",
     defaultItems: null,
     active: true,
     createdAt: "2026-07-22T12:00:00.000Z",
@@ -83,7 +83,7 @@ const catalogRule: ProviderConversionRuleDto = {
   conversionRule: {
     ...averageRule.conversionRule,
     id: "conversion_rule_catalog",
-    name: "Compra por catalogo",
+    name: "Compra por catálogo",
     triggerType: "structured_catalog",
     triggerValue: "structured_catalog",
     defaultValueCents: null,
@@ -140,7 +140,7 @@ describe("purchase review panel", () => {
   it("lets a manager approve an average-value purchase without catalog items", () => {
     const html = renderPanel(true);
 
-    expect(html).toContain("Regra de valor medio");
+    expect(html).toContain("Regra de valor médio");
     expect(html).toContain("R$ 299,90");
     expect(html).toContain("Aprovar e enviar");
     expect(html).not.toContain("Complete os produtos antes de aprovar");
@@ -149,7 +149,7 @@ describe("purchase review panel", () => {
   it("keeps decision controls out of read-only member access", () => {
     const html = renderPanel(false);
 
-    expect(html).toContain("Compra com valor medio");
+    expect(html).toContain("Compra com valor médio");
     expect(html).not.toContain("Aprovar e enviar");
     expect(html).not.toContain("Rejeitar");
   });
@@ -174,18 +174,18 @@ describe("purchase review panel", () => {
       conversionEventLogId: "event_1",
     });
 
-    expect(html).toContain("Diagnostico");
+    expect(html).toContain("Diagnóstico");
     expect(html).toContain("Conversão reconhecida");
     expect(html).toContain("Inspecionar");
-    expect(html).not.toContain("Evento Meta ainda nao criado");
+    expect(html).not.toContain("Evento Meta ainda não criado");
   });
 
   it("makes the missing Meta event explicit before materialization", () => {
     const html = renderPanel(true);
 
-    expect(html).toContain("Diagnostico");
+    expect(html).toContain("Diagnóstico");
     expect(html).toContain("Conversão reconhecida");
-    expect(html).toContain("Evento Meta ainda nao criado");
+    expect(html).toContain("Evento Meta ainda não criado");
     expect(html).not.toContain("Inspecionar");
   });
 
@@ -200,6 +200,6 @@ describe("purchase review panel", () => {
 
     expect(html).toContain("Selecionar variante");
     expect(html).toContain("Aprovar e enviar");
-    expect(html).not.toContain("Salvar revisao");
+    expect(html).not.toContain("Salvar revisão");
   });
 });

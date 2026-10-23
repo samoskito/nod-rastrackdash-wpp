@@ -133,7 +133,7 @@ describe("WhatsappProviderPanel edit flow", () => {
   it("submits the edit form, clears the secret and refreshes on success", async () => {
     const editAction = vi.fn(async () => ({
       ok: true as const,
-      message: "Conexao atualizada.",
+      message: "Conexão atualizada.",
     }));
     renderPanel({ editAction });
 
@@ -214,7 +214,7 @@ describe("WhatsappProviderPanel receiver instruction", () => {
       "URL completa do receiver WhatsApp",
     ) as HTMLInputElement;
     expect(webhookInput.value).toBe("https://api.test/webhook/uazapi-token");
-    expect(screen.getByText(/exibido uma unica vez/i)).not.toBeNull();
+    expect(screen.getByText(/exibido uma única vez/i)).not.toBeNull();
   });
 
   it("points students to the inbound webhooks block for Umbler Talk and Gupshup", () => {
@@ -238,7 +238,7 @@ describe("WhatsappProviderPanel delete flow", () => {
   it("requires typing the exact connection name before enabling the confirm button", async () => {
     const deleteAction = vi.fn(async () => ({
       ok: true as const,
-      message: "Conexao excluida.",
+      message: "Conexão excluída.",
     }));
     renderPanel({ deleteAction });
 
@@ -254,12 +254,12 @@ describe("WhatsappProviderPanel delete flow", () => {
     }) as HTMLButtonElement;
     expect(confirmButton.disabled).toBe(true);
 
-    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusao/i), {
+    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusão/i), {
       target: { value: "wrong name" },
     });
     expect(confirmButton.disabled).toBe(true);
 
-    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusao/i), {
+    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusão/i), {
       target: { value: connection.name },
     });
     expect(confirmButton.disabled).toBe(false);
@@ -274,7 +274,7 @@ describe("WhatsappProviderPanel delete flow", () => {
   it("cancels the delete confirmation without calling the action", () => {
     const deleteAction = vi.fn(async () => ({
       ok: true as const,
-      message: "Conexao excluida.",
+      message: "Conexão excluída.",
     }));
     renderPanel({ deleteAction });
 
@@ -290,7 +290,7 @@ describe("WhatsappProviderPanel delete flow", () => {
   it("shows an error and keeps the panel open when the delete action fails", async () => {
     const deleteAction = vi.fn(async () => ({
       ok: false as const,
-      message: "Nao foi possivel excluir a conexao WhatsApp.",
+      message: "Não foi possível excluir a conexão WhatsApp.",
     }));
     renderPanel({ deleteAction });
 
@@ -300,14 +300,14 @@ describe("WhatsappProviderPanel delete flow", () => {
         "whatsapp-connection-delete-confirm-connection_1",
       ),
     );
-    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusao/i), {
+    fireEvent.change(confirmPanel.getByLabelText(/confirmar exclusão/i), {
       target: { value: connection.name },
     });
     fireEvent.click(
       confirmPanel.getByRole("button", { name: /confirmar exclus/i }),
     );
 
-    await screen.findByText(/nao foi possivel excluir/i);
+    await screen.findByText(/não foi possível excluir/i);
     expect(
       screen.getByTestId("whatsapp-connection-delete-confirm-connection_1"),
     ).not.toBeNull();
