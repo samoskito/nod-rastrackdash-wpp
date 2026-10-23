@@ -257,6 +257,34 @@ export class ConversionRulesController {
     );
   }
 
+  /**
+   * "Ativar envio neste número" (regra para todos os números): promove o
+   * número coberto pela mesma ativação de Integrações. Edição do aluno: sem
+   * vaga nem cobrança; a licença bloqueada responde 423 antes daqui.
+   */
+  @Post("providers/:id/numbers/:channelId/activate")
+  @HttpCode(200)
+  async activateProviderRuleNumber(
+    @AuthToken() refreshToken: string,
+    @Param("id") providerRuleId: string,
+    @Param("channelId") channelId: string,
+  ) {
+    const context = await this.requireIntegrationManager(refreshToken);
+    if (
+      typeof channelId !== "string" ||
+      !channelId.trim() ||
+      channelId.length > 255
+    ) {
+      throw new BadRequestException("Número inválido");
+    }
+    return this.providerConversionRulesService.activateGlobalRuleNumber(
+      context.workspaceId,
+      providerRuleId,
+      channelId.trim(),
+      context.userId,
+    );
+  }
+
   @Post("providers/:id/rotate-endpoint")
   @HttpCode(200)
   async rotateProviderRuleEndpoint(

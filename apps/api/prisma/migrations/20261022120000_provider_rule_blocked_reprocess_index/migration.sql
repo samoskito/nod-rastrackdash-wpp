@@ -1,0 +1,11 @@
+-- Regra "Todos os números" + "Reprocessar bloqueadas": só acrescenta um
+-- índice em ProviderConversionRuleExecution para o painel das execuções e a
+-- varredura do reprocessamento (workspace, regra, situação e data).
+-- CONCURRENTLY: não trava as gravações de execuções enquanto o índice é
+-- criado. Por isso este arquivo tem UMA única instrução (mesmo padrão de
+-- 20260709233000_lead_ctwa_index_concurrently): o Prisma o envia sozinho,
+-- fora de transação. Reexecutável (IF NOT EXISTS). Se a criação for
+-- interrompida, sobra um índice INVALID: veja as notas de atualização para
+-- conferir e refazer. Reverter com DROP INDEX CONCURRENTLY IF EXISTS do mesmo
+-- nome (o código funciona sem o índice, só mais lento).
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "ProviderConversionRuleExecution_rule_status_occurredAt_idx" ON "ProviderConversionRuleExecution"("workspaceId", "providerRuleId", "status", "occurredAt");

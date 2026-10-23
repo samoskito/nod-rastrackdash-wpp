@@ -33,6 +33,7 @@ import {
 import { conversionsLicenseLockedNote } from "./license-lock";
 import { NumbersWithoutRules } from "./numbers-without-rules";
 import { MessagePhraseFields } from "./message-phrase-fields";
+import { PendingNumbersWarning } from "./pending-numbers";
 import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
@@ -375,6 +376,15 @@ export function NewRuleFlow({
           <strong>{result.replayed ? "Regra já existia" : "Regra criada"}</strong>
           <span>{result.message}</span>
         </div>
+        {result.ruleId && result.pendingNumbers?.length ? (
+          <PendingNumbersWarning
+            ruleId={result.ruleId}
+            pendingNumbers={result.pendingNumbers}
+            numbers={numbers}
+            mode={result.ruleMode ?? "observation"}
+            canManage
+          />
+        ) : null}
         {singleUrlProvider && draft && singleUrlActions && !result.webhookUrl ? (
           <SingleUrlAfterCreate
             provider={singleUrlProvider}

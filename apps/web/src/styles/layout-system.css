@@ -6247,6 +6247,128 @@ body {
   list-style: none;
 }
 
+/* "Todos os números": números que ainda não enviam (mesmo tom de aviso das
+   notas; uma linha por número com a sua ação). */
+
+.conversion-pending-numbers {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(242, 193, 78, 0.35);
+  border-radius: 10px;
+  background: rgba(242, 193, 78, 0.06);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.conversion-pending-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--amber, #f2c14e);
+}
+
+.conversion-pending-title strong {
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.conversion-pending-lead {
+  margin: 0;
+}
+
+.conversion-pending-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversion-pending-list li {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.conversion-pending-number {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 220px;
+  gap: 2px;
+}
+
+.conversion-pending-number strong {
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.conversion-pending-number small {
+  color: var(--ink-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.conversion-pending-list .button {
+  gap: 6px;
+}
+
+/* Janela de execuções: "Reprocessar bloqueadas" */
+
+.conversion-reprocess {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(242, 193, 78, 0.35);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.conversion-reprocess p {
+  margin: 0;
+}
+
+.conversion-reprocess-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  color: var(--ink-soft);
+  list-style: none;
+}
+
+.conversion-reprocess .button {
+  gap: 6px;
+}
+
+@media (max-width: 620px) {
+  .conversion-pending-list li {
+    align-items: stretch;
+  }
+
+  .conversion-pending-list .button,
+  .conversion-reprocess .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .conversions-empty {
   display: grid;
   justify-items: start;

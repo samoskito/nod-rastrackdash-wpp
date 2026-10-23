@@ -1,4 +1,5 @@
 import {
+  activateRuleNumberAction,
   adaptProviderConversionRuleAction,
   confirmConversionRuleCreateAction,
   createConversionRuleAction,
@@ -6,6 +7,7 @@ import {
   loadProviderConversionAutomationPayloadAction,
   loadProviderConversionExecutionAuditAction,
   removeProviderConversionRuleAction,
+  reprocessBlockedExecutionsAction,
   reprocessProviderConversionAutomationCallbacksAction,
   rotateProviderConversionRuleEndpointAction,
   testProviderCatalogMessageAction,
@@ -109,6 +111,8 @@ export default async function ConversionsPage({
         legacyRulesState={data.legacyRulesState}
         updateRuleAction={updateProviderConversionRuleAction}
         loadExecutionsAction={loadProviderConversionExecutionAuditAction}
+        activateNumberAction={activateRuleNumberAction}
+        reprocessBlockedAction={reprocessBlockedExecutionsAction}
         ruleActions={{
           remove: removeProviderConversionRuleAction,
           rotateEndpoint: rotateProviderConversionRuleEndpointAction,

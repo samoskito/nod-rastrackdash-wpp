@@ -5,6 +5,7 @@ import type {
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
   ProviderConversionRuleOriginDto,
+  ProviderConversionRulePendingNumberDto,
 } from "@wpptrack/shared";
 import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import type { PipedriveConnectionDetailDto } from "../integrations/pipedrive-actions";
@@ -123,7 +124,87 @@ export type ConversionRuleRow = {
   connectionId: string | null;
   mode: "observation" | "production" | null;
   active: boolean;
+  /**
+   * "Todos os números": números cobertos que ainda não enviam, com o motivo
+   * (ausente/vazio: todos os números cobertos enviam).
+   */
+  pendingNumbers?: ProviderConversionRulePendingNumberDto[];
 };
+
+// ---------------------------------------------------------------------------
+// "Todos os números": números que ainda não enviam
+// ---------------------------------------------------------------------------
+
+export type PendingNumberView = {
+  channelId: string;
+  /** Nome do número na tela (na falta, o telefone). */
+  label: string;
+  /** O que o bloqueia, em uma frase. */
+  detail: string;
+  /**
+   * activate: "Ativar envio neste número";
+   * integrations: precisa de algo em Integrações (WhatsApp, rota Meta ou
+   * conexão pausada);
+   * null: nada a fazer aqui (a própria regra ainda está em observação).
+   */
+  action: "activate" | "integrations" | null;
+};
+
+/** Motivo de um número pendente, em português simples. */
+export function pendingNumberDetail(
+  number: Pick<
+    ProviderConversionRulePendingNumberDto,
+    "reason" | "channelStatus" | "connectionStatus"
+  >,
+): string {
+  switch (number.reason) {
+    case "whatsapp_connection_inactive":
+      return "A conexão WhatsApp deste número não está ativa (suspensa ou removida). Reative-a em Integrações.";
+    case "meta_route_missing":
+      return "Falta uma rota Meta válida para este número. Configure em Integrações.";
+    case "channel_not_active":
+      return number.channelStatus === "paused"
+        ? "O envio deste número está pausado."
+        : "O envio deste número ainda não foi ativado.";
+    case "connection_not_production":
+      return "A conexão deste número ainda está em observação.";
+    case "connection_paused":
+      return "A conexão deste número foi pausada em Integrações. Retome por lá se quiser voltar a enviar.";
+  }
+}
+
+export function pendingNumberViews(
+  pending: readonly ProviderConversionRulePendingNumberDto[],
+  numbers: readonly ConversionNumber[],
+  ruleMode: "observation" | "production" | null,
+): PendingNumberView[] {
+  const numbersById = new Map(numbers.map((number) => [number.id, number]));
+  return pending.map((number) => ({
+    channelId: number.channelId,
+    label:
+      numbersById.get(number.channelId)?.label ??
+      number.label ??
+      number.phone ??
+      "Número sem nome",
+    detail: pendingNumberDetail(number),
+    action: number.activatable
+      ? ruleMode === "production"
+        ? "activate"
+        : null
+      : "integrations",
+  }));
+}
+
+/** Título do aviso numa regra para todos os números. */
+export function pendingNumbersTitle(
+  count: number,
+  ruleMode: "observation" | "production" | null,
+): string {
+  const numbers = count === 1 ? "1 número" : `${count} números`;
+  return ruleMode === "production"
+    ? `Esta regra ainda não envia eventos em ${numbers}`
+    : `Ao ativar o envio, ${numbers} ainda ${count === 1 ? "precisa" : "precisam"} de atenção`;
+}
 
 // ---------------------------------------------------------------------------
 // Provider rules
@@ -450,6 +531,10 @@ export function buildProviderRuleRows(
       connectionId: rule.connectionId,
       mode: rule.mode,
       active: rule.conversionRule.active,
+      pendingNumbers:
+        scope === "all_numbers" && rule.conversionRule.active
+          ? (rule.pendingNumbers ?? [])
+          : [],
     };
   });
 }

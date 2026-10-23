@@ -101,6 +101,27 @@ export class UazapiConversionBridgeService {
         select: { id: true },
       });
 
+      // Durable event, committed with the bridge: a "Todos os números" rule
+      // in production activates this number automatically
+      // (GlobalRuleAutoActivationService reads it).
+      await transaction.auditLog.create({
+        data: {
+          workspaceId: instance.workspaceId,
+          actorUserId: null,
+          actorType: "system",
+          action: "inbound_webhook.uazapi_bridge_provisioned",
+          targetType: "InboundWebhookChannel",
+          targetId: channel.id,
+          reason: null,
+          sourceIp: null,
+          resultStatus: "observation",
+          afterSummary: {
+            connectionId: connection.id,
+            whatsappInstanceId: instance.id,
+          },
+        },
+      });
+
       this.logger.log(
         JSON.stringify({
           event: "uazapi_conversion_bridge_provisioned",

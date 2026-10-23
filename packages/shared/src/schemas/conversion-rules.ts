@@ -854,6 +854,44 @@ const observationCanonicalChannelsSchema = z.array(
   }),
 );
 
+/**
+ * Regra "Todos os números": por que um número coberto ainda não envia.
+ *  - whatsapp_connection_inactive: a conexão WhatsApp (QR) do número não está
+ *    ativa (suspensa/removida em Integrações ou status legado); a regra não a
+ *    reativa. Não usa o health check (lastHealthStatus), que pode estar velho;
+ *  - meta_route_missing: falta a rota Meta válida exigida pelo provedor;
+ *  - channel_not_active: o canal do número ainda não está ativo;
+ *  - connection_not_production: a conexão do número está em observação;
+ *  - connection_paused: a conexão foi pausada por alguém; só Integrações a
+ *    retoma (nem a regra nem "Ativar envio neste número" a reativam).
+ * Edição do aluno: não há vaga paga nem cobrança por número; a licença válida
+ * é exigida em toda escrita (423 quando bloqueada).
+ */
+export const providerConversionRulePendingNumberReasons = [
+  "whatsapp_connection_inactive",
+  "meta_route_missing",
+  "channel_not_active",
+  "connection_not_production",
+  "connection_paused",
+] as const;
+
+export const providerConversionRulePendingNumberReasonSchema = z.enum(
+  providerConversionRulePendingNumberReasons,
+);
+
+export const providerConversionRulePendingNumberSchema = z.object({
+  channelId: idSchema,
+  connectionId: idSchema,
+  provider: z.string().trim().min(1).max(40),
+  label: z.string().trim().min(1).max(160).nullable(),
+  phone: z.string().trim().min(1).max(40).nullable(),
+  reason: providerConversionRulePendingNumberReasonSchema,
+  channelStatus: z.enum(["discovered", "active", "paused"]),
+  connectionStatus: z.enum(["observation", "production", "paused"]),
+  // true: "Ativar envio neste número" promove o número por aqui.
+  activatable: z.boolean(),
+});
+
 export const providerConversionRuleSchema = z.object({
   id: idSchema,
   workspaceId: idSchema,
@@ -895,6 +933,10 @@ export const providerConversionRuleSchema = z.object({
     .optional(),
   // Regra global que substituiu esta via "Unificar" (historico preservado).
   unifiedIntoRuleId: idSchema.nullable().optional(),
+  // Somente "all_numbers" ativa: números cobertos cuja conexão não está em
+  // produção ou cujo canal não está ativo, com o motivo. Opcional para
+  // aceitar respostas anteriores ao campo (ausente = nenhum pendente).
+  pendingNumbers: z.array(providerConversionRulePendingNumberSchema).optional(),
   triggerPhrases: z.array(messageTriggerPhraseSchema),
   messageAuthorScope: providerConversionMessageAuthorScopeSchema.nullable(),
   // message_phrase value pipeline; "fixed" for every other trigger type.
@@ -1015,6 +1057,25 @@ export const providerConversionRuleUnifyResultSchema = z.object({
   deactivatedRuleIds: z.array(idSchema),
   newlyCoveredChannelIds: z.array(idSchema),
 });
+
+/** "Ativar envio neste número" de uma regra para todos os números. */
+export const providerConversionRuleNumberActivationResultSchema = z.object({
+  // promoted: conexão/canal promovidos agora; already_live: já enviava;
+  // pending: continua pendente pelo motivo informado.
+  outcome: z.enum(["promoted", "already_live", "pending"]),
+  reason: providerConversionRulePendingNumberReasonSchema.nullable(),
+  rule: providerConversionRuleSchema,
+});
+
+export type ProviderConversionRulePendingNumberReasonDto = z.infer<
+  typeof providerConversionRulePendingNumberReasonSchema
+>;
+export type ProviderConversionRulePendingNumberDto = z.infer<
+  typeof providerConversionRulePendingNumberSchema
+>;
+export type ProviderConversionRuleNumberActivationResultDto = z.infer<
+  typeof providerConversionRuleNumberActivationResultSchema
+>;
 
 /**
  * Provedores de numero (InboundWebhookConnection.provider) em que cada origem
@@ -1203,6 +1264,42 @@ export const providerConversionRuleExecutionAuditSchema = z.object({
     totalItems: z.number().int().nonnegative(),
     totalPages: z.number().int().nonnegative(),
   }),
+  /**
+   * "Reprocessar bloqueadas": execuções desta regra paradas porque o número
+   * ainda não estava em produção (connection_not_production /
+   * channel_not_active, ou observadas antes da ativação). Opcional para
+   * aceitar respostas anteriores ao campo.
+   *  - ready: dentro da janela da Meta e com o número já em produção;
+   *  - stillBlocked: dentro da janela, mas o número continua sem produção;
+   *  - expired: mais antigas que a janela (a Meta recusa), não reenviadas.
+   */
+  blockedReprocess: z
+    .object({
+      windowDays: z.number().int().positive(),
+      ready: z.number().int().nonnegative(),
+      stillBlocked: z.number().int().nonnegative(),
+      expired: z.number().int().nonnegative(),
+      // false: a regra está pausada, em observação ou unificada; nada é
+      // reenviado (ready = 0) até o envio automático da regra ser ligado.
+      ruleSendsNow: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+/** Resultado de "Reprocessar bloqueadas" (lote limitado, idempotente). */
+export const providerConversionRuleBlockedReprocessResultSchema = z.object({
+  windowDays: z.number().int().positive(),
+  // Execuções reenviadas para a fila de envio agora.
+  reprocessed: z.number().int().nonnegative(),
+  // Dentro da janela, mas o bloqueio continua (número ainda sem produção).
+  stillBlocked: z.number().int().nonnegative(),
+  // Mais antigas que a janela da Meta: mostradas como expiradas, nunca reenviadas.
+  expired: z.number().int().nonnegative(),
+  // Origem sem reprocessamento por aqui (ex.: não QR) ou erro técnico.
+  skipped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  // Ficaram para o próximo lote.
+  remaining: z.number().int().nonnegative(),
 });
 
 export const providerConversionRuleExecutionAuditQuerySchema = z.object({
@@ -1492,6 +1589,9 @@ export type ProviderConversionRuleExecutionAuditItemDto = z.infer<
 >;
 export type ProviderConversionRuleExecutionAuditDto = z.infer<
   typeof providerConversionRuleExecutionAuditSchema
+>;
+export type ProviderConversionRuleBlockedReprocessResultDto = z.infer<
+  typeof providerConversionRuleBlockedReprocessResultSchema
 >;
 export type ProviderConversionRuleExecutionAuditQueryDto = z.infer<
   typeof providerConversionRuleExecutionAuditQuerySchema

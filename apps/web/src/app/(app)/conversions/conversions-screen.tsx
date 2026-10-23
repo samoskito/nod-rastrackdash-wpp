@@ -55,6 +55,7 @@ import {
 } from "../integrations/single-url/single-url-panels";
 import { LegacyRules, type LegacyRuleActions } from "./legacy-rules";
 import { NewRuleFlow } from "./new-rule-flow";
+import { PendingNumbersWarning } from "./pending-numbers";
 import { RuleExecutions } from "./rule-executions";
 import {
   RuleManage,
@@ -91,6 +92,10 @@ export type ConversionsScreenProps = {
   unifyAction: ScreenAction;
   updateRuleAction: RuleAction;
   loadExecutionsAction: RuleAction;
+  /** "Ativar envio neste número" de uma regra para todos os números. */
+  activateNumberAction?: ScreenAction;
+  /** "Reprocessar bloqueadas" na janela de execuções. */
+  reprocessBlockedAction?: ScreenAction;
   /** Full provider rules (edit form needs phrases, value, catalog...). */
   providerRules?: ProviderConversionRuleDto[];
   legacyRules?: LegacyConversionRuleDto[];
@@ -163,6 +168,8 @@ export function ConversionsScreen({
   unifyAction,
   updateRuleAction,
   loadExecutionsAction,
+  activateNumberAction,
+  reprocessBlockedAction,
   providerRules = [],
   legacyRules = [],
   legacyRulesState = "real",
@@ -497,6 +504,9 @@ export function ConversionsScreen({
                     row={row}
                     canManage={canManage}
                     licenseLocked={licenseLocked}
+                    numbers={numbers}
+                    activateNumberAction={activateNumberAction}
+                    onChanged={() => router.refresh()}
                     manageTabs={
                       manageActions && rulesById.has(row.id)
                         ? ruleManageTabs(
@@ -621,6 +631,8 @@ export function ConversionsScreen({
           <RuleExecutions
             ruleId={executionsRow.id}
             loadAction={loadExecutionsAction}
+            canManage={canManage && !licenseLocked}
+            reprocessAction={reprocessBlockedAction}
             purchaseReviewHref={
               executionsRow.eventName === "Purchase"
                 ? `/events/purchase-reviews?providerRuleId=${encodeURIComponent(executionsRow.id)}`
@@ -749,6 +761,9 @@ function RuleRow({
   row,
   canManage,
   licenseLocked,
+  numbers,
+  activateNumberAction,
+  onChanged,
   manageTabs,
   onExecutions,
   onManage,
@@ -757,6 +772,9 @@ function RuleRow({
   row: ConversionRuleRow;
   canManage: boolean;
   licenseLocked: boolean;
+  numbers: ConversionNumber[];
+  activateNumberAction?: ScreenAction;
+  onChanged: () => void;
   /** Tabs of "Gerenciar" (empty: the rule cannot be managed here). */
   manageTabs: RuleManageTab[];
   onExecutions: () => void;
@@ -883,6 +901,18 @@ function RuleRow({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {row.kind === "provider" && row.pendingNumbers?.length ? (
+        <PendingNumbersWarning
+          ruleId={row.id}
+          pendingNumbers={row.pendingNumbers}
+          numbers={numbers}
+          mode={row.mode}
+          canManage={canManage && !licenseLocked}
+          activateAction={activateNumberAction}
+          onChanged={onChanged}
+        />
       ) : null}
     </article>
   );

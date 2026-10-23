@@ -7,9 +7,11 @@ import {
   providerConversionAutomationReprocessBatchResultSchema,
   providerConversionEndpointSecretResultSchema,
   providerConversionRuleAdaptInputSchema,
+  providerConversionRuleBlockedReprocessResultSchema,
   providerConversionRuleExecutionAuditSchema,
   providerConversionRuleIdempotentCreateInputSchema,
   providerConversionRuleIdempotentCreateResultSchema,
+  providerConversionRuleNumberActivationResultSchema,
   providerConversionRuleSchema,
   providerConversionRuleUnifyInputSchema,
   providerConversionRuleUnifyResultSchema,
@@ -21,7 +23,10 @@ import {
   type ProviderConversionAutomationAuditDto,
   type ProviderConversionAutomationPayloadDto,
   type ProviderConversionAutomationReprocessBatchResultDto,
+  type ProviderConversionRuleBlockedReprocessResultDto,
   type ProviderConversionRuleExecutionAuditDto,
+  type ProviderConversionRulePendingNumberDto,
+  type ProviderConversionRulePendingNumberReasonDto,
   type StructuredCatalogTestMessageResultDto,
 } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
@@ -52,6 +57,19 @@ export type ConversionScreenActionResult = {
   replayed?: boolean;
   /** Conferência de uma criação incerta: a API não tem registro do pedido. */
   receiptAbsent?: boolean;
+  /**
+   * "Todos os números": números cobertos pela regra que ainda não enviam
+   * (conexão fora de produção / canal inativo), com o motivo.
+   */
+  pendingNumbers?: ProviderConversionRulePendingNumberDto[];
+  ruleMode?: "observation" | "production";
+  /** "Ativar envio neste número": o que aconteceu com o número. */
+  numberActivation?: {
+    outcome: "promoted" | "already_live" | "pending";
+    reason: ProviderConversionRulePendingNumberReasonDto | null;
+  };
+  /** "Reprocessar bloqueadas": contagens da rodada. */
+  reprocess?: ProviderConversionRuleBlockedReprocessResultDto;
   unify?: {
     outcome: "created" | "reused_existing" | "replayed";
     ruleId: string;
@@ -190,6 +208,11 @@ function revalidateRules() {
   }
 }
 
+function apiCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return isApiRequestError(error) && typeof code === "string" ? code : null;
+}
+
 function apiStatus(error: unknown): number | null {
   const status = (error as { status?: unknown } | null)?.status;
   return isApiRequestError(error) && typeof status === "number" ? status : null;
@@ -316,6 +339,8 @@ export async function createConversionRuleAction(
     return {
       ok: true,
       ruleId: result.data.rule.id,
+      ruleMode: result.data.rule.mode,
+      pendingNumbers: result.data.rule.pendingNumbers ?? [],
       ...(result.data.webhookUrl ? { webhookUrl: result.data.webhookUrl } : {}),
       message: result.data.webhookUrl
         ? "Regra criada em observação. Copie o endereço agora: ele não é exibido de novo."
@@ -453,6 +478,158 @@ export async function unifyConversionRulesAction(
   } catch (error) {
     return failure(error, "Não foi possível unificar as regras.", unifyUnknownMessage);
   }
+}
+
+// ---------------------------------------------------------------------------
+// "Todos os números": ativar um número e reprocessar bloqueadas
+// ---------------------------------------------------------------------------
+
+const activationUnknownMessage =
+  "Não deu para confirmar a ativação. Atualize a página para conferir o número.";
+const reprocessUnknownMessage =
+  "Não deu para confirmar o reprocessamento. Atualize as execuções: repetir não envia nada duas vezes.";
+
+/**
+ * "Ativar envio neste número" de uma regra para todos os números: a mesma
+ * ativação de Integrações. Conexão pausada ou conexão WhatsApp não ativa voltam
+ * pendentes e são resolvidos em Integrações. Trata o 423 da licença.
+ */
+export async function activateRuleNumberAction(
+  formData: FormData,
+): Promise<ConversionScreenActionResult> {
+  const ruleId = formId(formData, "ruleId");
+  const channelId = formId(formData, "channelId");
+  if (!ruleId || !channelId) return { ok: false, message: invalidMessage };
+
+  try {
+    const response = await serverApiFetch<unknown>(
+      `/conversion-rules/providers/${encodeURIComponent(ruleId)}/numbers/${encodeURIComponent(channelId)}/activate`,
+      { method: "POST" },
+    );
+    const result =
+      providerConversionRuleNumberActivationResultSchema.safeParse(response);
+    if (!result.success) {
+      return { ok: false, outcomeUnknown: true, message: activationUnknownMessage };
+    }
+    revalidateRules();
+    const { outcome, reason, rule } = result.data;
+    return {
+      ok: outcome !== "pending",
+      ruleId: rule.id,
+      ruleMode: rule.mode,
+      pendingNumbers: rule.pendingNumbers ?? [],
+      numberActivation: { outcome, reason },
+      message:
+        outcome === "promoted"
+          ? "Envio ativado neste número. As próximas conversas dele já vão para a Meta."
+          : outcome === "already_live"
+            ? "Este número já estava com o envio ativo."
+            : reason === "whatsapp_connection_inactive"
+              ? "A conexão WhatsApp deste número não está ativa (suspensa ou removida). Reative-a em Integrações e tente de novo."
+              : reason === "meta_route_missing"
+                ? "Falta uma rota Meta válida para este número. Configure em Integrações e tente de novo."
+                : reason === "connection_paused"
+                  ? "A conexão deste número está pausada. Ela só volta a enviar quando for retomada em Integrações."
+                  : "Não deu para ativar este número agora. Confira a conexão em Integrações e tente de novo.",
+    };
+  } catch (error) {
+    if (apiStatus(error) === 409) {
+      return {
+        ok: false,
+        message: "Ative o envio automático da regra antes de ativar um número.",
+      };
+    }
+    return failure(error, "Não foi possível ativar este número.", activationUnknownMessage);
+  }
+}
+
+/**
+ * "Reprocessar bloqueadas": reenvia as execuções da regra bloqueadas só
+ * porque o número ainda não enviava (últimos 7 dias, nunca em dobro). Trata
+ * o 423 da licença.
+ */
+export async function reprocessBlockedExecutionsAction(
+  formData: FormData,
+): Promise<ConversionScreenActionResult> {
+  const ruleId = formId(formData, "ruleId");
+  if (!ruleId) return { ok: false, message: invalidMessage };
+
+  try {
+    const response = await serverApiFetch<unknown>(
+      `/conversion-rules/providers/${encodeURIComponent(ruleId)}/reprocess-blocked`,
+      { method: "POST" },
+    );
+    const result =
+      providerConversionRuleBlockedReprocessResultSchema.safeParse(response);
+    if (!result.success) {
+      return { ok: false, outcomeUnknown: true, message: reprocessUnknownMessage };
+    }
+    revalidateRules();
+    return {
+      ok: true,
+      ruleId,
+      reprocess: result.data,
+      message: reprocessSummary(result.data),
+    };
+  } catch (error) {
+    const status = apiStatus(error);
+    if (status === 429) {
+      return {
+        ok: false,
+        message:
+          "Acabamos de reprocessar esta regra. Aguarde alguns segundos e tente de novo.",
+      };
+    }
+    if (status === 409) {
+      return {
+        ok: false,
+        message:
+          apiCode(error) === "provider_rule_reprocess_in_progress"
+          ? "Já existe um reprocessamento em andamento para esta regra. Aguarde ele terminar."
+          : "A regra está pausada ou em observação. Ative o envio automático da regra antes de reprocessar.",
+      };
+    }
+    return failure(
+      error,
+      "Não foi possível reprocessar as execuções.",
+      reprocessUnknownMessage,
+    );
+  }
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+function reprocessSummary(
+  result: ProviderConversionRuleBlockedReprocessResultDto,
+): string {
+  const parts = [
+    result.reprocessed > 0
+      ? `${plural(result.reprocessed, "conversa reenviada", "conversas reenviadas")} para a fila de envio`
+      : "Nenhuma conversa pronta para reenviar",
+  ];
+  if (result.stillBlocked > 0) {
+    parts.push(
+      `${plural(result.stillBlocked, "fica como está", "ficam como estão")} (número ainda sem envio ativo, pausado de propósito na época ou que não é QR)`,
+    );
+  }
+  if (result.expired > 0) {
+    parts.push(
+      result.expired === 1
+        ? `1 é mais antiga que ${result.windowDays} dias e não pode mais ser enviada à Meta`
+        : `${result.expired} são mais antigas que ${result.windowDays} dias e não podem mais ser enviadas à Meta`,
+    );
+  }
+  if (result.skipped + result.failed > 0) {
+    parts.push(
+      `${plural(result.skipped + result.failed, "não pôde ser reprocessada", "não puderam ser reprocessadas")} por aqui; confira os registros da API se precisar reenviá-las`,
+    );
+  }
+  if (result.remaining > 0) {
+    parts.push(`${plural(result.remaining, "ficou", "ficaram")} para o próximo lote`);
+  }
+  return `${parts.join(". ")}.`;
 }
 
 // ---------------------------------------------------------------------------

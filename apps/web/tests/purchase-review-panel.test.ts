@@ -175,7 +175,7 @@ describe("purchase review panel", () => {
     });
 
     expect(html).toContain("Diagnostico");
-    expect(html).toContain("Conversao reconhecida");
+    expect(html).toContain("Conversão reconhecida");
     expect(html).toContain("Inspecionar");
     expect(html).not.toContain("Evento Meta ainda nao criado");
   });
@@ -184,7 +184,7 @@ describe("purchase review panel", () => {
     const html = renderPanel(true);
 
     expect(html).toContain("Diagnostico");
-    expect(html).toContain("Conversao reconhecida");
+    expect(html).toContain("Conversão reconhecida");
     expect(html).toContain("Evento Meta ainda nao criado");
     expect(html).not.toContain("Inspecionar");
   });

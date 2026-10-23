@@ -6,6 +6,7 @@ import {
   HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -36,6 +37,9 @@ import type {
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
   ProviderConversionRuleIdempotentCreateResultDto,
+  ProviderConversionRuleNumberActivationResultDto,
+  ProviderConversionRulePendingNumberDto,
+  ProviderConversionRulePendingNumberReasonDto,
   ProviderConversionRuleScopeDto,
   ProviderConversionRuleUnifyCandidatesDto,
   ProviderConversionRuleUnifyInputDto,
@@ -59,6 +63,27 @@ import {
   providerRuleCreateIntentHash,
   providerRuleCreateLockId,
 } from "./provider-rule-create-intent";
+import {
+  activationErrorCode,
+  channelConnectable,
+  GLOBAL_AUTO_ACTIVATED_ACTION,
+  GLOBAL_AUTO_ACTIVATION_BACKOFF_MS,
+  GLOBAL_RULE_CASCADE_LIMIT,
+  OPERATOR_CHANNEL_ACTIONS,
+  OPERATOR_CONNECTION_ACTIONS,
+  pendingChannelSelect,
+  type PendingChannelRow,
+  pendingNumberState,
+  pendingReasonFromError,
+} from "./provider-rule-global-activation";
+import {
+  BLOCKED_REPROCESS_SCAN_LIMIT,
+  BLOCKED_REPROCESS_WINDOW_DAYS,
+  blockedReprocessCutoff,
+  blockedReprocessWhere,
+  findReprocessableExecutions,
+  ruleAcceptsReprocess,
+} from "./provider-rule-blocked-reprocess";
 import {
   listWorkspaceScopeChannels,
   PROVIDER_RULE_GLOBAL_PRECEDENCE,
@@ -117,8 +142,26 @@ type ScopeInfo = {
   observationCanonicalChannels: Array<{ canonicalChannelId: string; productionChannelIds: string[] }>;
 };
 
+type GlobalNumberActivation = {
+  channelId: string;
+  outcome: "promoted" | "already_live" | "pending";
+  reason: ProviderConversionRulePendingNumberReasonDto | null;
+  errorCode?: string;
+};
+
 @Injectable()
 export class ProviderConversionRulesService {
+  private readonly logger = new Logger(ProviderConversionRulesService.name);
+  /**
+   * Last FAILED automatic attempt per number (epoch ms), kept in memory by
+   * this API instance. The audit of a repeated failure is deduplicated, so
+   * the audit trail alone would pin the backoff to the FIRST failure and the
+   * number would be retried on every sweep after 6 h; this map makes the
+   * backoff follow the latest real attempt without writing more audit rows.
+   * Per instance and lost on restart: the durable audit stays the floor.
+   */
+  private readonly autoActivationFailures = new Map<string, number>();
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RUNTIME_ENV) private readonly env: RuntimeEnv = process.env,
@@ -200,11 +243,16 @@ export class ProviderConversionRulesService {
       summary[statusCount.status] = statusCount._count._all;
       summary.total += statusCount._count._all;
     }
+    const blockedReprocess = await this.blockedReprocessSummary(
+      workspaceId,
+      rule,
+    );
 
     return {
       providerRuleId,
       eventName: conversionEventNameSchema.parse(rule.conversionRule.eventName),
       summary,
+      blockedReprocess,
       items: executions.map((execution) => {
         const lead = execution.leadId
           ? (leadsById.get(execution.leadId) ?? null)
@@ -250,6 +298,45 @@ export class ProviderConversionRulesService {
         totalItems,
         totalPages: Math.max(1, Math.ceil(totalItems / query.pageSize)),
       },
+    };
+  }
+
+  /**
+   * Counts behind "Reprocessar bloqueadas": executions stopped only because
+   * their number was not live yet. `ready` is what a reprocess would retry
+   * now (number live, inside the Meta window); the button is enabled only
+   * when it is above zero.
+   */
+  private async blockedReprocessSummary(
+    workspaceId: string,
+    rule: PersistedProviderRule,
+  ): Promise<
+    NonNullable<ProviderConversionRuleExecutionAuditDto["blockedReprocess"]>
+  > {
+    const base = blockedReprocessWhere(workspaceId, rule.id);
+    const cutoff = blockedReprocessCutoff(new Date());
+    const [inWindow, expired, ready] = await Promise.all([
+      this.prisma.providerConversionRuleExecution.count({
+        where: { ...base, occurredAt: { gte: cutoff } },
+      }),
+      this.prisma.providerConversionRuleExecution.count({
+        where: { ...base, occurredAt: { lt: cutoff } },
+      }),
+      // Exactly what a reprocess would retry (same filters, same scan).
+      findReprocessableExecutions(this.prisma, {
+        workspaceId,
+        rule,
+        cutoff,
+        limit: BLOCKED_REPROCESS_SCAN_LIMIT,
+      }),
+    ]);
+    const readyCount = Math.min(ready.length, inWindow);
+    return {
+      windowDays: BLOCKED_REPROCESS_WINDOW_DAYS,
+      ready: readyCount,
+      stillBlocked: Math.max(0, inWindow - readyCount),
+      expired,
+      ruleSendsNow: ruleAcceptsReprocess(rule),
     };
   }
 
@@ -730,8 +817,30 @@ export class ProviderConversionRulesService {
         });
       });
 
-    if (result.outcome === "replayed") return result;
-    const created = result.created;
+    if (result.outcome === "replayed") {
+      // The first attempt may have committed and died before promoting its
+      // numbers: the (idempotent) cascade runs again for the same rule. It
+      // re-reads the rule and does nothing unless it is an active global
+      // rule in production; it never throws.
+      if (result.receipt.ruleId) {
+        await this.cascadeGlobalNumbers(
+          workspaceId,
+          result.receipt.ruleId,
+          actorUserId,
+        );
+      }
+      return result;
+    }
+    let created = result.created;
+    // The rule is committed: promoting its numbers never rolls it back.
+    if (
+      created.mode === "production" &&
+      created.conversionRule.active &&
+      providerRuleScope(created) === "all_numbers"
+    ) {
+      await this.cascadeGlobalNumbers(workspaceId, created.id, actorUserId);
+      created = await this.requireRule(this.prisma, workspaceId, created.id);
+    }
     const response = {
       rule: await this.toScopedDto(workspaceId, created),
       webhookUrl:
@@ -1017,7 +1126,9 @@ export class ProviderConversionRulesService {
       });
     }
 
+    let cascadeGlobal = false as boolean;
     const updated = await this.prisma.$transaction(async (transaction) => {
+      cascadeGlobal = false;
       const current = await this.requireRule(
         transaction,
         workspaceId,
@@ -1331,6 +1442,9 @@ export class ProviderConversionRulesService {
             current.channels.map((channel) => channel.channelId),
           actorUserId,
         });
+        // A global rule promotes its covered numbers after this commit, each
+        // in its own transaction (see cascadeGlobalNumbers).
+        cascadeGlobal = nextScope === "all_numbers";
       }
 
       const result = await this.requireRule(
@@ -1365,6 +1479,13 @@ export class ProviderConversionRulesService {
       return result;
     });
 
+    if (cascadeGlobal) {
+      await this.cascadeGlobalNumbers(workspaceId, providerRuleId, actorUserId);
+      return this.toScopedDto(
+        workspaceId,
+        await this.requireRule(this.prisma, workspaceId, providerRuleId),
+      );
+    }
     return this.toScopedDto(workspaceId, updated);
   }
 
@@ -1713,9 +1834,21 @@ export class ProviderConversionRulesService {
       };
     });
 
+    // A production global rule produced (or reused) by "Unificar" promotes
+    // the numbers it now covers, exactly as "Envio ativo" does.
+    let target = result.target;
+    if (
+      result.outcome !== "replayed" &&
+      target.mode === "production" &&
+      target.conversionRule.active
+    ) {
+      await this.cascadeGlobalNumbers(workspaceId, target.id, actorUserId);
+      target = await this.requireRule(this.prisma, workspaceId, target.id);
+    }
+
     return {
       outcome: result.outcome,
-      rule: await this.toScopedDto(workspaceId, result.target),
+      rule: await this.toScopedDto(workspaceId, target),
       deactivatedRuleIds: result.deactivatedRuleIds,
       newlyCoveredChannelIds: result.newlyCoveredChannelIds,
     };
@@ -2115,10 +2248,13 @@ export class ProviderConversionRulesService {
    *  - bound + specific: the historical cascade (connection and channels);
    *  - unbound + specific: the same cascade for each connection of the
    *    chosen numbers;
-   *  - all numbers: only the rule switches. A global rule never promotes
-   *    every number of the workspace; each occurrence is gated by the live
-   *    production state of its own number (and of the Umbler connection for
-   *    the automation).
+   *  - all numbers: only the rule switches inside this transaction. After the
+   *    commit, cascadeGlobalNumbers promotes the covered numbers that can be
+   *    promoted (WhatsApp connection active, Meta route present, nothing
+   *    paused by an operator), each in its own transaction; the others are
+   *    reported as `pendingNumbers` and each occurrence keeps being gated by
+   *    the live production state of its own number (and of the Umbler
+   *    connection for the automation).
    */
   private async activateScopedProduction(
     transaction: Prisma.TransactionClient,
@@ -2205,14 +2341,664 @@ export class ProviderConversionRulesService {
     rules: PersistedProviderRule[],
     peers: PersistedProviderRule[],
   ): Promise<ProviderConversionRuleDto[]> {
-    const channels = rules.some(
+    const hasGlobal = rules.some(
       (rule) => providerRuleScope(rule) === "all_numbers",
-    )
+    );
+    const channels = hasGlobal
       ? await listWorkspaceScopeChannels(client, workspaceId)
       : [];
-    return rules.map((rule) =>
-      this.toDto(rule, this.effectiveScope(rule, peers, channels)),
+    const scopes = rules.map((rule) =>
+      this.effectiveScope(rule, peers, channels),
     );
+    const pending = hasGlobal
+      ? await this.pendingNumbersByRule(client, workspaceId, rules, scopes)
+      : new Map<string, ProviderConversionRulePendingNumberDto[]>();
+    return rules.map((rule, index) =>
+      this.toDto(rule, scopes[index], pending.get(rule.id)),
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // "Todos os números": production cascade of the covered numbers
+  // ------------------------------------------------------------------
+
+  /**
+   * Numbers covered by each active global rule (its effective channels) that
+   * do not send yet: gate connection not in production or channel not
+   * active. Read-only; the reason says what would unblock each number.
+   */
+  private async pendingNumbersByRule(
+    client: Pick<Prisma.TransactionClient, "inboundWebhookChannel">,
+    workspaceId: string,
+    rules: PersistedProviderRule[],
+    scopes: Array<{ effectiveChannelIds: string[] }>,
+  ): Promise<Map<string, ProviderConversionRulePendingNumberDto[]>> {
+    const targets = rules
+      .map((rule, index) => ({
+        rule,
+        channelIds:
+          providerRuleScope(rule) === "all_numbers" &&
+          rule.conversionRule.active
+            ? (scopes[index]?.effectiveChannelIds ?? [])
+            : [],
+      }))
+      .filter((target) => target.channelIds.length > 0);
+    const result = new Map<string, ProviderConversionRulePendingNumberDto[]>();
+    if (targets.length === 0) return result;
+
+    const ids = [...new Set(targets.flatMap((target) => target.channelIds))];
+    const rows = (await client.inboundWebhookChannel.findMany({
+      where: {
+        workspaceId,
+        id: { in: ids },
+        connection: { is: { workspaceId, removedAt: null } },
+      },
+      select: pendingChannelSelect(),
+    })) as PendingChannelRow[];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const gateOf = (rule: PersistedProviderRule, channel: PendingChannelRow) =>
+      rule.connectionId && rule.connection
+        ? {
+            id: rule.connection.id,
+            provider: rule.connection.provider as string,
+            status: rule.connection.status as string,
+          }
+        : {
+            id: channel.connection.id,
+            provider: channel.connection.provider as string,
+            status: channel.connection.status as string,
+          };
+
+    const gatesToPromote = new Set<string>();
+    for (const target of targets) {
+      for (const channelId of target.channelIds) {
+        const channel = byId.get(channelId);
+        if (!channel) continue;
+        const gate = gateOf(target.rule, channel);
+        if (gate.status !== "production") gatesToPromote.add(gate.id);
+      }
+    }
+    const siblings = gatesToPromote.size
+      ? ((await client.inboundWebhookChannel.findMany({
+          where: {
+            workspaceId,
+            connectionId: { in: [...gatesToPromote] },
+            status: "active",
+          },
+          select: pendingChannelSelect(),
+        })) as PendingChannelRow[])
+      : [];
+    const siblingsByConnection = new Map<string, PendingChannelRow[]>();
+    for (const sibling of siblings) {
+      siblingsByConnection.set(sibling.connectionId, [
+        ...(siblingsByConnection.get(sibling.connectionId) ?? []),
+        sibling,
+      ]);
+    }
+
+    for (const target of targets) {
+      const pending: ProviderConversionRulePendingNumberDto[] = [];
+      for (const channelId of target.channelIds) {
+        const channel = byId.get(channelId);
+        if (!channel) continue;
+        const gate = gateOf(target.rule, channel);
+        const state = pendingNumberState({
+          channel,
+          gate,
+          siblings: siblingsByConnection.get(gate.id) ?? [],
+        });
+        if (state) pending.push(state);
+      }
+      result.set(target.rule.id, pending);
+    }
+    return result;
+  }
+
+  /**
+   * After a production global rule is written (create, "Envio ativo", edit
+   * into all numbers, "Unificar"): promote every covered number that can be
+   * promoted. Each number runs in its OWN transaction, after the rule commit,
+   * so one failing number (Meta route, replay in flight, concurrent edit)
+   * never rolls the rule back nor blocks the other numbers, and a partial
+   * promotion of one number is impossible. Paused channels and connections
+   * are left alone (an operator paused them); numbers whose WhatsApp
+   * connection is not active or without a Meta route are only reported.
+   * Never throws: the rule is already committed and its pending numbers stay
+   * visible on the screen.
+   */
+  private async cascadeGlobalNumbers(
+    workspaceId: string,
+    providerRuleId: string,
+    actorUserId: string,
+  ): Promise<GlobalNumberActivation[]> {
+    try {
+      const rule = await this.requireRule(
+        this.prisma,
+        workspaceId,
+        providerRuleId,
+      );
+      if (
+        providerRuleScope(rule) !== "all_numbers" ||
+        !rule.conversionRule.active ||
+        rule.mode !== "production"
+      ) {
+        return [];
+      }
+      this.requireProductionEnabledConfig();
+      const dto = await this.toScopedDto(workspaceId, rule);
+      const pending = dto.pendingNumbers ?? [];
+      const candidates = pending.filter(
+        (number) =>
+          number.activatable &&
+          number.channelStatus !== "paused" &&
+          number.connectionStatus !== "paused",
+      );
+      const results: GlobalNumberActivation[] = [];
+      for (const number of candidates.slice(0, GLOBAL_RULE_CASCADE_LIMIT)) {
+        results.push(
+          await this.activateCoveredNumber({
+            workspaceId,
+            rule,
+            channelId: number.channelId,
+            actorUserId,
+            allowPausedChannel: false,
+          }),
+        );
+      }
+      if (pending.length > 0) {
+        await this.createAudit(this.prisma, {
+          workspaceId,
+          actorUserId,
+          action: "provider_conversion_rule.global_numbers_activated",
+          targetId: rule.id,
+          resultStatus: results.some((item) => item.outcome === "promoted")
+            ? "promoted"
+            : "pending",
+          afterSummary: {
+            promotedChannelIds: results
+              .filter((item) => item.outcome === "promoted")
+              .map((item) => item.channelId),
+            pending: [
+              ...results
+                .filter((item) => item.outcome === "pending")
+                .map((item) => ({
+                  channelId: item.channelId,
+                  reason: item.reason,
+                  errorCode: item.errorCode ?? null,
+                })),
+              ...pending
+                .filter(
+                  (number) =>
+                    !results.some((item) => item.channelId === number.channelId),
+                )
+                .map((number) => ({
+                  channelId: number.channelId,
+                  reason: number.reason,
+                  errorCode: null,
+                })),
+            ].slice(0, 200),
+            truncated: candidates.length > GLOBAL_RULE_CASCADE_LIMIT,
+          },
+        });
+      }
+      return results;
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "provider_rule_global_cascade_failed",
+          workspaceId,
+          providerRuleId,
+          error: activationErrorCode(error),
+        }),
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Promotes ONE covered number with the same activation the Integrations
+   * buttons run (channel "Ativar envio", then the connection's "Ativar envios
+   * automáticos"), inside its own transaction.
+   */
+  private async activateCoveredNumber(input: {
+    workspaceId: string;
+    rule: PersistedProviderRule;
+    channelId: string;
+    /** null: system actor (automatic activation). */
+    actorUserId: string | null;
+    allowPausedChannel: boolean;
+  }): Promise<GlobalNumberActivation> {
+    const { workspaceId, channelId, actorUserId } = input;
+    let fallback: ProviderConversionRulePendingNumberReasonDto =
+      "connection_not_production";
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const channel = await requireInboundWebhookChannel(
+          transaction,
+          workspaceId,
+          channelId,
+        );
+        const gate = await requireInboundWebhookConnection(
+          transaction,
+          workspaceId,
+          input.rule.connectionId ?? channel.connectionId,
+        );
+        if (gate.status === "production" && channel.status === "active") {
+          return { channelId, outcome: "already_live" as const, reason: null };
+        }
+        fallback =
+          channel.status !== "active"
+            ? "channel_not_active"
+            : "connection_not_production";
+        // A paused connection (it may carry several numbers: Umbler,
+        // Gupshup) is never resumed from a rule: only Integrações does it.
+        if (gate.status === "paused") {
+          return {
+            channelId,
+            outcome: "pending" as const,
+            reason: "connection_paused" as const,
+          };
+        }
+        // A paused channel is this number alone: only an explicit click on
+        // "Ativar envio neste número" resumes it, never the cascade.
+        if (!input.allowPausedChannel && channel.status === "paused") {
+          return { channelId, outcome: "pending" as const, reason: fallback };
+        }
+        const liveRow = (await transaction.inboundWebhookChannel.findFirst({
+          where: { id: channelId, workspaceId },
+          select: pendingChannelSelect(),
+        })) as PendingChannelRow | null;
+        if (!liveRow || !channelConnectable(liveRow)) {
+          return {
+            channelId,
+            outcome: "pending" as const,
+            reason: "whatsapp_connection_inactive" as const,
+          };
+        }
+        const requireValidMetaRoute = metaRouteRequiredForProvider(
+          gate.provider,
+        );
+        const seats = this.seatHook();
+        if (channel.status !== "active") {
+          await applyInboundWebhookChannelStatus(transaction, {
+            workspaceId,
+            channelId,
+            status: "active",
+            actorUserId,
+            requireValidMetaRoute,
+            seats,
+          });
+        }
+        if (gate.status !== "production") {
+          await applyInboundWebhookConnectionStatus(transaction, {
+            workspaceId,
+            connectionId: gate.id,
+            status: "production",
+            actorUserId,
+            requireValidMetaRoute,
+            seats,
+            env: this.env,
+          });
+        }
+        return { channelId, outcome: "promoted" as const, reason: null };
+      });
+    } catch (error) {
+      return {
+        channelId,
+        outcome: "pending",
+        reason: pendingReasonFromError(error, fallback),
+        errorCode: activationErrorCode(error),
+      };
+    }
+  }
+
+  /**
+   * Automatic activation (system actor): every covered number of the
+   * workspace's ACTIVE production "Todos os números" rules that can be
+   * promoted is promoted now, with exactly the same per-number activation as
+   * the cascade (Meta route gate, own transaction, paused channels/
+   * connections left alone). Called by GlobalRuleAutoActivationService when a
+   * QR bridge is created and by its hourly reconciliation. Idempotent and a
+   * no-op when nothing applies; failures stay in pendingNumbers.
+   *
+   * Stricter than a human save: only numbers that were NEVER live are
+   * touched. A number whose channel or gate connection has a
+   * productionActivatedAt, or any connection_promoted / connection_observation
+   * / connection_paused / channel_activated / channel_paused audit, was
+   * decided on by an operator (e.g. "Voltar para observação") and is left
+   * alone; the screen keeps it in pendingNumbers with its button.
+   *
+   * Backoff: a number whose last automatic attempt failed is skipped for
+   * GLOBAL_AUTO_ACTIVATION_BACKOFF_MS unless a newer triggering event
+   * (`eventAt`) arrived; never-tried numbers go first, then the oldest
+   * attempts, so failing numbers cannot starve the others. The
+   * `provider_conversion_rule.global_number_auto_activated` audit (actor
+   * system) is written for every promotion, and for a failure only when its
+   * reason changed since the last automatic attempt.
+   */
+  async autoActivateGlobalNumbers(
+    workspaceId: string,
+    trigger: string,
+    options: {
+      eventAt?: Date | null;
+      now?: Date;
+      /**
+       * Work budget of the caller (GlobalRuleAutoActivationService): checked
+       * before each number, so one workspace never outlives the run lock.
+       */
+      shouldStop?: () => boolean;
+    } = {},
+  ): Promise<{ attempted: number; promoted: number }> {
+    const now = options.now ?? new Date();
+    const none = { attempted: 0, promoted: 0 };
+    const config = parseInboundWebhooksConfig(this.env);
+    if (
+      !config.enabled ||
+      !config.conversionRulesEnabled ||
+      !config.productionEnabled ||
+      !config.conversionProductionEnabled
+    ) {
+      return none;
+    }
+    const rules = await this.prisma.providerConversionRuleConfig.findMany({
+      where: {
+        workspaceId,
+        removedAt: null,
+        scope: "all_numbers",
+        mode: "production",
+        conversionRule: { active: true },
+      },
+      include: providerRuleInclude,
+      orderBy: { createdAt: "asc" },
+    });
+    if (rules.length === 0) return none;
+    const peers = await this.prisma.providerConversionRuleConfig.findMany({
+      where: { workspaceId, removedAt: null },
+      include: providerRuleInclude,
+    });
+    const dtos = await this.toDtos(this.prisma, workspaceId, rules, peers);
+
+    // One attempt per (gate, number): bound rules are gated by their own
+    // connection, unbound ones by the number's connection.
+    const targets = new Map<
+      string,
+      { rule: PersistedProviderRule; channelId: string; ruleIds: string[] }
+    >();
+    rules.forEach((rule, index) => {
+      for (const number of dtos[index]?.pendingNumbers ?? []) {
+        if (
+          !number.activatable ||
+          number.channelStatus === "paused" ||
+          number.connectionStatus === "paused"
+        ) {
+          continue;
+        }
+        const key = `${rule.connectionId ?? ""}:${number.channelId}`;
+        const target = targets.get(key);
+        if (target) target.ruleIds.push(rule.id);
+        else
+          targets.set(key, {
+            rule,
+            channelId: number.channelId,
+            ruleIds: [rule.id],
+          });
+      }
+    });
+
+    if (targets.size === 0) return none;
+
+    const channelIds = [
+      ...new Set([...targets.values()].map((target) => target.channelId)),
+    ];
+    const channelRows = await this.prisma.inboundWebhookChannel.findMany({
+      where: { workspaceId, id: { in: channelIds } },
+      select: {
+        id: true,
+        connectionId: true,
+        productionActivatedAt: true,
+        connection: { select: { id: true, productionActivatedAt: true } },
+      },
+    });
+    const channelById = new Map(channelRows.map((row) => [row.id, row]));
+    const gateOf = (target: {
+      rule: PersistedProviderRule;
+      channelId: string;
+    }) =>
+      target.rule.connectionId ??
+      channelById.get(target.channelId)?.connectionId ??
+      null;
+    const gateIds = [
+      ...new Set(
+        [...targets.values()]
+          .map(gateOf)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const history = await this.prisma.auditLog.findMany({
+      where: {
+        workspaceId,
+        OR: [
+          {
+            targetType: "InboundWebhookConnection",
+            targetId: { in: gateIds },
+            action: { in: [...OPERATOR_CONNECTION_ACTIONS] },
+          },
+          {
+            targetType: "InboundWebhookChannel",
+            targetId: { in: channelIds },
+            action: {
+              in: [...OPERATOR_CHANNEL_ACTIONS, GLOBAL_AUTO_ACTIVATED_ACTION],
+            },
+          },
+        ],
+      },
+      select: {
+        action: true,
+        targetId: true,
+        createdAt: true,
+        resultStatus: true,
+        afterSummary: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const touched = new Set<string>();
+    const lastAuto = new Map<string, (typeof history)[number]>();
+    for (const entry of history) {
+      if (entry.action === GLOBAL_AUTO_ACTIVATED_ACTION) {
+        lastAuto.set(entry.targetId, entry);
+      } else {
+        touched.add(entry.targetId);
+      }
+    }
+    const neverLive = (target: {
+      rule: PersistedProviderRule;
+      channelId: string;
+    }) => {
+      const channel = channelById.get(target.channelId);
+      const gateId = gateOf(target);
+      const gateActivatedAt = target.rule.connectionId
+        ? (target.rule.connection?.productionActivatedAt ?? null)
+        : (channel?.connection.productionActivatedAt ?? null);
+      return (
+        channel !== undefined &&
+        gateId !== null &&
+        channel.productionActivatedAt === null &&
+        gateActivatedAt === null &&
+        !touched.has(target.channelId) &&
+        !touched.has(gateId)
+      );
+    };
+    const failureKey = (channelId: string) => `${workspaceId}:${channelId}`;
+    /** Latest failed automatic attempt: audit (durable) or memory (newer). */
+    const lastFailureAt = (channelId: string): number | null => {
+      const last = lastAuto.get(channelId);
+      const durable =
+        last && last.resultStatus === "pending" ? last.createdAt.getTime() : null;
+      const memory = this.autoActivationFailures.get(failureKey(channelId)) ?? null;
+      if (durable === null) return memory;
+      return memory === null ? durable : Math.max(durable, memory);
+    };
+    const inBackoff = (channelId: string) => {
+      const failedAt = lastFailureAt(channelId);
+      return (
+        failedAt !== null &&
+        now.getTime() - failedAt < GLOBAL_AUTO_ACTIVATION_BACKOFF_MS &&
+        !(options.eventAt && options.eventAt.getTime() > failedAt)
+      );
+    };
+    const lastTryAt = (channelId: string) =>
+      Math.max(
+        lastAuto.get(channelId)?.createdAt.getTime() ?? -1,
+        this.autoActivationFailures.get(failureKey(channelId)) ?? -1,
+      );
+    const queue = [...targets.values()]
+      .filter((target) => neverLive(target) && !inBackoff(target.channelId))
+      .sort(
+        (left, right) => lastTryAt(left.channelId) - lastTryAt(right.channelId),
+      );
+
+    let attempted = 0;
+    let promoted = 0;
+    for (const target of queue.slice(0, GLOBAL_RULE_CASCADE_LIMIT)) {
+      if (options.shouldStop?.()) break;
+      const result = await this.activateCoveredNumber({
+        workspaceId,
+        rule: target.rule,
+        channelId: target.channelId,
+        actorUserId: null,
+        allowPausedChannel: false,
+      });
+      if (result.outcome === "already_live") {
+        this.autoActivationFailures.delete(failureKey(target.channelId));
+        continue;
+      }
+      attempted += 1;
+      if (result.outcome === "promoted") {
+        promoted += 1;
+        this.autoActivationFailures.delete(failureKey(target.channelId));
+      } else {
+        this.rememberAutoActivationFailure(failureKey(target.channelId), now);
+      }
+      const last = lastAuto.get(target.channelId);
+      const lastSummary = this.auditJsonObject(last?.afterSummary ?? null);
+      if (
+        result.outcome === "pending" &&
+        last?.resultStatus === "pending" &&
+        lastSummary?.reason === result.reason &&
+        (lastSummary?.errorCode ?? null) === (result.errorCode ?? null)
+      ) {
+        // Same failure as last time: no new audit row (dedupe).
+        continue;
+      }
+      await this.prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId: null,
+          actorType: "system",
+          action: GLOBAL_AUTO_ACTIVATED_ACTION,
+          targetType: "InboundWebhookChannel",
+          targetId: target.channelId,
+          reason: trigger.slice(0, 80),
+          sourceIp: null,
+          resultStatus: result.outcome,
+          afterSummary: {
+            ruleIds: target.ruleIds,
+            channelId: target.channelId,
+            trigger: trigger.slice(0, 80),
+            reason: result.reason,
+            errorCode: result.errorCode ?? null,
+          },
+        },
+      });
+    }
+    return { attempted, promoted };
+  }
+
+  /** Bounded: old entries (past the backoff) are dropped first. */
+  private rememberAutoActivationFailure(key: string, now: Date): void {
+    this.autoActivationFailures.delete(key);
+    this.autoActivationFailures.set(key, now.getTime());
+    if (this.autoActivationFailures.size <= 10_000) return;
+    for (const [entry, at] of this.autoActivationFailures) {
+      if (
+        this.autoActivationFailures.size <= 10_000 &&
+        now.getTime() - at < GLOBAL_AUTO_ACTIVATION_BACKOFF_MS
+      ) {
+        break;
+      }
+      this.autoActivationFailures.delete(entry);
+    }
+  }
+
+  /**
+   * "Ativar envio neste número" on a production global rule. Same activation
+   * as the Integrations buttons. An explicit click may resume a paused
+   * CHANNEL (this number only); a paused connection stays paused
+   * (connection_paused, see Integrações) and a WhatsApp connection that is
+   * not active (suspended/removed) is only reactivated in Integrações.
+   */
+  async activateGlobalRuleNumber(
+    workspaceId: string,
+    providerRuleId: string,
+    channelId: string,
+    actorUserId: string,
+  ): Promise<ProviderConversionRuleNumberActivationResultDto> {
+    this.requireProductionEnabledConfig();
+    const rule = await this.requireRule(
+      this.prisma,
+      workspaceId,
+      providerRuleId,
+    );
+    if (providerRuleScope(rule) !== "all_numbers") {
+      throw new BadRequestException(
+        "Esta ação vale apenas para regras de todos os números",
+      );
+    }
+    if (!rule.conversionRule.active || rule.mode !== "production") {
+      throw new ConflictException(
+        "Ative o envio automático da regra antes de ativar um número",
+      );
+    }
+    const dto = await this.toScopedDto(workspaceId, rule);
+    if (!(dto.effectiveChannelIds ?? []).includes(channelId)) {
+      throw new BadRequestException("Este número não é coberto por esta regra");
+    }
+    const pending = (dto.pendingNumbers ?? []).find(
+      (number) => number.channelId === channelId,
+    );
+    if (!pending) {
+      return { outcome: "already_live", reason: null, rule: dto };
+    }
+    const result = pending.activatable
+      ? await this.activateCoveredNumber({
+          workspaceId,
+          rule,
+          channelId,
+          actorUserId,
+          allowPausedChannel: true,
+        })
+      : ({
+          channelId,
+          outcome: "pending",
+          reason: pending.reason,
+        } satisfies GlobalNumberActivation);
+    await this.createAudit(this.prisma, {
+      workspaceId,
+      actorUserId,
+      action: "provider_conversion_rule.number_activation",
+      targetId: rule.id,
+      resultStatus: result.outcome,
+      afterSummary: {
+        channelId,
+        reason: result.reason,
+        errorCode: result.errorCode ?? null,
+      },
+    });
+    const fresh = await this.toScopedDto(
+      workspaceId,
+      await this.requireRule(this.prisma, workspaceId, providerRuleId),
+    );
+    return { outcome: result.outcome, reason: result.reason, rule: fresh };
   }
 
   private effectiveScope(
@@ -2818,6 +3604,7 @@ export class ProviderConversionRulesService {
   private toDto(
     rule: PersistedProviderRule,
     scopeInfo?: ScopeInfo,
+    pendingNumbers?: ProviderConversionRulePendingNumberDto[],
   ): ProviderConversionRuleDto {
     const scope = providerRuleScope(rule);
     const effective: ScopeInfo = scopeInfo ?? {
@@ -2873,6 +3660,9 @@ export class ProviderConversionRulesService {
       observationCanonicalChannels: effective.observationCanonicalChannels,
       globalPrecedence: PROVIDER_RULE_GLOBAL_PRECEDENCE,
       unifiedIntoRuleId: rule.unifiedIntoProviderRuleId ?? null,
+      ...(scope === "all_numbers"
+        ? { pendingNumbers: pendingNumbers ?? [] }
+        : {}),
       triggerPhrases: rule.messageTriggerPhrases,
       messageAuthorScope: rule.messageAuthorScope,
       valueMode: messagePhrase.valueMode,
