@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
 import EventsPage from "../src/app/(app)/events/page";
 import { retryBlockedMetaEventsAction } from "../src/app/(app)/events/actions";
 import { initialBackofficeActionState } from "../src/components/backoffice-action-form";
+import { readFileSync } from "./support/read-source";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
