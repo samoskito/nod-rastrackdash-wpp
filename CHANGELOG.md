@@ -7,6 +7,58 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). No migration, no new environment variable.
+
+### Added
+
+- **Team phrase rules on WAHA (GoWS).** A team message sent from a WAHA
+  number (`message.any` with `fromMe`) now runs the same phrase (and
+  structured catalog) rules as Uazapi: same bridge, frozen decision,
+  execution and Meta send. `UazapiConversionBridgeService.ensureBridge` and
+  `UazapiProviderConversionService.evaluateTeamMessage` take the provider
+  (`uazapi` default, `waha`); the WAHA bridge is a `waha`
+  InboundWebhookConnection on the certified `waha`/`v2` parser release, with
+  occurrence keys `waha:<channel>:<message id>`. The contact is the phone the
+  v2 parser resolves (`RecipientAlt`, `to`, `Chat`), and a LID-only contact
+  is looked up on the student's WAHA (`RecipientAlt` filled before
+  reparsing). The paid-lead lookup accepts 12 and 13 digit Brazilian numbers
+  (with or without the 9th digit). No paid lead: same as Uazapi.
+- **"Todos os números" and specific rules on WAHA**: saving a production rule
+  activates WAHA numbers, a WAHA number connected later is activated
+  automatically (new durable event `inbound_webhook.waha_bridge_provisioned`),
+  and "Ativar envio neste número" and "Reprocessar bloqueadas" work for WAHA.
+  WAHA bridged numbers resolve the Meta destination per ad (no saved route),
+  only send while the WAHA connection is active, and pauses are kept.
+- WAHA numbers are bridged when Conversões loads, when **Testar** reports
+  `WORKING`, or on the first team message; the store's real number replaces
+  the session placeholder on the first team message.
+
+### Changed
+
+- `waha` left `UNSUPPORTED_RULE_WHATSAPP_PROVIDERS`; the capability matrix
+  lists it for team phrases, catalog and Payt sales, never for labels.
+  Conversões no longer shows WAHA under "Em breve nas regras": the WAHA number
+  shows in Nova regra, editing, filters and the number list, with no label
+  trigger. The label origin text now names Uazapi numbers.
+- Guides: `docs/setup/whatsapp-providers.md` (new section "Regras de frase da
+  equipe na WAHA"), `troubleshooting.md` and `dokploy.md`.
+
+### Fixed
+
+- WAHA team messages ended as `ignored_outbound` and the phrase rule never
+  ran ("pagamento confirmado" typed by the team did not convert).
+
+### Tests
+
+- Receiver (team message by `RecipientAlt`, `to`, LID lookup, inbound
+  messages never run team rules, `message` copy and webhook redelivery
+  evaluated once, text-less media, failure marks the delivery for retry),
+  28 anonymized real team-message examples (`team-phrase-examples.json`),
+  activation matrix, and `waha-global-rule-production.pg.test.ts` (global
+  with 1 and N numbers, number connected later, specific, global + specific,
+  no duplicate, 12-digit phone, Reprocessar bloqueadas, paused, suspended,
+  Uazapi regression).
+
 ## [1.1.0] - 2026-10-23
 
 Upgrade notes for students (backup, the 26 migrations in order, environment variables, verification and rollback): [`docs/releases/1.1.0.json`](docs/releases/1.1.0.json).

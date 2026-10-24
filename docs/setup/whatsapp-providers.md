@@ -95,7 +95,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
 | Rota | Autenticação confirmada | Vínculo obrigatório do payload | Status |
 |---|---|---|---|
 | `POST /webhooks/whatsapp/:id` — **Uazapi (BYO)** | Token do receiver (header `x-wpptrack-webhook-token`, Bearer ou `?token=`) comparado ao hash salvo | — | **Pronto** |
-| `POST /webhooks/whatsapp/:id` — **WAHA** (motor GoWS) | Idem (a configuração automática manda o token no cabeçalho `X-Wpptrack-Webhook-Token`) | `session` do envelope precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — parser `waha` v2 (GoWS) enquanto a release certificada existir; veja [WAHA com motor GoWS](#waha-com-motor-gows-waha-servidor-do-aluno). Liberada no Hub (regras de frase da WAHA em breve) |
+| `POST /webhooks/whatsapp/:id` — **WAHA** (motor GoWS) | Idem (a configuração automática manda o token no cabeçalho `X-Wpptrack-Webhook-Token`) | `session` do envelope precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — parser `waha` v2 (GoWS) enquanto a release certificada existir; veja [WAHA com motor GoWS](#waha-com-motor-gows-waha-servidor-do-aluno). Liberada no Hub, com regras de frase da equipe em Conversões |
 | `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** — Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy / Unnichat** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
@@ -121,7 +121,7 @@ O que muda de provedor para provedor é **quais mensagens chegam**:
 | Gupshup | Sim | Não — envelope Cloud API só traz mensagens recebidas |
 | Data Crazy | Sim | Não — mensagens inbound só viram lead quando têm CTWA |
 | Meta WhatsApp (Cloud API) | Sim | **Não** — veja abaixo |
-| WAHA (GoWS) | Sim (evento `message`) | Lidas pelo evento `message.any` e registradas como `ignored_outbound`; **regras de frase da WAHA ainda não liberadas** |
+| WAHA (GoWS) | Sim (evento `message`) | **Sim** — lidas pelo evento `message.any` e avaliadas contra as regras de frase da equipe, como na Uazapi (sem etiquetas) |
 | Z-API | Sim | Não (mensagens `fromMe` são classificadas `ignored_outbound`) |
 
 Isso decide qual gatilho faz sentido em cada origem — é o erro de
@@ -332,7 +332,7 @@ Detalhes e modelo do corpo em [`url-unica.md`](url-unica.md).
 ## Uazapi, NOD API, WAHA e Z-API — por onde os gatilhos aparecem
 
 As conexões desses provedores **não** aparecem sozinhas nos cards de
-webhook de entrada (Umbler, Gupshup, Data Crazy e WhatsApp Cloud API): para Uazapi, o produto cria a origem de gatilhos
+webhook de entrada (Umbler, Gupshup, Data Crazy e WhatsApp Cloud API): para Uazapi e WAHA, o produto cria a origem de gatilhos
 automaticamente (`UazapiConversionBridgeService`) a partir da conexão
 WhatsApp — uma conexão vira uma origem e um canal, de forma idempotente.
 
@@ -350,10 +350,15 @@ Consequências práticas, confirmadas no código:
 - Criar uma conexão inbound `uazapi` **na mão** é recusado de propósito:
   *"Conexoes UAZAPI sao criadas automaticamente a partir da instancia
   WhatsApp"*.
-- **WAHA e Z-API** têm receiver e parser prontos (leads e conversões de
-  CTWA funcionam), mas **ainda não têm** ponte automática para a central
-  de Gatilhos. Trate isso como lacuna conhecida do produto, não como um
-  passo que você esqueceu de clicar.
+- **WAHA (GoWS)** tem a mesma ponte: o número aparece em `/conversions`
+  assim que a conexão está ativa (ao abrir Conversões, ao clicar em
+  **Testar** com a sessão `WORKING` ou na primeira mensagem do seu time).
+  Ele entra nas regras de **frase** (e de catálogo) da equipe; etiquetas não
+  existem na WAHA, então ela não oferece gatilho de etiqueta.
+- **Z-API** tem receiver e parser prontos (leads e conversões de CTWA
+  funcionam), mas **ainda não tem** ponte automática para a central de
+  Gatilhos. Trate isso como lacuna conhecida do produto, não como um passo
+  que você esqueceu de clicar.
 - **NOD API** ainda não tem receiver inbound (a rota responde `501`).
 
 > ℹ️ No Hub, Z-API e NOD API aparecem como **Em breve**: não é possível
@@ -473,7 +478,7 @@ no painel da WAHA; `STARTING` = subindo; `STOPPED` = sessão parada;
 | Clique em anúncio com `ctwa_clid` (`externalAdReply.ctwaClid`), inclusive quando a 1ª mensagem é foto, vídeo, áudio, temporária ou de visualização única | Lead de anúncio + `LeadSubmitted` à Meta, como nos outros provedores |
 | Anúncio só com `sourceID`, sem `ctwa_clid` (anúncios no **Status** do WhatsApp: a Meta não manda o clid; cerca de 22% dos cliques) | **Cria lead de anúncio**, como o Rastrackapp: o lead guarda o ID do anúncio (campanha e conjunto vêm do anúncio sincronizado) e a `sourceURL`. **Nenhum evento vai à Meta**: o `LeadSubmitted` e as regras exigem `ctwa_clid`, e o `ctwaPayload` nunca é usado no lugar dele (a Meta o rejeita, erro 2804087). Se depois chegar um clique com clid do mesmo contato, o mesmo lead recebe o clid e o `LeadSubmitted` |
 | Mensagem orgânica | Registrada; não cria lead (igual à Uazapi) |
-| Mensagem do seu time (`message.any`, `fromMe`) | Registrada como `ignored_outbound`; regras de frase da WAHA ainda não estão liberadas |
+| Mensagem do seu time (`message.any`, `fromMe`) | Registrada como `ignored_outbound` (nunca cria lead) e **avaliada contra as regras de frase da equipe**, no mesmo caminho da Uazapi: a frase casa por "contém", sem diferenciar maiúsculas; o lead é achado pelo telefone do contato (`RecipientAlt`, `to` ou `Chat`; 12 ou 13 dígitos, com ou sem o nono dígito). Contato só com LID: o app consulta a sua WAHA para achar o telefone; sem resposta, nada roda. Mensagem sem texto (foto sem legenda, áudio, figurinha) não roda regra. Veja [Regras de frase da equipe na WAHA](#regras-de-frase-da-equipe-na-waha) |
 | Cópia `message.any` de mensagem recebida | Descartada (a recebida já veio por `message`; nada conta duas vezes) |
 | Grupo, Status (`status@broadcast`), lista de transmissão, canal | Descartados |
 | Clique em anúncio com contato só por LID (sem `SenderAlt`) | O app consulta a sua WAHA (`GET /api/{sessão}/lids/{lid}`, prazo de 3 s): com o telefone, segue como clique com clid (lead + `LeadSubmitted`). Sem resposta útil, fica registrado como `ctwa_contact_phone_unresolved` com o ID do anúncio (a métrica não se perde), sem lead |
@@ -496,12 +501,42 @@ telefone, clid ou miniatura).
 release, ou com ela em observação/retirada, o receptor volta ao v1, que não
 lê anúncios do GoWS.
 
-**Ainda não suportado:** grupos, Status, regras de frase/palavra do time na
-WAHA, ponte automática para a central de Gatilhos, HMAC e outros motores
+**6. Regras de frase da equipe na WAHA**
+
+<a id="regras-de-frase-da-equipe-na-waha"></a>
+Quando alguém do seu time digita, pelo número da WAHA, a frase de uma regra
+(ex.: "pagamento confirmado"), a conversão vai à Meta como na Uazapi:
+mesma ponte, mesma decisão (congelada por mensagem), mesma execução e mesmo
+envio. Só vale para contato que chegou por anúncio (lead com `ctwa_clid`);
+sem lead de anúncio, nada é enviado, igual à Uazapi.
+
+- **Criar ou editar a regra:** em `/conversions`, **Nova regra** → **Frase na
+  conversa**. Em **Alcance**, "Todos os números" já inclui os números da WAHA;
+  em "Números específicos", marque o número da WAHA. Regras antigas também
+  funcionam: uma regra "Todos os números" passa a valer para a WAHA sem
+  edição. Uma regra presa a uma conexão Uazapi antiga não vale para a WAHA;
+  nesse caso, crie (ou edite) a regra de frase com a origem WAHA.
+- **Envio automático:** salvar uma regra em envio automático ativa os números
+  dela, inclusive os da WAHA; um número da WAHA conectado depois é ativado
+  sozinho em até alguns minutos. Se algum número ficar pendente, use
+  **Ativar envio neste número** na própria regra. Conexão pausada continua
+  pausada até você retomá-la em Integrações.
+- **Mensagens antigas bloqueadas:** conversas que chegaram antes de o número
+  enviar ficam bloqueadas (`connection_not_production`). Depois de ativar,
+  use **Reprocessar bloqueadas** na regra: só reenvia o que está dentro da
+  janela de 7 dias da Meta, uma vez só.
+- **Sem duplicar:** a mesma mensagem nunca gera duas conversões (a cópia
+  `message` da mensagem do time é descartada, a reentrega do webhook é
+  reconhecida e, com regra específica no número, a regra "Todos os números"
+  não roda ali).
+- **Etiquetas** não existem na WAHA: a origem "Etiqueta no WhatsApp" continua
+  só na Uazapi.
+
+**Ainda não suportado:** grupos, Status, etiquetas, HMAC e outros motores
 além do GOWS. Env de fallback (`WAHA_BASE_URL`, `WAHA_API_KEY`,
 `WAHA_SESSION`) vale só para o **Testar**; a configuração automática do
 webhook usa somente o que está salvo na conexão.
-- **No Hub:** a WAHA está liberada para novas conexões (entrada de lead de anúncio). As **regras de frase** da WAHA seguem como "Em breve" em Conversões.
+- **No Hub:** a WAHA está liberada para novas conexões (entrada de lead de anúncio) e, em Conversões, entra nas **regras de frase** da equipe.
 
 ### Z-API (`zapi`)
 
