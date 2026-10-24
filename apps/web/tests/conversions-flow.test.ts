@@ -41,7 +41,7 @@ function renderFlow(
       connections,
       capabilities,
       comingSoonNumbers: [
-        { id: "wc_1", provider: "waha", label: "WAHA Loja", phone: null },
+        { id: "wc_1", provider: "zapi", label: "Z-API Loja", phone: null },
       ],
       licenseLocked: options.licenseLocked ?? false,
       createAction,
@@ -117,10 +117,10 @@ describe("Nova regra flow", () => {
     await user.click(screen.getByRole("checkbox", { name: /Recepção/ }));
     await user.click(screen.getByRole("checkbox", { name: /Atendimento/ }));
     expect((screen.getByRole("checkbox", { name: /Atendimento/ }) as HTMLInputElement).checked).toBe(true);
-    // WAHA is "Em breve"; Gupshup works, it only receives conversions by webhook.
+    // Z-API is "Em breve"; Gupshup works, it only receives conversions by webhook.
     const soon = screen.getByLabelText("Números sem regras");
-    expect(within(soon).getByText("WAHA Loja")).toBeTruthy();
-    expect(within(soon).getByText("WAHA · Em breve")).toBeTruthy();
+    expect(within(soon).getByText("Z-API Loja")).toBeTruthy();
+    expect(within(soon).getByText("Z-API · Em breve")).toBeTruthy();
     expect(within(soon).getByText("Gupshup SP")).toBeTruthy();
     expect(within(soon).getByText("Gupshup · pelo webhook")).toBeTruthy();
     expect(within(soon).getByText(/Conversões chegam pelo webhook do provedor/)).toBeTruthy();

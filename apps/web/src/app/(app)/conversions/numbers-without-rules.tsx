@@ -8,7 +8,8 @@ import type { ConversionNumber } from "./conversion-rules-view";
 /**
  * Números que não entram nas regras de frase, etiqueta e catálogo, em dois
  * grupos que não se misturam:
- * - “Em breve”: WAHA, Z-API e NOD API (ainda não participam das regras);
+ * - “Em breve”: Z-API e NOD API (ainda não participam das regras). A WAHA
+ *   já entra nas regras de frase como a Uazapi;
  * - provedores que funcionam normalmente (Gupshup, Data Crazy, WhatsApp Cloud
  *   API): as conversões chegam pelo webhook do provedor, só não há regra de
  *   frase para eles. Nunca recebem o rótulo “Em breve”.
@@ -43,12 +44,6 @@ export function NumbersWithoutRules({
               </li>
             ))}
           </ul>
-          {comingSoon.some((number) => number.provider === "waha") ? (
-            <p className="muted" data-testid="waha-rules-note">
-              Na WAHA, a entrada de lead de anúncio (CTWA) já funciona. Só as
-              regras de frase ainda não estão disponíveis.
-            </p>
-          ) : null}
         </div>
       ) : null}
       {webhookOnly.length > 0 ? (

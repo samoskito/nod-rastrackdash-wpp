@@ -72,7 +72,7 @@ const providerCards: Array<{
     id: "waha",
     title: "WAHA",
     ingestion:
-      "WAHA própria, motor GoWS: a entrada de lead de anúncio (CTWA) já funciona. As regras de frase da WAHA seguem em breve.",
+      "WAHA própria, motor GoWS: a entrada de lead de anúncio (CTWA) e as regras de frase da equipe (Conversões) já funcionam.",
     pending: false,
   },
   {

@@ -52,7 +52,7 @@ export type ConversionsData = {
   legacyRulesState: "real" | "error";
   numbers: ConversionNumber[];
   connections: ConversionConnection[];
-  /** Números de WAHA, Z-API e NOD API: ainda não participam das regras. */
+  /** Números de Z-API e NOD API: ainda não participam das regras. */
   comingSoonNumbers: ComingSoonNumber[];
   /** Alguma conexão teve os números ilegíveis. */
   numbersPartial: boolean;

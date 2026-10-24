@@ -100,7 +100,7 @@ export type NewRuleFlowProps = {
   numbers: ConversionNumber[];
   connections: ConversionConnection[];
   capabilities: ProviderConversionRuleCapabilitiesDto | null;
-  /** Números de WAHA, Z-API e NOD API: aparecem como “Em breve”. */
+  /** Números de Z-API e NOD API: aparecem como “Em breve”. */
   comingSoonNumbers?: ComingSoonNumber[];
   /** Licença bloqueada: o fluxo inteiro fica desabilitado (a API recusaria com 423). */
   licenseLocked?: boolean;

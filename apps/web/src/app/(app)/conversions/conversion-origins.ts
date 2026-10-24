@@ -58,7 +58,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     description:
       "Quando a equipe (ou o contato, na Umbler) manda uma mensagem com a frase combinada.",
     logoProvider: null,
-    fallbackChannelProviders: ["umbler", "uazapi"],
+    fallbackChannelProviders: ["umbler", "uazapi", "waha"],
     connection: "none",
   },
   {
@@ -66,7 +66,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     kind: "provider",
     label: "Etiqueta no WhatsApp",
     description:
-      "Quando a equipe coloca uma etiqueta no contato, nos números conectados por QR code (Uazapi).",
+      "Quando a equipe coloca uma etiqueta no contato, nos números da Uazapi (a WAHA não tem etiquetas).",
     logoProvider: "uazapi_byo",
     fallbackChannelProviders: ["uazapi"],
     connection: "none",
@@ -120,6 +120,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "meta_cloud",
       "data_crazy",
       "unnichat",
+      "waha",
     ],
     connection: "any",
     // O evento vem do status de cada venda; o valor vem da própria venda.
@@ -230,7 +231,7 @@ export function providerLogo(id: IntegrationProviderId): RuleLogo {
   };
 }
 
-/** Cartão do Hub de um provedor de entrada ("uazapi" é o cartão Uazapi). */
+/** Cartão do Hub de um provedor de entrada ("uazapi" é o cartão Uazapi; "waha", o da WAHA). */
 export function hubProviderForInbound(
   provider: string,
 ): IntegrationProviderId | null {
@@ -242,6 +243,7 @@ export function hubProviderForInbound(
     case "data_crazy":
     case "unnichat":
     case "meta_cloud":
+    case "waha":
       return provider;
     default:
       return null;

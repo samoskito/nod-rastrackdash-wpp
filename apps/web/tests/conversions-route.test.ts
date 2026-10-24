@@ -317,7 +317,7 @@ describe("Conversions route", () => {
     ).toBe(false);
   });
 
-  it("lists WAHA, Z-API and NOD API numbers as coming soon, not as choices", async () => {
+  it("lists Z-API and NOD API numbers as coming soon; WAHA is no longer “Em breve”", async () => {
     mockApi({
       whatsapp: [
         {
@@ -330,14 +330,27 @@ describe("Conversions route", () => {
           lastHealthCheckedAt: null,
           createdAt: "2026-10-01T12:00:00.000Z",
         },
+        {
+          id: "wc_2",
+          name: "zapi-loja",
+          displayName: "Z-API Loja",
+          provider: "zapi",
+          status: "active",
+          lastHealthStatus: null,
+          lastHealthCheckedAt: null,
+          createdAt: "2026-10-01T12:00:00.000Z",
+        },
       ],
     });
 
     const html = await renderPage();
 
-    expect(html).toContain("WAHA Loja");
-    expect(html).toContain("WAHA · Em breve");
-    expect(html).toContain("a entrada de lead de anúncio (CTWA) já funciona");
+    expect(html).toContain("Z-API Loja");
+    expect(html).toContain("Z-API · Em breve");
+    // WAHA runs the team phrase rules: its number comes from the bridge
+    // (inbound connection "waha"), never from the coming-soon list.
+    expect(html).not.toContain("WAHA · Em breve");
+    expect(html).not.toContain("a entrada de lead de anúncio (CTWA) já funciona");
     // Gupshup works through the provider webhook: never labelled "Em breve".
     expect(html).toContain("Gupshup · pelo webhook");
     expect(html).not.toContain("Gupshup · Em breve");

@@ -343,9 +343,9 @@ describe("WhatsappProviderPanel WAHA (GoWS)", () => {
       true,
     );
     expect(screen.queryByText(/Em breve: novas conexões/)).toBeNull();
-    // Phrase rules stay "em breve"; CTWA lead entry already works.
+    // CTWA lead entry and the team phrase rules both work on WAHA.
     expect(
-      screen.getByText(/regras de frase da WAHA seguem em breve/i),
+      screen.getByText(/regras de frase da equipe \(Conversões\) já funcionam/i),
     ).not.toBeNull();
     expect(screen.queryByText("Nome exibido")).toBeNull();
   });

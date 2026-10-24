@@ -54,8 +54,8 @@ export const capabilities: ProviderConversionRuleCapabilitiesDto = {
     {
       origin: "message_phrase",
       scopes: ["all_numbers", "specific_numbers"],
-      channelProviders: ["umbler", "uazapi"],
-      authorChannelProviders: { team: ["umbler", "uazapi"], contact: ["umbler"] },
+      channelProviders: ["umbler", "uazapi", "waha"],
+      authorChannelProviders: { team: ["umbler", "uazapi", "waha"], contact: ["umbler"] },
       connectionBound: false,
       labelMatch: null,
       unifiable: true,
@@ -63,7 +63,7 @@ export const capabilities: ProviderConversionRuleCapabilitiesDto = {
     {
       origin: "structured_catalog",
       scopes: ["all_numbers", "specific_numbers"],
-      channelProviders: ["umbler", "uazapi"],
+      channelProviders: ["umbler", "uazapi", "waha"],
       authorChannelProviders: null,
       connectionBound: false,
       labelMatch: null,
@@ -88,7 +88,7 @@ export const capabilities: ProviderConversionRuleCapabilitiesDto = {
       unifiable: false,
     },
   ],
-  unsupportedWhatsappProviders: ["waha", "zapi", "nod_api"],
+  unsupportedWhatsappProviders: ["zapi", "nod_api"],
 };
 
 /** Capacidades com a venda da Payt (qualquer número de WhatsApp; carrinho em beta). */
