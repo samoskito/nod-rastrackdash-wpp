@@ -1,20 +1,20 @@
 import type { WorkspacePermissionsDto } from "./schemas/workspace";
 
 export const clientNavigation = [
-  { id: "overview", label: "Visao geral" },
+  { id: "overview", label: "Visão geral" },
   { id: "leads", label: "Leads" },
-  { id: "reports", label: "Relatorios" },
+  { id: "reports", label: "Relatórios" },
   { id: "events", label: "Eventos Meta" },
-  { id: "integrations", label: "Integracoes" },
+  { id: "integrations", label: "Integrações" },
   { id: "conversions", label: "Conversões" },
-  { id: "settings", label: "Configuracoes" }
+  { id: "settings", label: "Configurações" }
 ] as const;
 
 export const backofficeNavigation = [
   { id: "workspaces", label: "Workspaces" },
   { id: "billing", label: "Financeiro" },
   { id: "split", label: "Split" },
-  { id: "diagnostics", label: "Diagnostico" }
+  { id: "diagnostics", label: "Diagnóstico" }
 ] as const;
 
 export type ClientNavId = (typeof clientNavigation)[number]["id"];

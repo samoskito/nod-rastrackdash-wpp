@@ -232,7 +232,7 @@ describe("leads route", () => {
     const element = await LeadsPage({ searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Integracao externa");
+    expect(html).toContain("Integração externa");
     expect(html).not.toContain("external_mysql");
   });
 

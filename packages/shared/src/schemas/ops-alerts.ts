@@ -5,11 +5,11 @@ const alertPhoneSchema = z
   .trim()
   .transform((value) => value.replace(/\D/g, ""))
   .refine((value) => value.length === 0 || (value.length >= 10 && value.length <= 13), {
-    message: "Telefone deve ter entre 10 e 13 digitos",
+    message: "Telefone deve ter entre 10 e 13 dígitos",
   });
 
 const phoneDigitsSchema = alertPhoneSchema.refine((value) => value.length > 0, {
-  message: "Telefone e obrigatorio",
+  message: "Telefone é obrigatório",
 });
 
 export const workspaceOpsAlertSettingsInputSchema = z
@@ -25,10 +25,10 @@ export const workspaceOpsAlertSettingsInputSchema = z
   .superRefine((value, context) => {
     const alertPhones = value.alertPhones.length > 0 ? value.alertPhones : value.alertPhone ? [value.alertPhone] : [];
     if (new Set(alertPhones).size !== alertPhones.length) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["alertPhones"], message: "Telefones devem ser unicos" });
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["alertPhones"], message: "Telefones devem ser únicos" });
     }
     if (value.enabled && alertPhones.length === 0) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["alertPhones"], message: "Informe ao menos um telefone quando alertas estao ativos" });
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["alertPhones"], message: "Informe ao menos um telefone quando alertas estão ativos" });
     }
   })
   .transform((value) => ({

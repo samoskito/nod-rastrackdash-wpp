@@ -399,7 +399,7 @@ export const metaCapiTokenInputSchema = z
   })
   .refine(
     (value) => value.clear || Boolean(value.accessToken),
-    "Informe um token CAPI ou solicite limpar a configuracao",
+    "Informe um token CAPI ou solicite limpar a configuração",
   );
 
 export const metaCapiTokenStatusSchema = z.object({
@@ -638,7 +638,7 @@ export const metaManualDestinationInputSchema = z
     if (hasExisting === hasNew) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Escolha um destino existente ou informe Pixel e Pagina",
+        message: "Escolha um destino existente ou informe Pixel e Página",
       });
     }
   });
@@ -685,7 +685,7 @@ export const metaManualAccountDestinationInputSchema = z
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "O destino padrao precisa estar entre os destinos autorizados",
+        message: "O destino padrão precisa estar entre os destinos autorizados",
         path: ["conversionDestinationId"],
       });
     }

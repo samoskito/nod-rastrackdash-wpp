@@ -282,7 +282,7 @@ export const providerConversionCatalogInputSchema = z
       if (attributeKeys.has(attribute.key)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Cada atributo do catalogo deve ter uma chave unica",
+          message: "Cada atributo do catálogo deve ter uma chave única",
           path: ["attributes", index, "key"],
         });
       }
@@ -301,7 +301,7 @@ export const providerConversionCatalogInputSchema = z
       if (variant.aliases.length > catalog.attributes.length) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Os aliases devem acompanhar os atributos do catalogo",
+          message: "Os aliases devem acompanhar os atributos do catálogo",
           path: ["variants", index, "aliases"],
         });
       }
@@ -312,7 +312,7 @@ const uniqueChannelIdsSchema = z
   .array(idSchema)
   .max(100)
   .refine((channelIds) => new Set(channelIds).size === channelIds.length, {
-    message: "Cada canal deve ser informado uma unica vez",
+    message: "Cada canal deve ser informado uma única vez",
   });
 
 const providerConversionRuleBaseSchema = z.object({
@@ -345,7 +345,7 @@ function refineRuleScopeChannels(
     if (channelCount > 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Regras para todos os numeros nao recebem canais",
+        message: "Regras para todos os números não recebem canais",
         path: ["channelIds"],
       });
     }
@@ -369,7 +369,7 @@ const providerConversionMessageRuleShape = {
       (phrases) =>
         new Set(phrases.map((phrase) => phrase.toLocaleLowerCase("pt-BR")))
           .size === phrases.length,
-      { message: "Cada frase gatilho deve ser informada uma unica vez" },
+      { message: "Cada frase gatilho deve ser informada uma única vez" },
     ),
   messageAuthorScope: providerConversionMessageAuthorScopeSchema,
 };
@@ -398,21 +398,21 @@ function refineEventValueFields(
     if (input.defaultValueCents != null) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Este evento nao envia valor monetario",
+        message: "Este evento não envia valor monetário",
         path: ["defaultValueCents"],
       });
     }
     if (input.defaultContentName != null) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Este evento nao envia produto",
+        message: "Este evento não envia produto",
         path: ["defaultContentName"],
       });
     }
     if (input.valueMode === "message_extracted") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Este evento nao extrai valor da mensagem",
+        message: "Este evento não extrai valor da mensagem",
         path: ["valueMode"],
       });
     }
@@ -426,7 +426,7 @@ function refineEventValueFields(
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Informe o valor medio para regras com valor fixo",
+      message: "Informe o valor médio para regras com valor fixo",
       path: ["defaultValueCents"],
     });
   }
@@ -612,7 +612,7 @@ function rejectUnknownCreateFields(
       if (!Object.prototype.hasOwnProperty.call(schema.shape, key)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Campo nao permitido",
+          message: "Campo não permitido",
           path: [...path, key],
         });
       } else {
@@ -691,7 +691,7 @@ export const providerConversionRuleUpdateInputSchema = z
     message: "Informe ao menos um campo para atualizar",
   })
   .refine((input) => !(input.scope === "all_numbers" && input.channelIds), {
-    message: "Regras para todos os numeros nao recebem canais",
+    message: "Regras para todos os números não recebem canais",
     path: ["channelIds"],
   })
   .refine(
@@ -1044,7 +1044,7 @@ export const providerConversionRuleUnifyInputSchema = z.object({
     .min(2)
     .max(100)
     .refine((ids) => new Set(ids).size === ids.length, {
-      message: "Cada regra deve ser informada uma unica vez",
+      message: "Cada regra deve ser informada uma única vez",
     }),
   name: z.string().trim().min(2).max(120).optional(),
 });

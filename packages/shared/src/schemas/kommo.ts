@@ -128,7 +128,7 @@ export const kommoConversionRuleCreateInputSchema =
       )
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Este evento nao aceita configuracao de valor",
+          message: "Este evento não aceita configuração de valor",
           path: ["valueMode"],
         });
     } else if (input.valueMode === "fixed") {
@@ -152,7 +152,7 @@ export const kommoConversionRuleCreateInputSchema =
     )
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Informe a moeda do preco do lead",
+        message: "Informe a moeda do preço do lead",
         path: ["currency"],
       });
   });

@@ -292,7 +292,7 @@ describe("inbound webhook contracts", () => {
         receivedFrom: "2026-07-23T10:37",
         receivedUntil: "2026-07-23T10:36",
       }),
-    ).toThrow("O fim do periodo deve ser posterior ao inicio");
+    ).toThrow("O fim do período deve ser posterior ao início");
   });
 
   it("accepts the registered observation providers", () => {

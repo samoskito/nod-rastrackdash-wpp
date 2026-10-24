@@ -172,7 +172,7 @@ export const inboundWebhookDisplayNameSchema = z
   .min(2)
   .max(120)
   .refine((value) => !/[\u0000-\u001f\u007f<>]/u.test(value), {
-    message: "Nome de conexao invalido",
+    message: "Nome de conexão inválido",
   });
 
 // Numero de WhatsApp do cliente (nunca o telefone do lead de um webhook).
@@ -236,7 +236,7 @@ export const inboundWebhookChannelCreateInputSchema = z.object({
     .min(1)
     .max(32)
     .refine((value) => /\d{8,}/u.test(value.replace(/\D/gu, "")), {
-      message: "Informe um numero de telefone valido",
+      message: "Informe um número de telefone válido",
     }),
   channelName: inboundWebhookDisplayNameSchema.nullable().optional(),
 });
@@ -370,7 +370,7 @@ function validateBackofficeInboundWebhookPeriod(
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["receivedUntil"],
-      message: "O fim do periodo deve ser posterior ao inicio",
+      message: "O fim do período deve ser posterior ao início",
     });
   }
 }
@@ -602,7 +602,7 @@ export const backofficeProviderConversionRolloutQuerySchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["createdUntil"],
-        message: "O fim do periodo deve ser igual ou posterior ao inicio",
+        message: "O fim do período deve ser igual ou posterior ao início",
       });
     }
   });

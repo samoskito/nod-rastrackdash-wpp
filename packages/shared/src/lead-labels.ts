@@ -13,7 +13,7 @@ export function leadStatusLabel(status: LeadStatusDto): string {
     new: "Novo",
     active: "Atendimento ativo",
     qualified: "Lead qualificado",
-    converted: "Compra atribuida",
+    converted: "Compra atribuída",
     lost: "Perdido",
   };
 
@@ -29,7 +29,7 @@ export function leadLifecycleLabel(lead: LeadLifecycleInput): string {
   const labels: Record<string, string> = {
     LeadSubmitted: "Conversa iniciada",
     QualifiedLead: "Lead qualificado",
-    Purchase: "Compra atribuida",
+    Purchase: "Compra atribuída",
   };
 
   return lead.lastEventName
@@ -43,7 +43,7 @@ export function leadSourceLabel(
   adId: string | null,
 ): string {
   if (source === "external_mysql") {
-    return "Integracao externa";
+    return "Integração externa";
   }
 
   if (source === "umbler_talk") {

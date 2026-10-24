@@ -46,7 +46,7 @@ const timezoneSchema = z
     } catch {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Timezone invalido",
+        message: "Timezone inválido",
       });
     }
   });
@@ -99,7 +99,7 @@ export const externalDataConnectorUpdateInputSchema = z
     defaultCurrency: currencySchema.optional(),
   })
   .refine((input) => Object.keys(input).length > 0, {
-    message: "Informe ao menos uma alteracao",
+    message: "Informe ao menos uma alteração",
   });
 
 export const externalSyncCursorSchema = z.object({

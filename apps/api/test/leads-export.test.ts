@@ -554,7 +554,7 @@ describe("leads service export", () => {
       adSetId: "adset_1",
       adId: "ad_1",
     });
-    expect(rows[1]?.stage).toBe("Compra atribuida");
+    expect(rows[1]?.stage).toBe("Compra atribuída");
     expect(rows[0]?.enteredAt?.toISOString()).toBe("2026-07-02T03:00:05.000Z");
   });
 
