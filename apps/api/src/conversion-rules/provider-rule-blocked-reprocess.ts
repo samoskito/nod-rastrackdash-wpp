@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { BRIDGED_WHATSAPP_PROVIDERS } from "../inbound-webhooks/bridged-whatsapp-providers";
 
 /**
  * "Reprocessar bloqueadas" (Últimas execuções): which executions of a rule
@@ -152,7 +153,15 @@ export async function findReprocessableExecutions(
       { occurredAt: { gte: input.cutoff } },
       { providerDecisionId: { not: null } },
       live,
-      { channel: { is: { connection: { is: { provider: "uazapi" } } } } },
+      {
+        channel: {
+          is: {
+            connection: {
+              is: { provider: { in: [...BRIDGED_WHATSAPP_PROVIDERS] } },
+            },
+          },
+        },
+      },
     ],
   };
   const result: ReprocessableExecution[] = [];

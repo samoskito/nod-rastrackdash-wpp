@@ -1330,6 +1330,7 @@ export class InboundWebhookChannelRoutesService {
     // Unnichat binds its number when the connection is created (Fase 4b).
     if (
       connection.provider === "uazapi" ||
+      connection.provider === "waha" ||
       connection.provider === "data_crazy" ||
       connection.provider === "unnichat"
     ) {

@@ -43,6 +43,11 @@ import {
   UazapiConversionBridgeService,
   type UazapiBridgeInstance,
 } from "./uazapi-conversion-bridge.service";
+import {
+  BRIDGE_PARSER_VERSION,
+  isBridgedWhatsappProvider,
+  type BridgedWhatsappProvider,
+} from "./bridged-whatsapp-providers";
 import { WhatsappProviderRegistry } from "../integrations/whatsapp-providers/whatsapp-provider.registry";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 
@@ -100,6 +105,12 @@ const gatedChannelSelect = {
 
 export type UazapiTeamMessageInput = {
   workspaceId: string;
+  /**
+   * Provider of the WhatsApp connection that sent the team message: "uazapi"
+   * (default, uazapi_byo) or "waha" (GoWS `message.any` with fromMe). Both
+   * run the very same bridge, frozen decision, orchestration and send.
+   */
+  provider?: BridgedWhatsappProvider;
   instance: UazapiBridgeInstance;
   phone: string;
   messageText: string;
@@ -188,11 +199,14 @@ export class UazapiProviderConversionService {
       return { evaluated: false, eligibleExecutionId: null };
     }
 
-    const bridged = await this.bridge.ensureBridge(input.instance);
+    const provider: BridgedWhatsappProvider = input.provider ?? "uazapi";
+    const bridged = await this.bridge.ensureBridge(input.instance, provider);
     const rules = await this.loadRules(
       input.workspaceId,
       bridged.connectionId,
       bridged.channelId,
+      "team_message",
+      provider,
     );
     if (rules.length === 0) {
       return { evaluated: false, eligibleExecutionId: null };
@@ -212,7 +226,10 @@ export class UazapiProviderConversionService {
     });
     const occurredAt = input.occurredAt ?? new Date();
     const externalEventId = this.externalEventId(input, occurredAt);
-    const occurrenceKey = `uazapi:${bridged.channelId}:${externalEventId}`;
+    // One occurrence per (channel, provider message id): a re-delivered
+    // webhook, or the same message seen again, hits the frozen decision of
+    // the first evaluation instead of creating a second execution.
+    const occurrenceKey = `${provider}:${bridged.channelId}:${externalEventId}`;
 
     let evaluated = false;
     let eligibleExecutionId: string | null = null;
@@ -223,14 +240,14 @@ export class UazapiProviderConversionService {
         this.teamMessageTriggerType(rule),
       );
       const decisionInput: ProviderConversionDecisionInput = {
-        parserVersion: PARSER_VERSION,
+        parserVersion: BRIDGE_PARSER_VERSION[provider],
         rule: ruleSnapshot,
         catalog: this.catalogSnapshot(rule),
         leadResolution,
         contactIdentityHash: hashPhoneIdentity(phone) ?? null,
         occurrence: {
           source: "message",
-          provider: "uazapi",
+          provider,
           workspaceId: input.workspaceId,
           connectionId: bridged.connectionId,
           channelId: bridged.channelId,
@@ -255,6 +272,7 @@ export class UazapiProviderConversionService {
         workspaceId: input.workspaceId,
         connectionId: bridged.connectionId,
         ingressKey: occurrenceKey,
+        provider,
       });
       const persistedDecision = await this.resolveDecision({
         decision,
@@ -323,9 +341,9 @@ export class UazapiProviderConversionService {
     if (!persistedDecision) {
       throw new Error(`Provider conversion decision not found: ${decisionId}`);
     }
-    if (persistedDecision.decision.occurrence.provider !== "uazapi") {
+    if (!isBridgedWhatsappProvider(persistedDecision.decision.occurrence.provider)) {
       throw new Error(
-        `Decision ${decisionId} belongs to provider ${persistedDecision.decision.occurrence.provider}, not uazapi`,
+        `Decision ${decisionId} belongs to provider ${persistedDecision.decision.occurrence.provider}, not a bridged WhatsApp connection (uazapi/waha)`,
       );
     }
 
@@ -680,6 +698,7 @@ export class UazapiProviderConversionService {
     connectionId: string,
     channelId: string,
     triggerType: "team_message" | "provider_automation" = "team_message",
+    provider: BridgedWhatsappProvider = "uazapi",
   ): Promise<Rule[]> {
     const candidates = (await this.prisma.providerConversionRuleConfig.findMany(
       {
@@ -716,7 +735,7 @@ export class UazapiProviderConversionService {
               ? [{ channelId }]
               : [],
         })),
-        channel: { id: channelId, connectionId, provider: "uazapi" },
+        channel: { id: channelId, connectionId, provider },
       })
     ).applicable;
   }
@@ -725,6 +744,7 @@ export class UazapiProviderConversionService {
     workspaceId: string;
     connectionId: string;
     ingressKey: string;
+    provider?: BridgedWhatsappProvider;
   }): Promise<string> {
     const existing = await this.prisma.inboundWebhookDelivery.findUnique({
       where: {
@@ -743,9 +763,9 @@ export class UazapiProviderConversionService {
         data: {
           workspaceId: input.workspaceId,
           connectionId: input.connectionId,
-          provider: "uazapi",
+          provider: input.provider ?? "uazapi",
           ingressKey: input.ingressKey,
-          parserVersion: PARSER_VERSION,
+          parserVersion: BRIDGE_PARSER_VERSION[input.provider ?? "uazapi"],
           status: "processed",
           firstReceivedAt: receivedAt,
           lastReceivedAt: receivedAt,

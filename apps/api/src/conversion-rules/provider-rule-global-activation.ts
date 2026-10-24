@@ -5,6 +5,7 @@ import type {
   ProviderConversionRulePendingNumberReasonDto,
 } from "@wpptrack/shared";
 import { metaRouteRequiredForProvider } from "../inbound-webhooks/inbound-webhook-production-activation";
+import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
 
 /**
  * "Todos os números" x production gates (porte do incidente de 19/10/2026 do
@@ -87,8 +88,8 @@ export type PendingChannelRow = Prisma.InboundWebhookChannelGetPayload<{
 }>;
 
 /**
- * Whether the number's own WhatsApp connection allows sending. Only QR
- * numbers (UAZAPI/NOD bridge) carry a WhatsappInstance: it must be `active`
+ * Whether the number's own WhatsApp connection allows sending. Only bridged
+ * numbers (Uazapi and WAHA bridges) carry a WhatsappInstance: it must be `active`
  * (not suspended/removed). The QR session health is deliberately ignored. Webhook providers (Umbler,
  * Gupshup, Unnichat...) have no instance and are always connectable.
  */
@@ -97,7 +98,7 @@ export function channelConnectable(
     connection: { provider: string };
   },
 ): boolean {
-  if (channel.connection.provider !== "uazapi") return true;
+  if (!isBridgedWhatsappProvider(channel.connection.provider)) return true;
   return channel.whatsappInstance?.status === "active";
 }
 
@@ -169,7 +170,7 @@ export function pendingNumberState(input: {
   // A QR instance carries a placeholder (instance id) as connected phone
   // until its first connection test; never show that as a phone.
   const phone =
-    channel.connection.provider === "uazapi" &&
+    isBridgedWhatsappProvider(channel.connection.provider) &&
     !/^\+?\d{8,15}$/u.test((channel.connectedPhone ?? "").trim())
       ? null
       : channel.connectedPhone;

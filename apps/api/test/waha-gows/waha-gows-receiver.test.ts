@@ -115,13 +115,20 @@ function harness(
   const lidResolver = {
     resolvePhone: vi.fn(async () => options.lidPhone ?? null),
   };
+  // Regras de frase da equipe (mesmo serviço da Uazapi, provedor "waha").
+  const teamConversion = {
+    evaluateTeamMessage: vi.fn(async (_input: Record<string, any>) => ({
+      evaluated: true,
+      eligibleExecutionId: "execution-team-1" as string | null,
+    })),
+  };
   const controller = new WebhooksController(
     services.diagnosticsService as never,
     services.conversionRulesService as never,
     services.conversionEventsService as never,
     services.conversionEventsQueueService as never,
     services.leadsService as never,
-    {} as never,
+    teamConversion as never,
     prisma as never,
     lidResolver as never,
   );
@@ -140,6 +147,7 @@ function harness(
     leadsByPhoneHash,
     instance,
     lidResolver,
+    teamConversion,
   };
 }
 
@@ -520,4 +528,177 @@ describe("POST /webhooks/whatsapp/:id — WAHA GoWS com a release waha/v2 certif
       expect(first.summaryPayload.payload).toBeDefined();
     },
   );
+});
+
+describe("POST /webhooks/whatsapp/:id — regras de frase da equipe na WAHA (message.any fromMe)", () => {
+  it("leva a mensagem do time ao pipeline das regras de frase, pelo RecipientAlt, sem criar lead", async () => {
+    const { services, deliverFixture, teamConversion } = harness();
+
+    const response = await deliverFixture("message-any-team-recipient-alt");
+
+    expect(teamConversion.evaluateTeamMessage).toHaveBeenCalledTimes(1);
+    const input = teamConversion.evaluateTeamMessage.mock.calls[0]![0];
+    expect(input).toMatchObject({
+      workspaceId: "workspace-a",
+      provider: "waha",
+      phone: "5500900000101",
+      messageText: "Olá! Segue o link de pagamento (mensagem sintética).",
+      externalMessageId: "true_100000000000101@lid_3EB0000000000000000004",
+      instance: { id: "connection-waha", workspaceId: "workspace-a" },
+    });
+    // The store's own number travels with the instance (bridge phone).
+    expect(input.instance.connectedPhone).toBe("5500900009999");
+    expect(input.occurredAt).toBeInstanceOf(Date);
+    expect((response as any).conversion.teamMessage).toEqual({
+      evaluated: true,
+      eligibleExecutionId: "execution-team-1",
+    });
+    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+    expect(
+      services.conversionEventsService.recordAutomaticLeadSubmitted,
+    ).not.toHaveBeenCalled();
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it("usa o telefone do `to`/Chat quando não há RecipientAlt", async () => {
+    const { deliverFixture, teamConversion } = harness();
+
+    await deliverFixture("message-any-team-no-recipient-alt");
+
+    expect(teamConversion.evaluateTeamMessage).toHaveBeenCalledTimes(1);
+    expect(teamConversion.evaluateTeamMessage.mock.calls[0]![0]).toMatchObject({
+      provider: "waha",
+      phone: "5500900000103",
+      messageText: "Pedido confirmado (mensagem sintética).",
+    });
+  });
+
+  it("contato só com LID: resolve o telefone na WAHA do aluno e segue para a regra", async () => {
+    const { deliver, teamConversion, lidResolver } = harness({
+      lidPhone: "5500900000101",
+    });
+    const body = wahaGowsFixture("message-any-team-recipient-alt");
+    body.payload._data.Info.RecipientAlt = "";
+
+    await deliver(body);
+
+    expect(lidResolver.resolvePhone).toHaveBeenCalledWith({
+      workspaceId: "workspace-a",
+      whatsappInstanceId: "connection-waha",
+      lid: "100000000000101",
+    });
+    expect(teamConversion.evaluateTeamMessage).toHaveBeenCalledTimes(1);
+    expect(teamConversion.evaluateTeamMessage.mock.calls[0]![0]).toMatchObject({
+      phone: "5500900000101",
+    });
+  });
+
+  it("contato só com LID que a WAHA não resolve: registra e não roda regra", async () => {
+    const { services, deliver, teamConversion, lidResolver } = harness({
+      lidPhone: null,
+    });
+    const body = wahaGowsFixture("message-any-team-recipient-alt");
+    body.payload._data.Info.RecipientAlt = "";
+
+    await deliver(body);
+
+    expect(lidResolver.resolvePhone).toHaveBeenCalledTimes(1);
+    expect(teamConversion.evaluateTeamMessage).not.toHaveBeenCalled();
+    expect(lastLog(services)?.summaryPayload).toMatchObject({
+      classificationReason: "contact_phone_unresolved",
+    });
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it.each([
+    "message-organic",
+    "message-ctwa-clid",
+    "message-any-inbound-duplicate",
+  ] as const)(
+    "mensagem recebida do contato (%s) nunca roda a regra de frase da equipe",
+    async (name) => {
+      const { deliverFixture, teamConversion } = harness();
+
+      await deliverFixture(name);
+
+      expect(teamConversion.evaluateTeamMessage).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a cópia `message` de uma mensagem do time é descartada: uma avaliação só", async () => {
+    const { deliver, teamConversion } = harness();
+    const any = wahaGowsFixture("message-any-team-recipient-alt");
+    const copy = wahaGowsFixture("message-any-team-recipient-alt");
+    copy.event = "message";
+
+    await deliver(copy);
+    await deliver(any);
+
+    expect(teamConversion.evaluateTeamMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("reentrega do webhook (duplicada no WebhookLog) não avalia de novo", async () => {
+    const { services, deliverFixture, teamConversion } = harness();
+    services.diagnosticsService.recordWebhookLog
+      .mockResolvedValueOnce({
+        webhookLogId: "webhook-log-1",
+        diagnosticEventId: "diagnostic-event-1",
+        status: "received",
+      })
+      .mockResolvedValueOnce({
+        webhookLogId: "webhook-log-1",
+        diagnosticEventId: "diagnostic-event-1",
+        status: "duplicate",
+      });
+
+    await deliverFixture("message-any-team-recipient-alt");
+    await deliverFixture("message-any-team-recipient-alt");
+
+    expect(teamConversion.evaluateTeamMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["mídia sem legenda", (body: Record<string, any>) => {
+      body.payload.body = null;
+      body.payload.hasMedia = true;
+      body.payload._data.Message = { imageMessage: { mimetype: "image/jpeg" } };
+    }],
+    ["áudio", (body: Record<string, any>) => {
+      body.payload.body = "";
+      body.payload.hasMedia = true;
+      body.payload._data.Message = { audioMessage: { seconds: 3 } };
+    }],
+    ["figurinha", (body: Record<string, any>) => {
+      delete body.payload.body;
+      body.payload._data.Message = { stickerMessage: {} };
+    }],
+  ])("mensagem do time sem texto (%s) não quebra nem roda regra", async (_label, mutate) => {
+    const { services, deliver, teamConversion } = harness();
+    const body = wahaGowsFixture("message-any-team-recipient-alt");
+    mutate(body);
+
+    await deliver(body);
+
+    expect(teamConversion.evaluateTeamMessage).not.toHaveBeenCalled();
+    expect(services.diagnosticsService.markWebhookLogProcessed).toHaveBeenCalled();
+  });
+
+  it("falha na regra marca a entrega como falha para a retentativa da WAHA", async () => {
+    const { services, deliverFixture, teamConversion } = harness();
+    teamConversion.evaluateTeamMessage.mockRejectedValueOnce(new Error("db down"));
+
+    await expect(
+      deliverFixture("message-any-team-recipient-alt"),
+    ).rejects.toThrow("db down");
+    expect(services.diagnosticsService.markWebhookLogFailed).toHaveBeenCalled();
+    expect(services.diagnosticsService.markWebhookLogProcessed).not.toHaveBeenCalled();
+  });
+
+  it("com a release waha/v2 fora de produção (v1), a mensagem do time não roda regra", async () => {
+    const { deliverFixture, teamConversion } = harness({ release: "retired" });
+
+    await deliverFixture("message-any-team-recipient-alt");
+
+    expect(teamConversion.evaluateTeamMessage).not.toHaveBeenCalled();
+  });
 });

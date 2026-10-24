@@ -250,7 +250,7 @@ describe("provider rule workspace scope: precedence", () => {
     }
   });
 
-  it("never puts WAHA, Z-API or NOD API numbers in a global rule", () => {
+  it("never puts Z-API or NOD API numbers in a global rule", () => {
     const rules = [
       scopedRule({ id: "message", scope: "all_numbers" }),
       scopedRule({
@@ -263,7 +263,7 @@ describe("provider rule workspace scope: precedence", () => {
         },
       }),
     ];
-    for (const provider of ["waha", "zapi", "nod_api"]) {
+    for (const provider of ["zapi", "nod_api"]) {
       const channel = {
         id: `channel_${provider}`,
         connectionId: `connection_${provider}`,
@@ -277,10 +277,43 @@ describe("provider rule workspace scope: precedence", () => {
       ).toEqual([]);
     }
     expect(providerRuleCapabilities().unsupportedWhatsappProviders).toEqual([
-      "waha",
       "zapi",
       "nod_api",
     ]);
+  });
+
+  it("puts WAHA numbers in a global phrase rule, never in a label rule", () => {
+    const channel = {
+      id: "channel_waha",
+      connectionId: "connection_waha",
+      provider: "waha",
+    };
+    const message = scopedRule({ id: "message", scope: "all_numbers" });
+    const label = scopedRule({
+      id: "label",
+      scope: "all_numbers",
+      conversionRule: {
+        triggerType: "provider_automation",
+        eventName: "Purchase",
+        active: true,
+      },
+    });
+    expect(providerRuleCoversChannel(message, channel)).toBe(true);
+    expect(providerRuleCoversChannel(label, channel)).toBe(false);
+    expect(
+      selectApplicableProviderRules([message, label], channel).applicable.map(
+        (rule) => rule.id,
+      ),
+    ).toEqual(["message"]);
+    // A WAHA bridge channel still carrying the session name as phone has no
+    // phone identity (it never dedupes against a real number).
+    expect(
+      channelPhoneKey({
+        provider: "waha",
+        connectedPhone: "5511999990000",
+        providerChannelId: "5511999990000",
+      }),
+    ).toBeNull();
   });
 
   it("keeps the Umbler automation on its own connection", () => {

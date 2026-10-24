@@ -1361,8 +1361,8 @@ describe("provider rules API: Conversões screen support", () => {
         ]),
       ),
     ).toEqual({
-      message_phrase: ["umbler", "uazapi"],
-      structured_catalog: ["umbler", "uazapi"],
+      message_phrase: ["umbler", "uazapi", "waha"],
+      structured_catalog: ["umbler", "uazapi", "waha"],
       whatsapp_label: ["uazapi"],
       automation_umbler: ["umbler"],
       // Fase 4a: a Payt sale may belong to any WhatsApp number (Unnichat
@@ -1374,6 +1374,7 @@ describe("provider rules API: Conversões screen support", () => {
         "meta_cloud",
         "data_crazy",
         "unnichat",
+        "waha",
       ],
       // Fase 4b: the Unnichat automation runs on its own connection number.
       automation_unnichat: ["unnichat"],
@@ -1381,7 +1382,7 @@ describe("provider rules API: Conversões screen support", () => {
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
         ?.authorChannelProviders,
-    ).toEqual({ team: ["umbler", "uazapi"], contact: ["umbler"] });
+    ).toEqual({ team: ["umbler", "uazapi", "waha"], contact: ["umbler"] });
     expect(
       capabilities.origins.find((origin) => origin.origin === "automation_payt"),
     ).toMatchObject({
@@ -1420,7 +1421,6 @@ describe("provider rules API: Conversões screen support", () => {
       )?.eventNames,
     ).toBeUndefined();
     expect(capabilities.unsupportedWhatsappProviders).toEqual([
-      "waha",
       "zapi",
       "nod_api",
     ]);

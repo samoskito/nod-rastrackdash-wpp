@@ -9,6 +9,7 @@ import {
   type ProviderConversionRuleScopeDto,
 } from "@wpptrack/shared";
 import { phoneIdentityKey } from "../common/phone/phone-identity";
+import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
 
 /**
  * Alcance das regras de conversao por provedor (Fase 3, Conversoes).
@@ -34,19 +35,20 @@ import { phoneIdentityKey } from "../common/phone/phone-identity";
  * como rede de seguranca contra envio duplicado.
  *
  * Matriz de capacidade desta edicao (derivada dos parsers/ingestao):
- *  - frase da equipe: umbler (observacao de mensagens) e uazapi (fromMe=true
- *    no webhook Uazapi/uazapi_byo);
+ *  - frase da equipe: umbler (observacao de mensagens), uazapi (fromMe=true
+ *    no webhook Uazapi/uazapi_byo) e waha (message.any com fromMe=true no
+ *    receptor da WAHA GoWS, mesma ponte da Uazapi);
  *  - frase do contato: umbler (o parser marca authorType "contact"); Uazapi
  *    so avalia mensagens da equipe; gupshup/data_crazy/meta_cloud ainda nao
  *    avaliam regras de mensagem (a observacao so aceita eventos umbler);
- *  - catalogo estruturado: umbler e uazapi (mensagem da equipe, como no SaaS);
- *  - etiqueta: uazapi (por nome entre instancias);
+ *  - catalogo estruturado: umbler, uazapi e waha (mensagem da equipe);
+ *  - etiqueta: uazapi (por nome entre instancias); a WAHA nao tem etiqueta;
  *  - automacao Umbler: presa a conexao que recebe o callback;
  *  - venda Payt (Fase 4a): qualquer numero de WhatsApp do workspace; a regra
  *    guarda a conexao dos numeros escolhidos so como ancora da URL;
  *  - automacao Unnichat (Fase 4b): presa a conexao Unnichat que recebe o
  *    callback (o numero ligado a conexao), como a automacao Umbler.
- *  WAHA, Z-API e NOD API nao entram em regras de provedor (nao possuem canal
+ *  Z-API e NOD API nao entram em regras de provedor (nao possuem canal
  *  de entrada); ficam "Em breve".
  */
 
@@ -94,11 +96,11 @@ export const PROVIDER_RULE_GLOBAL_PRECEDENCE =
 export const PROVIDER_RULE_OVERRIDDEN_REASON = "overridden_by_specific_rule";
 
 /** Providers whose TEAM messages run message_phrase rules. */
-export const MESSAGE_TEAM_CHANNEL_PROVIDERS = ["umbler", "uazapi"] as const;
+export const MESSAGE_TEAM_CHANNEL_PROVIDERS = ["umbler", "uazapi", "waha"] as const;
 /** Providers whose CONTACT messages run message_phrase rules. */
 export const MESSAGE_CONTACT_CHANNEL_PROVIDERS = ["umbler"] as const;
 /** Providers whose team messages run structured catalog rules (as the SaaS). */
-export const CATALOG_RULE_CHANNEL_PROVIDERS = ["umbler", "uazapi"] as const;
+export const CATALOG_RULE_CHANNEL_PROVIDERS = ["umbler", "uazapi", "waha"] as const;
 /** Providers whose chats expose WhatsApp labels (tags). */
 export const LABEL_RULE_CHANNEL_PROVIDERS = ["uazapi"] as const;
 /**
@@ -112,13 +114,13 @@ export const WHATSAPP_CHANNEL_PROVIDERS = [
   "meta_cloud",
   "data_crazy",
   "unnichat",
+  "waha",
 ] as const;
 /** Payt events (Fase 4a); "Carrinho abandonado" is still beta. */
 export const PAYT_RULE_EVENT_NAMES = [...paytSaleEventNames];
 export const PAYT_RULE_BETA_EVENT_NAMES = [...paytBetaSaleEventNames];
 /** WhatsApp providers of this edition that do not run provider rules yet. */
 export const UNSUPPORTED_RULE_WHATSAPP_PROVIDERS = [
-  "waha",
   "zapi",
   "nod_api",
 ] as const;
@@ -507,7 +509,7 @@ export function channelPhoneKey(channel: {
   const phone = channel.connectedPhone?.trim();
   if (!phone) return null;
   if (
-    channel.provider === "uazapi" &&
+    isBridgedWhatsappProvider(channel.provider) &&
     (phone === channel.providerChannelId?.trim() ||
       phone === channel.organizationId?.trim())
   ) {

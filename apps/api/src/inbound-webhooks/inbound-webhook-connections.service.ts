@@ -482,7 +482,8 @@ export class InboundWebhookConnectionsService {
 
   /**
    * U2c: lazily provisions the InboundWebhookConnection/Channel bridge for
-   * every active UAZAPI/NOD instance so it shows up in the same Gatilhos
+   * every active UAZAPI/NOD instance (and every active WAHA connection, whose
+   * team messages run the phrase rules too) so it shows up in the same Gatilhos
    * builder without requiring a webhook to have arrived yet. Best-effort:
    * a failure here just means the instance stays invisible until its next
    * successful webhook (see UazapiProviderConversionService), not a 500.
@@ -491,18 +492,27 @@ export class InboundWebhookConnectionsService {
     if (!this.uazapiBridge) return;
 
     const instances = await this.prisma.whatsappInstance.findMany({
-      where: { workspaceId, provider: "uazapi", status: "active" },
+      where: {
+        workspaceId,
+        provider: { in: ["uazapi", "waha"] },
+        status: "active",
+      },
       select: {
         id: true,
         workspaceId: true,
         name: true,
         providerInstanceId: true,
+        provider: true,
       },
     });
 
     for (const instance of instances) {
       try {
-        await this.uazapiBridge.ensureBridge(instance);
+        const { provider, ...bridgeInstance } = instance;
+        await this.uazapiBridge.ensureBridge(
+          bridgeInstance,
+          provider === "waha" ? "waha" : "uazapi",
+        );
       } catch {
         // best-effort; see doc comment above
       }

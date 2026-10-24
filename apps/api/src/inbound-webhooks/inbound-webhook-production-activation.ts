@@ -10,6 +10,7 @@ import { assertMetaCloudSigningConfigured, inboundParserProductionEligible } fro
 import { studentReplayDispatchUnsettled } from "../inbound-webhook-replay/student-replay-context";
 import { resolveCtwaDestination } from "./authorized-ctwa-destination";
 import { effectiveUnnichatMetaRouting } from "./inbound-webhook-effective-meta-routing";
+import { isBridgedWhatsappProvider } from "./bridged-whatsapp-providers";
 
 /**
  * Single implementation of the "promote a connection to production" and
@@ -141,13 +142,13 @@ export function nextMutationTime(previous: Date): Date {
 }
 
 /**
- * UAZAPI/NOD resolves the Meta destination per ad at send time
+ * UAZAPI/NOD and WAHA resolve the Meta destination per ad at send time
  * (InboundWebhookMetaRouteReaderService.previewRoute by adId), so its bridged
  * channels never carry InboundWebhookChannelRoute rows. Requiring one there
  * would make every UAZAPI activation impossible.
  */
 export function metaRouteRequiredForProvider(provider: string): boolean {
-  return provider !== "uazapi";
+  return !isBridgedWhatsappProvider(provider);
 }
 
 /**
@@ -207,7 +208,7 @@ export async function applyInboundWebhookChannelStatus(
   if (
     status === "active" &&
     current.connection.status === "production" &&
-    current.connection.provider !== "uazapi" &&
+    !isBridgedWhatsappProvider(current.connection.provider) &&
     input.seats.enforcementEnabled()
   ) {
     // UAZAPI/NOD channels are billed as WhatsappInstance seats already
@@ -476,7 +477,10 @@ async function activateProductionSeats(
   connection: PersistedInboundWebhookConnection,
   options: { actorUserId: string | null; seats: ExternalChannelSeatHook },
 ): Promise<void> {
-  if (!options.seats.enforcementEnabled() || connection.provider === "uazapi") {
+  if (
+    !options.seats.enforcementEnabled() ||
+    isBridgedWhatsappProvider(connection.provider)
+  ) {
     // UAZAPI/NOD channels are billed as WhatsappInstance seats already
     // (see WhatsappSeatProvider "uazapi"); billing them again here as an
     // "external channel" seat would double-charge the workspace.

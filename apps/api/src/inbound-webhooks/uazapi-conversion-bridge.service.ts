@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
-
-const PARSER_VERSION = "v1";
+import {
+  BRIDGE_PARSER_VERSION,
+  BRIDGE_PROVISIONED_EVENT,
+  type BridgedWhatsappProvider,
+} from "./bridged-whatsapp-providers";
 
 export type UazapiBridgeInstance = {
   id: string;
@@ -28,6 +31,11 @@ export type UazapiBridgeResult = {
  * One instance <-> one connection <-> one channel (InboundWebhookChannel.
  * whatsappInstanceId is unique). Idempotent: safe to call on every webhook and
  * on every Settings load.
+ *
+ * WAHA (GoWS): the same bridge with `provider = "waha"`. The connection is a
+ * "waha" InboundWebhookConnection on the certified waha/v2 parser release (the
+ * receiver's), so the production gates (parser release of the connection's
+ * own provider) hold exactly as for Uazapi.
  */
 @Injectable()
 export class UazapiConversionBridgeService {
@@ -37,9 +45,11 @@ export class UazapiConversionBridgeService {
 
   async ensureBridge(
     instance: UazapiBridgeInstance,
+    provider: BridgedWhatsappProvider = "uazapi",
   ): Promise<UazapiBridgeResult> {
-    const existing = await this.findExisting(instance);
+    const existing = await this.findExisting(instance, provider);
     if (existing) return existing;
+    const parserVersion = BRIDGE_PARSER_VERSION[provider];
 
     return this.prisma.$transaction(async (transaction) => {
       // Re-check inside the transaction: two concurrent webhooks for the same
@@ -55,16 +65,18 @@ export class UazapiConversionBridgeService {
       const release = await transaction.inboundWebhookParserRelease.upsert({
         where: {
           provider_version: {
-            provider: "uazapi",
-            version: PARSER_VERSION,
+            provider,
+            version: parserVersion,
           },
         },
         create: {
-          provider: "uazapi",
-          version: PARSER_VERSION,
-          // UAZAPI messages are evaluated straight off the decision engine
-          // (no reparse step), so there is no separate parser certification
-          // workflow to gate on here.
+          provider,
+          version: parserVersion,
+          // UAZAPI/WAHA team messages are evaluated straight off the decision
+          // engine (no reparse step), so there is no separate parser
+          // certification workflow to gate on here. WAHA's waha/v2 row is
+          // normally already certified by its migration; `update: {}` never
+          // overrides an operator's retirement.
           status: "certified",
           certifiedAt: new Date(),
         },
@@ -74,8 +86,9 @@ export class UazapiConversionBridgeService {
       const connection = await transaction.inboundWebhookConnection.create({
         data: {
           workspaceId: instance.workspaceId,
-          provider: "uazapi",
-          displayName: instance.name?.trim() || "UAZAPI",
+          provider,
+          displayName:
+            instance.name?.trim() || (provider === "waha" ? "WAHA" : "UAZAPI"),
           parserReleaseId: release.id,
           status: "observation",
         },
@@ -109,7 +122,7 @@ export class UazapiConversionBridgeService {
           workspaceId: instance.workspaceId,
           actorUserId: null,
           actorType: "system",
-          action: "inbound_webhook.uazapi_bridge_provisioned",
+          action: BRIDGE_PROVISIONED_EVENT[provider],
           targetType: "InboundWebhookChannel",
           targetId: channel.id,
           reason: null,
@@ -118,13 +131,17 @@ export class UazapiConversionBridgeService {
           afterSummary: {
             connectionId: connection.id,
             whatsappInstanceId: instance.id,
+            provider,
           },
         },
       });
 
       this.logger.log(
         JSON.stringify({
-          event: "uazapi_conversion_bridge_provisioned",
+          event:
+            provider === "waha"
+              ? "waha_conversion_bridge_provisioned"
+              : "uazapi_conversion_bridge_provisioned",
           workspaceId: instance.workspaceId,
           whatsappInstanceId: instance.id,
           connectionId: connection.id,
@@ -138,14 +155,47 @@ export class UazapiConversionBridgeService {
 
   private async findExisting(
     instance: UazapiBridgeInstance,
+    provider: BridgedWhatsappProvider,
   ): Promise<UazapiBridgeResult | null> {
     const channel = await this.prisma.inboundWebhookChannel.findUnique({
       where: { whatsappInstanceId: instance.id },
-      select: { id: true, connectionId: true, workspaceId: true },
+      select: {
+        id: true,
+        connectionId: true,
+        workspaceId: true,
+        connectedPhone: true,
+        providerChannelId: true,
+        organizationId: true,
+      },
     });
 
-    return channel && channel.workspaceId === instance.workspaceId
-      ? { connectionId: channel.connectionId, channelId: channel.id }
-      : null;
+    if (!channel || channel.workspaceId !== instance.workspaceId) return null;
+
+    // WAHA: the bridge starts with the session name as a placeholder phone
+    // (its connection test reports no number). The first team message brings
+    // the store's real number; record it once so the number shows its phone
+    // and a global rule still runs once per phone. Uazapi keeps its behavior.
+    const phone = instance.connectedPhone?.trim();
+    const current = channel.connectedPhone?.trim() ?? "";
+    if (
+      provider === "waha" &&
+      phone &&
+      /^\d{8,15}$/u.test(phone) &&
+      phone !== current &&
+      (current === "" ||
+        current === channel.providerChannelId?.trim() ||
+        current === channel.organizationId?.trim())
+    ) {
+      await this.prisma.inboundWebhookChannel.updateMany({
+        where: {
+          id: channel.id,
+          workspaceId: instance.workspaceId,
+          connectedPhone: channel.connectedPhone,
+        },
+        data: { connectedPhone: phone },
+      });
+    }
+
+    return { connectionId: channel.connectionId, channelId: channel.id };
   }
 }

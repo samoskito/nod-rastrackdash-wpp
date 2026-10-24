@@ -149,7 +149,6 @@ describe("conversion rules controller: Conversões (Fase 3)", () => {
       .expect(({ body }) => {
         expect(body.workspaceScopeEnabled).toBe(true);
         expect(body.unsupportedWhatsappProviders).toEqual([
-          "waha",
           "zapi",
           "nod_api",
         ]);

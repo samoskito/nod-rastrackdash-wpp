@@ -804,6 +804,55 @@ export function withWahaResolvedContactPhone(
   return copy;
 }
 
+/**
+ * Mensagem do time (`message.any`, fromMe) para um contato só com LID (sem
+ * `Info.RecipientAlt`, motivo contact_phone_unresolved): o LID do contato a
+ * resolver na WAHA do aluno. Nunca devolve o LID da própria loja.
+ */
+export function wahaV2UnresolvedTeamContactLid(payload: unknown): string | null {
+  const envelope = asRecord(payload);
+  const inner = asRecord(envelope?.payload);
+  const info = asRecord(asRecord(inner?.["_data"])?.Info) ?? {};
+  const fromMe =
+    typeof inner?.fromMe === "boolean" ? inner.fromMe : info.IsFromMe;
+
+  if (envelope?.event !== "message.any" || fromMe !== true) {
+    return null;
+  }
+
+  const selfLids = collectSelf(
+    [asRecord(envelope?.me)?.lid, info.Sender, info.SenderAlt],
+    isLidJid,
+  );
+
+  return firstLid([info.RecipientAlt, inner?.to, info.Chat], selfLids);
+}
+
+/**
+ * Cópia do evento do time com o telefone do contato resolvido pela WAHA no
+ * lugar em que o GoWS o traria (Info.RecipientAlt da mensagem enviada). O
+ * original não muda.
+ */
+export function withWahaResolvedTeamContactPhone(
+  payload: unknown,
+  phone: string,
+): unknown {
+  const copy = JSON.parse(JSON.stringify(payload)) as JsonRecord;
+  const inner = asRecord(copy.payload);
+  const data = asRecord(inner?.["_data"]);
+
+  if (!inner || !data) {
+    return copy;
+  }
+
+  data.Info = {
+    ...(asRecord(data.Info) ?? {}),
+    RecipientAlt: `${phone}@s.whatsapp.net`,
+  };
+
+  return copy;
+}
+
 export type WahaSessionStatus =
   | "STARTING"
   | "SCAN_QR_CODE"

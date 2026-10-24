@@ -934,7 +934,9 @@ describe("Todos os números: ativação automática de números conectados depoi
           .reverse()
           .find(
             (row) =>
-              row.action === where.action &&
+              (typeof where.action === "string"
+                ? row.action === where.action
+                : (where.action?.in ?? []).includes(row.action)) &&
               (where.workspaceId === undefined ||
                 (row.workspaceId ?? null) === where.workspaceId) &&
               (row.createdAt ?? gNow) >= where.createdAt.gte,

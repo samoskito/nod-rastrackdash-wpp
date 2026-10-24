@@ -157,7 +157,7 @@ export class ProviderRuleBlockedReprocessService {
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
-          if (message.includes("not uazapi")) {
+          if (message.includes("not a bridged WhatsApp connection")) {
             counts.skipped += 1;
           } else {
             counts.failed += 1;

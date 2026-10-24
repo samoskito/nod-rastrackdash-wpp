@@ -11,15 +11,20 @@ import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import { LicenseClientService } from "../licensing-client/license-client.service";
 import { ProviderConversionRulesService } from "./provider-conversion-rules.service";
+import { BRIDGE_PROVISIONED_EVENT } from "../inbound-webhooks/bridged-whatsapp-providers";
 
 /**
- * Written by UazapiConversionBridgeService.ensureBridge in the SAME
+ * Written by UazapiConversionBridgeService.ensureBridge (Uazapi or WAHA) in the SAME
  * transaction as the bridge, so it works as a durable outbox: nothing is lost
  * if the process dies right after the commit (no new queue). The SaaS also
  * listens to seat events; this edition has no seats.
  */
-export const UAZAPI_BRIDGE_PROVISIONED_EVENT =
-  "inbound_webhook.uazapi_bridge_provisioned";
+export const UAZAPI_BRIDGE_PROVISIONED_EVENT: string =
+  BRIDGE_PROVISIONED_EVENT.uazapi;
+/** Bridge events of every bridged provider (Uazapi and WAHA). */
+export const BRIDGE_PROVISIONED_EVENTS: string[] = Object.values(
+  BRIDGE_PROVISIONED_EVENT,
+);
 
 const TICK_MS = 60_000;
 /** Events are retried on every tick while inside this window. */
@@ -211,7 +216,7 @@ export class GlobalRuleAutoActivationService
     const bridgeEvent = await this.prisma.auditLog.findFirst({
       where: {
         workspaceId,
-        action: UAZAPI_BRIDGE_PROVISIONED_EVENT,
+        action: { in: BRIDGE_PROVISIONED_EVENTS },
         createdAt: { gte: since },
       },
       orderBy: { createdAt: "desc" },

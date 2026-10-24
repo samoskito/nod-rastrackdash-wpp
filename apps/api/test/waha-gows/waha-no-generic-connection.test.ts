@@ -44,7 +44,7 @@ describe("WAHA has no generic inbound webhook connection", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("keeps WAHA phrase rules locked (another phase)", () => {
-    expect(UNSUPPORTED_RULE_WHATSAPP_PROVIDERS).toContain("waha");
+  it("WAHA runs phrase rules: it is no longer an unsupported provider", () => {
+    expect(UNSUPPORTED_RULE_WHATSAPP_PROVIDERS).not.toContain("waha");
   });
 });

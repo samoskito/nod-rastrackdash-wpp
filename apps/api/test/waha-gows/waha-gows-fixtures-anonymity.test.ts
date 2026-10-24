@@ -12,6 +12,7 @@ const SYNTHETIC_NUMBER_PREFIXES = [
   "1202000000", // IDs de anúncio sintéticos
   "1203000000", // grupo sintético
   "1792000", // timestamps (epoch) sintéticos
+  "000", // números zerados dos exemplos anonimizados (internacional e LID)
 ];
 const ALLOWED_URL_PREFIXES = [
   "https://fb.me/0Synth",
@@ -48,7 +49,8 @@ const NAME_KEYS = ["PushName", "pushName", "notifyName", "VerifiedName"];
 
 describe("WAHA GoWS fixtures stay synthetic", () => {
   it("has one file per documented case and a README", () => {
-    expect(wahaGowsFixtureFiles()).toHaveLength(17);
+    // 17 envelopes GoWS + os exemplos anonimizados de frase da equipe.
+    expect(wahaGowsFixtureFiles()).toHaveLength(18);
     expect(
       readFileSync(resolve(wahaGowsFixturesDir, "README.md"), "utf8"),
     ).toContain("sintétic");

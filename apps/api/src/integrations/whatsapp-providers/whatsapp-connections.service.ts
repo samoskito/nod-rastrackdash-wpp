@@ -344,6 +344,29 @@ export class WhatsappConnectionsService {
         connectedPhone: uazapiIdentity.connectedPhone,
       });
     }
+    // WAHA: a working session bridges the number right away, so it shows in
+    // Conversões (phrase rules) and a "Todos os números" rule activates it
+    // before the first team message. Best-effort: the receiver bridges it on
+    // the first team message anyway.
+    if (
+      status === "connected" &&
+      connection.provider === "waha" &&
+      this.uazapiBridge
+    ) {
+      try {
+        await this.uazapiBridge.ensureBridge(
+          {
+            id: updated.id,
+            workspaceId: connection.workspaceId,
+            name: connection.name,
+            providerInstanceId: connection.providerInstanceId,
+          },
+          "waha",
+        );
+      } catch {
+        // see above
+      }
+    }
     await this.recordAudit({
       workspaceId: actor.workspaceId,
       actorUserId: actor.userId,

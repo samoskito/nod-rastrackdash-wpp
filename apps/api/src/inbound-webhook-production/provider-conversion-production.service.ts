@@ -91,6 +91,7 @@ import {
 import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
+import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
 import {
   parseUmblerAutomationV1,
   type ParsedUmblerAutomationV1,
@@ -2062,7 +2063,7 @@ export class ProviderConversionProductionService
   /**
    * Ad route of a sale: the scoped channel's own valid routes, or the
    * workspace route when the channel inherits it (Unnichat) or resolves its
-   * own destination per ad (UAZAPI).
+   * own destination per ad (UAZAPI and WAHA bridges).
    */
   private async previewPurchaseRoute(execution: ExecutionRecord, adId: string) {
     const channel = await this.prisma.inboundWebhookChannel.findFirst({
@@ -2080,7 +2081,7 @@ export class ProviderConversionProductionService
       throw new ProviderConversionProductionFailure(
         "provider_conversion_route_not_authorized",
       );
-    if (channel.connection.provider === "uazapi")
+    if (isBridgedWhatsappProvider(channel.connection.provider))
       return this.routes.previewRoute({
         workspaceId: execution.workspaceId,
         adId,

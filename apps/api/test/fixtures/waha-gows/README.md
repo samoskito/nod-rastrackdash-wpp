@@ -67,6 +67,7 @@ destes padrões:
 | `message-status-broadcast.json` | Status (`status@broadcast`) — descartado |
 | `message-lid-without-sender-alt.json` | Só LID, sem `SenderAlt` — telefone não resolvido |
 | `session-status-*.json` | `session.status`: WORKING, SCAN_QR_CODE, FAILED, STOPPED |
+| `team-phrase-examples.json` | 28 exemplos reais anonimizados de mensagens do time (`message.any`, `fromMe`) com frase casada no Rastrackapp (set/2026): só texto, frase e formato do telefone (12 dígitos sem o nono, 13 dígitos, internacional, LID não resolvido, sem texto). Números zerados ou com DDD 00. Não é gerado pelo `generate.mjs`. |
 
 ## Regenerar
 
