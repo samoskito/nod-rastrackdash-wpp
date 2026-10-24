@@ -594,6 +594,83 @@ describe.skipIf(!optedIn)("WAHA: regras de frase da equipe no PostgreSQL descart
     expect((await send(ws, waha, await adLead(ws))).eligibleExecutionId).toBeTruthy();
   });
 
+  async function samePhonePair(ws: string, live: "uazapi" | "waha") {
+    const phone = `55119${String(++seq).padStart(8, "0")}`;
+    const instance = await db.whatsappInstance.create({
+      data: {
+        workspaceId: ws,
+        name: "Uazapi antiga",
+        provider: "uazapi_byo",
+        providerInstanceId: `prov_${randomUUID().slice(0, 8)}`,
+        status: "active",
+      },
+    });
+    const uazapi = {
+      instance,
+      ...(await bridge.ensureBridge({
+        id: instance.id,
+        workspaceId: ws,
+        name: instance.name,
+        providerInstanceId: instance.providerInstanceId,
+        connectedPhone: phone,
+      })),
+    };
+    const waha = await wahaNumber(ws, `mesmo-${seq}`);
+    await bridge.ensureBridge(
+      {
+        id: waha.instance.id,
+        workspaceId: ws,
+        name: waha.instance.name,
+        providerInstanceId: waha.instance.providerInstanceId,
+        connectedPhone: phone,
+      },
+      "waha",
+    );
+    const stale = new Date(Date.now() - 2 * day);
+    const fresh = new Date();
+    // The Uazapi channel is the older one (it would win on age alone).
+    await db.inboundWebhookChannel.update({
+      where: { id: uazapi.channelId },
+      data: {
+        createdAt: new Date(Date.now() - 90 * day),
+        lastSeenAt: live === "uazapi" ? fresh : stale,
+      },
+    });
+    await db.inboundWebhookChannel.update({
+      where: { id: waha.channelId },
+      data: { lastSeenAt: live === "waha" ? fresh : stale },
+    });
+    return { uazapi, waha };
+  }
+
+  it("número migrado da Uazapi (parada, ainda ativa) para a WAHA: a regra global roda na WAHA", async () => {
+    const ws = await workspace("mesmo telefone, WAHA viva");
+    const { uazapi, waha } = await samePhonePair(ws, "waha");
+    const rule = await createRule(ws);
+
+    expect((await send(ws, waha, await adLead(ws))).eligibleExecutionId).toBeTruthy();
+    expect(
+      (await send(ws, uazapi, await adLead(ws), { provider: "uazapi" })).eligibleExecutionId,
+    ).toBeNull();
+    expect((await executionsOf(rule.id)).map((row) => row.channelId)).toEqual([
+      waha.channelId,
+    ]);
+  });
+
+  it("o inverso: WAHA parada e Uazapi viva, a regra global roda na Uazapi", async () => {
+    const ws = await workspace("mesmo telefone, Uazapi viva");
+    const { uazapi, waha } = await samePhonePair(ws, "uazapi");
+    const rule = await createRule(ws);
+
+    expect(
+      (await send(ws, uazapi, await adLead(ws), { provider: "uazapi" })).eligibleExecutionId,
+    ).toBeTruthy();
+    expect((await send(ws, waha, await adLead(ws))).eligibleExecutionId).toBeNull();
+    expect((await executionsOf(rule.id)).map((row) => row.channelId)).toEqual([
+      uazapi.channelId,
+    ]);
+  });
+
   it("regressão: Uazapi e WAHA no mesmo workspace, uma regra global, cada uma envia a sua", async () => {
     const ws = await workspace("uazapi + waha");
     const uazapi = await uazapiNumber(ws, "u");

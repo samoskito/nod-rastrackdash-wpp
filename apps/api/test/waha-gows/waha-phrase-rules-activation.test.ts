@@ -13,7 +13,10 @@ import {
   LABEL_RULE_CHANNEL_PROVIDERS,
   MESSAGE_CONTACT_CHANNEL_PROVIDERS,
   MESSAGE_TEAM_CHANNEL_PROVIDERS,
+  canonicalPhoneChannel,
   providerRuleCapabilities,
+  selectApplicableProviderRules,
+  type ScopedChannel,
 } from "../../src/conversion-rules/provider-rule-scope";
 import { isBridgedWhatsappProvider } from "../../src/inbound-webhooks/bridged-whatsapp-providers";
 import { metaRouteRequiredForProvider } from "../../src/inbound-webhooks/inbound-webhook-production-activation";
@@ -101,5 +104,90 @@ describe("WAHA nas regras de frase: matriz e ativação", () => {
         "inbound_webhook.waha_bridge_provisioned",
       ]),
     );
+  });
+});
+
+describe("mesmo telefone em Uazapi e WAHA: o canal vivo vence", () => {
+  const now = new Date("2026-10-24T12:00:00.000Z");
+  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000);
+  const channel = (
+    id: string,
+    provider: string,
+    overrides: Partial<ScopedChannel> = {},
+  ): ScopedChannel => ({
+    id,
+    connectionId: `connection_${id}`,
+    provider,
+    phoneKey: "5511987654321",
+    status: "active",
+    productionReady: true,
+    ...overrides,
+  });
+  const globalRule = {
+    id: "global",
+    scope: "all_numbers",
+    connectionId: null,
+    channels: [],
+    removedAt: null,
+    conversionRule: { triggerType: "message_phrase", eventName: "Purchase", active: true },
+    parserRelease: null,
+    connection: null,
+    messageAuthorScope: "team",
+  } as never;
+
+  function runsOn(channels: ScopedChannel[]): string[] {
+    return channels
+      .filter(
+        (candidate) =>
+          selectApplicableProviderRules([globalRule], candidate, {
+            phoneChannels: channels,
+          }).applicable.length === 1,
+      )
+      .map((candidate) => candidate.id);
+  }
+
+  it("Uazapi antiga parada e WAHA ativa: a regra global roda só na WAHA", () => {
+    const uazapi = channel("uazapi", "uazapi", {
+      createdAt: hoursAgo(24 * 90),
+      lastSeenAt: hoursAgo(48),
+    });
+    const waha = channel("waha", "waha", {
+      createdAt: hoursAgo(24),
+      lastSeenAt: hoursAgo(0),
+    });
+    expect(canonicalPhoneChannel([uazapi, waha])?.id).toBe("waha");
+    expect(runsOn([uazapi, waha])).toEqual(["waha"]);
+  });
+
+  it("o inverso: WAHA parada e Uazapi ativa, roda só na Uazapi", () => {
+    const uazapi = channel("uazapi", "uazapi", {
+      createdAt: hoursAgo(24),
+      lastSeenAt: hoursAgo(0),
+    });
+    const waha = channel("waha", "waha", {
+      createdAt: hoursAgo(24 * 90),
+      lastSeenAt: hoursAgo(48),
+    });
+    expect(runsOn([uazapi, waha])).toEqual(["uazapi"]);
+  });
+
+  it("dois canais vivos do mesmo telefone: um só vencedor estável (ativo, depois o mais antigo)", () => {
+    const older = channel("older", "uazapi", {
+      createdAt: hoursAgo(100),
+      lastSeenAt: hoursAgo(0.01),
+    });
+    const newer = channel("newer", "waha", {
+      createdAt: hoursAgo(10),
+      lastSeenAt: hoursAgo(0),
+    });
+    expect(runsOn([older, newer])).toEqual(["older"]);
+    // An inactive channel loses to an active one when both are live.
+    expect(runsOn([{ ...older, status: "paused" }, newer])).toEqual(["newer"]);
+  });
+
+  it("um canal só por telefone continua sendo o próprio vencedor", () => {
+    const only = channel("only", "waha", { lastSeenAt: hoursAgo(500), productionReady: false });
+    expect(canonicalPhoneChannel([only])?.id).toBe("only");
+    expect(runsOn([only])).toEqual(["only"]);
   });
 });

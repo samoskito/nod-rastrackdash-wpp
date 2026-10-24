@@ -529,6 +529,10 @@ sem lead de anúncio, nada é enviado, igual à Uazapi.
   `message` da mensagem do time é descartada, a reentrega do webhook é
   reconhecida e, com regra específica no número, a regra "Todos os números"
   não roda ali).
+- **Trocou o número da Uazapi para a WAHA?** Exclua a conexão Uazapi antiga
+  em Integrações. Se ela ficar ativa, a regra "Todos os números" usa o número
+  que continua recebendo mensagens (a WAHA), mas a conexão antiga só confunde
+  a lista de números.
 - **Etiquetas** não existem na WAHA: a origem "Etiqueta no WhatsApp" continua
   só na Uazapi.
 

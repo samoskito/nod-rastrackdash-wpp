@@ -82,6 +82,11 @@ export type ScopedChannel = {
   status?: string;
   createdAt?: Date;
   /**
+   * Last message seen on the channel (contact or team). A bridged channel
+   * (Uazapi/WAHA) is touched by its receiver on every message.
+   */
+  lastSeenAt?: Date | null;
+  /**
    * Channel active AND its connection in production: an occurrence here can
    * be sent. Undefined when unknown (occurrence-side channels).
    */
@@ -375,11 +380,39 @@ export type ProviderRulePhoneContext = {
   peerRules?: readonly ScopedProviderRule[];
 };
 
-/** Active channels first, then the oldest, then the smallest id. */
+/**
+ * A channel whose last message is older than the freshest channel of the same
+ * phone by more than this window stopped receiving (e.g. the number moved
+ * from Uazapi to WAHA and the old connection was left active). Channels that
+ * really share the phone see the same messages within seconds, so they stay
+ * inside the window and keep a stable winner.
+ */
+export const PHONE_CHANNEL_STALE_WINDOW_MS = 30 * 60 * 1_000;
+
+/**
+ * Canonical channel of one phone: channels with recent activity first (a
+ * stale one never wins over a live one), then, as in the SaaS, active
+ * channels, then the oldest, then the smallest id. Production is not a
+ * criterion on purpose: a live canonical channel still in observation is
+ * reported to the screen (observationCanonicalChannels) instead of silently
+ * moving the conversion to another channel. A single channel per phone is
+ * always its own canonical channel.
+ */
 export function canonicalPhoneChannel(
   channels: readonly ScopedChannel[],
 ): ScopedChannel | null {
+  const seen = channels
+    .map((channel) => channel.lastSeenAt?.getTime())
+    .filter((value): value is number => typeof value === "number");
+  const freshest = seen.length ? Math.max(...seen) : null;
+  const fresh = (channel: ScopedChannel) =>
+    freshest === null ||
+    !channel.lastSeenAt ||
+    channel.lastSeenAt.getTime() >= freshest - PHONE_CHANNEL_STALE_WINDOW_MS;
   const sorted = [...channels].sort((left, right) => {
+    const leftFresh = fresh(left);
+    const rightFresh = fresh(right);
+    if (leftFresh !== rightFresh) return leftFresh ? -1 : 1;
     const leftActive = left.status === undefined || left.status === "active";
     const rightActive = right.status === undefined || right.status === "active";
     if (leftActive !== rightActive) return leftActive ? -1 : 1;
@@ -558,6 +591,7 @@ export async function scanWorkspaceScopeChannels(
         providerChannelId: true,
         status: true,
         createdAt: true,
+        lastSeenAt: true,
         connectedPhone: true,
         connection: { select: { provider: true, status: true } },
       },
@@ -574,6 +608,7 @@ export async function scanWorkspaceScopeChannels(
         phoneKey: channelPhoneKey({ ...channel, provider }),
         status: channel.status,
         createdAt: channel.createdAt,
+        lastSeenAt: channel.lastSeenAt,
         productionReady:
           channel.status === "active" &&
           channel.connection?.status === "production",

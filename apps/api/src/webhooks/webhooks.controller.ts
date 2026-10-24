@@ -623,6 +623,9 @@ export class WebhooksController {
     }
 
     const message = this.recordValue(body.message);
+    if (message !== undefined) {
+      await this.touchBridgedChannel(resolvedContext);
+    }
     const isInboundMessage =
       message !== undefined &&
       message.fromMe === false &&
@@ -845,6 +848,12 @@ export class WebhooksController {
 
     if (diagnostic.status === "duplicate" || diagnostic.status === "conflict") {
       return { ...diagnostic, conversion: emptyConversion };
+    }
+
+    // A WAHA message (contact or team) marks its bridged number as alive:
+    // the canonical channel of a phone prefers the one still receiving.
+    if (isWahaV2 && event) {
+      await this.touchBridgedChannel(context);
     }
 
     // From here on this request holds the WebhookLog claim and must settle
@@ -1297,6 +1306,31 @@ export class WebhooksController {
           errorName: error instanceof Error ? error.name : "unknown",
         }),
       );
+    }
+  }
+
+  /**
+   * Last activity of the number bridged from this WhatsApp connection
+   * (Uazapi/WAHA), used to pick the live channel when the same phone has an
+   * old connection that stopped receiving. At most one write per minute per
+   * number; best-effort (never fails the delivery).
+   */
+  private async touchBridgedChannel(context: {
+    workspaceId: string;
+    whatsappInstanceId: string;
+  }): Promise<void> {
+    const now = new Date();
+    try {
+      await this.prisma.inboundWebhookChannel.updateMany({
+        where: {
+          workspaceId: context.workspaceId,
+          whatsappInstanceId: context.whatsappInstanceId,
+          lastSeenAt: { lt: new Date(now.getTime() - 60_000) },
+        },
+        data: { lastSeenAt: now },
+      });
+    } catch {
+      // best-effort
     }
   }
 

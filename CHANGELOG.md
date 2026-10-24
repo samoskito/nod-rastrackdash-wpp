@@ -21,14 +21,22 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
   occurrence keys `waha:<channel>:<message id>`. The contact is the phone the
   v2 parser resolves (`RecipientAlt`, `to`, `Chat`), and a LID-only contact
   is looked up on the student's WAHA (`RecipientAlt` filled before
-  reparsing). The paid-lead lookup accepts 12 and 13 digit Brazilian numbers
-  (with or without the 9th digit). No paid lead: same as Uazapi.
+  reparsing). The paid lead is found by the existing lookup (which already
+  accepts 12 and 13 digit Brazilian numbers). No paid lead: same as Uazapi.
 - **"Todos os números" and specific rules on WAHA**: saving a production rule
   activates WAHA numbers, a WAHA number connected later is activated
   automatically (new durable event `inbound_webhook.waha_bridge_provisioned`),
   and "Ativar envio neste número" and "Reprocessar bloqueadas" work for WAHA.
   WAHA bridged numbers resolve the Meta destination per ad (no saved route),
   only send while the WAHA connection is active, and pauses are kept.
+- **Same phone on two connections:** the "Todos os números" rule now runs on
+  the channel that is still receiving messages (bridged Uazapi/WAHA numbers
+  record their last message), then, as before, the active one and the
+  oldest. A number moved from Uazapi to WAHA whose old Uazapi connection was
+  left active no longer blocks the WAHA as a duplicate phone. One channel per
+  phone is unchanged and a phone still converts once. Tip: when moving a
+  number from Uazapi to WAHA, delete the old Uazapi connection in
+  Integrações.
 - WAHA numbers are bridged when Conversões loads, when **Testar** reports
   `WORKING`, or on the first team message; the store's real number replaces
   the session placeholder on the first team message.
