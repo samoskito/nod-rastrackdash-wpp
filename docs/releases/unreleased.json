@@ -1,15 +1,24 @@
 {
   "version": "PENDENTE: versão definida pelo mantenedor",
-  "title": "PENDENTE: título da atualização",
-  "summary": "PENDENTE: benefício e impacto para o aluno",
-  "changes": "PENDENTE: novidades e melhorias incluídas",
+  "title": "Inscrição do app Meta na sua WABA direto pelo painel (Meta Cloud)",
+  "summary": "Quem usa a conexão Meta WhatsApp (Cloud API) já pode conferir e fazer, pelo próprio painel, a inscrição do seu app Meta na sua conta do WhatsApp Business (WABA). Era o passo que mais faltava: sem ele a Meta confirma a URL do webhook e nunca envia nenhuma mensagem. O token que você cola é usado só naquela consulta e descartado. Não há migration nem variável nova.",
+  "changes": "Novo bloco \"Inscrição do app na sua WABA\" na conexão Meta Cloud (Integrações → aba WhatsApp → card WhatsApp Cloud API → conexão): informe o WABA ID, cole um token do mesmo app configurado na instalação e use \"Consultar\" ou \"Inscrever este app\" (com confirmação).\nO token pode ser o temporário do painel do app (WhatsApp → Configuração da API, o mais simples), um do Graph API Explorer ou um de system user, desde que seja do app da instalação (META_APP_ID), tenha whatsapp_business_management e tenha sido gerado por quem é admin da WABA. Ele não é salvo no banco nem no navegador, não volta na resposta e não vai para logs nem para a auditoria.\nA consulta mostra os apps inscritos na WABA, destacando \"Este app\", e os números dessa WABA. Se um número que já chegou por webhook nesta conexão não pertencer à WABA informada, o painel avisa.\nA inscrição só adiciona o app da instalação (sem trocar a URL de callback) e reconsulta a Meta para mostrar o estado real. Outros apps inscritos continuam lá: o painel nunca remove nenhum.\nAntes de tocar na WABA, o token é conferido na Meta e o painel para com mensagem clara quando ele é inválido ou expirou, foi gerado para outro app, não tem whatsapp_business_management ou não dá acesso a essa WABA. Também avisa quando o ID colado é do número (phone number ID) e não da WABA, e traduz erros de permissão, limite de chamadas e rede. Quando a inscrição falha, a tela mostra o passo a passo manual pelo Graph API Explorer.\nSó o dono ou um admin do workspace consulta e inscreve. Cada consulta e inscrição fica na auditoria com o WABA ID, o resultado e quem fez.\nGuias atualizados: docs/setup/whatsapp-providers.md separa os três passos da Meta (confirmar a URL, assinar o campo messages no app e inscrever o app na WABA) e explica a inscrição pelo painel; docs/setup/meta-cloud-recovery.md e docs/GUIA-ALUNO.md acompanham. As regras de frase da equipe continuam fora do Meta Cloud.",
   "fixes": "",
-  "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
-  "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",
-  "rollback": "PENDENTE: procedimento de recuperação verificado e limitações",
+  "requirements": "Nada muda em versões de Node, PostgreSQL ou Redis. Publique API, shared e WEB da mesma entrega.\nPara usar o bloco, a API precisa de META_APP_ID e META_APP_SECRET do seu próprio app Meta (as mesmas variáveis que a conexão Meta Cloud já usa para conferir a assinatura dos webhooks). Sem elas, o painel avisa e não tenta nada.\nNa hora de usar: o WABA ID e um token do mesmo app, com whatsapp_business_management, gerado por quem é admin da WABA.\nNenhuma variável nova, nenhuma dependência nova, nenhuma migration.",
+  "upgradeGuide": "Passo a passo geral de atualização (sem reinstalar nada): docs/setup/update.md.\n\nBackup: antes de atualizar, faça e confira uma cópia do PostgreSQL (por exemplo pg_dump, ou o backup do serviço de banco no Dokploy) e das variáveis da API, no local onde você guarda seus backups. Esta versão não altera o banco, mas a cópia continua sendo o ponto de volta seguro.\n\nMigration: não se aplica (nenhuma migration nova).\n\nVariáveis de ambiente: nenhuma variável nova. Confira apenas se META_APP_ID e META_APP_SECRET da API são do seu próprio app Meta, o mesmo que entrega os webhooks do Meta Cloud. Não substitua o arquivo de variáveis nem apague variáveis existentes.\n\nPreservação de customizações: atualize pelo fluxo de sempre do seu fork (merge ou rebase da main), mantendo suas alterações locais, marca, integrações e arquivos. Não sobrescreva trabalho local nem recrie banco, administrador, licença ou chaves.\n\nDepois de atualizar (Meta Cloud):\n1. Abra Integrações → aba WhatsApp → card WhatsApp Cloud API → sua conexão.\n2. No bloco \"Inscrição do app na sua WABA\", informe o WABA ID (WhatsApp → Configuração da API no app, logo acima do número) e cole um token do mesmo app, como o temporário dessa mesma tela.\n3. Clique em \"Consultar\". Se \"Este app\" não aparecer na lista, clique em \"Inscrever este app\" e confirme.\n\nVerificação: depois da inscrição, a lista mostra o seu app marcado como \"Este app\". Envie uma mensagem de teste a partir de um anúncio para o número oficial: a entrega aparece na conexão (Última entrega). Se a consulta falhar, siga a mensagem da tela ou o passo a passo manual pelo Graph API Explorer.",
+  "rollback": "Volte API, shared e WEB ao código ou imagem anterior (no seu fork, git revert dos commits desta atualização, preservando suas customizações), faça o deploy da API e depois o do WEB. Não há migration para desfazer.\nLimitações: voltar o código não desfaz a inscrição do app na WABA feita na Meta; ela continua valendo e é o estado desejado. Os registros de auditoria das consultas e inscrições permanecem no banco. Na versão anterior o bloco some e a inscrição volta a ser só manual.\nA recuperação não foi testada em instalação real; os testes desta entrega rodaram com a Graph API simulada.",
   "minVersion": null,
   "breakingChange": false,
   "components": "BOTH",
-  "links": [],
-  "tags": []
+  "links": [
+    "https://github.com/samoskito/nod-rastrackdash-wpp/blob/main/docs/setup/whatsapp-providers.md",
+    "https://github.com/samoskito/nod-rastrackdash-wpp/blob/main/docs/setup/update.md"
+  ],
+  "tags": [
+    "meta-cloud",
+    "whatsapp-cloud-api",
+    "waba",
+    "webhooks",
+    "inscricao-do-app"
+  ]
 }

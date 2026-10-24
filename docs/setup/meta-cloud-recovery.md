@@ -55,8 +55,12 @@ Uma rota BM + qualquer conta + destino pode atender três contas autorizadas
 sem criar três rotas. Cada anúncio ainda precisa resolver uma única conta e
 um destino permitido. O destino padrão do BM sozinho não autoriza a conta,
 e anúncios ausentes, ambíguos ou de outro BM/workspace ficam bloqueados.
-Ativar produção não envia o histórico. Assinar `messages` no app Meta
-continua sendo uma etapa manual; esta alteração não assina a WABA sozinha.
+Ativar produção não envia o histórico. Assinar o campo `messages` no app Meta
+continua sendo uma etapa manual no app. Inscrever o app na WABA também é uma
+etapa separada: faça pelo bloco **Inscrição do app na sua WABA** da conexão
+(com um token do mesmo app da instalação) ou manualmente, conforme
+[`whatsapp-providers.md`](whatsapp-providers.md). Ativar produção não inscreve
+a WABA sozinho.
 
 ## CTWAs anteriores — prévia, um teste, depois os demais
 

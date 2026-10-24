@@ -161,6 +161,19 @@ configuração mais comum hoje.
 
 ### Passo a passo
 
+Toda a conexão Meta Cloud é sua: usa o **seu** app Meta (o mesmo de
+`META_APP_ID` e `META_APP_SECRET` na API) e o **seu** número oficial. Não
+existe QR code e o "Conectar Meta" de anúncios não serve para isso.
+
+São **três passos diferentes na Meta**, e os três são obrigatórios. É comum
+fazer só o primeiro (ou os dois primeiros) e a Meta nunca entregar nada:
+
+| Passo | Onde | O que faz |
+|---|---|---|
+| 1. Confirmar a URL (handshake) | App Meta → WhatsApp → Configuração → Webhooks | A Meta testa a URL de callback com o verify token. Só prova que a URL responde. |
+| 2. Assinar o campo `messages` | Mesma tela de Webhooks do app | Diz ao **app** que ele quer receber o evento `messages` do objeto WhatsApp Business Account. |
+| 3. Inscrever o app na WABA | Pelo painel (bloco **Inscrição do app na sua WABA**) ou manualmente | Liga a **sua conta do WhatsApp Business (WABA)** a este app (`POST /{WABA ID}/subscribed_apps`). Sem isso a WABA não manda os eventos para o app. |
+
 1. Em `/integrations`, aba **WhatsApp**, abra o card **WhatsApp Cloud API**,
    clique em **Adicionar conexão** (já aberto quando não há nenhuma), dê
    um nome à conexão e clique em **Gerar webhook**.
@@ -169,20 +182,85 @@ configuração mais comum hoje.
    os dois agora — eles não voltam a aparecer. (Diferente de
    Umbler/Gupshup, a URL do Meta Cloud **não** leva `?token=`: o token
    viaja separado, no handshake.)
-3. No **app Meta** (WhatsApp → Configuração → Webhooks), em **Configurar
-   webhooks**, cole a **URL de callback** e o **Verify token** e clique
-   em verificar e salvar. A Meta chama
+3. **Passo 1 — confirmar a URL.** No **app Meta** (WhatsApp → Configuração
+   → Webhooks), em **Configurar webhooks**, cole a **URL de callback** e o
+   **Verify token** e clique em verificar e salvar. A Meta chama
    `GET /webhooks/inbound/:id?hub.mode=subscribe&hub.verify_token=...` e o
    produto devolve o `hub.challenge` quando o token confere.
-4. Assine o campo **`messages`** do objeto WhatsApp Business Account.
-   Sem essa assinatura a Meta valida o webhook e nunca envia nada.
-5. Cadastre o **canal/número** na própria conexão (botão **Cadastrar
+4. **Passo 2 — assinar o campo `messages`.** Na mesma tela, em **Campos do
+   webhook**, assine **`messages`** do objeto WhatsApp Business Account.
+5. **Passo 3 — inscrever o app na WABA.** Na conexão, use o bloco
+   **Inscrição do app na sua WABA** (veja a próxima seção) ou faça a
+   inscrição manual.
+6. Cadastre o **canal/número** na própria conexão (botão **Cadastrar
    canal/número**), usando o número que aparece como
    `display_phone_number` na Meta. Isso libera as regras de conversão
-   antes do primeiro lead — veja a próxima seção.
-6. Configure a **rota Meta** do canal (Pixel/dataset e evento de
+   antes do primeiro lead — veja a seção seguinte.
+7. Configure a **rota Meta** do canal (Pixel/dataset e evento de
    destino). Um canal sem rota Meta válida não pode ser ativado para
    envio automático.
+
+### Inscrição do app na sua WABA pelo painel
+
+Em `/integrations` → aba **WhatsApp** → card **WhatsApp Cloud API** → abra a
+conexão. O bloco **Inscrição do app na sua WABA** consulta e faz o passo 3
+sem sair do painel. Só o **dono** ou um **admin** do workspace vê os botões
+funcionando; com a licença bloqueada, consultar e inscrever ficam
+indisponíveis (a API responde `423`).
+
+**Requisitos**
+
+- `META_APP_ID` e `META_APP_SECRET` do **seu** app configurados na API. Sem
+  eles o painel avisa que a instalação precisa das duas variáveis e não
+  tenta nada.
+- O **WABA ID** — o "ID da conta do WhatsApp Business". Fica em
+  developers.facebook.com → seu app → **WhatsApp → Configuração da API**,
+  logo acima do número, ou no Gerenciador do WhatsApp. **Não** é o ID do
+  número (phone number ID); se você colar o ID do número, o painel avisa.
+- Um **token do mesmo app configurado na instalação** (`META_APP_ID`), com a
+  permissão `whatsapp_business_management` e gerado por alguém com acesso
+  de **admin à WABA**. Serve qualquer um destes:
+  - o **token temporário** de WhatsApp → Configuração da API, no painel do
+    app (o mais simples; vale cerca de 24 h);
+  - um token gerado no **Graph API Explorer** para o mesmo app;
+  - um token de **system user** do Gerenciador de Negócios.
+
+**Como funciona**
+
+1. Preencha o WABA ID e cole o token. O token é usado **só nessa
+   requisição** e descartado: não é salvo no banco nem no navegador, não
+   volta na resposta, não vai para logs nem para a auditoria. Por isso é
+   preciso colá-lo de novo a cada ação.
+2. **Consultar** mostra os apps inscritos na WABA, destacando **Este app**,
+   e os números dessa WABA. Se algum número que já chegou por webhook nesta
+   conexão não pertencer a essa WABA, o painel avisa.
+3. **Inscrever este app** pede confirmação, inscreve o app da instalação
+   (sem trocar a URL de callback) e **reconsulta** a Meta para mostrar o
+   estado real. Outros apps inscritos (CRM, BSP etc.) continuam lá: o
+   painel nunca remove nenhum app.
+
+Antes de tocar na WABA, a API confere o token na Meta (`debug_token`, com o
+app token montado só no servidor) e para com uma mensagem clara quando o
+token é inválido ou expirou, foi gerado para **outro app** (a assinatura
+dos webhooks é conferida com o segredo do app da instalação), não tem
+`whatsapp_business_management` ou foi restrito a outras WABAs. Erros da
+Meta de permissão, ID errado, limite de chamadas ou rede também aparecem
+em português. Consultas e inscrições ficam na auditoria do workspace com o
+WABA ID, o resultado e quem fez — sem o token.
+
+**Inscrição manual (se o painel falhar)**
+
+1. Abra o **Graph API Explorer** e escolha o app configurado na instalação.
+2. Gere um token de usuário com `whatsapp_business_management` e selecione
+   a sua WABA.
+3. Faça `POST <WABA ID>/subscribed_apps`, sem parâmetros. A resposta
+   esperada é `success: true`.
+4. Confira com `GET <WABA ID>/subscribed_apps`: o app da instalação precisa
+   aparecer na lista. Não apague outros apps.
+
+> As **regras de frase da equipe** continuam fora do Meta Cloud: a Meta não
+> entrega as mensagens que o seu time envia, e a inscrição na WABA não muda
+> isso. Ela só libera o recebimento das mensagens dos clientes (CTWA).
 
 ### Rota com qualquer conta do BM e ativação do Meta Cloud
 

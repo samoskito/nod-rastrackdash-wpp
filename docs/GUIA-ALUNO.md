@@ -184,8 +184,9 @@ número e regras nascem em observação. Passo a passo, verificação e rollback
 1. `/integrations` → aba **WhatsApp** → card **WhatsApp Cloud API** → **Gerar webhook**.
 2. Copie **URL de callback** e **Verify token** (os dois aparecem uma única vez, em linhas separadas). Aqui a URL **não** leva `?token=`.
 3. No app Meta: **Configurar webhooks** → cole URL e Verify token → verificar e salvar.
-4. Assine o campo **`messages`**. Sem isso a Meta valida e nunca envia nada.
-5. Cadastre o canal/número e configure a rota Meta do canal.
+4. No mesmo app, assine o campo **`messages`** (Webhooks → campos do webhook).
+5. Inscreva o app na sua WABA: na conexão, bloco **Inscrição do app na sua WABA**, informe o WABA ID, cole um token do mesmo app (o temporário de WhatsApp → Configuração da API serve) e clique em **Inscrever este app**. São três passos diferentes (URL, campo `messages`, inscrição na WABA); sem qualquer um deles a Meta nunca envia nada. Detalhes em [`setup/whatsapp-providers.md`](setup/whatsapp-providers.md).
+6. Cadastre o canal/número e configure a rota Meta do canal.
 
 Uma rota pode usar **qualquer conta do BM**, sem criar uma rota por conta;
 cada anúncio ainda precisa resolver uma conta autorizada ao destino no mesmo

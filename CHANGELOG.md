@@ -7,6 +7,45 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). No migration, no new environment variable.
+
+### Added
+
+- **Meta Cloud: subscribe the installation app to the student's WABA from the
+  panel.** New block "Inscrição do app na sua WABA" on `meta_cloud`
+  connections, backed by
+  `POST /integrations/inbound-webhooks/:connectionId/meta-cloud/waba-subscription/lookup`
+  (reads `GET /{waba}/subscribed_apps`) and
+  `POST /integrations/inbound-webhooks/:connectionId/meta-cloud/waba-subscription`
+  (`confirm: true`; `POST /{waba}/subscribed_apps` without
+  `override_callback_uri`, then re-reads the real state). Both take the WABA
+  ID and the student's token in the body; the token is used only for that
+  request and is never stored, returned, logged or audited. Owner/admin only
+  (`canManageIntegrations`); the license soft-lock answers 423 to both.
+- The token is checked first with `GET /debug_token` using the server-side
+  app token (`META_APP_ID|META_APP_SECRET`): it must be valid, of type `USER`
+  or `SYSTEM_USER` (the temporary token from the app dashboard, a Graph API
+  Explorer token or a system user token), issued for `META_APP_ID`, with
+  `whatsapp_business_management`; when that scope carries `target_ids` the
+  WABA must be listed (without `target_ids` the Graph calls are the final
+  check). Missing `META_APP_ID`/`META_APP_SECRET` answers 503 without calling
+  Meta.
+- `GET /{waba}/phone_numbers` validates the WABA ID, detects a phone number
+  ID pasted instead of the WABA ID and warns when a real channel phone number
+  ID of the connection is not in that WABA. Graph errors 190, 200/10, 100,
+  4/80007 and network/timeout map to pt-BR messages with a stable `code`.
+  Every lookup and subscription writes an `AuditLog` (WABA ID, result, actor;
+  no token). Other subscribed apps are listed and never removed (no DELETE).
+- Zod contracts in `packages/shared` (`metaCloudWabaSubscription*`).
+
+### Changed
+
+- `docs/setup/whatsapp-providers.md` (Meta Cloud) now separates the three
+  Meta steps (URL handshake, `messages` field on the app, app subscription on
+  the WABA) and documents the panel subscription and the manual fallback;
+  `docs/setup/meta-cloud-recovery.md` and `docs/GUIA-ALUNO.md` follow. Team
+  phrase rules remain unavailable on Meta Cloud.
+
 ## [1.1.1] - 2026-10-24
 
 Upgrade notes for students: [`docs/releases/1.1.1.json`](docs/releases/1.1.1.json). No migration, no new environment variable.
