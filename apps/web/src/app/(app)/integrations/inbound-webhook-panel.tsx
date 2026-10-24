@@ -36,6 +36,7 @@ import type {
 import { InboundWebhookRouteEditor } from "./inbound-webhook-route-editor";
 import { InboundWebhookRoutingMode } from "./inbound-webhook-routing-mode";
 import { InboundRecoveryPanel } from "./inbound-recovery-panel";
+import { MetaCloudWabaSubscriptionPanel } from "./meta-cloud-waba-subscription";
 import {
   adUnavailableLabel,
   ctwaDestinationReasonLabel,
@@ -558,6 +559,13 @@ export function InboundWebhookPanel({
                   </div>
 
                   {connection.provider === "meta_cloud" ? <p>Canal habilitado recebe eventos; a conexão precisa de envios automáticos ativos para enviar novos CTWAs. CTWA roteado não significa enviado. Ativar envios automáticos não recupera o histórico.</p> : null}
+                  {connection.provider === "meta_cloud" ? (
+                    <MetaCloudWabaSubscriptionPanel
+                      connectionId={connection.id}
+                      canManage={canManage}
+                      licenseLocked={licenseLocked}
+                    />
+                  ) : null}
                   {canManage ? (
                     <div className="inbound-connection-actions">
                       {connection.status === "observation" &&

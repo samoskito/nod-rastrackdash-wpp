@@ -16196,3 +16196,170 @@ button.meta-manual-entry[aria-expanded="true"] {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Meta Cloud: inscrição do app na WABA do aluno */
+.meta-waba-subscription {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 14px 0;
+  border-block: 1px solid var(--border);
+}
+
+.meta-waba-heading h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.meta-waba-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.meta-waba-steps code,
+.meta-waba-apps code,
+.meta-waba-manual code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.meta-waba-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.meta-waba-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meta-waba-form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(5, 8, 7, 0.84);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.meta-waba-form input:focus {
+  border-color: rgba(66, 240, 168, 0.72);
+  box-shadow: 0 0 0 3px rgba(18, 184, 132, 0.16);
+}
+
+.meta-waba-form input:disabled {
+  opacity: 0.6;
+}
+
+.meta-waba-subscription .feedback-banner {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.meta-waba-subscription .feedback-banner svg {
+  margin-top: 2px;
+}
+
+.meta-waba-subscription .field-label {
+  font-size: 13px;
+}
+
+.meta-waba-form .field-help {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.meta-waba-actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 10px;
+}
+
+.meta-waba-result,
+.meta-waba-failure {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.meta-waba-apps ul,
+.meta-waba-numbers ul {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meta-waba-apps li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.meta-waba-apps li.this-app {
+  border-color: var(--border-strong);
+}
+
+.meta-waba-apps li code {
+  color: var(--ink-muted);
+}
+
+.meta-waba-apps p,
+.meta-waba-numbers li {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.meta-waba-manual summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.meta-waba-manual ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.meta-waba-scope-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .meta-waba-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meta-waba-actions .button {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}

@@ -603,6 +603,18 @@ it("offers student historical CTWA recovery on the Meta connection", () => {
   expect(html).toContain("CTWA roteado não significa enviado");
 });
 
+it("shows the WABA subscription block only on Meta Cloud connections", () => {
+  const meta = renderPanel({ connections: [{
+    ...connectionView,
+    overview: { ...connectionView.overview, connection: {
+      ...connectionView.overview.connection, provider: "meta_cloud", parserVersion: "v1",
+    } },
+  }] });
+  expect(meta).toContain("Inscrição do app na sua WABA");
+  expect(meta).toContain('type="password"');
+  expect(renderPanel()).not.toContain("Inscrição do app na sua WABA");
+});
+
 function inboundRoute({
   id,
   metaBusinessConnectionId,
