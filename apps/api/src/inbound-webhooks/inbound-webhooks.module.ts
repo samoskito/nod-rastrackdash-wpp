@@ -28,6 +28,7 @@ import { InboundWebhookProcessor } from "./inbound-webhook.processor";
 import { InboundWebhookPublicController } from "./inbound-webhook-public.controller";
 import { InboundWebhookQueueService } from "./inbound-webhook-queue.service";
 import { MetaCloudWabaSubscriptionController } from "./meta-cloud-waba-subscription.controller";
+import { MetaCloudWabaRateLimiter } from "./meta-cloud-waba-rate-limiter";
 import { MetaCloudWabaSubscriptionService } from "./meta-cloud-waba-subscription.service";
 import { ProviderRuleBlockedReprocessController } from "./provider-rule-blocked-reprocess.controller";
 import { ProviderRuleBlockedReprocessService } from "./provider-rule-blocked-reprocess.service";
@@ -77,6 +78,7 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
     InboundWebhookQueueService,
     InboundWebhookParserRegistry,
     IntegrationEndpointsService,
+    MetaCloudWabaRateLimiter,
     MetaCloudWabaSubscriptionService,
     ProviderRuleBlockedReprocessService,
     UazapiConversionBridgeService,

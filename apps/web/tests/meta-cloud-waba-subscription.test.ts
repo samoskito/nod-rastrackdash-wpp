@@ -82,7 +82,9 @@ describe("bloco Inscrição do app na sua WABA", () => {
     expect(screen.getByText(/token temporário/)).toBeTruthy();
     const token = screen.getByLabelText("Token do app Meta") as HTMLInputElement;
     expect(token.type).toBe("password");
-    expect(token.autocomplete).toBe("off");
+    expect(token.getAttribute("autocomplete")).toBe("new-password");
+    expect(token.getAttribute("data-1p-ignore")).toBe("true");
+    expect(token.getAttribute("data-lpignore")).toBe("true");
     expect((screen.getByRole("button", { name: /Consultar/ }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /Inscrever este app/ }) as HTMLButtonElement).disabled).toBe(true);
   });

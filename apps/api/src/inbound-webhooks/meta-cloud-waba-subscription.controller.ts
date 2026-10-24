@@ -7,6 +7,7 @@ import {
   Inject,
   Param,
   Post,
+  Req,
 } from "@nestjs/common";
 import type { ZodError } from "zod";
 import {
@@ -16,12 +17,14 @@ import {
 import { AuthToken } from "../auth/auth-user.decorator";
 import { AuthService } from "../auth/auth.service";
 import { WorkspacesService } from "../workspaces/workspaces.service";
+import { MetaCloudWabaRateLimiter } from "./meta-cloud-waba-rate-limiter";
 import { MetaCloudWabaSubscriptionService } from "./meta-cloud-waba-subscription.service";
 
 /**
  * Inscrição do app Meta da instalação na WABA do aluno. As duas rotas são
  * POST para o token do aluno nunca ir na URL; só dono/admin do workspace
- * (canManageIntegrations). O guard global de licença responde 423 a ambas
+ * (canManageIntegrations), com limite de chamadas por usuário e por
+ * workspace (MetaCloudWabaRateLimiter). O guard global de licença responde 423 a ambas
  * enquanto a licença estiver bloqueada.
  */
 @Controller("integrations/inbound-webhooks")
@@ -32,6 +35,8 @@ export class MetaCloudWabaSubscriptionController {
     private readonly workspacesService: WorkspacesService,
     @Inject(MetaCloudWabaSubscriptionService)
     private readonly service: MetaCloudWabaSubscriptionService,
+    @Inject(MetaCloudWabaRateLimiter)
+    private readonly rateLimiter: MetaCloudWabaRateLimiter,
   ) {}
 
   @Post(":connectionId/meta-cloud/waba-subscription/lookup")
@@ -40,10 +45,12 @@ export class MetaCloudWabaSubscriptionController {
     @AuthToken() refreshToken: string,
     @Param("connectionId") connectionId: string,
     @Body() body: unknown,
+    @Req() request: { ip?: string },
   ) {
     const context = await this.requireManager(refreshToken);
     const parsed = metaCloudWabaSubscriptionLookupInputSchema.safeParse(body);
     if (!parsed.success) throw invalidInput(parsed.error);
+    this.rateLimiter.enforce(context.userId, context.workspaceId);
 
     return this.service.lookup({
       workspaceId: context.workspaceId,
@@ -51,6 +58,7 @@ export class MetaCloudWabaSubscriptionController {
       connectionId,
       wabaId: parsed.data.wabaId,
       accessToken: parsed.data.accessToken,
+      sourceIp: request.ip ?? null,
     });
   }
 
@@ -60,10 +68,12 @@ export class MetaCloudWabaSubscriptionController {
     @AuthToken() refreshToken: string,
     @Param("connectionId") connectionId: string,
     @Body() body: unknown,
+    @Req() request: { ip?: string },
   ) {
     const context = await this.requireManager(refreshToken);
     const parsed = metaCloudWabaSubscriptionSubscribeInputSchema.safeParse(body);
     if (!parsed.success) throw invalidInput(parsed.error);
+    this.rateLimiter.enforce(context.userId, context.workspaceId);
 
     return this.service.subscribe({
       workspaceId: context.workspaceId,
@@ -71,6 +81,7 @@ export class MetaCloudWabaSubscriptionController {
       connectionId,
       wabaId: parsed.data.wabaId,
       accessToken: parsed.data.accessToken,
+      sourceIp: request.ip ?? null,
     });
   }
 

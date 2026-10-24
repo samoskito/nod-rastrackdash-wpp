@@ -2,7 +2,9 @@ import {
   HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
@@ -23,7 +25,10 @@ import { isProvisionalProviderChannelId } from "./inbound-webhook-provisional-ch
 
 /** Mesmo padrão do adapter Meta do projeto. */
 const defaultGraphApiVersion = "v21.0";
-const graphTimeoutMs = 10_000;
+/** Prazo de cada chamada à Graph e prazo total da operação inteira. */
+export const META_CLOUD_WABA_TIMEOUTS = Symbol("META_CLOUD_WABA_TIMEOUTS");
+export type MetaCloudWabaTimeouts = { callMs: number; totalMs: number };
+const defaultTimeouts: MetaCloudWabaTimeouts = { callMs: 10_000, totalMs: 25_000 };
 const requiredScope = "whatsapp_business_management";
 const acceptedTokenTypes = new Set(["USER", "SYSTEM_USER"]);
 
@@ -40,6 +45,9 @@ type GraphResult = {
 
 type Operation = "lookup" | "subscribe";
 
+/** Em qual etapa o erro da Graph aconteceu (muda a mensagem). */
+type GraphStep = "token" | "waba_read" | "subscribe_post";
+
 export type MetaCloudWabaRequest = {
   workspaceId: string;
   connectionId: string;
@@ -47,7 +55,11 @@ export type MetaCloudWabaRequest = {
   wabaId: string;
   /** Usado só nas chamadas à Graph; nunca gravado, logado ou devolvido. */
   accessToken: string;
+  /** IP de origem da requisição, só para a auditoria. */
+  sourceIp?: string | null;
 };
+
+type Ctx = MetaCloudWabaRequest & { deadline: number };
 
 /**
  * Erro com mensagem em português e `code` estável para a tela. Nunca carrega
@@ -89,18 +101,30 @@ const messages = {
   rateLimited:
     "A Meta limitou as chamadas deste app ou desta WABA agora. Aguarde alguns minutos e tente de novo.",
   graphUnavailable:
-    "Não foi possível falar com a Meta agora (rede ou tempo esgotado). Tente de novo em instantes.",
+    "Não foi possível falar com a Meta agora (falha de rede). Tente de novo em instantes.",
+  graphTimeout:
+    "A Meta demorou demais para responder. Clique em \"Consultar\" para ver o estado real da inscrição antes de tentar de novo.",
+  graphUnexpected:
+    "A Meta respondeu com um erro inesperado. Tente de novo em instantes; se continuar, confira pelo Graph API Explorer.",
   subscribeFailed:
     "A Meta não confirmou a inscrição do app na WABA. Tente de novo ou faça a inscrição manual pelo Graph API Explorer.",
 } as const;
 
 @Injectable()
 export class MetaCloudWabaSubscriptionService {
+  private readonly logger = new Logger(MetaCloudWabaSubscriptionService.name);
+  private readonly timeouts: MetaCloudWabaTimeouts;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RUNTIME_ENV) private readonly env: RuntimeEnv,
     @Inject(RUNTIME_FETCH) private readonly fetchImpl: RuntimeFetch,
-  ) {}
+    @Optional()
+    @Inject(META_CLOUD_WABA_TIMEOUTS)
+    timeouts?: MetaCloudWabaTimeouts,
+  ) {
+    this.timeouts = timeouts ?? defaultTimeouts;
+  }
 
   lookup(input: MetaCloudWabaRequest): Promise<MetaCloudWabaSubscriptionStatusDto> {
     return this.run("lookup", input);
@@ -137,21 +161,12 @@ export class MetaCloudWabaSubscriptionService {
       );
     }
 
+    const ctx: Ctx = { ...input, deadline: Date.now() + this.timeouts.totalMs };
+    let status: MetaCloudWabaSubscriptionStatusDto;
     try {
-      const status = await this.execute(operation, input);
-      await this.audit(operation, input, {
-        resultStatus: status.thisAppSubscribed ? "subscribed" : "not_subscribed",
-        summary: {
-          outcome: status.outcome,
-          thisAppSubscribed: status.thisAppSubscribed,
-          subscribedAppsCount: status.apps.length,
-          otherAppsCount: status.apps.filter((app) => !app.isThisApp).length,
-          channelCheck: status.channelCheck.status,
-        },
-      });
-      return status;
+      status = await this.execute(operation, ctx);
     } catch (error) {
-      await this.audit(operation, input, {
+      await this.safeAudit(operation, input, {
         resultStatus: "failed",
         summary: {
           errorCode:
@@ -160,11 +175,39 @@ export class MetaCloudWabaSubscriptionService {
       });
       throw error;
     }
+
+    // Fora do try: falha ao auditar um sucesso não vira erro nem "failed".
+    await this.safeAudit(operation, input, {
+      resultStatus: status.thisAppSubscribed ? "subscribed" : "not_subscribed",
+      summary: {
+        outcome: status.outcome,
+        thisAppSubscribed: status.thisAppSubscribed,
+        subscribedAppsCount: status.apps.length,
+        otherAppsCount: status.apps.filter((app) => !app.isThisApp).length,
+        channelCheck: status.channelCheck.status,
+      },
+    });
+    return status;
+  }
+
+  /** Nunca derruba a operação; loga só o nome do erro (sem dados). */
+  private async safeAudit(
+    operation: Operation,
+    input: MetaCloudWabaRequest,
+    result: { resultStatus: string; summary: Prisma.InputJsonObject },
+  ): Promise<void> {
+    try {
+      await this.audit(operation, input, result);
+    } catch (error) {
+      this.logger.warn(
+        `audit_failed operation=${operation} error=${error instanceof Error ? error.name : "unknown"}`,
+      );
+    }
   }
 
   private async execute(
     operation: Operation,
-    input: MetaCloudWabaRequest,
+    input: Ctx,
   ): Promise<MetaCloudWabaSubscriptionStatusDto> {
     const appId = this.env.META_APP_ID?.trim();
     const appSecret = this.env.META_APP_SECRET?.trim();
@@ -216,18 +259,21 @@ export class MetaCloudWabaSubscriptionService {
    * do Graph API Explorer) e de system user.
    */
   private async validateToken(
-    input: MetaCloudWabaRequest,
+    input: Ctx,
     appId: string,
     appSecret: string,
   ): Promise<void> {
     const result = await this.graph("GET", "/debug_token", {
       bearer: `${appId}|${appSecret}`,
       query: { input_token: input.accessToken },
+      deadline: input.deadline,
     });
 
     if (result.body.error) {
       const code = result.body.error.code;
-      if (code === 190 || code === 101 || code === 102) {
+      // Erro no nível de cima do debug_token é da credencial da instalação
+      // (app token), não do token do aluno, que vem em data.is_valid.
+      if (code === 190 || code === 100 || code === 101 || code === 102) {
         throw new MetaCloudWabaError(
           "meta_app_not_configured",
           messages.appCredentialsRejected,
@@ -306,13 +352,14 @@ export class MetaCloudWabaSubscriptionService {
   }
 
   private async readPhoneNumbers(
-    input: MetaCloudWabaRequest,
+    input: Ctx,
   ): Promise<MetaCloudWabaPhoneNumberDto[]> {
     const result = await this.graph(
       "GET",
       `/${encodeURIComponent(input.wabaId)}/phone_numbers`,
       {
         bearer: input.accessToken,
+        deadline: input.deadline,
         query: { fields: "id,display_phone_number,verified_name", limit: "100" },
       },
     );
@@ -328,7 +375,7 @@ export class MetaCloudWabaSubscriptionService {
           422,
         );
       }
-      throw this.mapGraphError(result.body.error, "waba");
+      throw this.mapGraphError(result.body.error, "waba_read");
     }
 
     const data = Array.isArray(result.body.data) ? result.body.data : [];
@@ -351,7 +398,7 @@ export class MetaCloudWabaSubscriptionService {
    * própria conexão ou perguntando à Graph se o nó tem display_phone_number.
    */
   private async looksLikePhoneNumberId(
-    input: MetaCloudWabaRequest,
+    input: Ctx,
   ): Promise<boolean> {
     const knownChannel = await this.prisma.inboundWebhookChannel.findFirst({
       where: {
@@ -369,6 +416,7 @@ export class MetaCloudWabaSubscriptionService {
         `/${encodeURIComponent(input.wabaId)}`,
         {
           bearer: input.accessToken,
+        deadline: input.deadline,
           query: { fields: "id,display_phone_number" },
         },
       );
@@ -381,7 +429,7 @@ export class MetaCloudWabaSubscriptionService {
   }
 
   private async checkChannels(
-    input: MetaCloudWabaRequest,
+    input: Ctx,
     phoneNumbers: MetaCloudWabaPhoneNumberDto[],
   ): Promise<MetaCloudWabaSubscriptionStatusDto["channelCheck"]> {
     const channels = await this.prisma.inboundWebhookChannel.findMany({
@@ -411,17 +459,17 @@ export class MetaCloudWabaSubscriptionService {
   }
 
   private async readSubscribedApps(
-    input: MetaCloudWabaRequest,
+    input: Ctx,
     appId: string,
   ): Promise<MetaCloudWabaSubscribedAppDto[]> {
     const result = await this.graph(
       "GET",
       `/${encodeURIComponent(input.wabaId)}/subscribed_apps`,
-      { bearer: input.accessToken },
+      { bearer: input.accessToken, deadline: input.deadline },
     );
 
     if (result.body.error) {
-      throw this.mapGraphError(result.body.error, "waba");
+      throw this.mapGraphError(result.body.error, "waba_read");
     }
 
     const data = Array.isArray(result.body.data) ? result.body.data : [];
@@ -450,15 +498,15 @@ export class MetaCloudWabaSubscriptionService {
   }
 
   /** Só POST, sem override_callback_uri; nunca DELETE nem outros apps. */
-  private async subscribeThisApp(input: MetaCloudWabaRequest): Promise<void> {
+  private async subscribeThisApp(input: Ctx): Promise<void> {
     const result = await this.graph(
       "POST",
       `/${encodeURIComponent(input.wabaId)}/subscribed_apps`,
-      { bearer: input.accessToken },
+      { bearer: input.accessToken, deadline: input.deadline },
     );
 
     if (result.body.error) {
-      throw this.mapGraphError(result.body.error, "waba");
+      throw this.mapGraphError(result.body.error, "subscribe_post");
     }
 
     if (result.body.success !== true) {
@@ -470,10 +518,7 @@ export class MetaCloudWabaSubscriptionService {
     }
   }
 
-  private mapGraphError(
-    error: GraphError,
-    context: "token" | "waba",
-  ): MetaCloudWabaError {
+  private mapGraphError(error: GraphError, step: GraphStep): MetaCloudWabaError {
     const code = error.code;
 
     if (code === 190) {
@@ -490,7 +535,7 @@ export class MetaCloudWabaSubscriptionService {
       );
     }
     if (code === 100) {
-      return context === "token"
+      return step === "token"
         ? new MetaCloudWabaError("token_invalid", messages.tokenInvalid, 422)
         : new MetaCloudWabaError("waba_not_found", messages.wabaNotFound, 422);
     }
@@ -501,17 +546,16 @@ export class MetaCloudWabaSubscriptionService {
         502,
       );
     }
-    return new MetaCloudWabaError(
-      context === "token" ? "token_invalid" : "subscribe_failed",
-      context === "token" ? messages.tokenInvalid : messages.subscribeFailed,
-      502,
-    );
+    // Código desconhecido: só o POST de inscrição fala em "não confirmou".
+    return step === "subscribe_post"
+      ? new MetaCloudWabaError("subscribe_failed", messages.subscribeFailed, 502)
+      : new MetaCloudWabaError("graph_unavailable", messages.graphUnexpected, 502);
   }
 
   private async graph(
     method: "GET" | "POST",
     path: string,
-    options: { bearer: string; query?: Record<string, string> },
+    options: { bearer: string; deadline: number; query?: Record<string, string> },
   ): Promise<GraphResult> {
     const version = this.env.META_GRAPH_API_VERSION?.trim() || defaultGraphApiVersion;
     const url = new URL(`https://graph.facebook.com/${version}${path}`);
@@ -519,8 +563,16 @@ export class MetaCloudWabaSubscriptionService {
       url.searchParams.set(key, value);
     }
 
+    const remaining = options.deadline - Date.now();
+    if (remaining <= 0) {
+      throw new MetaCloudWabaError("graph_unavailable", messages.graphTimeout, 504);
+    }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), graphTimeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, Math.min(this.timeouts.callMs, remaining));
 
     try {
       const response = await this.fetchImpl(url.toString(), {
@@ -545,7 +597,7 @@ export class MetaCloudWabaSubscriptionService {
       // Sem detalhes do erro: a mensagem de rede pode carregar a URL.
       throw new MetaCloudWabaError(
         "graph_unavailable",
-        messages.graphUnavailable,
+        timedOut ? messages.graphTimeout : messages.graphUnavailable,
         504,
       );
     } finally {
@@ -570,7 +622,7 @@ export class MetaCloudWabaSubscriptionService {
         targetType: "InboundWebhookConnection",
         targetId: input.connectionId,
         reason: null,
-        sourceIp: null,
+        sourceIp: input.sourceIp ? input.sourceIp.slice(0, 64) : null,
         resultStatus: result.resultStatus,
         beforeSummary: undefined,
         afterSummary: {

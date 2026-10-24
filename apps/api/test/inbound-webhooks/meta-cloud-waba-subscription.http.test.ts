@@ -12,7 +12,16 @@ import {
   RUNTIME_FETCH,
 } from "../../src/common/runtime/runtime.module";
 import { MetaCloudWabaSubscriptionController } from "../../src/inbound-webhooks/meta-cloud-waba-subscription.controller";
-import { MetaCloudWabaSubscriptionService } from "../../src/inbound-webhooks/meta-cloud-waba-subscription.service";
+import {
+  META_CLOUD_WABA_RATE_LIMITS,
+  MetaCloudWabaRateLimiter,
+  type MetaCloudWabaRateLimits,
+} from "../../src/inbound-webhooks/meta-cloud-waba-rate-limiter";
+import {
+  META_CLOUD_WABA_TIMEOUTS,
+  MetaCloudWabaSubscriptionService,
+  type MetaCloudWabaTimeouts,
+} from "../../src/inbound-webhooks/meta-cloud-waba-subscription.service";
 import { LicenseClientService } from "../../src/licensing-client/license-client.service";
 import { LicenseSoftlockGuard } from "../../src/licensing-client/license-softlock.guard";
 import { WorkspacesService } from "../../src/workspaces/workspaces.service";
@@ -68,6 +77,9 @@ function graphFake() {
     postAddsApp: true,
     probeIsPhone: false,
     networkFailure: false,
+    debugTopLevelError: null as null | { code: number },
+    delayMs: 0,
+    hangPath: null as null | string,
     calls: [] as GraphCall[],
   };
   const fetchImpl = vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -75,10 +87,22 @@ function graphFake() {
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
     const path = url.pathname.replace(/^\/v\d+\.\d+/, "");
+    const signal = init?.signal as AbortSignal | undefined;
+    const wait = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    if (state.hangPath === path) await wait(60_000);
+    if (state.delayMs > 0) await wait(state.delayMs);
     const auth = String((init?.headers as Record<string, string>)?.Authorization ?? "");
     state.calls.push({ method, path, query: url.searchParams, auth });
 
     if (path === "/debug_token") {
+      if (state.debugTopLevelError) return json({ error: state.debugTopLevelError }, 400);
       return json({ data: state.debug });
     }
     if (path === `/${WABA_ID}/phone_numbers` || path === `/${PHONE_ID}/phone_numbers`) {
@@ -156,7 +180,14 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function fixture(options: { locked?: boolean; env?: Record<string, string | undefined> } = {}) {
+async function fixture(
+  options: {
+    locked?: boolean;
+    env?: Record<string, string | undefined>;
+    limits?: Partial<MetaCloudWabaRateLimits>;
+    timeouts?: MetaCloudWabaTimeouts;
+  } = {},
+) {
   const graph = graphFake();
   const db = prismaFake();
   const session: any = {
@@ -187,6 +218,15 @@ async function fixture(options: { locked?: boolean; env?: Record<string, string 
     controllers: [MetaCloudWabaSubscriptionController],
     providers: [
       MetaCloudWabaSubscriptionService,
+      MetaCloudWabaRateLimiter,
+      {
+        provide: META_CLOUD_WABA_RATE_LIMITS,
+        useValue: options.limits ?? { perUserMinIntervalMs: 0, perWorkspaceMax: 10_000 },
+      },
+      {
+        provide: META_CLOUD_WABA_TIMEOUTS,
+        useValue: options.timeouts ?? { callMs: 10_000, totalMs: 25_000 },
+      },
       { provide: PrismaService, useValue: db.prisma },
       { provide: RUNTIME_ENV, useValue: env },
       { provide: RUNTIME_FETCH, useValue: graph.fetchImpl },
@@ -500,5 +540,83 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
       expect(everything).not.toContain(secret);
     }
     expect(everything).not.toMatch(/access_?token|input_token/i);
+  });
+
+  it("limite por usuário: 429 com code rate_limited e libera depois do intervalo", async () => {
+    let now = 1_000_000;
+    const h = await fixture({ limits: { perUserMinIntervalMs: 4_000, perWorkspaceMax: 20, now: () => now } });
+    await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+    const callsBefore = h.fetchImpl.mock.calls.length;
+    const blocked = await h.api.post(base).set("Authorization", bearer).send(subscribeBody).expect(429);
+    expect(blocked.body.code).toBe("rate_limited");
+    expect(blocked.body.message).toContain("Aguarde alguns segundos");
+    expect(h.fetchImpl.mock.calls.length).toBe(callsBefore);
+    now += 4_000;
+    await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+  });
+
+  it("limite por workspace: teto de 20 por hora entre usuários", async () => {
+    let now = 5_000_000;
+    const h = await fixture({ limits: { perUserMinIntervalMs: 4_000, perWorkspaceMax: 20, now: () => now } });
+    for (let i = 0; i < 20; i += 1) {
+      now += 5_000;
+      await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+    }
+    now += 5_000;
+    h.session.user.id = "other_admin";
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(429);
+    expect(res.body.code).toBe("rate_limited");
+    expect(res.body.message).toContain("última hora");
+    now += 60 * 60 * 1000;
+    await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+  });
+
+  it("falha ao gravar a auditoria de um sucesso não vira erro nem gera 'failed'", async () => {
+    const h = await fixture();
+    h.prisma.auditLog.create.mockRejectedValueOnce(new Error(`db down ${STUDENT_TOKEN}`));
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+    expect(res.body.thisAppSubscribed).toBe(true);
+    expect(h.prisma.auditLog.create).toHaveBeenCalledTimes(1);
+    expect(h.audits.some((a) => a.data.resultStatus === "failed")).toBe(false);
+  });
+
+  it("código desconhecido na consulta não fala em inscrição; no POST, sim", async () => {
+    const h = await fixture();
+    h.state.subscribedError = { code: 99999 };
+    const lookup = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(502);
+    expect(lookup.body.code).toBe("graph_unavailable");
+    expect(lookup.body.message).not.toMatch(/inscrição/);
+
+    h.state.subscribedError = null;
+    h.state.subscribed = [];
+    h.state.postError = { code: 99999 };
+    const sub = await h.api.post(base).set("Authorization", bearer).send(subscribeBody).expect(502);
+    expect(sub.body.code).toBe("subscribe_failed");
+  });
+
+  it("erro 100 no nível de cima do debug_token é credencial da instalação", async () => {
+    const h = await fixture();
+    h.state.debugTopLevelError = { code: 100 };
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
+    expect(res.body.code).toBe("meta_app_not_configured");
+    expect(res.body.message).toContain("META_APP_ID e META_APP_SECRET");
+  });
+
+  it("prazo total da operação: 504 sugerindo Consultar de novo", async () => {
+    const h = await fixture({ timeouts: { callMs: 5_000, totalMs: 250 } });
+    h.state.delayMs = 20;
+    h.state.hangPath = `/${WABA_ID}/subscribed_apps`;
+    const started = Date.now();
+    const res = await h.api.post(base).set("Authorization", bearer).send(subscribeBody).expect(504);
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(res.body.code).toBe("graph_unavailable");
+    expect(res.body.message).toContain("Consultar");
+    expect(h.state.calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("grava o IP de origem na auditoria", async () => {
+    const h = await fixture();
+    await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+    expect(typeof h.audits[0]!.data.sourceIp).toBe("string");
   });
 });

@@ -147,7 +147,7 @@ export function MetaCloudWabaSubscriptionPanel({
             id={tokenFieldId}
             name="metaAccessToken"
             type="password"
-            autoComplete="off"
+            autoComplete="new-password"
             data-1p-ignore="true"
             data-lpignore="true"
             spellCheck={false}
