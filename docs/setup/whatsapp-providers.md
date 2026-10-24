@@ -96,7 +96,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
 |---|---|---|---|
 | `POST /webhooks/whatsapp/:id` — **Uazapi (BYO)** | Token do receiver (header `x-wpptrack-webhook-token`, Bearer ou `?token=`) comparado ao hash salvo | — | **Pronto** |
 | `POST /webhooks/whatsapp/:id` — **WAHA** (motor GoWS) | Idem (a configuração automática manda o token no cabeçalho `X-Wpptrack-Webhook-Token`) | `session` do envelope precisa ser **exatamente** a Sessão salva na conexão | **Pronto** — parser `waha` v2 (GoWS) enquanto a release certificada existir; veja [WAHA com motor GoWS](#waha-com-motor-gows-waha-servidor-do-aluno). Liberada no Hub, com regras de frase da equipe em Conversões |
-| `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Pronto** — Em breve no Hub: só para conexões já existentes |
+| `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Em breve** — o parser ainda não lê o payload real da Z-API; não use para receber leads |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy / Unnichat** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
 | `POST /webhooks/inbound/:id` — **Meta WhatsApp (Cloud API)** | `x-hub-signature-256` via `META_APP_SECRET`; **sem** `META_APP_SECRET`, só é aceito enquanto a conexão está em **observação** | — | **Pronto (CTWA)** — veja a seção Meta Cloud |
@@ -122,7 +122,7 @@ O que muda de provedor para provedor é **quais mensagens chegam**:
 | Data Crazy | Sim | Não — mensagens inbound só viram lead quando têm CTWA |
 | Meta WhatsApp (Cloud API) | Sim | **Não** — veja abaixo |
 | WAHA (GoWS) | Sim (evento `message`) | **Sim** — lidas pelo evento `message.any` e avaliadas contra as regras de frase da equipe, como na Uazapi (sem etiquetas) |
-| Z-API | Sim | Não (mensagens `fromMe` são classificadas `ignored_outbound`) |
+| Z-API | Em breve | Em breve (sem leads de anúncio nem regras de frase por enquanto) |
 
 Isso decide qual gatilho faz sentido em cada origem — é o erro de
 configuração mais comum hoje.
@@ -152,6 +152,16 @@ configuração mais comum hoje.
   origem "Mensagem no WhatsApp" com autor **equipe** nunca vai casar numa
   conexão `meta_cloud`. Quem precisa disso hoje usa **Uazapi (BYO)** ou
   **Umbler Talk**.
+- **Regras de frase da equipe.** Pelo mesmo motivo (a Meta não entrega
+  pelo webhook da Cloud API as mensagens enviadas pela equipe), as regras
+  de frase da equipe não funcionam numa conexão Meta Cloud. O que fazer:
+  - **Número com coexistência** (app WhatsApp Business junto com a Cloud
+    API): conecte esse número pela **Uazapi** do aluno (URL + token da
+    sua própria instância). Ela entrega o anúncio (CTWA) e as mensagens
+    da equipe.
+  - **Sem coexistência:** a conversão por frase depende de integrar a
+    plataforma que a equipe usa para responder (CRM/atendimento), por
+    exemplo chamando a URL única de conversão. Fale com o suporte.
 - **Gatilhos vindos de CRM** — **Kommo existe** e é conectado em
   `/integrations` → aba **CRM** → card **Kommo** (somente o dono da conta);
   ele não depende da conexão Meta Cloud. **Kinbox e outros CRM / call center**:
@@ -433,16 +443,15 @@ Consequências práticas, confirmadas no código:
   **Testar** com a sessão `WORKING` ou na primeira mensagem do seu time).
   Ele entra nas regras de **frase** (e de catálogo) da equipe; etiquetas não
   existem na WAHA, então ela não oferece gatilho de etiqueta.
-- **Z-API** tem receiver e parser prontos (leads e conversões de CTWA
-  funcionam), mas **ainda não tem** ponte automática para a central de
-  Gatilhos. Trate isso como lacuna conhecida do produto, não como um passo
-  que você esqueceu de clicar.
+- **Z-API** está como **Em breve**: ainda não recebe lead de anúncio
+  (CTWA) nem participa das regras de frase da equipe. Entra quando houver
+  demanda. Para esse número, use a Uazapi ou a WAHA.
 - **NOD API** ainda não tem receiver inbound (a rota responde `501`).
 
 > ℹ️ No Hub, Z-API e NOD API aparecem como **Em breve**: não é possível
-> criar conexões novas; as já existentes continuam gerenciáveis. O receiver
-> da Z-API existe no backend (matriz acima), mas só quem já tem a conexão o
-> usa por enquanto. A WAHA (GoWS) já cria conexões novas.
+> criar conexões novas; as já existentes continuam gerenciáveis. A Z-API
+> ainda não tem parser compatível com o payload real, então não receba
+> leads por ela por enquanto. A WAHA (GoWS) já cria conexões novas.
 
 ## Gatilhos de conversão exigem as envs `INBOUND_*`
 
@@ -625,9 +634,9 @@ webhook usa somente o que está salvo na conexão.
 - Você roda ou assina sua própria instância [Z-API](https://www.z-api.io/).
 - Credenciais na UI: URL da API, Instance ID e Token. Env de fallback:
   `ZAPI_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN`.
-- Receiver inbound: **pronto**, com o mesmo vínculo estrito —
-  `body.instanceId` precisa bater com o Instance ID salvo.
-- Ainda **sem** ponte automática para a central de Gatilhos.
+- **Em breve:** o parser ainda não lê o payload real da Z-API, então ela
+  não entrega lead de anúncio (CTWA) nem regras de frase da equipe. Será
+  priorizada quando houver demanda.
 - **Em breve no Hub:** não é possível criar conexões novas; as já existentes continuam gerenciáveis.
 
 ### Data Crazy (`data_crazy`)

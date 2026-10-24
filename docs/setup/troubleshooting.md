@@ -70,10 +70,10 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
   - **URL antiga.** Cada clique em **Gerar receiver** invalida o token anterior. Se você gerou duas vezes, só a última URL vale.
   - **Só a parte antes do `?`.** Alguns painéis cortam a query string ao colar — confirme que o `?token=...` foi salvo.
   - **WAHA:** o `payload.session` da entrega precisa ser **exatamente** a Sessão salva na conexão. Trocou a sessão na WAHA? Clique em **Gerar receiver** de novo (isso regrava a sessão a partir da configuração salva) e recole a URL.
-  - **Z-API:** o `body.instanceId` da entrega precisa ser **exatamente** o Instance ID salvo na conexão.
+  - **Z-API (Em breve):** a Z-API ainda não recebe lead de anúncio; use Uazapi ou WAHA para esse número.
   - **Conexão excluída/desativada:** conexão em `suspended` rejeita tudo.
   - **Rota legada:** `POST /webhooks/uazapi` e `POST /webhooks/uazapi/instances/:id` só enxergam registros com `provider = "uazapi"` (valor legado); o painel atual grava `uazapi_byo`. Se você configurou uma dessas duas URLs, troque pelo receiver por conexão — preencher `UAZAPI_WEBHOOK_AUTH_TOKEN` não resolve.
-- **Correção:** gere o receiver de novo, cole a URL completa no painel do provedor e confirme os campos de vínculo (Sessão na WAHA, Instance ID na Z-API).
+- **Correção:** gere o receiver de novo, cole a URL completa no painel do provedor e confirme o campo de vínculo (Sessão na WAHA).
 - **Verificação:** o próximo evento de teste chega sem `401` nos logs da API.
 
 ## Receiver do NOD API responde 501
@@ -161,7 +161,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 - **Diagnóstico:** `/integrations` mostra o status de saúde reportado pelo provedor (`connected`/`needs_reconnect`/`disconnected`/`error`); confira se as variáveis do provedor escolhido estão preenchidas (veja [`environment.md`](environment.md)).
 - **Causa provável:**
-  - `needs_reconnect`: sessão/instância precisa escanear QR de novo na sua própria instância Uazapi/WAHA/Z-API (fora deste template).
+  - `needs_reconnect`: sessão/instância precisa reconectar o WhatsApp na sua própria instância Uazapi/WAHA/Z-API (fora deste template).
   - `disconnected`: variáveis do provedor ausentes ou instância parada.
   - `error`: URL/token errados ou instância inacessível pela rede onde a API roda.
 - **Correção:** reconecte diretamente no painel/instância do provedor; confirme host/porta acessíveis a partir do servidor da API (não só do seu navegador); use **Editar** na conexão para corrigir URL/token. O botão **Testar** usa as credenciais salvas **naquela conexão** e só cai nas variáveis de ambiente quando o campo não foi preenchido na UI — se um workspace continua errado depois de corrigir a env, é porque a conexão dele tem credencial própria (veja [`whatsapp-providers.md`](whatsapp-providers.md#envs-de-provedor-o-que-elas-fazem-hoje)).
@@ -188,7 +188,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
   - **Umbler, Gupshup, Meta WhatsApp (Cloud API):** a origem aparece assim que a conexão existe em `/integrations` (card Umbler/Gupshup na aba **Atendimento e vendas**, ou card **WhatsApp Cloud API** na aba **WhatsApp**). Se você criou a conexão no card de um provedor Uazapi/NOD API/WAHA/Z-API, criou outra coisa — são cards diferentes.
   - **Uazapi:** a origem é criada automaticamente pelo produto, mas só quando chega pelo receiver uma mensagem **enviada pelo número conectado** (atendente) ou uma mudança de etiqueta. Uma mensagem apenas recebida do cliente não cria a origem. Responda uma conversa pelo número conectado e recarregue.
   - **WAHA (GoWS):** participa das regras de **frase** da equipe, como a Uazapi (sem etiquetas). Se a frase do time não converte, confira se a regra está em envio automático, se o número da WAHA não está pendente na regra (**Ativar envio neste número**) e use **Reprocessar bloqueadas** para as conversas dos últimos 7 dias. Detalhes em [whatsapp-providers.md](whatsapp-providers.md#regras-de-frase-da-equipe-na-waha).
-  - **Z-API e NOD API:** recebem leads normalmente (Z-API), mas **ainda não participam das regras de conversão**: na tela Conversões os números aparecem como "Em breve". É lacuna conhecida do produto, não configuração.
+  - **Z-API e NOD API:** estão como "Em breve": a Z-API ainda não recebe lead de anúncio nem tem regras de conversão, e a NOD API não tem receiver. Na tela Conversões os números aparecem como "Em breve". É lacuna conhecida do produto, não configuração.
   - **Gupshup, Data Crazy e WhatsApp Cloud API:** funcionam normalmente: leads e conversões chegam pelo webhook do provedor (CTWA). As regras de frase, etiqueta e catálogo não se aplicam a esses números, então eles não aparecem como escolha no alcance; a tela Conversões mostra uma nota neutra, não "Em breve".
 - **Correção:** use o painel certo para cada plataforma e, no caso da Uazapi, gere um evento de atendente/etiqueta. Não tente criar uma conexão inbound `uazapi` na mão — a API recusa de propósito ("Conexoes UAZAPI sao criadas automaticamente a partir da instancia WhatsApp").
 - **Verificação:** o número aparece em **Nova regra → Alcance → Números específicos** (ou entra em "Todos os números"), e **Nova regra** abre o formulário.

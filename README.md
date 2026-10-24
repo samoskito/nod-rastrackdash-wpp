@@ -9,8 +9,8 @@
 **Student edition F3–F6.2 landed** on this public template (sanitized export of private WppTrack):
 
 - License **client** (activate / heartbeat / status UI) — fail-closed: without a valid activation, reads stay open and every write answers `423`
-- WhatsApp multi-provider registry: `uazapi_byo`, `nod_api` (PalmUP broker), `waha`, `zapi`
-- Inbound webhook parsers (Umbler, Gupshup, WAHA, Z-API)
+- WhatsApp multi-provider registry: `uazapi_byo`, `nod_api` (PalmUP broker), `waha`, `zapi` (Z-API: "Em breve", no ad-lead parsing yet)
+- Inbound webhook parsers (Umbler, Gupshup, WAHA; Z-API is "Em breve")
 - Disconnect alerts (optional webhook)
 - Student backoffice (no PalmUP billing) + read-only license tab
 - Env-driven whitelabel with fixed residual footer (`RastrackDash · powered by PalmUP`)
@@ -55,7 +55,7 @@ Verify: open `/backoffice` (onboarding checklist), `/backoffice/license`, `/inte
 ## Bring your own services
 
 - SMTP for email delivery
-- WhatsApp: Uazapi BYO, WAHA (GoWS engine, your own server) and/or WhatsApp Cloud API (NOD API and Z-API are "Em breve": existing connections only)
+- WhatsApp: Uazapi BYO, WAHA (GoWS engine, your own server) and/or WhatsApp Cloud API (NOD API and Z-API are "Em breve": existing connections only, and Z-API does not yet receive ad leads)
 - Meta System User access token (manual)
 - Optional brand: `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR`
 
