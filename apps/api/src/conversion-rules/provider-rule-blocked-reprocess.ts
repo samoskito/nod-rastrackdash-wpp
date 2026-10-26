@@ -1,4 +1,12 @@
 import type { Prisma } from "@prisma/client";
+import { providerConversionDecisionSchema } from "@wpptrack/shared";
+import {
+  COVERED_CONVERTING_LOG_WHERE,
+  COVERED_LOG_SELECT,
+  isLeadLifetimeEvent,
+  pickPriorLeadLifetimeConversion,
+  resolveLeadConversionIdentities,
+} from "../conversion-events/lead-lifetime-conversion-guard";
 import { BRIDGED_WHATSAPP_PROVIDERS } from "../inbound-webhooks/bridged-whatsapp-providers";
 
 /**
@@ -115,7 +123,158 @@ type ReprocessClient = Pick<
 export type ReprocessableExecution = {
   id: string;
   providerDecisionId: string;
+  channelId?: string | null;
+  eventName?: string | null;
 };
+
+type PreviewRoute = (input: { workspaceId: string; adId: string }) => Promise<{
+  status: string;
+  conversionDestinationId: string | null;
+}>;
+
+/** Distinct ad routes previewed per call; beyond it the destination is unknown. */
+const PARTITION_ROUTE_LIMIT = 20;
+/** Covered logs loaded per call (one query for every lead of the batch). */
+const PARTITION_LOG_LIMIT = 5_000;
+
+/**
+ * Splits what a reprocess would retry into what it would really send and
+ * what the production job would only mark as duplicate because the same
+ * lead already converted this once-per-lead event for the same Meta
+ * destination on another number or through the CTWA entry (same rule as
+ * ProviderConversionProductionService, lead-lifetime-conversion-guard.ts).
+ * Those are left untouched ("ficam como estão") and never re-enqueued.
+ *
+ * Runs on every Execuções summary, so it is batched: nothing at all when no
+ * candidate is a once-per-lead event; otherwise one decision query, two lead
+ * identity queries, one log query and at most PARTITION_ROUTE_LIMIT distinct
+ * ad route previews. When the destination cannot be predicted the execution
+ * stays ready (production decides, as before).
+ */
+export async function partitionAlreadyConverted(
+  client: Pick<
+    Prisma.TransactionClient,
+    "providerConversionDecisionAudit" | "lead" | "conversionEventLog"
+  >,
+  input: {
+    workspaceId: string;
+    executions: ReprocessableExecution[];
+    previewRoute: PreviewRoute;
+  },
+): Promise<{
+  ready: ReprocessableExecution[];
+  alreadyConverted: ReprocessableExecution[];
+}> {
+  const lifetime = input.executions.filter(
+    (execution) =>
+      execution.eventName && isLeadLifetimeEvent(execution.eventName),
+  );
+  if (lifetime.length === 0) {
+    return { ready: input.executions, alreadyConverted: [] };
+  }
+
+  const audits = await client.providerConversionDecisionAudit.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      id: { in: lifetime.map((execution) => execution.providerDecisionId) },
+    },
+    select: { id: true, decisionJson: true },
+  });
+  const leadByDecision = new Map<
+    string,
+    { id: string; adId: string | null; ctwaDestinationId: string | null }
+  >();
+  for (const audit of audits) {
+    const decision = providerConversionDecisionSchema.safeParse(
+      audit.decisionJson,
+    );
+    if (!decision.success || decision.data.decisionCode !== "eligible") continue;
+    const lead = decision.data.leadResolution.lead;
+    leadByDecision.set(audit.id, {
+      id: lead.id,
+      adId: lead.adId ?? null,
+      ctwaDestinationId: lead.ctwaDestination?.destinationId ?? null,
+    });
+  }
+
+  const destinationByAd = new Map<string, string | null>();
+  const adIds = [
+    ...new Set(
+      [...leadByDecision.values()]
+        .map((lead) => lead.adId)
+        .filter((adId): adId is string => Boolean(adId)),
+    ),
+  ].slice(0, PARTITION_ROUTE_LIMIT);
+  for (const adId of adIds) {
+    try {
+      const route = await input.previewRoute({
+        workspaceId: input.workspaceId,
+        adId,
+      });
+      destinationByAd.set(
+        adId,
+        route.status === "resolved" ? route.conversionDestinationId : null,
+      );
+    } catch {
+      destinationByAd.set(adId, null);
+    }
+  }
+
+  const identities = await resolveLeadConversionIdentities(
+    client,
+    input.workspaceId,
+    [...leadByDecision.values()].map((lead) => lead.id),
+  );
+  const allLeadIds = [...new Set([...identities.values()].flat())];
+  const eventNames = [
+    ...new Set(lifetime.map((execution) => execution.eventName!)),
+  ];
+  const logs = allLeadIds.length
+    ? await client.conversionEventLog.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          leadId: { in: allLeadIds },
+          eventName: { in: eventNames },
+          ...COVERED_CONVERTING_LOG_WHERE,
+        },
+        select: COVERED_LOG_SELECT,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: PARTITION_LOG_LIMIT,
+      })
+    : [];
+
+  const converted = new Set<string>();
+  for (const execution of lifetime) {
+    const lead = leadByDecision.get(execution.providerDecisionId);
+    if (!lead) continue;
+    const destinationId =
+      (lead.adId ? destinationByAd.get(lead.adId) : null) ??
+      lead.ctwaDestinationId;
+    if (!destinationId) continue;
+    const leadIds = identities.get(lead.id) ?? [lead.id];
+    const prior = pickPriorLeadLifetimeConversion(
+      logs.filter(
+        (log) =>
+          log.eventName === execution.eventName &&
+          log.leadId !== null &&
+          leadIds.includes(log.leadId),
+      ),
+      {
+        conversionDestinationId: destinationId,
+        channelId: execution.channelId ?? null,
+        pipeline: "provider_rule",
+        ownDedupeKey: `provider-conversion:${execution.id}`,
+      },
+    );
+    if (prior) converted.add(execution.id);
+  }
+  return {
+    ready: input.executions.filter((execution) => !converted.has(execution.id)),
+    alreadyConverted: input.executions.filter((execution) =>
+      converted.has(execution.id),
+    ),
+  };
+}
 
 /**
  * Executions a reprocess may retry now, oldest first. On top of the reason
@@ -181,6 +340,7 @@ export async function findReprocessableExecutions(
         occurredAt: true,
         channelId: true,
         channel: { select: { connectionId: true } },
+        providerDecision: { select: { eventName: true } },
       },
     });
     if (page.length === 0) break;
@@ -252,7 +412,12 @@ export async function findReprocessableExecutions(
           row.reasonCode === "channel_not_active" &&
           before(firstChannelActivation, row.channelId, row.occurredAt));
       if (deliberate) continue;
-      result.push({ id: row.id, providerDecisionId: row.providerDecisionId });
+      result.push({
+        id: row.id,
+        providerDecisionId: row.providerDecisionId,
+        channelId: row.channelId,
+        eventName: row.providerDecision?.eventName ?? null,
+      });
       if (result.length >= input.limit) break;
     }
     if (page.length < SCAN_PAGE) break;

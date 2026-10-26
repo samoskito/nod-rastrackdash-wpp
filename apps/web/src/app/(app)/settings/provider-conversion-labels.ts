@@ -88,6 +88,10 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Falha interna ao criar o evento Meta",
     queue_recovery_pending: "Aguardando recuperação da fila",
     qualified_lead_already_materialized: "Lead já qualificado anteriormente",
+    lead_already_converted_other_number:
+      "Lead já convertido por outro número: nada novo enviado à Meta",
+    lead_already_converted_other_source:
+      "Lead já convertido pela entrada do anúncio: nada novo enviado à Meta",
     // Venda da Payt (Fase 4a).
     purchase_duplicate: "Venda repetida: recibo registrado, nada novo enviado",
     rule_in_observation: "Regra em observação: nada é enviado à Meta",

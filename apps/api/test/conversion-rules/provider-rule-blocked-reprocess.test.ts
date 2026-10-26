@@ -261,6 +261,7 @@ describe("ProviderRuleBlockedReprocessService (Reprocessar bloqueadas)", () => {
       reprocessed: 2,
       stillBlocked: 1,
       expired: 1,
+      alreadyConverted: 0,
       skipped: 0,
       failed: 0,
       remaining: 0,

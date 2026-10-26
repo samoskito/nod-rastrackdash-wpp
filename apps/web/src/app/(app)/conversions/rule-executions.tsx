@@ -256,7 +256,9 @@ function BlockedReprocessPanel({
 }) {
   if (!summary) return null;
   const rulePaused = summary.ruleSendsNow === false;
-  const total = summary.ready + summary.stillBlocked + summary.expired;
+  const alreadyConverted = summary.alreadyConverted ?? 0;
+  const total =
+    summary.ready + summary.stillBlocked + alreadyConverted + summary.expired;
   if (total === 0 && !note) return null;
 
   return (
@@ -284,6 +286,14 @@ function BlockedReprocessPanel({
               <span className="status-chip warn">{summary.stillBlocked}</span>{" "}
               {summary.stillBlocked === 1 ? "fica como está" : "ficam como estão"}
             </li>
+            {alreadyConverted > 0 ? (
+              <li>
+                <span className="status-chip neutral">{alreadyConverted}</span>{" "}
+                {alreadyConverted === 1
+                  ? "já convertida por outro número ou pela entrada do anúncio (não é reenviada)"
+                  : "já convertidas por outro número ou pela entrada do anúncio (não são reenviadas)"}
+              </li>
+            ) : null}
             <li>
               <span className="status-chip neutral">{summary.expired}</span>{" "}
               {summary.expired === 1 ? "expirada" : "expiradas"} (mais de{" "}

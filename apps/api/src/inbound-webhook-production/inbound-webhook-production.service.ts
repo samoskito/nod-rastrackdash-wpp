@@ -590,6 +590,13 @@ export class InboundWebhookProductionService {
           adId: event.adId,
           processingMode: "live_production",
         },
+        // Once per lead and Meta destination across numbers and rules.
+        // Unnichat records inside the caller's transaction (client below).
+        leadLifetimeGuard: {
+          channelId: event.channelId,
+          pipeline: "ctwa_entry",
+          inTransaction: true,
+        },
       },
       client,
     );
@@ -811,6 +818,15 @@ export class InboundWebhookProductionService {
         hasCtwa: true,
         adId: event.adId,
         processingMode: "live_production",
+      },
+      // Once per lead and Meta destination across numbers and rules: covers
+      // the nod's Meta Cloud (meta_cloud) CTWA entry and the other
+      // non-Unnichat inbound providers. Not in a caller transaction here, so
+      // recordExternalConversion opens one (the advisory lock needs it).
+      leadLifetimeGuard: {
+        channelId: event.channelId,
+        pipeline: "ctwa_entry",
+        inTransaction: false,
       },
     });
 

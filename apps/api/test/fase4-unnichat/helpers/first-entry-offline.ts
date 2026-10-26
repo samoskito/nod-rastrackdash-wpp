@@ -156,6 +156,13 @@ export function offline() {
     }),
     updateMany: vi.fn(async () => ({ count: 1 })),
     findMany: vi.fn(async () => leads),
+    // Once-per-lead guard (lead-lifetime-conversion-guard.ts).
+    findFirst: vi.fn(
+      async ({ where }: any) =>
+        leads.find(
+          (l) => l.id === where.id && l.workspaceId === where.workspaceId,
+        ) ?? null,
+    ),
   };
   p.conversionEventLog = {
     count: vi.fn(

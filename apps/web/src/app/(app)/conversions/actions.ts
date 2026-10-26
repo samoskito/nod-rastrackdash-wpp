@@ -614,6 +614,11 @@ function reprocessSummary(
       `${plural(result.stillBlocked, "fica como está", "ficam como estão")} (número ainda sem envio ativo, pausado de propósito na época ou que não é QR)`,
     );
   }
+  if ((result.alreadyConverted ?? 0) > 0) {
+    parts.push(
+      `${plural(result.alreadyConverted ?? 0, "fica como está", "ficam como estão")} porque o lead já foi convertido por outro número ou pela entrada do anúncio (nada é enviado de novo à Meta)`,
+    );
+  }
   if (result.expired > 0) {
     parts.push(
       result.expired === 1

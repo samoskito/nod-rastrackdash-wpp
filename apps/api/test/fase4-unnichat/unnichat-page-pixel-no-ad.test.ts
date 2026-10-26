@@ -324,7 +324,7 @@ describe("Unnichat authorized unique workspace page/pixel without ad (synthetic 
       }),
     ).rejects.toThrow();
   });
-  it("two inbound numbers share the workspace target without per-number account rows or duplicate events", async () => {
+  it("two inbound numbers share the workspace target without per-number account rows or duplicate events (same lead: one LeadSubmitted)", async () => {
     const h = pageOffline();
     const firstChannel = { ...h.channel };
     await h.production.processItem({
@@ -364,17 +364,29 @@ describe("Unnichat authorized unique workspace page/pixel without ad (synthetic 
       async ({ where }: any) => (where.id === "ch" ? firstChannel : h.channel),
     );
     Object.assign(h.item, second);
-    await h.production.processItem({
-      workspaceId: "w",
-      productionItemId: "item2",
-    });
+    // Same lead entering through the second number to the same page/pixel:
+    // once-per-lead LeadSubmitted is not sent again (owner rule,
+    // lead-lifetime-conversion-guard.ts), but the second number keeps its own
+    // not_eligible receipt (proof of origin, attribution in the reports) and
+    // its item points to it.
+    await expect(
+      h.production.processItem({
+        workspaceId: "w",
+        productionItemId: "item2",
+      }),
+    ).resolves.toEqual({ status: "duplicate" });
     expect(h.logs).toHaveLength(2);
-    expect(h.logs[0].eventId).not.toBe(h.logs[1].eventId);
-    expect(await h.conversions.sendReadyEvent(h.logs[1].id)).toMatchObject({
-      status: "sent",
+    expect(h.logs[1]).toMatchObject({
+      status: "not_eligible",
+      errorCode: "lead_already_converted_other_number",
+      sourcePayload: expect.objectContaining({ channelId: "ch2" }),
     });
-    await h.conversions.sendReadyEvent(h.logs[1].id);
-    expect(h.calls).toHaveLength(2);
+    expect(h.item).toMatchObject({
+      status: "duplicate",
+      conversionEventLogId: h.logs[1].id,
+    });
+    expect(h.jobs).toHaveLength(1);
+    expect(h.calls).toHaveLength(1);
     expect(new Set(h.calls.map((c) => new URL(c.url).pathname))).toEqual(
       new Set(["/v21.0/synthetic_pixel/events"]),
     );

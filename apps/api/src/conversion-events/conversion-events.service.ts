@@ -24,6 +24,13 @@ import {
 } from "../pipedrive/pipedrive-production-policy";
 import { isCrmCtwaContext } from "../crm-channels/crm-ctwa-context";
 import {
+  guardLeadLifetimeConversion,
+  isLeadLifetimeEvent,
+  LEAD_CONVERTED_BY_ANOTHER_SOURCE,
+  LEAD_CONVERTED_ON_ANOTHER_NUMBER,
+  type LeadConversionPipeline,
+} from "./lead-lifetime-conversion-guard";
+import {
   settleKommoSenderOutcome,
   KOMMO_DELIVERY_UNKNOWN,
   KOMMO_DELIVERY_UNKNOWN_MESSAGE,
@@ -187,12 +194,29 @@ export type RecordExternalConversionInput = {
   eventOccurredAt: Date;
   sourcePayload?: Record<string, unknown> | null;
   deliveryStatus?: "imported" | "not_eligible" | "shadow_observed";
+  /**
+   * Once-per-lead guard for writers outside the provider production job
+   * (CTWA entry LeadSubmitted, live and replay): see
+   * lead-lifetime-conversion-guard.ts. Ignored for other events.
+   */
+  leadLifetimeGuard?: {
+    channelId: string | null;
+    pipeline: LeadConversionPipeline;
+    /**
+     * The `client` passed is already an interactive transaction. When false
+     * the record (lock + check + write) runs in its own transaction, since
+     * the advisory lock only holds inside one.
+     */
+    inTransaction: boolean;
+  };
 };
 
 export type RecordExternalConversionResult = {
   conversionEventLogId: string;
   status: "created" | "duplicate";
   deliveryStatus: string;
+  /** Set when the once-per-lead guard refused a new conversion. */
+  duplicateReasonCode?: string;
 };
 
 type InitialStatus = {
@@ -210,6 +234,8 @@ type InitialStatus = {
     | "EventValueMissing"
     | "UnsupportedConversionEventName"
     | "MetaEventTimeExpired"
+    | typeof LEAD_CONVERTED_ON_ANOTHER_NUMBER
+    | typeof LEAD_CONVERTED_BY_ANOTHER_SOURCE
     | null;
   errorMessage: string | null;
 };
@@ -731,6 +757,8 @@ export class ConversionEventsService {
   async recordExternalConversion(
     input: RecordExternalConversionInput,
     client: ConversionEventPrismaClient = this.prisma,
+    /** Internal: already inside the guard transaction opened below. */
+    insideGuardTransaction = false,
   ): Promise<RecordExternalConversionResult> {
     const existing = (await client.conversionEventLog.findUnique({
       where: { dedupeKey: input.dedupeKey },
@@ -790,6 +818,46 @@ export class ConversionEventsService {
       return this.reconcileExistingExternalConversion(existing, input, client);
     }
 
+    const guardDestinationId =
+      input.ctwaDestination?.destinationId ??
+      input.metaConversionDestinationId ??
+      null;
+    let lifetimeDuplicate: Awaited<
+      ReturnType<typeof guardLeadLifetimeConversion>
+    > = null;
+    if (
+      input.leadLifetimeGuard &&
+      input.leadId &&
+      guardDestinationId &&
+      isLeadLifetimeEvent(input.eventName)
+    ) {
+      // The identity lock only holds inside a transaction: open one when the
+      // caller did not (the whole record then commits under it).
+      if (!insideGuardTransaction && !input.leadLifetimeGuard.inTransaction) {
+        return this.prisma.$transaction((transaction) =>
+          this.recordExternalConversion(input, transaction, true),
+        );
+      }
+      // The lead already converted for this destination (another number or
+      // the other pipeline): the receipt below is STILL written, with the
+      // full attribution of this entry (channel, connection, ad, click,
+      // CTWA destination), because it is this number's proof of origin
+      // (resolveCtwaLeadProof) and its conversation in the reports. It is
+      // recorded not_eligible with the reason and is never sent to Meta.
+      lifetimeDuplicate = await guardLeadLifetimeConversion(
+        client as Prisma.TransactionClient,
+        {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId,
+          eventName: input.eventName,
+          conversionDestinationId: guardDestinationId,
+          channelId: input.leadLifetimeGuard.channelId,
+          pipeline: input.leadLifetimeGuard.pipeline,
+          ownDedupeKey: input.dedupeKey,
+        },
+      );
+    }
+
     // No ctwa_clid, no CTWA path: the page/pixel destination exists only for a
     // lead that carries the click id (the messaging pixel requires it).
     if (
@@ -806,7 +874,17 @@ export class ConversionEventsService {
     )
       throw new ConversionRecordError("ctwa_destination_not_authorized");
 
-    const initialStatus = this.resolveExternalInitialStatus(input);
+    const initialStatus: InitialStatus = lifetimeDuplicate
+      ? {
+          status: "not_eligible",
+          errorCode: lifetimeDuplicate.reasonCode,
+          // Shown as is on the Eventos Meta audit page.
+          errorMessage:
+            lifetimeDuplicate.reasonCode === LEAD_CONVERTED_ON_ANOTHER_NUMBER
+              ? "Lead já convertido por outro número para este pixel: entrada registrada como origem, não enviada à Meta"
+              : "Lead já convertido por outra regra ou pela entrada do anúncio para este pixel: registrado como origem, não enviado à Meta",
+        }
+      : this.resolveExternalInitialStatus(input);
     const purchaseKind = await this.resolvePurchaseKind(
       {
         workspaceId: input.workspaceId,
@@ -890,6 +968,16 @@ export class ConversionEventsService {
         },
       });
 
+      if (lifetimeDuplicate) {
+        // Callers map "duplicate" to a duplicate production/replay item that
+        // points to THIS receipt (its own proof of origin), never queued.
+        return {
+          conversionEventLogId: log.id,
+          status: "duplicate",
+          deliveryStatus: log.status,
+          duplicateReasonCode: lifetimeDuplicate.reasonCode,
+        };
+      }
       return {
         conversionEventLogId: log.id,
         status: "created",

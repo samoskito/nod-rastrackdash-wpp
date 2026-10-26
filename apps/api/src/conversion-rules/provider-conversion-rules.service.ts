@@ -82,8 +82,10 @@ import {
   blockedReprocessCutoff,
   blockedReprocessWhere,
   findReprocessableExecutions,
+  partitionAlreadyConverted,
   ruleAcceptsReprocess,
 } from "./provider-rule-blocked-reprocess";
+import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import {
   listWorkspaceScopeChannels,
   PROVIDER_RULE_GLOBAL_PRECEDENCE,
@@ -330,11 +332,25 @@ export class ProviderConversionRulesService {
         limit: BLOCKED_REPROCESS_SCAN_LIMIT,
       }),
     ]);
-    const readyCount = Math.min(ready.length, inWindow);
+    // Same split as the reprocess run: would-be duplicates are not "ready".
+    const split = await partitionAlreadyConverted(this.prisma, {
+      workspaceId,
+      executions: ready,
+      previewRoute: (route) =>
+        new InboundWebhookMetaRouteReaderService(this.prisma).previewRoute(
+          route,
+        ),
+    });
+    const readyCount = Math.min(split.ready.length, inWindow);
+    const alreadyConverted = Math.min(
+      split.alreadyConverted.length,
+      Math.max(0, inWindow - readyCount),
+    );
     return {
       windowDays: BLOCKED_REPROCESS_WINDOW_DAYS,
       ready: readyCount,
-      stillBlocked: Math.max(0, inWindow - readyCount),
+      stillBlocked: Math.max(0, inWindow - readyCount - alreadyConverted),
+      alreadyConverted,
       expired,
       ruleSendsNow: ruleAcceptsReprocess(rule),
     };

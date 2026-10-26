@@ -158,6 +158,14 @@ export async function materializeCtwaEntry(
         channelId: event.channelId,
         processingMode: mode,
       },
+      // Once per lead and Meta destination across numbers and rules.
+      // CTWA destination entries are Unnichat-only and always run inside the
+      // caller's transaction (production and replay).
+      leadLifetimeGuard: {
+        channelId: event.channelId,
+        pipeline: "ctwa_entry",
+        inTransaction: true,
+      },
     },
     client,
   );

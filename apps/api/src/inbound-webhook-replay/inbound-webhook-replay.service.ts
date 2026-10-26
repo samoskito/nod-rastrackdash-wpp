@@ -1524,6 +1524,14 @@ export class InboundWebhookReplayService {
         hasCtwa: true,
         adId: event.adId,
       },
+      // Once per lead and Meta destination across numbers and rules (same
+      // rule as the live entry, including Meta Cloud). Not in a caller
+      // transaction: recordExternalConversion opens one for the lock.
+      leadLifetimeGuard: {
+        channelId: event.channelId,
+        pipeline: "ctwa_entry",
+        inTransaction: false,
+      },
     });
 
     if (

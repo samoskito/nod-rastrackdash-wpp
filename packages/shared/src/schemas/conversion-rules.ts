@@ -1279,6 +1279,10 @@ export const providerConversionRuleExecutionAuditSchema = z.object({
       ready: z.number().int().nonnegative(),
       stillBlocked: z.number().int().nonnegative(),
       expired: z.number().int().nonnegative(),
+      // Dentro da janela, mas o lead já converteu este evento "uma vez por
+      // lead" para o mesmo destino Meta em outro número ou pela entrada do
+      // anúncio: não é reenviada (fica como está). Opcional (respostas antigas).
+      alreadyConverted: z.number().int().nonnegative().optional(),
       // false: a regra está pausada, em observação ou unificada; nada é
       // reenviado (ready = 0) até o envio automático da regra ser ligado.
       ruleSendsNow: z.boolean().optional(),
@@ -1295,6 +1299,9 @@ export const providerConversionRuleBlockedReprocessResultSchema = z.object({
   stillBlocked: z.number().int().nonnegative(),
   // Mais antigas que a janela da Meta: mostradas como expiradas, nunca reenviadas.
   expired: z.number().int().nonnegative(),
+  // Lead já convertido (evento "uma vez por lead", mesmo destino Meta) por
+  // outro número ou pela entrada do anúncio: não reenviadas.
+  alreadyConverted: z.number().int().nonnegative().optional(),
   // Origem sem reprocessamento por aqui (ex.: não QR) ou erro técnico.
   skipped: z.number().int().nonnegative(),
   failed: z.number().int().nonnegative(),
