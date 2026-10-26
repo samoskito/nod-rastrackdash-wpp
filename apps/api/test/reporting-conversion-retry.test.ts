@@ -91,7 +91,10 @@ describe("reporting conversion retry routes", () => {
     });
     expect(diagnostics.retryBlockedConversionEvents).toHaveBeenCalledWith(
       ["blocked"],
-      { reason: "Reenvio manual de eventos Meta bloqueados por configuração" },
+      {
+        reason:
+          "Reenvio manual de eventos Meta bloqueados por configuração ou falha de login da Meta",
+      },
       expect.objectContaining({
         workspaceId: "workspace_1",
         actorUserId: "user_1",

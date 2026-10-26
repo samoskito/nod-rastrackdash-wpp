@@ -5,6 +5,10 @@ import {
 } from "@wpptrack/shared";
 import type { AuthorizedPagePixelCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
 import {
+  isMetaAuthFailureResponse,
+  metaGraphErrorCodeFromResponse,
+} from "./conversion-event-retry";
+import {
   buildMetaCapiPayload,
   type MetaCapiPayload,
 } from "./meta-capi-payload.builder";
@@ -140,11 +144,32 @@ export class MetaCapiAdapter {
       );
       // A received non-2xx is an explicit rejection even if its body is not JSON.
       if (!response.ok) {
+        // nod (#181): keep only the numeric Graph error.code of the body (no
+        // message or other provider text, which may carry PII), so "Reenviar
+        // bloqueados" can tell a dead Meta login/token (190/102) apart.
+        let errorBody: unknown = null;
+        try {
+          errorBody = await bounded(response.json(), dispatch.signal);
+        } catch {
+          errorBody = null;
+        }
+        const graphErrorCode = metaGraphErrorCodeFromResponse(errorBody);
+        const responseSummary: Record<string, unknown> = {
+          httpStatus: response.status,
+          ...(graphErrorCode !== null
+            ? { error: { code: graphErrorCode } }
+            : {}),
+        };
         return {
           status: "error",
           requestPayload,
-          responseSummary: { httpStatus: response.status },
-          errorMessage: "Meta CAPI request failed",
+          responseSummary,
+          // errorCode stays MetaCapiRejected (screens/reports rely on it); the
+          // message flags a dead Meta login/token (code 190/102), resendable
+          // after reconnecting.
+          errorMessage: isMetaAuthFailureResponse(responseSummary)
+            ? "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend"
+            : "Meta CAPI request failed",
           errorCode: "MetaCapiRejected",
         };
       }

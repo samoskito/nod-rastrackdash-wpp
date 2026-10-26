@@ -39,8 +39,19 @@ import { CONVERSION_EVENTS_QUEUE } from "../common/queue/queue.constants";
 import {
   BLOCKED_CONVERSION_RETRY_LIMIT,
   canRetryConversionEvent,
-  isConfigurationBlockedConversionEvent
+  isConfigurationBlockedConversionEvent,
+  isMetaAuthFailureConversionEvent,
+  isOutsideMetaEventTimeWindow
 } from "../conversion-events/conversion-event-retry";
+
+/** Meta login failure older than Meta's 7-day event_time window: never resent. */
+class MetaEventTimeExpiredRetryError extends BadRequestException {
+  constructor() {
+    super(
+      "Evento com mais de 7 dias: a Meta não aceita mais este event_time"
+    );
+  }
+}
 
 const sensitiveKeyPattern =
   /(authorization|cookie|secret|token|api.?key|refresh|password)/i;
@@ -175,6 +186,8 @@ type ConversionEventLogRecord = {
   errorMessage: string | null;
   jobId: string | null;
   createdAt: Date;
+  eventOccurredAt?: Date | null;
+  providerResponseSummary?: unknown;
 };
 
 export type ConversionEventRetryContext = {
@@ -1367,10 +1380,19 @@ export class DiagnosticsService {
   ): Promise<{
     claimed: number;
     enqueued: number;
+    /** Not resent; includes `expired`. */
     skipped: number;
+    /** Skipped because the event is older than Meta's 7-day window. */
+    expired: number;
     failed: number;
   }> {
-    const result = { claimed: 0, enqueued: 0, skipped: 0, failed: 0 };
+    const result = {
+      claimed: 0,
+      enqueued: 0,
+      skipped: 0,
+      expired: 0,
+      failed: 0
+    };
 
     for (const id of [...new Set(eventIds)].slice(
       0,
@@ -1406,6 +1428,8 @@ export class DiagnosticsService {
             error instanceof ConflictException)
         ) {
           result.skipped += 1;
+          if (error instanceof MetaEventTimeExpiredRetryError)
+            result.expired += 1;
         } else {
           result.failed += 1;
         }
@@ -1437,11 +1461,25 @@ export class DiagnosticsService {
       throw new NotFoundException("Conversão não encontrada");
     }
 
+    const metaAuthFailure = isMetaAuthFailureConversionEvent(conversionEvent);
+
     if (
       progress.configurationBlockedOnly &&
-      !isConfigurationBlockedConversionEvent(conversionEvent)
+      !isConfigurationBlockedConversionEvent(conversionEvent) &&
+      !metaAuthFailure
     ) {
-      throw new BadRequestException("Evento não está bloqueado por configuração");
+      throw new BadRequestException(
+        "Evento não está bloqueado por configuração nem falhou por login da Meta"
+      );
+    }
+
+    // The resend keeps the original event_time; Meta refuses it after 7 days.
+    if (
+      context.allowConfigurationBlocked &&
+      metaAuthFailure &&
+      isOutsideMetaEventTimeWindow(conversionEvent)
+    ) {
+      throw new MetaEventTimeExpiredRetryError();
     }
 
     if (

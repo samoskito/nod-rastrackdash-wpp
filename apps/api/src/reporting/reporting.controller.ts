@@ -429,7 +429,10 @@ export class ReportingController {
 
     return this.diagnosticsService.retryBlockedConversionEvents(
       eventIds,
-      { reason: "Reenvio manual de eventos Meta bloqueados por configuração" },
+      {
+        reason:
+          "Reenvio manual de eventos Meta bloqueados por configuração ou falha de login da Meta",
+      },
       {
         workspaceId: workspace.id,
         actorUserId: authenticated.user.id,

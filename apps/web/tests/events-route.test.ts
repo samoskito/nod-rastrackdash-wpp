@@ -111,6 +111,7 @@ function auditResponse(events: unknown[]) {
       shadowObserved: 0,
       historical: 0,
       discarded: 0,
+      metaAuthRetryable: 0,
     },
     pagination: {
       page: 1,
@@ -375,7 +376,43 @@ describe("events route", () => {
     expect(form).toContain('name="source" value="external_integration"');
     expect(form).not.toContain('name="page"');
     expect(form).not.toContain("disabled");
-    expect(html).toContain("Eventos já enviados não são reenviados.");
+    expect(html).toContain(
+      "Eventos já enviados não são reenviados; os com mais de 7 dias ficam de fora.",
+    );
+  });
+
+  it("enables the bulk retry for Meta login failures alone and explains it in the tooltip (#181)", async () => {
+    const failed = auditEvent({
+      id: "event_auth",
+      deliveryState: "failed",
+      statusLabel: "Falhou",
+      status: "error",
+      sentAt: null,
+      canRetry: true,
+      errorCode: "MetaCapiRejected",
+      errorMessage:
+        "A Meta recusou por falha de login da conexão; reconecte a Meta e reenvie",
+    });
+    const audit = auditResponse([failed]);
+    mockAuditApi({
+      audit: {
+        ...audit,
+        summary: { ...audit.summary, sent: 0, failed: 1, metaAuthRetryable: 1 },
+      },
+      role: "owner",
+    });
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({ since: "2026-07-06", until: "2026-07-12" }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+    const formStart = html.indexOf('class="audit-retry-blocked-form"');
+    const form = html.slice(formStart, html.indexOf("</form>", formStart));
+
+    expect(form).toContain("Reenviar bloqueados e falhas de login da Meta");
+    expect(form).not.toContain("disabled");
+    expect(form).toContain("Use depois de reconectar a Meta.");
+    expect(html).toContain("falha de login da conexão; reconecte a Meta");
   });
 
   it("disables the bulk retry when the period has no blocked events", async () => {
@@ -394,6 +431,28 @@ describe("events route", () => {
     expect(formStart).toBeGreaterThan(-1);
     expect(form).toContain("Reenviar bloqueados");
     expect(form).toContain('disabled=""');
+    expect(form).toContain(
+      "Nenhum evento bloqueado ou com falha de login da Meta neste período",
+    );
+  });
+
+  it("reports events skipped for being older than Meta's 7-day window (#181)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({ claimed: 2, enqueued: 2, skipped: 3, expired: 2, failed: 0 }),
+    );
+    const formData = new FormData();
+    formData.set("since", "2026-07-06");
+    formData.set("until", "2026-07-12");
+
+    const state = await retryBlockedMetaEventsAction(
+      initialBackofficeActionState,
+      formData,
+    );
+
+    expect(state.status).toBe("success");
+    expect(state.message).toBe(
+      "2 eventos enfileirados para nova tentativa. 1 já não estava bloqueado e ficou de fora. 2 eventos ficaram de fora por ter mais de 7 dias: a Meta não aceita mais.",
+    );
   });
 
   it("posts retry-blocked with the submitted filters and reports the returned counts", async () => {

@@ -44,6 +44,8 @@ type RetryBlockedResult = {
   claimed: number;
   enqueued: number;
   skipped: number;
+  /** Part of skipped: older than Meta's 7-day window (absent on older APIs). */
+  expired?: number;
   failed: number;
 };
 
@@ -60,9 +62,18 @@ function retryBlockedMessage(result: RetryBlockedResult): string {
     );
   }
 
-  if (result.skipped > 0) {
+  const expired = Math.min(result.expired ?? 0, result.skipped);
+  const otherSkipped = result.skipped - expired;
+
+  if (otherSkipped > 0) {
     parts.push(
-      `${result.skipped} ${plural(result.skipped, "já não estava bloqueado e ficou", "já não estavam bloqueados e ficaram")} de fora.`
+      `${otherSkipped} ${plural(otherSkipped, "já não estava bloqueado e ficou", "já não estavam bloqueados e ficaram")} de fora.`
+    );
+  }
+
+  if (expired > 0) {
+    parts.push(
+      `${expired} ${plural(expired, "evento ficou", "eventos ficaram")} de fora por ter mais de 7 dias: a Meta não aceita mais.`
     );
   }
 

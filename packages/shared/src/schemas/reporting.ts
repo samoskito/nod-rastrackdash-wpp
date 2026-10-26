@@ -378,6 +378,12 @@ export const conversionAuditSummarySchema = z.object({
   shadowObserved: z.number().int().nonnegative(),
   historical: z.number().int().nonnegative(),
   discarded: z.number().int().nonnegative(),
+  /**
+   * Refused by Meta for a dead login/token (code 190/102), inside the 7-day
+   * window: resendable by "Reenviar bloqueados" after reconnecting. Optional
+   * so an older API keeps validating.
+   */
+  metaAuthRetryable: z.number().int().nonnegative().optional(),
 });
 
 export const conversionAuditOverviewSchema = z.object({

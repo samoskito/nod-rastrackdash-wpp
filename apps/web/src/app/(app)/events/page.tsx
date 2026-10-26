@@ -54,6 +54,7 @@ const emptySummary = {
   shadowObserved: 0,
   historical: 0,
   discarded: 0,
+  metaAuthRetryable: 0,
 };
 
 function asStringParam(
@@ -632,7 +633,9 @@ export default async function EventsPage({
           {canRetryBlocked && result.state !== "error" ? (
             <>
               <RetryBlockedEvents
-                blockedCount={summary.blocked}
+                blockedCount={
+                  summary.blocked + (summary.metaAuthRetryable ?? 0)
+                }
                 filters={{
                   since,
                   until,
@@ -643,7 +646,7 @@ export default async function EventsPage({
               />
               <span className="muted">
                 Até 500 por vez, com os filtros atuais. Eventos já enviados não
-                são reenviados.
+                são reenviados; os com mais de 7 dias ficam de fora.
               </span>
             </>
           ) : null}

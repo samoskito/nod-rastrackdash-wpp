@@ -61,7 +61,9 @@ import { isSupportedConversionEventName } from "../conversion-events/conversion-
 import {
   BLOCKED_CONVERSION_RETRY_LIMIT,
   canRetryConversionEvent,
-  configurationBlockedConversionEventWhere,
+  isMetaAuthFailureConversionEvent,
+  retryableMetaAuthFailureConversionEventWhere,
+  retryBlockedConversionEventWhere,
 } from "../conversion-events/conversion-event-retry";
 import { buildMetaCapiPayload } from "../conversion-events/meta-capi-payload.builder";
 import { FunnelConfigurationService } from "../conversion-rules/funnel-configuration.service";
@@ -361,6 +363,8 @@ type ConversionAuditEventRecord = {
   errorMessage: string | null;
   valueCents: number | null;
   valueSource: "actual" | "configured_average" | "manual" | null;
+  /** ready_to_send stuck > 10 min is retryable (7ac17df7). */
+  createdAt?: Date | null;
 };
 
 type ConversionAuditEventDetailRecord = ConversionAuditEventRecord & {
@@ -2270,7 +2274,8 @@ export class MetaReportingService {
     pageSize: number;
   }): Promise<ConversionAuditOverviewDto> {
     const where = this.conversionAuditWhere(input);
-    const [events, statusGroups, funnelStages] = await Promise.all([
+    const [events, statusGroups, funnelStages, metaAuthRetryable] =
+      await Promise.all([
       this.prisma.conversionEventLog.findMany({
         where,
         orderBy: [{ eventOccurredAt: "desc" }, { id: "desc" }],
@@ -2296,6 +2301,7 @@ export class MetaReportingService {
           errorMessage: true,
           valueCents: true,
           valueSource: true,
+          createdAt: true,
         },
       }) as Promise<ConversionAuditEventRecord[]>,
       this.prisma.conversionEventLog.groupBy({
@@ -2304,6 +2310,11 @@ export class MetaReportingService {
         _count: { _all: true },
       }),
       this.getFunnelStages(input.workspaceId),
+      // "Reenviar bloqueados" also covers Meta login failures (code 190/102)
+      // still inside Meta's 7-day window: they count toward the button.
+      this.prisma.conversionEventLog.count({
+        where: { AND: [where, retryableMetaAuthFailureConversionEventWhere()] },
+      }),
     ]);
     const eventLabels = new Map<string, string>(
       funnelStages.map((stage) => [stage.eventName, stage.label]),
@@ -2329,6 +2340,7 @@ export class MetaReportingService {
       shadowObserved: this.conversionAuditStateCount(statusCounts, "shadow"),
       historical: this.conversionAuditStateCount(statusCounts, "historical"),
       discarded: this.conversionAuditStateCount(statusCounts, "discarded"),
+      metaAuthRetryable,
     };
 
     return {
@@ -2354,7 +2366,7 @@ export class MetaReportingService {
       where: {
         AND: [
           this.conversionAuditWhere(input),
-          configurationBlockedConversionEventWhere,
+          retryBlockedConversionEventWhere,
         ],
       },
       orderBy: [{ eventOccurredAt: "desc" }, { id: "desc" }],
@@ -2403,6 +2415,7 @@ export class MetaReportingService {
         contentName: true,
         errorCode: true,
         errorMessage: true,
+        createdAt: true,
       },
     })) as ConversionAuditEventDetailRecord | null;
 
@@ -2451,7 +2464,7 @@ export class MetaReportingService {
       ...base,
       reasonCode,
       reason: reasonCode
-        ? this.conversionAuditSafeError(reasonCode)
+        ? this.conversionAuditEventError(event, reasonCode)
         : missingFields.length
           ? this.conversionAuditMissingFieldsReason(missingFields)
           : null,
@@ -4929,7 +4942,7 @@ export class MetaReportingService {
           : null,
       errorCode: inferredErrorCode,
       errorMessage: inferredErrorCode
-        ? this.conversionAuditSafeError(inferredErrorCode)
+        ? this.conversionAuditEventError(event, inferredErrorCode)
         : null,
       valueSource: event.valueSource ?? null,
     };
@@ -5445,6 +5458,24 @@ export class MetaReportingService {
     };
 
     return labels[source];
+  }
+
+  /**
+   * errorCode stays MetaCapiRejected (filters and reports rely on it); only
+   * the text tells a Meta login failure (code 190/102) apart.
+   */
+  private conversionAuditEventError(
+    event: {
+      status: string;
+      errorCode: string | null;
+      sourceTrigger?: string | null;
+      providerResponseSummary?: unknown;
+    },
+    errorCode: string,
+  ): string {
+    return isMetaAuthFailureConversionEvent(event)
+      ? "A Meta recusou por falha de login da conexão; reconecte a Meta e reenvie"
+      : this.conversionAuditSafeError(errorCode);
   }
 
   private conversionAuditSafeError(errorCode: string): string {
