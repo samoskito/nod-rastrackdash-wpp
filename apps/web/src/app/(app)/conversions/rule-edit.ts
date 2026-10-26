@@ -109,6 +109,7 @@ export function ruleEditDraft(
     scope: rule.scope ?? "specific_numbers",
     channelIds: [...rule.channelIds],
     connectionId: rule.connectionId,
+    crossConnection: rule.crossConnectionScope === true,
     name: rule.conversionRule.name,
     primaryPhrase: labels ? "" : primaryPhrase,
     variationPhrases: labels ? "" : variations.join("\n"),
@@ -222,11 +223,21 @@ export function buildRuleUpdatePayload(
   const scopeChanged = draft.scope !== currentScope;
   const numbersChanged =
     draft.scope === "specific_numbers" && !sameSet(draft.channelIds, rule.channelIds);
-  if (scopeChanged || numbersChanged) {
+  // Umbler/Unnichat: "Ampliar para todas as conexões" (or back to the
+  // rule's connection only).
+  const automation =
+    draft.origin === "automation_unnichat" || draft.origin === "automation_umbler";
+  const crossChanged =
+    automation &&
+    draft.scope === "all_numbers" &&
+    draft.crossConnection !== (rule.crossConnectionScope === true);
+  if (scopeChanged || numbersChanged || crossChanged) {
     const issue = scopeIssue(draft, context);
     if (issue) return { ok: false, message: issue };
     if (draft.scope === "all_numbers") {
-      payload.scope = "all_numbers";
+      if (scopeChanged) payload.scope = "all_numbers";
+      if (automation && (crossChanged || scopeChanged))
+        payload.crossConnectionScope = draft.crossConnection;
     } else {
       if (scopeChanged) payload.scope = "specific_numbers";
       payload.channelIds = [...draft.channelIds];

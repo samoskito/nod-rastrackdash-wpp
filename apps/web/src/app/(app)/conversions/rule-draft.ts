@@ -9,6 +9,7 @@ import {
   conversionEventRequiresValue,
 } from "@wpptrack/shared";
 import {
+  automationPlatformOf,
   contactMessageProviders,
   originChannelProviders,
   ruleOriginDefinition,
@@ -46,8 +47,18 @@ export type RuleDraft = {
   eventName: ConversionEventNameDto;
   scope: RuleScopeChoice;
   channelIds: string[];
-  /** Automação da Umbler: a conexão que recebe a chamada. */
+  /**
+   * Automação Umbler/Unnichat: a conexão âncora da regra. Nula numa regra
+   * nova (vem dos números escolhidos ou, em "Todos os números", da conexão
+   * viva mais antiga do provedor); fixa ao editar (Fase 6.1a, #159).
+   */
   connectionId: string | null;
+  /**
+   * Umbler/Unnichat "Todos os números": true = "da <plataforma> (todas as
+   * conexões)" (default of a new rule); false = only the rule's connection
+   * (the historical shape of existing rules).
+   */
+  crossConnection: boolean;
   name: string;
   primaryPhrase: string;
   variationPhrases: string;
@@ -95,6 +106,7 @@ export function emptyRuleDraft(
     scope: "all_numbers",
     channelIds: [],
     connectionId: null,
+    crossConnection: definition.connection === "provider_anchor",
     name: "",
     primaryPhrase: "",
     variationPhrases: "",
@@ -118,6 +130,46 @@ export function emptyRuleDraft(
 
 type Result<T> = { ok: true; value: T } | { ok: false; message: string };
 
+/** Umbler/Unnichat: os números específicos de uma regra ficam numa conexão. */
+export function automationSingleConnectionNote(origin: string): string {
+  return `Em “Números específicos”, escolha números de uma mesma conexão. Para vários números de conexões diferentes, use “Todos os números ${automationPlatformOf(origin)}”.`;
+}
+
+/** "Unnichat" / "Umbler" no texto do alcance de uma automação. */
+export function automationPlatformName(origin: string): string {
+  return origin === "automation_umbler" ? "Umbler" : "Unnichat";
+}
+
+/**
+ * Âncora de uma regra NOVA Umbler/Unnichat para todos os números: uma
+ * conexão viva do provedor com número aqui (produção primeiro, depois a
+ * ordem da lista). Ela só guarda as entregas da regra: todos os números do
+ * provedor são cobertos qualquer que seja a âncora.
+ */
+export function automationAnchorConnectionId(
+  origin: ProviderConversionRuleOriginDto,
+  context: Pick<DraftContext, "numbers" | "connections"> &
+    Partial<Pick<DraftContext, "capabilities">>,
+): string | null {
+  const providers = originChannelProviders(origin, context.capabilities ?? null);
+  const withNumbers = new Set(
+    context.numbers
+      .filter((number) => providers.includes(number.provider))
+      .map((number) => number.connectionId),
+  );
+  const candidates = context.connections.filter(
+    (connection) =>
+      providers.includes(connection.provider) &&
+      connection.status !== "paused" &&
+      withNumbers.has(connection.id),
+  );
+  return (
+    candidates.find((connection) => connection.status === "production")?.id ??
+    candidates[0]?.id ??
+    null
+  );
+}
+
 /**
  * Conexão enviada com a regra. A automação da Umbler usa a conexão escolhida;
  * frase, catálogo e etiqueta só levam conexão quando todos os números
@@ -135,8 +187,12 @@ export function resolveRuleConnectionId(
     .map((id) => context.numbers.find((number) => number.id === id))
     .filter((number): number is ConversionNumber => Boolean(number));
 
-  if (definition.connection === "same_provider") {
-    return draft.connectionId;
+  if (definition.connection === "provider_anchor") {
+    // Editing keeps the rule's connection; a new rule takes the chosen
+    // numbers' connection, or an anchor of the provider for all numbers.
+    if (draft.connectionId) return draft.connectionId;
+    if (draft.scope === "specific_numbers") return chosen[0]?.connectionId ?? null;
+    return automationAnchorConnectionId(draft.origin, context);
   }
 
   if (definition.connection === "any") {
@@ -184,10 +240,6 @@ export function scopeIssue(
 ): string | null {
   const definition = ruleOriginDefinition(draft.origin);
 
-  if (definition.connection === "same_provider" && !draft.connectionId) {
-    return "Escolha a conexão que vai chamar o endereço desta regra.";
-  }
-
   if (draft.scope === "all_numbers") {
     return null;
   }
@@ -209,10 +261,12 @@ export function scopeIssue(
       : "Um dos números escolhidos ainda não funciona com esta origem.";
   }
   if (
-    definition.connection === "same_provider" &&
-    chosen.some((number) => number.connectionId !== draft.connectionId)
+    definition.connection === "provider_anchor" &&
+    (new Set(chosen.map((number) => number.connectionId)).size > 1 ||
+      (draft.connectionId !== null &&
+        chosen.some((number) => number.connectionId !== draft.connectionId)))
   ) {
-    return "Escolha só números da conexão selecionada.";
+    return automationSingleConnectionNote(draft.origin);
   }
   if (
     definition.connection === "any" &&
@@ -443,6 +497,9 @@ export function buildRulePayload(
           triggerType: "provider_automation",
           eventName,
           ...values.value,
+          ...(draft.scope === "all_numbers" && draft.crossConnection
+            ? { crossConnectionScope: true }
+            : {}),
           ...(context.singleUrl ? { perRuleUrl: false } : {}),
         },
       };

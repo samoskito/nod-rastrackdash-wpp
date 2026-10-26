@@ -96,6 +96,10 @@ describe("real later Unnichat production services with no ad", () => {
     // number's entry is deduped but its receipt still proves the origin.
     "Purchase_after_entry_deduped",
     "QualifiedLead_already_converted_on_other_number",
+    // 21/10/2026: ONE rule for all Unnichat numbers whose deliveries are
+    // anchored on ANOTHER Unnichat connection (in observation): the number's
+    // own connection gates it and the CTWA origin is checked per channel.
+    "QualifiedLead_unified_rule_other_anchor",
   ] as const)(
     "materializes and dispatches %s from genuine parser plus typed original receipt",
     async (scenario) => {
@@ -280,6 +284,18 @@ describe("real later Unnichat production services with no ad", () => {
         purchaseReview: null,
         normalizedResult: null,
       };
+      if (scenario === "QualifiedLead_unified_rule_other_anchor") {
+        execution.providerRule.scope = "all_numbers";
+        execution.providerRule.crossConnectionScope = true;
+        execution.providerRule.channels = [];
+        execution.providerRule.connectionId = "c_anchor";
+        execution.providerRule.connection = {
+          ...h.channel.connection,
+          id: "c_anchor",
+          status: "observation",
+        };
+        execution.sourceDelivery.connectionId = "c_anchor";
+      }
       h.prisma.providerConversionRuleExecution = {
         findFirst: vi.fn(async ({ where }: any) =>
           typeof where.id === "string" ? execution : null,

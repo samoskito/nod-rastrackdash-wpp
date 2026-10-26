@@ -478,7 +478,8 @@ describe("Conversions screen", () => {
       "Todos",
       "Envio automático",
       "Observação",
-      "Pausadas",
+      // Fase 6.1a (#159): also the rules whose number was removed.
+      "Pausadas ou sem número",
       "Unificadas",
     ]);
   });

@@ -492,6 +492,7 @@ function RuleEditForm({
         onChange={patch}
         disabled={disabled}
         connectionLocked
+        initialCrossConnection={rule.crossConnectionScope === true}
         legend="Números"
       />
 

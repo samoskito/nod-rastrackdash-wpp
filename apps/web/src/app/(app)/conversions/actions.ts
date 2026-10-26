@@ -438,10 +438,13 @@ export async function unifyConversionRulesAction(
   const input = providerConversionRuleUnifyInputSchema.safeParse({
     ruleIds: formData.getAll("ruleId").filter((id) => typeof id === "string"),
     ...(formText(formData, "name") ? { name: formText(formData, "name") } : {}),
+    ...(formText(formData, "acknowledgeDifferences") === "true"
+      ? { acknowledgeDifferences: true }
+      : {}),
   });
 
   if (!input.success) {
-    return { ok: false, message: "Escolha ao menos duas regras iguais." };
+    return { ok: false, message: "Escolha as regras iguais que quer unificar." };
   }
 
   try {
@@ -457,11 +460,16 @@ export async function unifyConversionRulesAction(
 
     revalidateRules();
     const { outcome, rule } = result.data;
+    const automation =
+      rule.origin === "automation_unnichat" ||
+      rule.origin === "automation_umbler";
     return {
       ok: true,
       ruleId: rule.id,
       message:
-        outcome === "created"
+        automation && outcome !== "replayed"
+          ? `Pronto: agora uma regra vale para todos os números ${rule.origin === "automation_umbler" ? "da Umbler" : "do Unnichat"}, de todas as conexões. As URLs antigas continuam funcionando e entregam nesta regra; quando puder, troque-as pela URL do evento.`
+          : outcome === "created"
           ? "Pronto: agora uma regra vale para todos os números. As regras antigas foram pausadas e o histórico delas continua salvo. Dá para voltar atrás: retome as regras pausadas e pause a regra para todos os números."
           : outcome === "reused_existing"
             ? "Já existia uma regra igual para todos os números. As regras por número foram pausadas e ela segue valendo."
@@ -476,6 +484,13 @@ export async function unifyConversionRulesAction(
       },
     };
   } catch (error) {
+    if (apiStatus(error) === 409 && apiCode(error) === "provider_rule_unify_differences") {
+      return {
+        ok: false,
+        message:
+          "As regras têm valores ou modos diferentes. Confira quais vão valer e confirme antes de unificar.",
+      };
+    }
     return failure(error, "Não foi possível unificar as regras.", unifyUnknownMessage);
   }
 }

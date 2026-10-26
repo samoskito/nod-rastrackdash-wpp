@@ -93,6 +93,7 @@ import {
   providerRuleChannelProviders,
   scanWorkspaceScopeChannels,
   providerRuleCoversChannel,
+  providerRuleGateConnectionId,
   providerRuleOrigin,
   providerRuleOriginRequiresConnection,
   providerRuleOriginUnifiable,
@@ -114,6 +115,17 @@ const providerRuleInclude = {
   parserRelease: true,
   channels: {
     orderBy: { createdAt: "asc" },
+    // "Número removido": whether the chosen number still exists (its
+    // connection, and in the nod the WhatsApp connection of a Uazapi/WAHA
+    // bridge, which Integrations "removes" by suspending it).
+    include: {
+      channel: {
+        select: {
+          connection: { select: { removedAt: true } },
+          whatsappInstance: { select: { status: true } },
+        },
+      },
+    },
   },
   endpoint: true,
   catalog: {
@@ -143,6 +155,126 @@ type ScopeInfo = {
   duplicatePhoneChannelIds: string[];
   observationCanonicalChannels: Array<{ canonicalChannelId: string; productionChannelIds: string[] }>;
 };
+
+/** Umbler/Unnichat automations: "Unificar" folds them per provider + event. */
+function isUnifiableAutomationOrigin(
+  origin: ProviderRuleOrigin | null | undefined,
+): boolean {
+  return origin === "automation_unnichat" || origin === "automation_umbler";
+}
+
+/**
+ * "Numero removido": the rule can no longer receive anything because the
+ * number it belongs to was removed. Endpoint automations: their connection
+ * (anchor of the URL) was removed. Specific rules: every chosen number's
+ * connection was removed. Read-only: the rule itself is never changed here.
+ */
+export function providerRuleNumberRemoved(rule: {
+  scope?: string | null;
+  connectionId: string | null;
+  connection?: { provider: string; removedAt: Date | null } | null;
+  conversionRule: { triggerType: string; eventName: string };
+  parserRelease?: { provider: string } | null;
+  channels: ReadonlyArray<{
+    channel?: {
+      connection?: { removedAt: Date | null } | null;
+      whatsappInstance?: { status: string } | null;
+    } | null;
+  }>;
+}): boolean {
+  const origin = providerRuleOrigin({
+    conversionRule: rule.conversionRule,
+    parserRelease: rule.parserRelease ?? null,
+    connection: rule.connection ?? null,
+  });
+  if (
+    origin &&
+    providerRuleOriginRequiresConnection(origin) &&
+    rule.connectionId &&
+    rule.connection?.removedAt
+  )
+    return true;
+  if (providerRuleScope(rule) !== "specific_numbers") return false;
+  return (
+    rule.channels.length > 0 &&
+    rule.channels.every(
+      (scope) =>
+        Boolean(scope.channel?.connection?.removedAt) ||
+        // nod: a Uazapi/WAHA number deleted in Integrations (suspended).
+        scope.channel?.whatsappInstance?.status === "suspended",
+    )
+  );
+}
+
+/** The rule's own connection (anchor of its deliveries and URL) is live. */
+function unifyTargetAnchorLive(rule: PersistedProviderRule): boolean {
+  return Boolean(rule.connectionId && rule.connection && !rule.connection.removedAt);
+}
+
+/** An existing automation rule "todas as conexoes" that can be the target. */
+function unifyAutomationTargetEligible(rule: PersistedProviderRule): boolean {
+  return (
+    providerRuleScope(rule) === "all_numbers" &&
+    rule.crossConnectionScope === true &&
+    unifyTargetAnchorLive(rule) &&
+    Boolean(rule.endpoint)
+  );
+}
+
+/**
+ * Automation "Unificar" without a target yet: the requested rule that will
+ * become "todas as conexoes" (keeps its URL, history, value and mode). A
+ * live connection and URL first; an "all numbers" rule before a specific
+ * one; then the oldest.
+ */
+function automationPromotionTarget(
+  rules: readonly PersistedProviderRule[],
+): PersistedProviderRule | null {
+  return (
+    [...rules]
+      .filter((rule) => unifyTargetAnchorLive(rule) && rule.endpoint)
+      .sort((left, right) => {
+        const leftCross = left.crossConnectionScope === true ? 0 : 1;
+        const rightCross = right.crossConnectionScope === true ? 0 : 1;
+        if (leftCross !== rightCross) return leftCross - rightCross;
+        const leftGlobal = providerRuleScope(left) === "all_numbers" ? 0 : 1;
+        const rightGlobal = providerRuleScope(right) === "all_numbers" ? 0 : 1;
+        if (leftGlobal !== rightGlobal) return leftGlobal - rightGlobal;
+        return left.createdAt.getTime() - right.createdAt.getTime();
+      })[0] ?? null
+  );
+}
+
+/** What differs between automation rules being unified. */
+function unifyDifferences(
+  rules: readonly PersistedProviderRule[],
+): Array<"mode" | "value" | "currency" | "contentName"> {
+  const distinct = (values: unknown[]) => new Set(values.map((v) => v ?? null)).size > 1;
+  const result: Array<"mode" | "value" | "currency" | "contentName"> = [];
+  if (distinct(rules.map((rule) => rule.mode))) result.push("mode");
+  if (distinct(rules.map((rule) => rule.conversionRule.defaultValueCents)))
+    result.push("value");
+  if (distinct(rules.map((rule) => rule.conversionRule.defaultCurrency)))
+    result.push("currency");
+  if (distinct(rules.map((rule) => rule.conversionRule.defaultContentName)))
+    result.push("contentName");
+  return result;
+}
+
+function unifyMemberDto(rule: PersistedProviderRule) {
+  return {
+    ruleId: rule.id,
+    name: rule.conversionRule.name,
+    connectionId: rule.connectionId,
+    scope: providerRuleScope(rule),
+    crossConnectionScope: rule.crossConnectionScope === true,
+    mode: rule.mode,
+    defaultValueCents: rule.conversionRule.defaultValueCents ?? null,
+    defaultCurrency: rule.conversionRule.defaultCurrency ?? null,
+    defaultContentName: rule.conversionRule.defaultContentName ?? null,
+    numberRemoved: providerRuleNumberRemoved(rule),
+  };
+}
 
 type GlobalNumberActivation = {
   channelId: string;
@@ -554,6 +686,19 @@ export class ProviderConversionRulesService {
           const scope: ProviderConversionRuleScopeDto =
             input.scope ?? "specific_numbers";
           const origin = this.createOrigin(input, connection, isPaytAutomation);
+          // "Todos os numeros da <plataforma> (todas as conexoes)": explicit,
+          // only for Umbler/Unnichat automations for all numbers.
+          const crossConnectionScope =
+            input.triggerType === "provider_automation" &&
+            input.crossConnectionScope === true;
+          if (
+            crossConnectionScope &&
+            (!isUnifiableAutomationOrigin(origin) || scope !== "all_numbers")
+          ) {
+            throw new BadRequestException(
+              "Todas as conexões só existe para automações Unnichat/Umbler em todos os números",
+            );
+          }
           if (!connection && providerRuleOriginRequiresConnection(origin)) {
             throw new BadRequestException(
               "Informe a conexao que recebe o webhook desta automacao",
@@ -715,6 +860,7 @@ export class ProviderConversionRulesService {
                 connectionId: bound ? connection!.id : null,
                 parserReleaseId: bound ? parserRelease!.id : null,
                 scope,
+                ...(crossConnectionScope ? { crossConnectionScope: true } : {}),
                 mode: input.mode,
                 messageTriggerPhrases:
                   input.triggerType === "provider_automation"
@@ -1196,6 +1342,21 @@ export class ProviderConversionRulesService {
               nextChannelIds,
             ))));
       const nextConnectionId = unbind ? null : current.connectionId;
+      // "Ampliar para todas as conexoes" (Umbler/Unnichat): explicit; going
+      // back to specific numbers (or asking false) returns to the rule's
+      // connection only.
+      const currentCross = current.crossConnectionScope === true;
+      const nextCross =
+        nextScope === "all_numbers" &&
+        (input.crossConnectionScope ?? currentCross);
+      if (input.crossConnectionScope === true) {
+        if (!isUnifiableAutomationOrigin(origin) || nextScope !== "all_numbers") {
+          throw new BadRequestException(
+            "Todas as conexões só existe para automações Unnichat/Umbler em todos os números",
+          );
+        }
+      }
+      const crossChanged = nextCross !== currentCross;
 
       if (nextChannelIds && nextChannelIds.length > 0) {
         if (nextConnectionId !== null) {
@@ -1367,11 +1528,12 @@ export class ProviderConversionRulesService {
       // again (it then overrides the global rule on its numbers).
       const reactivatesUnified =
         input.active === true && current.unifiedIntoProviderRuleId !== null;
-      if (scopeChanged || unbind || reactivatesUnified) {
+      if (scopeChanged || unbind || reactivatesUnified || crossChanged) {
         await transaction.providerConversionRuleConfig.update({
           where: { id: current.id },
           data: {
             scope: nextScope,
+            ...(crossChanged ? { crossConnectionScope: nextCross } : {}),
             ...(unbind ? { connectionId: null, parserReleaseId: null } : {}),
             ...(reactivatesUnified ? { unifiedIntoProviderRuleId: null } : {}),
           },
@@ -1619,9 +1781,15 @@ export class ProviderConversionRulesService {
 
   /**
    * "Unificar": groups of active specific rules that are identical in origin,
-   * event, trigger (phrases/labels/catalog), value and mode. The Umbler
-   * automation is never a candidate: unifying it would retire the webhook URL
-   * configured in Umbler.
+   * event, trigger (phrases/labels/catalog), value and mode. Sales platforms
+   * (Payt) are never candidates. Umbler/Unnichat automations are
+   * (21/10/2026): their per-connection rules of the same event fold into ONE
+   * rule for all numbers of the provider, and the OLD per-rule URLs keep
+   * working (forwarded to the unified rule), so nothing has to be
+   * reconfigured in the platform right away. For them a group may also hold
+   * extra "all numbers" rules (one per connection, from before the scope
+   * spanned connections) and rules whose number was removed; one existing
+   * rule for all numbers with a live connection is the target.
    */
   async listUnifyCandidates(
     workspaceId: string,
@@ -1637,16 +1805,29 @@ export class ProviderConversionRulesService {
     for (const rule of rules) {
       const signature = this.unifySignature(rule);
       if (!signature || !rule.conversionRule.active) continue;
+      const automation = isUnifiableAutomationOrigin(signature.origin);
       if (providerRuleScope(rule) === "all_numbers") {
-        if (!globalsByKey.has(signature.key))
+        // Automations: only a rule already "todas as conexoes" with a live
+        // connection is a target; per-connection "all numbers" rules (the
+        // historical shape) are members.
+        if (
+          !globalsByKey.has(signature.key) &&
+          (!automation || unifyAutomationTargetEligible(rule))
+        ) {
           globalsByKey.set(signature.key, rule);
-        continue;
+          continue;
+        }
+        if (!automation) continue;
       }
       if (rule.unifiedIntoProviderRuleId) continue;
       groups.set(signature.key, [...(groups.get(signature.key) ?? []), rule]);
     }
     const candidates = [...groups.entries()].filter(
-      ([, members]) => members.length >= 2,
+      ([key, members]) =>
+        members.length >= 2 ||
+        (members.length === 1 &&
+          isUnifiableAutomationOrigin(providerRuleOrigin(members[0]!)) &&
+          globalsByKey.has(key)),
     );
     if (candidates.length === 0) return { groups: [] };
 
@@ -1655,7 +1836,24 @@ export class ProviderConversionRulesService {
       groups: candidates.map(([key, members]) => {
         const first = members[0]!;
         const coverage = this.unifyCoverage(members, rules, channels);
+        const existingGlobal = globalsByKey.get(key) ?? null;
+        const automation = isUnifiableAutomationOrigin(providerRuleOrigin(first));
+        const target = automation
+          ? (existingGlobal ?? automationPromotionTarget(members))
+          : existingGlobal;
         return {
+          ...(automation
+            ? {
+                members: [...members, ...(existingGlobal ? [existingGlobal] : [])].map(
+                  (rule) => unifyMemberDto(rule),
+                ),
+                targetRuleId: target?.id ?? null,
+                differences: unifyDifferences([
+                  ...members,
+                  ...(existingGlobal ? [existingGlobal] : []),
+                ]),
+              }
+            : {}),
           key,
           origin: providerRuleOrigin(first)!,
           eventName: conversionEventNameSchema.parse(
@@ -1693,7 +1891,7 @@ export class ProviderConversionRulesService {
   ): Promise<ProviderConversionRuleUnifyResultDto> {
     this.requireRulesEnabled();
     const ruleIds = [...new Set(input.ruleIds)].sort();
-    if (ruleIds.length < 2) {
+    if (ruleIds.length < 1) {
       throw new BadRequestException("Selecione ao menos duas regras");
     }
 
@@ -1707,42 +1905,54 @@ export class ProviderConversionRulesService {
         throw new NotFoundException(ruleNotFoundMessage);
       }
 
-      const unifiedInto = new Set(
-        rules.map((rule) => rule.unifiedIntoProviderRuleId ?? null),
-      );
-      if (!unifiedInto.has(null)) {
-        if (unifiedInto.size !== 1) {
-          throw new ConflictException(
-            "Estas regras foram unificadas em regras diferentes",
-          );
-        }
-        const target = await this.requireRule(
-          transaction,
-          workspaceId,
-          [...unifiedInto][0]!,
+      const linked = rules.filter((rule) => rule.unifiedIntoProviderRuleId);
+      if (linked.length > 0) {
+        const targets = new Set(
+          linked.map((rule) => rule.unifiedIntoProviderRuleId!),
         );
-        return {
-          outcome: "replayed" as const,
-          target,
-          deactivatedRuleIds: ruleIds,
-          newlyCoveredChannelIds: [] as string[],
-        };
-      }
-      if (unifiedInto.size > 1) {
+        const unlinked = rules.filter(
+          (rule) => !rule.unifiedIntoProviderRuleId,
+        );
+        // Replay: every rule points to the same target (an automation
+        // "Unificar" may have promoted one of the requested rules itself).
+        if (
+          targets.size === 1 &&
+          unlinked.every((rule) => targets.has(rule.id))
+        ) {
+          const target = await this.requireRule(
+            transaction,
+            workspaceId,
+            [...targets][0]!,
+          );
+          return {
+            outcome: "replayed" as const,
+            target,
+            deactivatedRuleIds: linked.map((rule) => rule.id).sort(),
+            newlyCoveredChannelIds: [] as string[],
+          };
+        }
         throw new ConflictException(
-          "Algumas destas regras ja foram unificadas; atualize a lista",
+          unlinked.length === 0
+            ? "Estas regras foram unificadas em regras diferentes"
+            : "Algumas destas regras ja foram unificadas; atualize a lista",
         );
       }
 
       const signatures = rules.map((rule) => this.unifySignature(rule));
       const key = signatures[0]?.key;
+      const automation = isUnifiableAutomationOrigin(
+        signatures[0]?.origin ?? null,
+      );
+      // Requested rules that are already the target ("todas as conexoes")
+      // never pause themselves.
       if (
         !key ||
         signatures.some((signature) => signature?.key !== key) ||
         rules.some(
           (rule) =>
             !rule.conversionRule.active ||
-            providerRuleScope(rule) !== "specific_numbers",
+            // Automations may fold extra per-connection "all numbers" rules.
+            (!automation && providerRuleScope(rule) !== "specific_numbers"),
         )
       ) {
         throw new ConflictException(
@@ -1754,9 +1964,6 @@ export class ProviderConversionRulesService {
         (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
       )[0]!;
       const origin = providerRuleOrigin(first)!;
-      if (first.mode === "production") {
-        this.assertModeAllowed("production", null);
-      }
 
       const peers = await transaction.providerConversionRuleConfig.findMany({
         where: {
@@ -1770,11 +1977,47 @@ export class ProviderConversionRulesService {
         },
         include: providerRuleInclude,
       });
-      const existing = peers.find(
-        (peer) =>
-          providerRuleScope(peer) === "all_numbers" &&
-          this.unifySignature(peer)?.key === key,
-      );
+      const requested = new Set(ruleIds);
+      const existing = peers
+        .filter((peer) => !requested.has(peer.id))
+        .sort(
+          (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+        )
+        .find(
+          (peer) =>
+            providerRuleScope(peer) === "all_numbers" &&
+            this.unifySignature(peer)?.key === key &&
+            (!automation || unifyAutomationTargetEligible(peer)),
+        );
+      if (ruleIds.length < 2 && !(automation && existing)) {
+        throw new BadRequestException("Selecione ao menos duas regras");
+      }
+      // Automations of one event may differ in value or mode: the target's
+      // prevail, so the operator must have seen and confirmed it.
+      if (automation) {
+        const differences = unifyDifferences([
+          ...rules,
+          ...(existing ? [existing] : []),
+        ]);
+        if (differences.length > 0 && input.acknowledgeDifferences !== true) {
+          throw new ConflictException({
+            statusCode: 409,
+            error: "Conflict",
+            code: "provider_rule_unify_differences",
+            differences,
+            message:
+              "As regras têm valores ou modos diferentes; confirme quais valores vão valer",
+          });
+        }
+      }
+      const targetMode = existing
+        ? existing.mode
+        : automation
+          ? (automationPromotionTarget(rules)?.mode ?? first.mode)
+          : first.mode;
+      if (targetMode === "production") {
+        this.assertModeAllowed("production", null);
+      }
       // Unificar cria uma regra global: com mais canais do que o limite de
       // avaliação a cobertura não é confiável, então recusa em vez de criar.
       const scan = await scanWorkspaceScopeChannels(transaction, workspaceId);
@@ -1785,8 +2028,22 @@ export class ProviderConversionRulesService {
       }
       const coverage = this.unifyCoverage(rules, peers, scan.channels);
 
+      // Automations keep their connection binding (anchor + signed URL), so
+      // without an existing rule for all numbers one of the requested rules
+      // becomes it (its URL, history and connection stay); never a new
+      // unbound rule without URL.
+      const promoted =
+        !existing && automation
+          ? await this.promoteUnifiedAutomation(transaction, {
+              workspaceId,
+              rules,
+              name: input.name ?? null,
+              actorUserId,
+            })
+          : null;
       const targetId =
         existing?.id ??
+        promoted?.id ??
         (await this.createUnifiedRule(transaction, {
           workspaceId,
           template: first,
@@ -1794,16 +2051,18 @@ export class ProviderConversionRulesService {
           name: input.name ?? first.conversionRule.name,
           actorUserId,
         }));
+      const pausedRules = rules.filter((rule) => rule.id !== targetId);
+      const pausedRuleIds = pausedRules.map((rule) => rule.id).sort();
 
       await transaction.conversionRule.updateMany({
         where: {
           workspaceId,
-          id: { in: rules.map((rule) => rule.conversionRuleId) },
+          id: { in: pausedRules.map((rule) => rule.conversionRuleId) },
         },
         data: { active: false },
       });
       await transaction.providerConversionRuleConfig.updateMany({
-        where: { workspaceId, id: { in: ruleIds } },
+        where: { workspaceId, id: { in: pausedRuleIds } },
         data: {
           mode: "observation",
           productionActivatedAt: null,
@@ -1816,19 +2075,34 @@ export class ProviderConversionRulesService {
         actorUserId,
         action: "provider_conversion_rule.unified",
         targetId,
-        resultStatus: existing ? "reused_existing" : "created",
+        resultStatus: existing
+          ? "reused_existing"
+          : promoted
+            ? "promoted_member"
+            : "created",
         afterSummary: {
           origin,
           eventName: first.conversionRule.eventName,
-          mode: first.mode,
-          sourceRuleIds: ruleIds,
+          mode: targetMode,
+          ...(automation
+            ? {
+                acknowledgedDifferences: unifyDifferences([
+                  ...rules,
+                  ...(existing ? [existing] : []),
+                ]),
+              }
+            : {}),
+          sourceRuleIds: pausedRuleIds,
+          ...(promoted
+            ? { previousChannelIds: promoted.previousChannelIds }
+            : {}),
           sourceChannelIds: coverage.channelIds,
           newlyCoveredChannelIds: coverage.newlyCoveredChannelIds,
           overriddenChannelIds: coverage.overriddenChannelIds,
           duplicatePhoneChannelIds: coverage.duplicatePhoneChannelIds,
         },
       });
-      for (const rule of rules) {
+      for (const rule of pausedRules) {
         await this.createAudit(transaction, {
           workspaceId,
           actorUserId,
@@ -1847,7 +2121,7 @@ export class ProviderConversionRulesService {
       return {
         outcome: existing ? ("reused_existing" as const) : ("created" as const),
         target: await this.requireRule(transaction, workspaceId, targetId),
-        deactivatedRuleIds: ruleIds,
+        deactivatedRuleIds: pausedRuleIds,
         newlyCoveredChannelIds: coverage.newlyCoveredChannelIds,
       };
     });
@@ -1870,6 +2144,47 @@ export class ProviderConversionRulesService {
       deactivatedRuleIds: result.deactivatedRuleIds,
       newlyCoveredChannelIds: result.newlyCoveredChannelIds,
     };
+  }
+
+  /**
+   * Automation "Unificar" without a rule for all numbers yet: the oldest
+   * requested rule whose connection is still live (an "all numbers" one
+   * first) becomes the rule for all numbers of the provider. Its chosen
+   * numbers are recorded in the audit before the scope rows go, exactly like
+   * switching a rule to "Todos os numeros" in Gerenciar.
+   */
+  private async promoteUnifiedAutomation(
+    transaction: Prisma.TransactionClient,
+    input: {
+      workspaceId: string;
+      rules: PersistedProviderRule[];
+      name: string | null;
+      actorUserId: string;
+    },
+  ): Promise<{ id: string; previousChannelIds: string[] }> {
+    const target = automationPromotionTarget(input.rules);
+    if (!target) {
+      throw new ConflictException(
+        "Nenhuma destas regras tem uma conexao ativa; conecte o numero novo e crie a regra para todos os numeros",
+      );
+    }
+    const previousChannelIds = target.channels.map(
+      (channel) => channel.channelId,
+    );
+    await transaction.providerConversionRuleConfig.update({
+      where: { id: target.id },
+      data: { scope: "all_numbers", crossConnectionScope: true },
+    });
+    await transaction.providerConversionRuleChannel.deleteMany({
+      where: { workspaceId: input.workspaceId, providerRuleId: target.id },
+    });
+    if (input.name && input.name !== target.conversionRule.name) {
+      await transaction.conversionRule.updateMany({
+        where: { workspaceId: input.workspaceId, id: target.conversionRuleId },
+        data: { name: input.name },
+      });
+    }
+    return { id: target.id, previousChannelIds };
   }
 
   private async createUnifiedRule(
@@ -1964,8 +2279,25 @@ export class ProviderConversionRulesService {
     rule: PersistedProviderRule,
   ): { key: string; origin: ProviderRuleOrigin } | null {
     const origin = providerRuleOrigin(rule);
-    if (!origin || !providerRuleOriginUnifiable(origin) || rule.removedAt) {
+    if (
+      !origin ||
+      (!providerRuleOriginUnifiable(origin) &&
+        !isUnifiableAutomationOrigin(origin)) ||
+      rule.removedAt
+    ) {
       return null;
+    }
+    if (isUnifiableAutomationOrigin(origin)) {
+      // Umbler/Unnichat: one rule per provider and event. Value and mode may
+      // differ; the review shows them and which ones prevail.
+      const key = createHash("sha256")
+        .update(
+          JSON.stringify({ origin, eventName: rule.conversionRule.eventName }),
+          "utf8",
+        )
+        .digest("hex")
+        .slice(0, 32);
+      return { key, origin };
     }
     const normalize = (value: string) =>
       value.normalize("NFKC").trim().toLocaleLowerCase("pt-BR");
@@ -2057,6 +2389,8 @@ export class ProviderConversionRulesService {
       {
         ...first,
         scope: "all_numbers",
+        // Automations: the unified rule spans every connection.
+        crossConnectionScope: true,
         connectionId: null,
         parserRelease: null,
         connection: null,
@@ -2449,8 +2783,14 @@ export class ProviderConversionRulesService {
       select: pendingChannelSelect(),
     })) as PendingChannelRow[];
     const byId = new Map(rows.map((row) => [row.id, row]));
+    // Bound rules: their own connection. Unbound rules and Umbler/Unnichat
+    // rules for all numbers: the connection of each covered number.
     const gateOf = (rule: PersistedProviderRule, channel: PendingChannelRow) =>
-      rule.connectionId && rule.connection
+      rule.connectionId &&
+      rule.connection &&
+      providerRuleGateConnectionId(rule, {
+        connectionId: channel.connection.id,
+      }) === rule.connectionId
         ? {
             id: rule.connection.id,
             provider: rule.connection.provider as string,
@@ -2634,7 +2974,7 @@ export class ProviderConversionRulesService {
         const gate = await requireInboundWebhookConnection(
           transaction,
           workspaceId,
-          input.rule.connectionId ?? channel.connectionId,
+          providerRuleGateConnectionId(input.rule, channel),
         );
         if (gate.status === "production" && channel.status === "active") {
           return { channelId, outcome: "already_live" as const, reason: null };
@@ -2813,13 +3153,14 @@ export class ProviderConversionRulesService {
       },
     });
     const channelById = new Map(channelRows.map((row) => [row.id, row]));
-    const gateOf = (target: {
-      rule: PersistedProviderRule;
-      channelId: string;
-    }) =>
-      target.rule.connectionId ??
-      channelById.get(target.channelId)?.connectionId ??
-      null;
+    const gateOf = (target: { rule: PersistedProviderRule; channelId: string }) => {
+      const channelConnectionId = channelById.get(target.channelId)?.connectionId;
+      return channelConnectionId
+        ? providerRuleGateConnectionId(target.rule, {
+            connectionId: channelConnectionId,
+          })
+        : (target.rule.connectionId ?? null);
+    };
     const gateIds = [
       ...new Set(
         [...targets.values()]
@@ -2869,9 +3210,10 @@ export class ProviderConversionRulesService {
     }) => {
       const channel = channelById.get(target.channelId);
       const gateId = gateOf(target);
-      const gateActivatedAt = target.rule.connectionId
-        ? (target.rule.connection?.productionActivatedAt ?? null)
-        : (channel?.connection.productionActivatedAt ?? null);
+      const gateActivatedAt =
+        target.rule.connectionId && gateId === target.rule.connectionId
+          ? (target.rule.connection?.productionActivatedAt ?? null)
+          : (channel?.connection.productionActivatedAt ?? null);
       return (
         channel !== undefined &&
         gateId !== null &&
@@ -3913,6 +4255,8 @@ export class ProviderConversionRulesService {
       observationCanonicalChannels: effective.observationCanonicalChannels,
       globalPrecedence: PROVIDER_RULE_GLOBAL_PRECEDENCE,
       unifiedIntoRuleId: rule.unifiedIntoProviderRuleId ?? null,
+      numberRemoved: providerRuleNumberRemoved(rule),
+      crossConnectionScope: rule.crossConnectionScope === true,
       ...(scope === "all_numbers"
         ? { pendingNumbers: pendingNumbers ?? [] }
         : {}),
@@ -4079,6 +4423,7 @@ export class ProviderConversionRulesService {
       triggerType: rule.conversionRule.triggerType,
       connectionId: rule.connectionId,
       scope: providerRuleScope(rule),
+      crossConnectionScope: rule.crossConnectionScope === true,
       channelCount: rule.channels.length,
       mode: rule.mode,
       active: rule.conversionRule.active,

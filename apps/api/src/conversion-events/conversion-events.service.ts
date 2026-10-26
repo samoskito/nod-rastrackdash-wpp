@@ -52,7 +52,11 @@ import { lockUnnichatMetaPolicy } from "../inbound-webhooks/inbound-webhook-effe
 import { ConversionRecordError } from "./conversion-record.error";
 import { CTWA_SEND_SKIPPED_ERROR_CODE } from "./conversion-event-retry";
 import { providerAutomationManualReplayApproved } from "../conversion-rules/provider-manual-replay-approval";
-import { providerRuleCoversChannel } from "../conversion-rules/provider-rule-scope";
+import {
+  providerRuleCoversChannel,
+  providerRuleScope,
+  providerRuleSpansProviderConnections,
+} from "../conversion-rules/provider-rule-scope";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { Prisma } from "@prisma/client";
@@ -2468,7 +2472,19 @@ export class ConversionEventsService {
       },
       include: {
         sourceDelivery: true,
-        channel: { include: { connection: { select: { provider: true } } } },
+        channel: {
+          include: {
+            connection: {
+              select: {
+                provider: true,
+                // Gate of Umbler/Unnichat rules for all numbers.
+                status: true,
+                removedAt: true,
+                parserRelease: { select: { status: true } },
+              },
+            },
+          },
+        },
         providerRule: {
           include: {
             conversionRule: true,
@@ -2480,8 +2496,15 @@ export class ConversionEventsService {
       },
     });
     if (!e || !e.channel) return "provider_conversion_execution_not_materialized";
-    // CTWA (no-ad) dispatch exists only for endpoint automations, which always
-    // keep their connection binding.
+    // 21/10/2026: an Umbler/Unnichat rule for ALL numbers stores its
+    // callbacks on its own (anchor) connection while the number may be on
+    // another connection of the provider: the origin is the number's channel
+    // and its own connection is the production gate.
+    const spansConnections =
+      providerRuleScope(e.providerRule) === "all_numbers" &&
+      providerRuleSpansProviderConnections(e.providerRule);
+    // CTWA (no-ad) dispatch exists only for endpoint automations (Payt,
+    // Unnichat, Umbler), which always keep their connection binding.
     if (!e.providerRule.connection || !e.providerRule.parserRelease)
       return "provider_conversion_origin_mismatch";
     // A sale callback (Payt, Fase 4a) sits on its rule's endpoint (any
@@ -2511,6 +2534,12 @@ export class ConversionEventsService {
         }))
       )
         return "provider_purchase_claim_missing";
+    } else if (spansConnections) {
+      if (
+        e.channel.connectionId !== intent.connectionId ||
+        e.sourceDelivery.connectionId !== e.providerRule.connectionId
+      )
+        return "provider_conversion_origin_mismatch";
     } else if (
       e.providerRule.connectionId !== intent.connectionId ||
       e.sourceDelivery.connectionId !== intent.connectionId
@@ -2524,11 +2553,15 @@ export class ConversionEventsService {
       !e.providerRule.productionActivatedAt
     )
       return "provider_rule_not_in_production";
+    const gate = spansConnections
+      ? e.channel.connection
+      : e.providerRule.connection;
     if (
       e.providerRule.parserRelease.status !== "certified" ||
-      e.providerRule.connection.removedAt ||
-      e.providerRule.connection.status !== "production" ||
-      e.providerRule.connection.parserRelease.status !== "certified"
+      !gate ||
+      gate.removedAt ||
+      gate.status !== "production" ||
+      gate.parserRelease?.status !== "certified"
     )
       return "provider_connection_not_certified";
     if (

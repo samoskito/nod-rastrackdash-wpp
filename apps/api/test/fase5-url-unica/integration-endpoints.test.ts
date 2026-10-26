@@ -21,6 +21,7 @@ import {
   W,
   world,
   type Channel,
+  type Lead,
   type Rule,
 } from "./url-unica-world";
 
@@ -739,6 +740,154 @@ describe("Unnichat: one URL per event for every number (Jean: 1020 and 5520)", (
       integrationEndpointCreateInputSchema.safeParse({ provider: "braip" })
         .success,
     ).toBe(false);
+  });
+});
+
+// Fase 6.1a: porte do SaaS (42ccbc7c, #159).
+describe("Unnichat: ONE rule and ONE URL per event for every number of every connection (21/10/2026)", () => {
+  // Unnichat creates one connection per number: 5159, 5520 and a 3rd number
+  // connected after the rule was created.
+  const channels: Channel[] = [
+    { id: "ch_5159", connectionId: "conn_5159", provider: "unnichat", phone: "555195405159" },
+    { id: "ch_5520", connectionId: "conn_5520", provider: "unnichat", phone: "555195365520" },
+    { id: "ch_third", connectionId: "conn_third", provider: "unnichat", phone: "555199990003" },
+  ];
+  const leads: Lead[] = [
+    { id: "lead_5159", phone: "5551987650001", entryChannelId: "ch_5159", ctwaClid: "click-5159" },
+    { id: "lead_5520", phone: "5551987650002", entryChannelId: "ch_5520", ctwaClid: "click-5520" },
+    { id: "lead_third", phone: "5551987650003", entryChannelId: "ch_third", ctwaClid: "click-third" },
+  ];
+  const unified: Rule = { id: "qualified_all", provider: "unnichat", eventName: "QualifiedLead", scope: "all_numbers", connectionId: "conn_5159", channelIds: [], crossConnectionScope: true };
+
+  it("routes every number (both connections and the new 3rd one) to the single rule through the single URL", async () => {
+    const w = world({ channels, rules: [unified], leads });
+    const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
+    for (const lead of leads) {
+      await expect(
+        w.post(endpoint.id, token, unnichatMovement({ phone: lead.phone, ctwaClid: lead.ctwaClid })),
+      ).resolves.toMatchObject({ routing: "routed" });
+    }
+    expect(w.observed.map((call) => call.providerRuleId)).toEqual([
+      "qualified_all",
+      "qualified_all",
+      "qualified_all",
+    ]);
+    // Deliveries are stored on the rule's anchor connection, and each call
+    // carries the number the router proved (the ctwa_clid entry).
+    expect(w.observed.every((call) => call.connectionId === "conn_5159")).toBe(true);
+    expect(w.observed.map((call) => call.origin)).toEqual([
+      { connectionId: "conn_5159", channelId: "ch_5159" },
+      { connectionId: "conn_5520", channelId: "ch_5520" },
+      { connectionId: "conn_third", channelId: "ch_third" },
+    ]);
+  });
+
+  it("blocks (never picks silently) when a per-connection rule and a rule for all connections both own the number", async () => {
+    const legacy: Rule = { id: "qualified_5520_all", provider: "unnichat", eventName: "QualifiedLead", scope: "all_numbers", connectionId: "conn_5520", channelIds: [] };
+    const w = world({ channels, rules: [legacy, unified], leads });
+    const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
+    await expect(
+      w.post(endpoint.id, token, unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" })),
+    ).resolves.toMatchObject({ routing: "unattributed", reasonCode: "multiple_rules_for_event" });
+    // The legacy rule only covers its own connection: 5159 is unambiguous.
+    await expect(
+      w.post(endpoint.id, token, unnichatMovement({ phone: "5551987650001", ctwaClid: "click-5159" })),
+    ).resolves.toMatchObject({ routing: "routed" });
+    expect(w.observed.map((call) => call.providerRuleId)).toEqual(["qualified_all"]);
+  });
+
+  it("keeps legacy duplicates exactly as before: two specific or two per-connection rules → the oldest wins", async () => {
+    const olderSpecific: Rule = { id: "old_5520", provider: "unnichat", eventName: "QualifiedLead", scope: "specific_numbers", connectionId: "conn_5520", channelIds: ["ch_5520"], createdAt: new Date(at.getTime() - 200_000) };
+    const newerSpecific: Rule = { id: "new_5520", provider: "unnichat", eventName: "QualifiedLead", scope: "specific_numbers", connectionId: "conn_5520", channelIds: ["ch_5520"], createdAt: new Date(at.getTime() - 100_000) };
+    const specifics = world({ channels, rules: [newerSpecific, olderSpecific], leads });
+    const first = await specifics.connect("unnichat", "QualifiedLead");
+    await expect(
+      specifics.post(first.endpoint.id, first.token, unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" })),
+    ).resolves.toMatchObject({ routing: "routed" });
+    expect(specifics.observed.map((call) => call.providerRuleId)).toEqual(["old_5520"]);
+
+    const olderAll: Rule = { ...olderSpecific, id: "old_all", scope: "all_numbers", channelIds: [] };
+    const newerAll: Rule = { ...newerSpecific, id: "new_all", scope: "all_numbers", channelIds: [] };
+    const globals = world({ channels, rules: [newerAll, olderAll], leads });
+    const second = await globals.connect("unnichat", "QualifiedLead");
+    await expect(
+      globals.post(second.endpoint.id, second.token, unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" })),
+    ).resolves.toMatchObject({ routing: "routed" });
+    expect(globals.observed.map((call) => call.providerRuleId)).toEqual(["old_all"]);
+  });
+
+  it("passes the called URL's connection as the callback origin (own URL of the rule)", async () => {
+    const w = world({ channels, rules: [unified], leads });
+    await w.postOldUrl("qualified_all", unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" }));
+    expect(w.observed[0]!.origin).toEqual({ connectionId: "conn_5159", channelId: null });
+  });
+
+  it("keeps precedence: a specific rule of a number beats the rule for all numbers", async () => {
+    const specific: Rule = { id: "qualified_5520", provider: "unnichat", eventName: "QualifiedLead", scope: "specific_numbers", connectionId: "conn_5520", channelIds: ["ch_5520"] };
+    const w = world({ channels, rules: [unified, specific], leads });
+    const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
+    for (const lead of leads)
+      await w.post(endpoint.id, token, unnichatMovement({ phone: lead.phone, ctwaClid: lead.ctwaClid }));
+    expect(w.observed.map((call) => call.providerRuleId)).toEqual([
+      "qualified_all",
+      "qualified_5520",
+      "qualified_all",
+    ]);
+  });
+
+  it("keeps the OLD per-connection URL of a rule merged by Unificar working: it reaches the unified rule, once", async () => {
+    const merged: Rule = {
+      id: "qualified_5520_old",
+      provider: "unnichat",
+      eventName: "QualifiedLead",
+      scope: "specific_numbers",
+      connectionId: "conn_5520",
+      channelIds: ["ch_5520"],
+      active: false,
+      unifiedIntoProviderRuleId: "qualified_all",
+    };
+    const w = world({ channels, rules: [unified, merged], leads });
+    const body = unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" });
+    await expect(w.postOldUrl("qualified_5520_old", body)).resolves.toMatchObject({
+      status: "accepted",
+      duplicate: false,
+    });
+    expect(w.observed.map((call) => call.providerRuleId)).toEqual(["qualified_all"]);
+    // The number is the one whose automation called: the OLD URL's connection.
+    expect(w.observed[0]!.origin).toEqual({ connectionId: "conn_5520", channelId: null });
+    // The old URL keeps showing it still receives; the unified rule's own does not move.
+    expect(w.endpoints.get("endpoint_qualified_5520_old").lastDeliveryAt).not.toBeNull();
+    expect(w.endpoints.get("endpoint_qualified_all").lastDeliveryAt).toBeNull();
+    // The same callback through the per-event URL collapses into the same delivery.
+    const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
+    await w.post(endpoint.id, token, body);
+    expect(w.deliveries.size).toBe(1);
+    const [delivery] = [...w.deliveries.values()];
+    expect(delivery.providerRuleEndpointId).toBe("endpoint_qualified_all");
+    expect(delivery.attemptCount).toBe(2);
+    // The paused rule itself is never routed nor evaluated.
+    expect(w.observed.some((call) => call.providerRuleId === "qualified_5520_old")).toBe(false);
+  });
+
+  it("still answers 404 on the old URL of a paused rule that was NOT unified", async () => {
+    const paused: Rule = { ...unified, id: "paused_rule", scope: "specific_numbers", channelIds: ["ch_5159"], active: false };
+    const w = world({ channels, rules: [unified, paused], leads });
+    await expect(
+      w.postOldUrl("paused_rule", unnichatMovement({ phone: "5551987650001", ctwaClid: "click-5159" })),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("never routes to a rule whose number (connection) was removed; the rule for all numbers takes over", async () => {
+    const orphan: Rule = { id: "qualified_removed", provider: "unnichat", eventName: "QualifiedLead", scope: "specific_numbers", connectionId: "conn_removed", channelIds: ["ch_removed"] };
+    const w = world({
+      channels: [...channels, { id: "ch_removed", connectionId: "conn_removed", provider: "unnichat", phone: "555190000000" }],
+      rules: [orphan, unified],
+      leads,
+      removedConnectionIds: ["conn_removed"],
+    });
+    const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
+    await w.post(endpoint.id, token, unnichatMovement({ phone: "5551987650003", ctwaClid: "click-third" }));
+    expect(w.observed.map((call) => call.providerRuleId)).toEqual(["qualified_all"]);
   });
 });
 

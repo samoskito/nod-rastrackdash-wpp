@@ -13,8 +13,10 @@ import {
   providerRuleCandidateWhere,
   providerRuleCapabilities,
   providerRuleCoversChannel,
+  providerRuleGateConnectionId,
   providerRuleOrigin,
   PROVIDER_RULE_SCOPE_CHANNEL_LIMIT,
+  providerRuleSpansProviderConnections,
   resolveApplicableProviderRules,
   resolveProviderRuleScopeChannelIds,
   selectApplicableProviderRules,
@@ -316,6 +318,86 @@ describe("provider rule workspace scope: precedence", () => {
     ).toBeNull();
   });
 
+  it("keeps Umbler/Unnichat 'all numbers' on their connection unless explicitly 'todas as conexões'; Payt on any number", () => {
+    const legacy = scopedRule({
+      id: "umbler_legacy",
+      scope: "all_numbers",
+      connectionId: "connection_umbler",
+      conversionRule: {
+        triggerType: "provider_automation",
+        eventName: "Purchase",
+        active: true,
+      },
+      parserRelease: { provider: "umbler" },
+    });
+    const otherUmbler = {
+      ...umblerChannel,
+      id: "channel_other_umbler",
+      connectionId: "connection_other",
+    };
+    // Existing rules are never widened silently.
+    expect(providerRuleCoversChannel(legacy, umblerChannel)).toBe(true);
+    expect(providerRuleCoversChannel(legacy, otherUmbler)).toBe(false);
+    expect(providerRuleSpansProviderConnections(legacy)).toBe(false);
+    expect(
+      providerRuleGateConnectionId(legacy, { connectionId: "connection_other" }),
+    ).toBe("connection_umbler");
+
+    const umblerAutomation = scopedRule({
+      id: "umbler_automation",
+      scope: "all_numbers",
+      crossConnectionScope: true,
+      connectionId: "connection_umbler",
+      conversionRule: {
+        triggerType: "provider_automation",
+        eventName: "Purchase",
+        active: true,
+      },
+      parserRelease: { provider: "umbler" },
+    });
+    const payt = scopedRule({
+      id: "payt",
+      scope: "all_numbers",
+      connectionId: "connection_umbler",
+      conversionRule: {
+        triggerType: "provider_automation",
+        eventName: "Purchase",
+        active: true,
+      },
+      parserRelease: { provider: "payt" },
+    });
+
+    expect(providerRuleCoversChannel(umblerAutomation, umblerChannel)).toBe(
+      true,
+    );
+    // 21/10/2026: "all numbers" of an automation spans the provider's
+    // connections (Unnichat creates one connection per number).
+    expect(
+      providerRuleCoversChannel(umblerAutomation, {
+        ...umblerChannel,
+        id: "channel_other_umbler",
+        connectionId: "connection_other",
+      }),
+    ).toBe(true);
+    // Never a number of another provider.
+    expect(providerRuleCoversChannel(umblerAutomation, qrChannel)).toBe(false);
+    expect(providerRuleSpansProviderConnections(umblerAutomation)).toBe(true);
+    expect(providerRuleSpansProviderConnections(payt)).toBe(false);
+    // Gate: the number's connection for the spanning rule, the rule's own
+    // connection for the others.
+    expect(
+      providerRuleGateConnectionId(umblerAutomation, {
+        connectionId: "connection_other",
+      }),
+    ).toBe("connection_other");
+    expect(
+      providerRuleGateConnectionId(payt, { connectionId: "connection_other" }),
+    ).toBe("connection_umbler");
+    expect(providerRuleCoversChannel(payt, qrChannel)).toBe(true);
+    expect(providerRuleCoversChannel(payt, gupshupChannel)).toBe(true);
+  });
+
+
   it("keeps the Umbler automation on its own connection", () => {
     const umblerAutomation = scopedRule({
       id: "umbler_automation",
@@ -333,6 +415,8 @@ describe("provider rule workspace scope: precedence", () => {
     expect(providerRuleCoversChannel(umblerAutomation, umblerChannel)).toBe(
       true,
     );
+    // Historical "all numbers" automation (no crossConnectionScope): its
+    // own connection only, never widened silently (Fase 6.1a, #159).
     expect(
       providerRuleCoversChannel(umblerAutomation, {
         ...umblerChannel,

@@ -18,9 +18,10 @@ import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-
  * num canal (numero de WhatsApp) quando:
  *  - scope "specific_numbers" (toda regra criada antes desta fase): o canal e
  *    uma das linhas ProviderConversionRuleChannel da regra; ou
- *  - scope "all_numbers": o provedor do canal suporta a origem da regra (e,
- *    para a automacao Umbler, o canal e da conexao da regra). Avaliado na
- *    hora, entao numeros conectados depois entram automaticamente.
+ *  - scope "all_numbers": o provedor do canal suporta a origem da regra (para
+ *    a automacao Umbler/Unnichat, o canal e da conexao da regra, salvo a regra
+ *    "todas as conexoes" da Fase 6.1a, que cobre todo numero do provedor).
+ *    Avaliado na hora, entao numeros conectados depois entram automaticamente.
  *
  * Precedencia: num canal, uma regra especifica ativa com a mesma origem e o
  * mesmo evento SUBSTITUI toda regra "all_numbers" dessa origem/evento; a
@@ -59,6 +60,11 @@ export type ProviderRuleOrigin = ProviderConversionRuleOriginDto;
 export type ScopedProviderRule = {
   id: string;
   scope?: string | null;
+  /**
+   * Umbler/Unnichat "Todos os numeros da <plataforma> (todas as conexoes)":
+   * explicit opt-in (null/false = numbers of the rule's connection only).
+   */
+  crossConnectionScope?: boolean | null;
   connectionId: string | null;
   removedAt?: Date | null;
   messageAuthorScope?: string | null;
@@ -204,15 +210,65 @@ export function providerRuleChannelProviders(
   return providerRuleOriginChannelProviders(origin);
 }
 
-/**
- * Umbler/Unnichat automations resolve the contact on the connection that
- * received the callback, so even "all numbers" means all numbers of that
- * connection. Payt callbacks carry no channel and may own any WhatsApp number.
- */
-export function providerRuleOriginIsConnectionBound(
-  origin: ProviderRuleOrigin,
+/** Umbler/Unnichat automations (signed URL per rule + URL per event). */
+export function providerRuleIsConnectionAutomation(
+  rule: Pick<
+    ScopedProviderRule,
+    "conversionRule" | "parserRelease" | "connection"
+  >,
 ): boolean {
+  const origin = providerRuleOrigin(rule);
   return origin === "automation_umbler" || origin === "automation_unnichat";
+}
+
+/**
+ * Umbler/Unnichat rule "Todos os numeros da <plataforma> (todas as
+ * conexoes)" (21/10/2026). Unnichat creates ONE connection per WhatsApp
+ * number, so the historical "all numbers" of an automation (numbers of the
+ * rule's connection) never reached a 2nd/3rd number. This explicit scope
+ * (crossConnectionScope, set only by the new option, "Ampliar para todas as
+ * conexoes" or the automation "Unificar") covers every live number of the
+ * provider on any connection, current and future. The rule's connection is
+ * then only the ANCHOR that stores its deliveries and owns its per-rule URL;
+ * each occurrence is gated by the connection of its own number
+ * (providerRuleGateConnectionId). Existing "all numbers" rules keep the
+ * per-connection scope until the operator widens them.
+ */
+export function providerRuleSpansProviderConnections(
+  rule: Pick<
+    ScopedProviderRule,
+    "conversionRule" | "parserRelease" | "connection" | "scope" | "crossConnectionScope"
+  >,
+): boolean {
+  return (
+    providerRuleScope(rule) === "all_numbers" &&
+    rule.crossConnectionScope === true &&
+    providerRuleIsConnectionAutomation(rule)
+  );
+}
+
+/**
+ * Connection whose production state gates an occurrence of `rule` on a
+ * channel: the channel's own connection for unbound rules and for
+ * automations spanning connections; the rule's connection otherwise (the
+ * historical bound shape, unchanged). For a specific Umbler/Unnichat rule on
+ * its own connection both are the same connection.
+ */
+export function providerRuleGateConnectionId(
+  rule: Pick<
+    ScopedProviderRule,
+    | "connectionId"
+    | "conversionRule"
+    | "parserRelease"
+    | "connection"
+    | "scope"
+    | "crossConnectionScope"
+  >,
+  channel: { connectionId: string },
+): string {
+  if (!rule.connectionId || providerRuleSpansProviderConnections(rule))
+    return channel.connectionId;
+  return rule.connectionId;
 }
 
 /** Origins whose rule must keep a connection binding (signed endpoint). */
@@ -353,8 +409,11 @@ export function providerRuleCoversChannel(
   if (!origin) return false;
   if (!providerRuleChannelProviders(rule).includes(channel.provider))
     return false;
+  // Umbler/Unnichat: the rule's connection only, unless the rule was made
+  // explicitly "todas as conexoes" (providerRuleSpansProviderConnections).
   return (
-    !providerRuleOriginIsConnectionBound(origin) ||
+    !providerRuleIsConnectionAutomation(rule) ||
+    providerRuleSpansProviderConnections(rule) ||
     rule.connectionId === channel.connectionId
   );
 }
@@ -686,6 +745,7 @@ type RuleLookupClient = Pick<
 const peerRuleSelect = {
   id: true,
   scope: true,
+  crossConnectionScope: true,
   connectionId: true,
   removedAt: true,
   messageAuthorScope: true,

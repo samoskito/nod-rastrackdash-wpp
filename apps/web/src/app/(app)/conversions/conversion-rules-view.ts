@@ -11,6 +11,7 @@ import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import type { PipedriveConnectionDetailDto } from "../integrations/pipedrive-actions";
 import { ruleEventLabel, ruleEventLabelForOrigin } from "./event-copy";
 import {
+  automationPlatformOf,
   crmManageHref,
   contactMessageProviders,
   hubProviderForInbound,
@@ -73,14 +74,34 @@ export function toConversionNumbers(
   );
 }
 
-export type RuleStatus = "observation" | "production" | "paused" | "unified";
+export type RuleStatus =
+  | "observation"
+  | "production"
+  | "paused"
+  | "unified"
+  | "number_removed";
 
 export const ruleStatusLabels: Record<RuleStatus, string> = {
   observation: "Observação",
   production: "Envio automático",
   paused: "Pausada",
   unified: "Unificada",
+  number_removed: "Número removido",
 };
+
+/** Warning of a rule whose number was removed (it no longer receives anything). */
+export const numberRemovedWarning = {
+  title: "Número removido",
+  body: "Esta regra não recebe mais eventos. Pause, exclua ou unifique.",
+} as const;
+
+/** The same warning in one line. */
+export const numberRemovedNote = "Número removido: esta regra não recebe mais eventos. Pause, exclua ou unifique.";
+
+/** Two rules of the same automation event own the same numbers. */
+export function duplicateEventRuleNote(names: string): string {
+  return `Duas regras para o mesmo evento em ${names} — unifique as regras para ficar só uma.`;
+}
 
 export type RuleScopeKind = "all_numbers" | "specific_numbers";
 
@@ -118,6 +139,8 @@ export type ConversionRuleRow = {
   notes: string[];
   /** Avisos que pedem atenção (ex.: regra ativa que não vale em nenhum número). */
   warnings: string[];
+  /** Highlighted warning (callout), e.g. "Número removido". */
+  warning?: { title: string; body: string } | null;
   lastExecution: RuleRowExecution | null;
   /** CRM rules: where they are managed today. */
   manageHref: string | null;
@@ -233,12 +256,33 @@ export function providerRuleOrigin(
   }
 }
 
-export function providerRuleStatus(rule: ProviderConversionRuleDto): RuleStatus {
+export function providerRuleStatus(
+  rule: ProviderConversionRuleDto,
+  numbersById?: ReadonlyMap<string, ConversionNumber>,
+): RuleStatus {
   if (!rule.conversionRule.active) {
     return rule.unifiedIntoRuleId ? "unified" : "paused";
   }
+  if (providerRuleNumberRemoved(rule, numbersById)) return "number_removed";
 
   return rule.mode === "production" ? "production" : "observation";
+}
+
+/**
+ * The rule's number was removed: the API says so (numberRemoved); older
+ * APIs: a specific rule none of whose numbers is connected any more.
+ */
+export function providerRuleNumberRemoved(
+  rule: ProviderConversionRuleDto,
+  numbersById?: ReadonlyMap<string, ConversionNumber>,
+): boolean {
+  if (rule.numberRemoved !== undefined) return rule.numberRemoved;
+  return (
+    numbersById !== undefined &&
+    (rule.scope ?? "specific_numbers") === "specific_numbers" &&
+    rule.channelIds.length > 0 &&
+    rule.channelIds.every((id) => !numbersById.has(id))
+  );
 }
 
 /** "Recepção, Comercial e mais 2" (unknown ids read "número removido"). */
@@ -340,14 +384,26 @@ function triggerDetailForProviderRule(
         ? `Catálogo “${rule.catalog.name}”`
         : firstWithMore("Frase ");
     case "automation_umbler":
-      return rule.endpoint ? "Endereço da automação criado" : null;
+    case "automation_unnichat": {
+      const own =
+        origin === "automation_umbler"
+          ? "Endereço da automação criado"
+          : "URL da regra criada";
+      // Fase 6.1a (#159): a rule for every connection is called through the
+      // event URL (or, while it still has one, its own address, which also
+      // serves every number of the provider).
+      if ((rule.scope ?? "specific_numbers") === "all_numbers" && rule.crossConnectionScope)
+        return rule.endpoint && !rule.endpoint.publicUrlDisabledAt
+          ? `${own} (todas as conexões)`
+          : "URL do evento (todas as conexões)";
+      return rule.endpoint ? own : null;
+    }
     case "automation_payt":
       return rule.endpoint ? "URL de postback criada" : null;
-    case "automation_unnichat":
-      return rule.endpoint ? "URL da regra criada" : null;
   }
 }
 
+/** Every number of the origin (optionally of one connection only). */
 function originNumberIds(
   definition: RuleOriginDefinition,
   numbers: readonly ConversionNumber[],
@@ -360,8 +416,7 @@ function originNumberIds(
     .filter(
       (number) =>
         providers.includes(number.provider) &&
-        (definition.connection !== "same_provider" ||
-          number.connectionId === connectionId),
+        (connectionId === null || number.connectionId === connectionId),
     )
     .map((number) => number.id);
 }
@@ -408,7 +463,7 @@ export function buildProviderRuleRows(
     const origin = origins.get(rule.id)!;
     const definition = ruleOriginDefinition(origin);
     const scope = rule.scope ?? "specific_numbers";
-    const status = providerRuleStatus(rule);
+    const status = providerRuleStatus(rule, numbersById);
     const eventName = rule.conversionRule.eventName;
     const connection = rule.connectionId
       ? connectionsById.get(rule.connectionId)
@@ -423,14 +478,49 @@ export function buildProviderRuleRows(
         ...(rule.overriddenChannelIds ?? []),
         ...(rule.duplicatePhoneChannelIds ?? []),
       ];
+      // Umbler/Unnichat: "todas as conexões" only when the rule says so;
+      // otherwise the historical "all numbers of the rule's connection".
+      const automationOnConnection =
+        definition.connection === "provider_anchor" && !rule.crossConnectionScope;
       numberIds =
         covered.length > 0 || rule.conversionRule.active
           ? [...new Set(covered)]
-          : originNumberIds(definition, numbers, rule.connectionId, capabilities);
+          : originNumberIds(
+              definition,
+              numbers,
+              automationOnConnection ? rule.connectionId : null,
+              capabilities,
+            );
       scopeLabel =
-        definition.connection === "same_provider" && connection
-          ? `Todos os números de ${connection.displayName}`
-          : "Todos os números";
+        definition.connection !== "provider_anchor" || !definition.logoProvider
+          ? "Todos os números"
+          : automationOnConnection
+            ? `Todos os números de ${connection?.displayName ?? "conexão removida"}`
+            : `Todos os números ${automationPlatformOf(origin)} (todas as conexões)`;
+      if (automationOnConnection && rule.conversionRule.active && connection) {
+        notes.push(
+          `Vale só para os números de ${connection.displayName}. Para valer em todas as conexões, use Gerenciar > “Ampliar para todas as conexões”.`,
+        );
+      }
+      if (definition.connection === "provider_anchor" && rule.conversionRule.active) {
+        const mine = new Set(rule.effectiveChannelIds ?? []);
+        const shared = rules
+          .filter(
+            (other) =>
+              other.id !== rule.id &&
+              (other.scope ?? "specific_numbers") === "all_numbers" &&
+              other.conversionRule.active &&
+              other.conversionRule.eventName === eventName &&
+              origins.get(other.id) === origin,
+          )
+          .flatMap((other) => other.effectiveChannelIds ?? [])
+          .filter((channelId) => mine.has(channelId));
+        if (shared.length > 0) {
+          notes.push(
+            duplicateEventRuleNote(numberNames([...new Set(shared)], numbersById)),
+          );
+        }
+      }
 
       if (rule.overriddenChannelIds?.length) {
         notes.push(
@@ -444,6 +534,27 @@ export function buildProviderRuleRows(
       }
     } else {
       numberIds = [...rule.channelIds];
+      // Two specific Umbler/Unnichat rules of the same event on one number
+      // (legacy duplicates: the oldest keeps receiving the event URL).
+      if (definition.connection === "provider_anchor" && rule.conversionRule.active) {
+        const mine = new Set(rule.channelIds);
+        const shared = rules
+          .filter(
+            (other) =>
+              other.id !== rule.id &&
+              (other.scope ?? "specific_numbers") === "specific_numbers" &&
+              other.conversionRule.active &&
+              other.conversionRule.eventName === eventName &&
+              origins.get(other.id) === origin,
+          )
+          .flatMap((other) => other.channelIds)
+          .filter((channelId) => mine.has(channelId));
+        if (shared.length > 0) {
+          notes.push(
+            duplicateEventRuleNote(numberNames([...new Set(shared)], numbersById)),
+          );
+        }
+      }
       scopeLabel =
         rule.channelIds.length > 0
           ? numberNames(rule.channelIds, numbersById)
@@ -469,6 +580,7 @@ export function buildProviderRuleRows(
       }
     }
 
+
     if (status === "unified" && rule.unifiedIntoRuleId) {
       const target = rulesById.get(rule.unifiedIntoRuleId);
       notes.push(
@@ -485,7 +597,7 @@ export function buildProviderRuleRows(
         }
       : platformForNumbers(
           scope === "all_numbers"
-            ? originNumberIds(definition, numbers, rule.connectionId, capabilities)
+            ? originNumberIds(definition, numbers, null, capabilities)
             : rule.channelIds,
           numbersById,
         );
@@ -498,8 +610,12 @@ export function buildProviderRuleRows(
       name: rule.conversionRule.name,
       origin,
       originLabel: definition.label,
+      // Specific Umbler/Unnichat rules show their connection; a rule for
+      // all numbers spans every connection of the provider.
       platformLabel:
-        definition.connection === "same_provider" && connection
+        definition.connection === "provider_anchor" &&
+        (scope === "specific_numbers" || !rule.crossConnectionScope) &&
+        connection
           ? connection.displayName
           : platform.label,
       logo: platform.logo,
@@ -520,6 +636,7 @@ export function buildProviderRuleRows(
         observationCanonicalChannels: rule.observationCanonicalChannels,
         numbersById,
       }),
+      warning: status === "number_removed" ? numberRemovedWarning : null,
       lastExecution: execution
         ? {
             label: executionLabels[execution.status].label,
@@ -711,17 +828,25 @@ export function buildCrmRuleRows(
 const statusOrder: Record<RuleStatus, number> = {
   production: 0,
   observation: 1,
-  paused: 2,
-  unified: 3,
+  number_removed: 2,
+  paused: 3,
+  unified: 4,
 };
 
-/** Live rules first, then paused/unified; inside each, by origin then name. */
+/**
+ * Live rules first, then paused/unified/number removed; inside each, by
+ * origin then name.
+ */
 export function sortRuleRows(rows: readonly ConversionRuleRow[]): ConversionRuleRow[] {
   const originOrder = new Map(
     ruleOriginDefinitions.map((definition, index) => [definition.id, index]),
   );
   const live = (row: ConversionRuleRow) =>
-    row.status === "paused" || row.status === "unified" ? 1 : 0;
+    row.status === "paused" ||
+    row.status === "unified" ||
+    row.status === "number_removed"
+      ? 1
+      : 0;
 
   return [...rows].sort(
     (left, right) =>
@@ -768,7 +893,12 @@ export function filterRuleRows(
       (filters.numberId === "all" ||
         row.appliesToAllNumbers ||
         row.numberIds.includes(filters.numberId)) &&
-      (filters.status === "all" || row.status === filters.status),
+      (filters.status === "all" ||
+        // nod: "Unificadas" keeps its own filter; "Pausadas ou sem número"
+        // also lists the rules whose number was removed (Fase 6.1a, #159).
+        (filters.status === "paused"
+          ? row.status === "paused" || row.status === "number_removed"
+          : row.status === filters.status)),
   );
 }
 
@@ -809,7 +939,7 @@ export function offeredRuleOrigins(input: OriginOfferInput): RuleOriginId[] {
         return false;
       }
       const providers = originChannelProviders(definition.id, input.capabilities);
-      if (definition.connection === "same_provider") {
+      if (definition.connection === "provider_anchor") {
         return input.connections.some(
           (connection) =>
             providers.includes(connection.provider) &&
@@ -822,9 +952,10 @@ export function offeredRuleOrigins(input: OriginOfferInput): RuleOriginId[] {
 }
 
 /**
- * Números onde a origem roda (opcionalmente dentro de uma conexão).
- * `authorScope` "contact" restringe aos provedores que leem mensagens do
- * contato (hoje só a Umbler).
+ * Números onde a origem roda: Umbler/Unnichat em todas as conexões do
+ * provedor (opcionalmente só uma conexão, ex.: editar uma regra ligada a
+ * ela). `authorScope` "contact" restringe aos provedores que leem mensagens
+ * do contato (hoje só a Umbler).
  */
 export function numbersForOrigin(
   origin: RuleOriginId,
@@ -842,20 +973,20 @@ export function numbersForOrigin(
   return numbers.filter(
     (number) =>
       providers.includes(number.provider) &&
-      (definition.connection !== "same_provider" ||
+      (definition.connection !== "provider_anchor" ||
         connectionId === null ||
         number.connectionId === connectionId),
   );
 }
 
-/** Conexões que hospedam uma automação por endereço desta origem. */
+/** Conexões de uma automação Umbler/Unnichat (por endereço). */
 export function connectionsForOrigin(
   origin: RuleOriginId,
   connections: readonly ConversionConnection[],
   capabilities: ProviderConversionRuleCapabilitiesDto | null = null,
 ): ConversionConnection[] {
   const definition = ruleOriginDefinition(origin);
-  if (definition.connection !== "same_provider") return [];
+  if (definition.connection !== "provider_anchor") return [];
   const providers = originChannelProviders(origin, capabilities);
 
   return connections.filter((connection) =>

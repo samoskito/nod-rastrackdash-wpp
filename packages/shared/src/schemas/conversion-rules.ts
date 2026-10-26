@@ -503,6 +503,10 @@ const providerAutomationCreateSchema = z
     // Fase 5.3: false = a regra recebe só pela URL única da integração (a URL
     // própria da regra nasce desativada). Ausente = comportamento histórico.
     perRuleUrl: z.boolean().optional(),
+    // Unnichat/Umbler: true = "Todos os numeros da <plataforma> (todas as
+    // conexoes)" (so com scope all_numbers). Ausente/false = numeros da
+    // conexao da regra (comportamento historico).
+    crossConnectionScope: z.boolean().optional(),
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
@@ -686,6 +690,8 @@ export const providerConversionRuleUpdateInputSchema = z
     // confirmPublicUrlDisable: true, porque a plataforma pode ainda postar ali.
     publicUrlDisabled: z.boolean().optional(),
     confirmPublicUrlDisable: z.literal(true).optional(),
+    // Unnichat/Umbler: true = "Ampliar para todas as conexoes" (all_numbers).
+    crossConnectionScope: z.boolean().optional(),
   })
   .refine((input) => Object.keys(input).length > 0, {
     message: "Informe ao menos um campo para atualizar",
@@ -933,8 +939,16 @@ export const providerConversionRuleSchema = z.object({
     .optional(),
   // Regra global que substituiu esta via "Unificar" (historico preservado).
   unifiedIntoRuleId: idSchema.nullable().optional(),
-  // Somente "all_numbers" ativa: números cobertos cuja conexão não está em
-  // produção ou cujo canal não está ativo, com o motivo. Opcional para
+  // O numero da regra foi removido (automacao: a conexao da URL foi
+  // removida; especifica: todos os numeros escolhidos foram removidos). A
+  // regra nao recebe mais nada; a tela mostra "Numero removido" com as
+  // acoes. Opcional para aceitar respostas anteriores ao campo.
+  numberRemoved: z.boolean().optional(),
+  // Unnichat/Umbler "Todos os numeros da <plataforma> (todas as conexoes)".
+  // Ausente/false em all_numbers = numeros da conexao da regra.
+  crossConnectionScope: z.boolean().optional(),
+  // Somente "all_numbers" ativa: numeros cobertos cuja conexao nao esta em
+  // producao ou cujo canal nao esta ativo, com o motivo. Opcional para
   // aceitar respostas anteriores ao campo (ausente = nenhum pendente).
   pendingNumbers: z.array(providerConversionRulePendingNumberSchema).optional(),
   triggerPhrases: z.array(messageTriggerPhraseSchema),
@@ -1020,7 +1034,9 @@ export const providerConversionRuleUnifyCandidateSchema = z.object({
   mode: providerConversionRuleModeSchema,
   name: z.string().min(1),
   triggerPhrases: z.array(z.string()),
-  ruleIds: z.array(idSchema).min(2),
+  // Automacoes Umbler/Unnichat: 1 regra basta quando ja existe a regra para
+  // todos os numeros (existingGlobalRuleId); as demais origens pedem 2+.
+  ruleIds: z.array(idSchema).min(1),
   // Numeros hoje cobertos pelas regras do grupo.
   channelIds: z.array(idSchema),
   // Numeros compativeis que passariam a ser cobertos pela regra global.
@@ -1032,6 +1048,27 @@ export const providerConversionRuleUnifyCandidateSchema = z.object({
   observationCanonicalChannels: observationCanonicalChannelsSchema.optional(),
   // Regra global identica ja existente, que sera reaproveitada.
   existingGlobalRuleId: idSchema.nullable(),
+  // Automacoes Unnichat/Umbler (mesmo evento): cada regra com valor e modo,
+  // a regra cujos valores e modo vao valer e o que difere entre elas
+  // (com diferencas, "Unificar" exige acknowledgeDifferences).
+  members: z
+    .array(
+      z.object({
+        ruleId: idSchema,
+        name: z.string(),
+        connectionId: idSchema.nullable(),
+        scope: providerConversionRuleScopeSchema,
+        crossConnectionScope: z.boolean(),
+        mode: providerConversionRuleModeSchema,
+        defaultValueCents: z.number().int().nullable(),
+        defaultCurrency: z.string().nullable(),
+        defaultContentName: z.string().nullable(),
+        numberRemoved: z.boolean(),
+      }),
+    )
+    .optional(),
+  targetRuleId: idSchema.nullable().optional(),
+  differences: z.array(z.enum(["mode", "value", "currency", "contentName"])).optional(),
 });
 
 export const providerConversionRuleUnifyCandidatesSchema = z.object({
@@ -1041,12 +1078,15 @@ export const providerConversionRuleUnifyCandidatesSchema = z.object({
 export const providerConversionRuleUnifyInputSchema = z.object({
   ruleIds: z
     .array(idSchema)
-    .min(2)
+    // A API exige 2+, exceto automacoes com regra para todos os numeros.
+    .min(1)
     .max(100)
     .refine((ids) => new Set(ids).size === ids.length, {
       message: "Cada regra deve ser informada uma única vez",
     }),
   name: z.string().trim().min(2).max(120).optional(),
+  // Automacoes: confirma que os valores/modo da regra alvo vao valer.
+  acknowledgeDifferences: z.boolean().optional(),
 });
 
 export const providerConversionRuleUnifyResultSchema = z.object({

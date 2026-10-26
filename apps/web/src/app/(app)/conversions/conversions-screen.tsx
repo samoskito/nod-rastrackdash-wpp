@@ -138,6 +138,7 @@ const statusTone: Record<ConversionRuleRow["status"], string> = {
   observation: " neutral",
   paused: " warn",
   unified: " neutral",
+  number_removed: " warn",
 };
 
 function formatDateTime(value: string): string {
@@ -432,7 +433,7 @@ export function ConversionsScreen({
             <option value="all">Todos</option>
             <option value="production">Envio automático</option>
             <option value="observation">Observação</option>
-            <option value="paused">Pausadas</option>
+            <option value="paused">Pausadas ou sem número</option>
             <option value="unified">Unificadas</option>
           </select>
         </label>
@@ -885,6 +886,13 @@ function RuleRow({
         ) : null}
       </div>
 
+      {row.warning ? (
+        <div className="feedback-banner warn conversion-rule-warning" role="status">
+          <strong>{row.warning.title}</strong>
+          <span>{row.warning.body}</span>
+        </div>
+      ) : null}
+
       {row.warnings.length > 0 ? (
         <ul className="conversion-rule-notes conversion-rule-warnings" role="list">
           {row.warnings.map((warning) => (
@@ -949,6 +957,31 @@ function RuleStateButtons({
       >
         <Play size={14} aria-hidden="true" />
         Retomar observação
+      </button>
+    );
+  }
+
+  // The rule's number was removed: it can no longer send anything, so the
+  // only switch offered is the safe one (pause, reversible, history kept).
+  // Excluir is in Gerenciar; "Unificar" moves it into the all-numbers rule.
+  if (row.status === "number_removed") {
+    return (
+      <button
+        className="button ghost compact-button"
+        type="button"
+        aria-label={`Pausar ${row.name}, cujo número foi removido`}
+        onClick={() =>
+          onConfirm({
+            row,
+            title: "Pausar regra de número removido",
+            body: "O número desta regra foi removido, então ela já não recebe eventos. Pausar tira a regra dos envios ativos; o histórico continua salvo e você pode excluir a regra em Gerenciar.",
+            confirmLabel: "Pausar",
+            patch: { active: false },
+          })
+        }
+      >
+        <Pause size={14} aria-hidden="true" />
+        Pausar
       </button>
     );
   }

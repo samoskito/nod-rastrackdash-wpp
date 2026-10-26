@@ -11,6 +11,7 @@ import {
 import { resolvePurchaseChannels } from "../conversion-rules/provider-purchase-routing";
 import {
   listWorkspaceScopeChannels,
+  providerRuleIsConnectionAutomation,
   providerRuleScope,
   samePhoneChannels,
   selectApplicableProviderRules,
@@ -43,6 +44,7 @@ export type IntegrationRoutingProvider = "payt" | "unnichat" | "umbler";
 const routingRuleSelect = {
   id: true,
   scope: true,
+  crossConnectionScope: true,
   connectionId: true,
   removedAt: true,
   createdAt: true,
@@ -116,6 +118,10 @@ export async function loadRoutingRules(
       workspaceId: input.workspaceId,
       removedAt: null,
       connectionId: { not: null },
+      // A rule whose anchor connection was removed (number deleted) can no
+      // longer store callbacks: it never wins the routing (fail closed would
+      // otherwise turn every callback into "rule_unavailable").
+      connection: { is: { removedAt: null } },
       conversionRule: {
         active: true,
         triggerType: "provider_automation",
@@ -136,14 +142,37 @@ export async function loadRoutingRules(
   });
 }
 
+export type RoutedRuleOutcome<R> =
+  | { status: "picked"; rule: R }
+  | { status: "none" }
+  /** Umbler/Unnichat: two rules of the same tier own the number. */
+  | { status: "ambiguous"; ruleIds: string[] };
+
+/** Compatibility wrapper: the picked rule, or null (none or ambiguous). */
+export function pickRoutedRule<R extends RoutingRule>(
+  rules: readonly R[],
+  channel: ScopedChannel,
+  options: {
+    phoneChannels?: readonly ScopedChannel[];
+    productCodes: readonly string[] | null;
+  },
+): R | null {
+  const outcome = pickRoutedRuleOutcome(rules, channel, options);
+  return outcome.status === "picked" ? outcome.rule : null;
+}
+
 /**
  * Picks the rule that owns an occurrence on `channel` among `rules` (already
- * restricted to one platform and event). Product filter first, then the
- * precedence of the rules: a specific rule of that number (or of another
- * channel of the same phone) replaces the rule for all numbers. Ties: the rule
- * with a product filter, then the oldest. Pure: no I/O.
+ * restricted to one provider and event). Product filter first, then the
+ * phase-1 precedence: a specific rule of that number (or of another channel
+ * of the same phone) replaces the rule for all numbers. Sales platforms
+ * break ties (product filter, then the oldest), and so do legacy duplicate
+ * Umbler/Unnichat rules (two specific or two per-connection rules: exactly
+ * as before). When a rule "todas as conexoes" competes with another rule of
+ * the same tier on the number, the callback is held instead of picked
+ * silently ("Duas regras para o mesmo evento — unifique"). Pure: no I/O.
  */
-export function pickRoutedRule<R extends RoutingRule>(
+export function pickRoutedRuleOutcome<R extends RoutingRule>(
   rules: readonly R[],
   channel: ScopedChannel,
   options: {
@@ -151,7 +180,7 @@ export function pickRoutedRule<R extends RoutingRule>(
     /** Sale codes; null = platform without products (no filter). */
     productCodes: readonly string[] | null;
   },
-): R | null {
+): RoutedRuleOutcome<R> {
   const productCodes = options.productCodes;
   const matching = productCodes
     ? rules.filter((rule) =>
@@ -179,6 +208,16 @@ export function pickRoutedRule<R extends RoutingRule>(
     );
     pool = matching.filter((rule) => winners.has(rule.id));
   }
+  // Only when a rule "todas as conexoes" competes (new behaviour): legacy
+  // duplicates (two specific or two per-connection rules) keep the historical
+  // tie-break below (oldest wins); the list still warns "unifique".
+  if (
+    pool.length > 1 &&
+    pool.every(providerRuleIsConnectionAutomation) &&
+    pool.some((rule) => rule.crossConnectionScope === true)
+  ) {
+    return { status: "ambiguous", ruleIds: pool.map((rule) => rule.id) };
+  }
   const sorted = [...pool].sort((left, right) => {
     const leftFiltered = left.productFilterCodes.length > 0 ? 0 : 1;
     const rightFiltered = right.productFilterCodes.length > 0 ? 0 : 1;
@@ -187,7 +226,9 @@ export function pickRoutedRule<R extends RoutingRule>(
     if (byDate !== 0) return byDate;
     return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
   });
-  return sorted[0] ?? null;
+  return sorted[0]
+    ? { status: "picked", rule: sorted[0] }
+    : { status: "none" };
 }
 
 function leadUnresolvedReason(
@@ -295,10 +336,14 @@ function finishRoute(
 ): IntegrationRouteDecision {
   const channel = channels.find((candidate) => candidate.id === originChannelId);
   if (!channel) return unattributed("origin_channel_unresolved");
-  const picked = pickRoutedRule(rules, channel, {
+  const outcome = pickRoutedRuleOutcome(rules, channel, {
     phoneChannels: samePhoneChannels(channels, channel.id),
     productCodes,
   });
+  if (outcome.status === "ambiguous") {
+    return unattributed("multiple_rules_for_event", channel.id);
+  }
+  const picked = outcome.status === "picked" ? outcome.rule : null;
   if (!picked || !picked.connectionId) {
     return unattributed("no_rule_for_number", channel.id);
   }

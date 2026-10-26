@@ -35,6 +35,7 @@ import {
 import { UazapiConversionBridgeService } from "./uazapi-conversion-bridge.service";
 import { effectiveInboundParserStatus } from "./inbound-webhook-parser-eligibility";
 import { normalizePhoneIdentity } from "../common/phone/phone-identity";
+import { reanchorSpanningAutomationRules } from "../conversion-rules/provider-rule-reanchor";
 
 const parserVersion = "v1";
 
@@ -451,6 +452,16 @@ export class InboundWebhookConnectionsService {
       });
 
       this.assertMutationClaimed(claimed.count);
+
+      // Fase 6.1a (porte do #159): Umbler/Unnichat rules for ALL numbers
+      // anchored here move to another live connection of the provider, so
+      // the other numbers keep sending (audited; same transaction).
+      await reanchorSpanningAutomationRules(transaction, {
+        workspaceId,
+        removedConnectionId: connectionId,
+        provider: current.provider,
+        actorUserId,
+      });
 
       // rastrackdash sanitize (rewrite_rules.external-channel-seat-gate-noop):
       // billing/ is stripped in this edition, so external-channel seats are

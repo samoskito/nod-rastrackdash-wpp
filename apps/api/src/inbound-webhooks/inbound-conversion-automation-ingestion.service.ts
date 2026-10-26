@@ -2,8 +2,26 @@ import { inboundParserProductionEligible } from "./inbound-webhook-parser-eligib
 import { createHash, randomUUID } from "node:crypto";
 import { buildProviderPurchaseIdentity } from "../conversion-rules/provider-purchase-identity";
 import { PAYT_LEAD_OTHER_CHANNEL_REASON } from "../conversion-rules/provider-purchase-routing";
-import { PROVIDER_RULE_OVERRIDDEN_REASON } from "../conversion-rules/provider-rule-scope";
+import {
+  PROVIDER_RULE_OVERRIDDEN_REASON,
+  providerRuleScope,
+  providerRuleSpansProviderConnections,
+} from "../conversion-rules/provider-rule-scope";
 import type { ProviderConversionManualReplayApproval } from "../conversion-rules/provider-conversion-orchestrator.service";
+
+/** Umbler/Unnichat rule "todas as conexões" (any connection of the provider). */
+function automationRuleSpansConnections(rule: {
+  scope?: string | null;
+  crossConnectionScope?: boolean | null;
+  conversionRule: { triggerType: string; eventName: string };
+  parserRelease?: { provider: string } | null;
+  connection?: { provider: string } | null;
+}): boolean {
+  return (
+    providerRuleScope(rule) === "all_numbers" &&
+    providerRuleSpansProviderConnections(rule)
+  );
+}
 import {
   BadRequestException,
   ConflictException,
@@ -33,6 +51,7 @@ import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import {
   PAYT_PRODUCT_NOT_IN_RULE_REASON,
   ProviderConversionObservationService,
+  type AutomationCallbackOrigin,
   type ProviderConversionAutomationObservationResult,
   type ProviderConversionEvaluationMode,
 } from "../conversion-rules/provider-conversion-observation.service";
@@ -290,11 +309,17 @@ export class InboundConversionAutomationIngestionService {
     input: InboundConversionAutomationIngestionInput,
   ): Promise<InboundConversionAutomationIngestionResult> {
     this.assertFeatureEnabled();
-    const endpoint = await this.authenticateEndpoint(
+    const authenticated = await this.authenticateEndpoint(
       input.endpointId,
       input.token,
     );
+    const endpoint = authenticated.endpoint;
     const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
+    if (authenticated.forwardedFrom) {
+      // The OLD URL keeps showing that it still receives ("Desativar URL
+      // antiga"), the unified rule's own URL does not move.
+      await this.touchForwardedEndpoint(authenticated.forwardedFrom);
+    }
     const { ruleOutcome: _internal, ...result } = await this.ingestForEndpoint({
       endpoint,
       rawBody,
@@ -302,8 +327,34 @@ export class InboundConversionAutomationIngestionService {
         input.providerAttempt,
       ),
       integrationEndpointId: null,
+      touchRuleEndpoint: !authenticated.forwardedFrom,
+      // The URL that was called names the connection (number) of the
+      // callback: the rule's own, or the OLD rule's for a forwarded URL.
+      origin: {
+        connectionId: (authenticated.forwardedFrom ?? endpoint).providerRule
+          .connectionId,
+        channelId: null,
+      },
     });
     return result;
+  }
+
+  /** Best effort: never fails a callback that is already authenticated. */
+  private async touchForwardedEndpoint(
+    endpoint: LoadedConversionEndpoint,
+  ): Promise<void> {
+    try {
+      await this.prisma.providerConversionRuleEndpoint.updateMany({
+        where: {
+          id: endpoint.id,
+          workspaceId: endpoint.workspaceId,
+          removedAt: null,
+        },
+        data: { lastDeliveryAt: new Date() },
+      });
+    } catch {
+      // The forwarded delivery itself carries the receipt.
+    }
   }
 
   /**
@@ -329,6 +380,11 @@ export class InboundConversionAutomationIngestionService {
      * arrived (only the rule's explicit reprocess may send it).
      */
     occurrenceReceivedAt?: Date;
+    /**
+     * Fase 6.1a (porte do #159): connection and number the router proved for
+     * this callback (rules "todas as conexões" resolve it first).
+     */
+    origin?: AutomationCallbackOrigin | null;
   }): Promise<RoutedIngestionResult | null> {
     this.assertFeatureEnabled();
     const endpoint = await this.loadRoutableEndpoint(
@@ -343,6 +399,7 @@ export class InboundConversionAutomationIngestionService {
       integrationEndpointId: input.integrationEndpointId,
       routedChannelId: input.routedChannelId ?? null,
       occurrenceReceivedAt: input.occurrenceReceivedAt,
+      origin: input.origin ?? null,
     });
   }
 
@@ -355,12 +412,19 @@ export class InboundConversionAutomationIngestionService {
     /** Router-proven number; undefined keeps the one stored on the delivery. */
     routedChannelId?: string | null;
     occurrenceReceivedAt?: Date;
+    /**
+     * Whether the rule's own URL counts this receipt. False for routed
+     * callbacks and for an old URL forwarded to the rule it was unified into
+     * (porte do #159). The per-rule URL's lastDeliveryAt tells the operator
+     * whether the OLD URL still receives ("Desativar URL antiga").
+     */
+    touchRuleEndpoint?: boolean;
+    origin?: AutomationCallbackOrigin | null;
   }): Promise<RoutedIngestionResult> {
     const routedChannelId = input.routedChannelId ?? undefined;
     const { endpoint, rawBody, providerAttempt } = input;
-    // The per-rule URL's lastDeliveryAt tells the operator whether the OLD URL
-    // still receives ("Desativar URL antiga"); routed callbacks do not move it.
-    const touchRuleEndpoint = input.integrationEndpointId === null;
+    const touchRuleEndpoint =
+      input.touchRuleEndpoint ?? input.integrationEndpointId === null;
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
     const parsed = this.parseAutomation(endpoint, payload);
     const receivedAt = new Date();
@@ -400,6 +464,7 @@ export class InboundConversionAutomationIngestionService {
           deliveryId: existing.id,
           deliveryReceivedAt: existing.firstReceivedAt,
           parsed: effective.parsed,
+          origin: input.origin ?? null,
           ...(effective.evaluationMode
             ? { evaluationMode: effective.evaluationMode }
             : {}),
@@ -444,6 +509,8 @@ export class InboundConversionAutomationIngestionService {
         ingressKey,
         providerAttempt,
         integrationEndpointId: input.integrationEndpointId,
+        touchRuleEndpoint,
+        origin: input.origin ?? null,
         rawBodyLength: rawBody.length,
         receivedAt,
         firstReceivedAt: occurrenceReceivedAt,
@@ -497,6 +564,7 @@ export class InboundConversionAutomationIngestionService {
       deliveryReceivedAt: occurrenceReceivedAt,
       parsed: parsed.value,
       routedChannelId,
+      origin: input.origin ?? null,
     });
     await this.enqueueEligibleObservation(endpoint.workspaceId, observed);
 
@@ -1001,8 +1069,11 @@ export class InboundConversionAutomationIngestionService {
       !rule.productionActivatedAt ||
       !inboundParserProductionEligible(rule.parserRelease) ||
       rule.parserRelease.version !== UMBLER_AUTOMATION_V1_PARSER_VERSION ||
-      rule.connection.status !== "production" ||
-      !inboundParserProductionEligible(rule.connection.parserRelease)
+      // A rule for all Umbler/Unnichat numbers is gated per number (its
+      // connection only stores the deliveries); the others by their own.
+      (!automationRuleSpansConnections(rule) &&
+        (rule.connection.status !== "production" ||
+          !inboundParserProductionEligible(rule.connection.parserRelease)))
     ) {
       throw new ConflictException(
         "Ative o envio automático da regra antes de reprocessar callbacks",
@@ -1563,6 +1634,37 @@ export class InboundConversionAutomationIngestionService {
     });
   }
 
+  /** Callback origin stored with the delivery (first receipt). */
+  private async storedCallbackOrigin(
+    endpoint: PublicConversionEndpoint,
+    deliveryId: string,
+  ): Promise<AutomationCallbackOrigin | null> {
+    try {
+      const delivery = await this.prisma.inboundWebhookDelivery.findFirst({
+        where: {
+          id: deliveryId,
+          workspaceId: endpoint.workspaceId,
+          connectionId: endpoint.providerRule.connectionId,
+          providerRuleEndpointId: endpoint.id,
+        },
+        select: { normalizedSummary: true },
+      });
+      const stored = this.jsonRecord(
+        this.jsonRecord(delivery?.normalizedSummary)?.callbackOrigin as
+          | Prisma.JsonValue
+          | undefined,
+      );
+      if (!stored || typeof stored.connectionId !== "string") return null;
+      return {
+        connectionId: stored.connectionId,
+        channelId:
+          typeof stored.channelId === "string" ? stored.channelId : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private jsonRecord(
     value: Prisma.JsonValue | null | undefined,
   ): Record<string, Prisma.JsonValue> | null {
@@ -1590,7 +1692,11 @@ export class InboundConversionAutomationIngestionService {
   private async authenticateEndpoint(
     endpointId: string,
     token: unknown,
-  ): Promise<PublicConversionEndpoint> {
+  ): Promise<{
+    endpoint: PublicConversionEndpoint;
+    /** Old URL of a rule merged by "Unificar" (its callbacks go to the target). */
+    forwardedFrom: PublicConversionEndpoint | null;
+  }> {
     let endpoint: PublicConversionEndpoint | null;
     try {
       endpoint = asBoundEndpoint(
@@ -1615,6 +1721,42 @@ export class InboundConversionAutomationIngestionService {
       rule?.parserRelease.provider === "payt" &&
       rule?.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION;
 
+    // "Unificar" of automations (21/10/2026): the merged rule is paused and
+    // linked to the rule for all numbers. Its OLD URL keeps working: the
+    // callback is handed to the unified rule (same ingress key as the
+    // per-event URL, so both URLs collapse into one delivery).
+    if (
+      endpoint &&
+      rule &&
+      tokenMatches &&
+      endpoint.removedAt === null &&
+      endpoint.publicUrlDisabledAt == null &&
+      rule.removedAt === null &&
+      !rule.conversionRule.active &&
+      rule.unifiedIntoProviderRuleId &&
+      rule.conversionRule.triggerType === "provider_automation" &&
+      !isPaytAutomation &&
+      (rule.connection.provider === "umbler" ||
+        rule.connection.provider === "unnichat") &&
+      rule.connection.removedAt === null &&
+      ["observation", "production"].includes(rule.connection.status) &&
+      rule.parserRelease.status !== "retired"
+    ) {
+      const target = await this.loadRoutableEndpoint(
+        endpoint.workspaceId,
+        rule.unifiedIntoProviderRuleId,
+      );
+      if (
+        target &&
+        target.providerRule.parserRelease.provider ===
+          rule.parserRelease.provider &&
+        target.providerRule.conversionRule.eventName ===
+          rule.conversionRule.eventName
+      ) {
+        return { endpoint: target, forwardedFrom: endpoint };
+      }
+    }
+
     if (
       !endpoint ||
       !rule ||
@@ -1636,7 +1778,7 @@ export class InboundConversionAutomationIngestionService {
       throw new NotFoundException(publicEndpointNotFoundMessage);
     }
 
-    return endpoint;
+    return { endpoint, forwardedFrom: null };
   }
 
   /**
@@ -1847,13 +1989,21 @@ export class InboundConversionAutomationIngestionService {
      * reprocess or a resend by the old URL decides the same number.
      */
     routedChannelId?: string;
+    /** Callback origin (porte do #159); the one stored with the delivery wins. */
+    origin?: AutomationCallbackOrigin | null;
   }): Promise<ProviderConversionAutomationObservationResult> {
     const routedChannelId =
       input.routedChannelId ??
       (await this.storedRoutedChannelId(input.endpoint, input.deliveryId));
+    // Replays and resends keep the origin of the first receipt.
+    const origin =
+      (await this.storedCallbackOrigin(input.endpoint, input.deliveryId)) ??
+      input.origin ??
+      null;
     const observed = await this.conversionObservation.observeAutomation({
       workspaceId: input.endpoint.workspaceId,
       connectionId: input.endpoint.providerRule.connectionId,
+      origin,
       deliveryId: input.deliveryId,
       externalDeliveryId: input.parsed.externalExecutionKey,
       deliveryReceivedAt: input.deliveryReceivedAt,
@@ -1898,6 +2048,7 @@ export class InboundConversionAutomationIngestionService {
           channelResolved: Boolean(observed.channelId),
           paidLeadResolved: observed.leadResolved,
           manuallyReprocessed: input.manualRecovery === true,
+          ...(origin ? { callbackOrigin: origin } : {}),
           evaluatedAt: processedAt.toISOString(),
           ...(routedChannelId ? { routedChannelId } : {}),
         }),
@@ -2296,6 +2447,8 @@ export class InboundConversionAutomationIngestionService {
     providerAttempt: number | null;
     integrationEndpointId: string | null;
     rawBodyLength: number;
+    touchRuleEndpoint: boolean;
+    origin: AutomationCallbackOrigin | null;
     receivedAt: Date;
     /** Original receipt of the occurrence ("Tentar de novo"); else receivedAt. */
     firstReceivedAt?: Date;
@@ -2358,6 +2511,7 @@ export class InboundConversionAutomationIngestionService {
                   reasonCode: "decision_pending",
                   channelResolved: false,
                   paidLeadResolved: false,
+                  ...(input.origin ? { callbackOrigin: input.origin } : {}),
                   rawBodyLength: input.rawBodyLength,
                 }
               : {
@@ -2381,7 +2535,7 @@ export class InboundConversionAutomationIngestionService {
         input.endpoint,
         input.receivedAt,
         Boolean(parsed),
-        input.integrationEndpointId === null,
+        input.touchRuleEndpoint,
       );
     });
   }

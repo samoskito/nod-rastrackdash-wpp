@@ -53,11 +53,36 @@ import {
   PROVIDER_RULE_OVERRIDDEN_REASON,
   providerRuleCandidateWhere,
   providerRuleScope,
+  providerRuleSpansProviderConnections,
   resolveApplicableProviderRules,
   resolveProviderRuleScopeChannelIds,
 } from "./provider-rule-scope";
 
-/** Fase 5.3: sale of a product outside the rule product filter. */
+/**
+ * An Umbler/Unnichat rule "todas as conexoes" covers every number of the
+ * provider, on any connection (Unnichat: one connection per number). Its
+ * callbacks are resolved FIRST on the connection that sent them (the
+ * callback origin) and only then across the scope; each occurrence is gated
+ * by its own number's connection. Every other rule keeps the historical
+ * per-connection resolution.
+ */
+function automationSpansConnections(rule: AutomationRule): boolean {
+  return providerRuleSpansProviderConnections(rule);
+}
+
+/**
+ * Where a callback came from (the strongest signal of its number):
+ *  - per-rule URL: the connection of the rule that owns that URL (for an
+ *    old URL forwarded by "Unificar", the OLD rule's connection);
+ *  - per-event URL: the number the router proved (ctwa_clid entry, payload
+ *    channel.phone, lead origin).
+ */
+export type AutomationCallbackOrigin = {
+  connectionId: string;
+  channelId: string | null;
+};
+
+/** Sale of a product outside the rule's product filter (fase 4). */
 export const PAYT_PRODUCT_NOT_IN_RULE_REASON = "payt_product_not_in_rule";
 
 const observedRuleInclude = {
@@ -115,12 +140,24 @@ type GateConnection = {
 
 type ObservedChannel = {
   id: string;
+  /** Connection of the number (automations spanning connections gate on it). */
+  connectionId?: string;
   organizationId: string;
   providerChannelId: string;
   status: string;
   productionActivatedAt: Date | null;
   conversionEngineMode: ProviderConversionEngineMode;
 };
+
+const observedChannelSelect = {
+  id: true,
+  connectionId: true,
+  organizationId: true,
+  providerChannelId: true,
+  status: true,
+  productionActivatedAt: true,
+  conversionEngineMode: true,
+} as const;
 
 /** Endpoint automations of this edition (Umbler, Payt). */
 type ParsedProviderAutomation =
@@ -236,6 +273,8 @@ export class ProviderConversionObservationService {
      * against the rule scope: outside it, the rule does not own the callback.
      */
     routedChannelId?: string | null;
+    /** Callback origin (default: the rule's own connection). */
+    origin?: AutomationCallbackOrigin | null;
   }): Promise<ProviderConversionAutomationObservationResult> {
     if (input.automation.provider === "payt") {
       // One sale (seller + order + event) is one occurrence, whatever endpoint
@@ -320,24 +359,34 @@ export class ProviderConversionObservationService {
     if (this.isUnnichatWithoutCtwa(input.automation)) {
       return this.recordUnnichatCtwaMissing({ input, rule });
     }
+    // Fase 6.1a (porte do #159): the callback's own connection first (and
+    // its number when the router proved it): a contact that talked to two
+    // numbers is attributed to the number whose automation called, never to
+    // the latest conversation.
+    const spansConnections = automationSpansConnections(rule);
+    const origin: AutomationCallbackOrigin =
+      spansConnections && input.origin
+        ? input.origin
+        : { connectionId: input.connectionId, channelId: null };
     // A Payt sale is attributed only to a tracked CTWA lead: its verified
     // entry (on any channel of the workspace) is then bound to the rule scope.
-    // An Unnichat automation resolves the lead on its own entry connection.
+    // An Unnichat automation resolves the lead on its own entry connection
+    // (a rule "todas as conexões": then on any number of its scope).
     const purchaseLead = ["payt", "unnichat"].includes(
       rule.parserRelease.provider,
     )
-      ? await this.paidLeads.resolve({
-          workspaceId: input.workspaceId,
-          ...(rule.parserRelease.provider === "unnichat"
-            ? { connectionId: input.connectionId }
-            : { ctwaProofAnyChannel: true }),
-          phone: input.automation.phone,
+      ? await this.resolveAutomationPurchaseLead({
+          input,
+          rule,
+          origin,
+          spansConnections,
           phoneCandidates,
         })
       : null;
     const channel = await this.resolveAutomationChannel({
       workspaceId: input.workspaceId,
       connectionId: input.connectionId,
+      origin,
       phone: input.automation.phone,
       phoneCandidates,
       deliveryReceivedAt: input.deliveryReceivedAt,
@@ -423,6 +472,12 @@ export class ProviderConversionObservationService {
         leadResolved: false,
       };
     }
+    // The number's own connection: the anchor for every historical rule, the
+    // resolved number's connection for an automation spanning connections.
+    const occurrenceConnectionId =
+      spansConnections && channel?.connectionId
+        ? channel.connectionId
+        : input.connectionId;
     const leadResolution =
       rule.parserRelease.provider === "unnichat" && !channel
         ? {
@@ -433,11 +488,14 @@ export class ProviderConversionObservationService {
         : (purchaseLead ??
           (await this.paidLeads.resolve({
             workspaceId: input.workspaceId,
+            ...(rule.parserRelease.provider === "unnichat" && channel
+              ? { channelId: channel.id, connectionId: occurrenceConnectionId }
+              : {}),
             phone: input.automation.phone,
             phoneCandidates,
           })));
     const persistedDecision = await this.resolveAutomationDecision({
-      input,
+      input: { ...input, connectionId: occurrenceConnectionId },
       rule,
       channel,
       leadResolution,
@@ -457,11 +515,25 @@ export class ProviderConversionObservationService {
       };
     }
 
+    // Spanning automations are gated by the resolved number's connection
+    // (production, certified parser, not removed); the anchor only stores
+    // the delivery. A number whose connection vanished fails closed.
+    const gateConnection =
+      occurrenceConnectionId === rule.connectionId
+        ? rule.connection
+        : await this.loadGateConnection({
+            workspaceId: input.workspaceId,
+            connectionId: occurrenceConnectionId,
+          });
     const disposition = this.disposition({
       config,
       decision: persistedDecision.decision,
       rule,
-      gateConnection: rule.connection,
+      gateConnection: gateConnection ?? {
+        ...rule.connection,
+        removedAt: rule.connection.removedAt ?? new Date(0),
+        status: "paused",
+      },
       channel,
       deliveryReceivedAt: input.deliveryReceivedAt,
       manualRecovery: input.manualRecovery === true,
@@ -858,9 +930,50 @@ export class ProviderConversionObservationService {
     });
   }
 
+  /**
+   * Paid lead of an automation callback. Unnichat: the CTWA proof of the
+   * callback's own connection (and number) first; only a rule "todas as
+   * conexoes" whose contact has no proof there looks for the proof of any
+   * number of the workspace (an ambiguous contact, with proofs on several
+   * numbers, then stays unresolved: never guessed). Sales platforms: any
+   * channel, as before.
+   */
+  private async resolveAutomationPurchaseLead(input: {
+    input: {
+      workspaceId: string;
+      connectionId: string;
+      automation: ParsedProviderAutomation;
+    };
+    rule: AutomationRule;
+    origin: AutomationCallbackOrigin;
+    spansConnections: boolean;
+    phoneCandidates?: readonly string[];
+  }): Promise<ProviderConversionPaidLeadResolutionDto> {
+    const base = {
+      workspaceId: input.input.workspaceId,
+      phone: input.input.automation.phone,
+      phoneCandidates: input.phoneCandidates,
+    };
+    if (input.rule.parserRelease.provider !== "unnichat") {
+      return this.paidLeads.resolve({ ...base, ctwaProofAnyChannel: true });
+    }
+    const own = await this.paidLeads.resolve({
+      ...base,
+      connectionId: input.origin.connectionId,
+      ...(input.origin.channelId ? { channelId: input.origin.channelId } : {}),
+    });
+    if (
+      !input.spansConnections ||
+      !(own.status === "not_found" && own.reasonCode === "paid_attribution_missing")
+    )
+      return own;
+    return this.paidLeads.resolve({ ...base, ctwaProofAnyChannel: true });
+  }
+
   private async resolveAutomationChannel(input: {
     workspaceId: string;
     connectionId: string;
+    origin: AutomationCallbackOrigin;
     phone: string;
     phoneCandidates?: readonly string[];
     deliveryReceivedAt: Date;
@@ -895,19 +1008,23 @@ export class ProviderConversionObservationService {
       input.purchaseLead.lead.ctwaDestination
     ) {
       const proof = input.purchaseLead.lead.ctwaDestination;
+      // A rule for all Unnichat numbers takes the proof of any number of its
+      // scope; every other rule only the proof of its own connection.
+      const spans = automationSpansConnections(input.rule);
       if (
         !channelIds.includes(proof.channelId) ||
-        proof.connectionId !== input.connectionId
+        (!spans && proof.connectionId !== input.connectionId)
       )
         return null;
       return this.prisma.inboundWebhookChannel.findFirst({
         where: {
           id: proof.channelId,
           workspaceId: input.workspaceId,
-          connectionId: input.connectionId,
+          connectionId: spans ? proof.connectionId : input.connectionId,
         },
         select: {
           id: true,
+          connectionId: true,
           organizationId: true,
           providerChannelId: true,
           status: true,
@@ -962,12 +1079,16 @@ export class ProviderConversionObservationService {
       if (proof && candidates[0]!.id !== proof.channelId) return null;
       return candidates[0]!;
     }
-
+    const spans = automationSpansConnections(input.rule);
     // Fase 5.3: an Umbler callback routed by the URL por evento already has
     // its number (channel.phone or the contact's single number). Recomputing
     // it by the last message could pick another number (two numbers within
     // 30 days) and silently drop or duplicate the conversion.
-    if (input.rule.parserRelease.provider === "umbler" && input.routedChannelId) {
+    if (
+      !spans &&
+      input.rule.parserRelease.provider === "umbler" &&
+      input.routedChannelId
+    ) {
       if (!channelIds.includes(input.routedChannelId)) return null;
       return this.prisma.inboundWebhookChannel.findFirst({
         where: {
@@ -977,6 +1098,7 @@ export class ProviderConversionObservationService {
         },
         select: {
           id: true,
+          connectionId: true,
           organizationId: true,
           providerChannelId: true,
           status: true,
@@ -986,14 +1108,20 @@ export class ProviderConversionObservationService {
       });
     }
 
+    // The callback's own connection (and number) first.
+    const ownConnectionId = spans ? input.origin.connectionId : input.connectionId;
+    const ownChannelIds =
+      spans && input.origin.channelId
+        ? channelIds.filter((id) => id === input.origin.channelId)
+        : channelIds;
     const recentEvent = await this.prisma.inboundWebhookEvent.findFirst({
       where: {
         workspaceId: input.workspaceId,
-        connectionId: input.connectionId,
+        connectionId: ownConnectionId,
         ...(input.rule.parserRelease.provider === "unnichat"
           ? { hasCtwa: true }
           : {}),
-        channelId: { in: channelIds },
+        channelId: { in: ownChannelIds },
         contactIdentityHash:
           contactIdentityHashes.length === 1
             ? contactIdentityHashes[0]!
@@ -1007,6 +1135,7 @@ export class ProviderConversionObservationService {
         channel: {
           select: {
             id: true,
+            connectionId: true,
             organizationId: true,
             providerChannelId: true,
             status: true,
@@ -1017,6 +1146,29 @@ export class ProviderConversionObservationService {
       },
     });
     if (recentEvent?.channel) return recentEvent.channel;
+
+    if (spans) {
+      // Umbler: the number named by the payload (channel.phone) is the
+      // number even before any message of the contact reached it.
+      if (
+        input.origin.channelId &&
+        input.rule.parserRelease.provider !== "unnichat" &&
+        channelIds.includes(input.origin.channelId)
+      ) {
+        const named = await this.prisma.inboundWebhookChannel.findFirst({
+          where: { id: input.origin.channelId, workspaceId: input.workspaceId },
+          select: observedChannelSelect,
+        });
+        if (named) return named;
+      }
+      // Nothing on the callback's own number: the rest of the scope, a
+      // production number before any other, then the most recent.
+      return this.scopeWideAutomationChannel({
+        ...input,
+        channelIds,
+        contactIdentityHashes,
+      });
+    }
 
     // An Unnichat CRM movement is only attributable when the same contact was
     // previously observed through CTWA on a scoped channel. Do not fall back
@@ -1031,12 +1183,70 @@ export class ProviderConversionObservationService {
     const fallback = input.rule.channels[0]!.channel;
     return {
       id: fallback.id,
+      connectionId: input.connectionId,
       organizationId: "",
       providerChannelId: "",
       status: fallback.status,
       productionActivatedAt: fallback.productionActivatedAt,
       conversionEngineMode: fallback.conversionEngineMode,
     };
+  }
+
+  /**
+   * Fallback of a rule "todas as conexoes" when the contact has nothing on
+   * the callback's own number: the contact's numbers in the scope, a number
+   * whose connection is in production first (never an observation one over
+   * a production one), then the most recent conversation. Removed
+   * connections are never in the scope.
+   */
+  private async scopeWideAutomationChannel(input: {
+    workspaceId: string;
+    rule: AutomationRule;
+    channelIds: string[];
+    contactIdentityHashes: string[];
+    deliveryReceivedAt: Date;
+  }): Promise<ObservedChannel | null> {
+    const events = await this.prisma.inboundWebhookEvent.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        ...(input.rule.parserRelease.provider === "unnichat"
+          ? { hasCtwa: true }
+          : {}),
+        channelId: { in: input.channelIds },
+        contactIdentityHash:
+          input.contactIdentityHashes.length === 1
+            ? input.contactIdentityHashes[0]!
+            : { in: input.contactIdentityHashes },
+        occurredAt: {
+          lte: new Date(input.deliveryReceivedAt.getTime() + 5 * 60 * 1_000),
+        },
+      },
+      orderBy: { occurredAt: "desc" },
+      select: {
+        channel: {
+          select: {
+            ...observedChannelSelect,
+            connection: { select: { status: true, removedAt: true } },
+          },
+        },
+      },
+      take: 50,
+    });
+    const candidates = events
+      .map((event) => event.channel)
+      .filter(
+        (channel): channel is NonNullable<typeof channel> =>
+          Boolean(channel) && !channel!.connection?.removedAt,
+      );
+    const picked =
+      candidates.find(
+        (channel) =>
+          channel.connection?.status === "production" &&
+          channel.status === "active",
+      ) ?? candidates[0];
+    if (!picked) return null;
+    const { connection: _connection, ...channel } = picked;
+    return channel;
   }
 
   /** The lead may have been matched through an equivalent BR form (with or

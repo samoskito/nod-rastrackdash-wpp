@@ -319,7 +319,10 @@ describe("conversion rules controller: Conversões (Fase 3)", () => {
     await request(owner.server)
       .post("/conversion-rules/providers/unify")
       .set("Authorization", "Bearer refresh-token")
-      .send({ ruleIds: ["rule_a"] })
+      // Fase 6.1a (#159): one rule is accepted by the contract (an
+      // Umbler/Unnichat automation folding into an existing rule for all
+      // numbers); the service refuses the rest. An empty list never passes.
+      .send({ ruleIds: [] })
       .expect(400);
     expect(owner.providerConversionRulesService.unifyRules).toHaveBeenCalledWith(
       "workspace_1",

@@ -8870,6 +8870,9 @@ html[data-presentation-mode="active"] .inbound-webhook-secret {
   text-transform: uppercase;
 }
 
+/* URL da regra/do evento (aba URL, cartao da integracao): mesmo campo escuro. */
+.conversion-endpoint input,
+.single-url-box input,
 .provider-conversion-secret input,
 .provider-conversion-builder input,
 .provider-conversion-builder select,
@@ -8941,6 +8944,8 @@ html[data-presentation-mode="active"] .inbound-webhook-secret {
   color: var(--ink);
 }
 
+.conversion-endpoint input:hover,
+.single-url-box input:hover,
 .provider-conversion-secret input:hover,
 .provider-conversion-builder input:hover,
 .provider-conversion-builder textarea:hover,
@@ -8969,6 +8974,8 @@ html[data-presentation-mode="active"] .inbound-webhook-secret {
   background-repeat: no-repeat;
 }
 
+.conversion-endpoint input:focus,
+.single-url-box input:focus,
 .provider-conversion-secret input:focus,
 .provider-conversion-builder input:focus,
 .provider-conversion-builder textarea:focus,

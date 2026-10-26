@@ -6233,18 +6233,36 @@ body {
   gap: 6px;
 }
 
+/* One compact line per note (scope, duplicates, overrides), secondary text
+   with readable contrast; never a single low-contrast dashed box. */
 .conversion-rule-notes {
   display: grid;
   grid-column: 1 / -1;
   gap: 4px;
   margin: 2px 0 0;
-  padding: 8px 10px;
-  border: 1px dashed rgba(242, 193, 78, 0.35);
-  border-radius: 8px;
+  padding: 0;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.45;
   list-style: none;
+}
+
+.conversion-rule-notes li {
+  padding: 6px 10px;
+  border-left: 2px solid rgba(242, 193, 78, 0.7);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-soft);
+}
+
+/* "Número removido": a callout (warn tone, readable contrast) across the row. */
+.conversion-rule-warning {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+}
+
+.conversion-rule-warning span {
+  color: var(--ink-soft);
 }
 
 /* "Todos os números": números que ainda não enviam (mesmo tom de aviso das
@@ -6762,6 +6780,12 @@ body {
   gap: 10px;
 }
 
+.single-url-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .conversion-webhook-url .conversion-field,
 .conversion-webhook-url .provider-conversion-payload-helper {
   width: 100%;
@@ -6789,6 +6813,77 @@ body {
 
 .conversion-review-block p {
   margin: 0;
+}
+
+/* Unificar (automações): each rule with its mode and value; the one that
+   prevails is highlighted. Scrolls sideways on a phone instead of the page. */
+.conversion-unify-members-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.conversion-unify-members {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+
+.conversion-unify-members th,
+.conversion-unify-members td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* "Regra" takes the room; the name wraps, the chip stays beside it. */
+.conversion-unify-members td:first-child {
+  width: 100%;
+  white-space: normal;
+}
+
+.conversion-unify-member-name {
+  margin-right: 8px;
+}
+
+.conversion-unify-members .status-chip {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.conversion-unify-members th {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.conversion-unify-members tr.is-target td {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* "Entendi quais valores vão valer": design-system checkbox row, inline. */
+.conversion-unify-ack {
+  align-items: center;
+  justify-self: start;
+  margin-top: 6px;
+}
+
+/* Disabled "Unificar" reads as disabled: neutral, not-allowed. */
+.conversion-unify-review .button.primary:disabled {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-muted);
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .conversion-number-chips {
@@ -6958,6 +7053,7 @@ body {
   }
 
   /* Notes right under the facts, actions last, in one compact row. */
+  .conversion-rule-warning,
   .conversion-rule-notes {
     order: 1;
   }

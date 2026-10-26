@@ -36,12 +36,16 @@ export type RuleOriginDefinition = {
    */
   fallbackChannelProviders: readonly string[];
   /**
-   * "same_provider": a automação por endereço fica presa à conexão que a
-   * chama (Umbler); o alcance "todos os números" vale para essa conexão.
+   * "provider_anchor" (Umbler/Unnichat; Fase 6.1a, porte do #159): a
+   * automação por endereço guarda uma conexão só como âncora da regra
+   * (escolhida automaticamente). "Todos os números" vale para os números da
+   * conexão, ou para todos os números do provedor em qualquer conexão quando
+   * a regra é "todas as conexões" (a Unnichat cria uma conexão por número);
+   * números específicos ficam numa conexão só.
    * "any": a regra de venda (Payt) fica presa à conexão dos números
    * escolhidos, só como âncora da URL; a Payt não tem conexão própria.
    */
-  connection: "none" | "same_provider" | "any";
+  connection: "none" | "provider_anchor" | "any";
   /** Evento fixo da origem. */
   lockedEvent?: ConversionEventNameDto;
   /** Eventos que a origem reconhece (padrão: todo o catálogo). */
@@ -87,10 +91,10 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     kind: "provider",
     label: "Automação da Umbler",
     description:
-      "Quando uma automação do Umbler Talk chama o endereço do evento (vale para os números da conexão).",
+      "Quando uma automação do Umbler Talk chama o endereço do evento (vale para todos os números, de todas as conexões).",
     logoProvider: "umbler",
     fallbackChannelProviders: ["umbler"],
-    connection: "same_provider",
+    connection: "provider_anchor",
     // O callback da Umbler só conhece estas duas automações.
     allowedEvents: ["QualifiedLead", "Purchase"],
   },
@@ -99,10 +103,10 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     kind: "provider",
     label: "Automação do Unnichat",
     description:
-      "Quando um fluxo do Unnichat chama a URL da regra (vale para os números da conexão). Qualquer evento do catálogo.",
+      "Quando um fluxo do Unnichat chama a URL do evento (vale para todos os números, de todas as conexões). Qualquer evento do catálogo.",
     logoProvider: "unnichat",
     fallbackChannelProviders: ["unnichat"],
-    connection: "same_provider",
+    connection: "provider_anchor",
     // O evento vem da regra, nunca do corpo enviado pelo Unnichat: sem
     // lista de eventos, vale todo o catálogo.
   },
@@ -280,4 +284,16 @@ export function providerDisplayName(provider: string): string {
 /** Onde as regras do CRM são editadas: janela do CRM no Hub (aba CRM). */
 export function crmManageHref(origin: CrmRuleOrigin): string {
   return `/integrations?abrir=${origin}`;
+}
+
+/**
+ * Fase 6.1a (porte do #159): a plataforma de uma automação com o artigo do
+ * texto do nod ("da Umbler", "do Unnichat"; "na Umbler", "no Unnichat").
+ */
+export function automationPlatformOf(origin: string): string {
+  return origin === "automation_umbler" ? "da Umbler" : "do Unnichat";
+}
+
+export function automationPlatformIn(origin: string): string {
+  return origin === "automation_umbler" ? "na Umbler" : "no Unnichat";
 }

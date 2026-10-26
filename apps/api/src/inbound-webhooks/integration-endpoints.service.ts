@@ -691,6 +691,11 @@ export class IntegrationEndpointsService {
         ...(input.occurrenceReceivedAt
           ? { occurrenceReceivedAt: input.occurrenceReceivedAt }
           : {}),
+        // The number the router proved for this callback.
+        origin: {
+          connectionId: decision.connectionId,
+          channelId: decision.channelId,
+        },
       });
     } catch (error) {
       if (error instanceof NotFoundException) handedOff = null;
@@ -1326,6 +1331,7 @@ export class IntegrationEndpointsService {
       select: {
         id: true,
         scope: true,
+        crossConnectionScope: true,
         conversionRule: { select: { name: true, eventName: true } },
         parserRelease: { select: { provider: true } },
         channels: { select: { channelId: true } },

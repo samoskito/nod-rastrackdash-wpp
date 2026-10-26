@@ -165,15 +165,17 @@ export function IntegrationUrlBox({
               onFocus={(event) => event.currentTarget.select()}
             />
           </label>
-          <CopyButton value={url} />
-          <button
-            className="button ghost"
-            type="button"
-            onClick={() => setShown(null)}
-          >
-            <EyeOff size={14} aria-hidden="true" />
-            Ocultar URL
-          </button>
+          <div className="single-url-buttons">
+            <CopyButton value={url} />
+            <button
+              className="button ghost"
+              type="button"
+              onClick={() => setShown(null)}
+            >
+              <EyeOff size={14} aria-hidden="true" />
+              Ocultar URL
+            </button>
+          </div>
         </div>
       ) : canManage ? (
         <div className="conversion-field">

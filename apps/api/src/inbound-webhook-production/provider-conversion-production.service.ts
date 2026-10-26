@@ -92,6 +92,8 @@ import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inboun
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
 import {
   providerRuleCoversChannel,
+  providerRuleScope,
+  providerRuleSpansProviderConnections,
   resolveProviderRuleScopeChannelIds,
 } from "../conversion-rules/provider-rule-scope";
 import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbound-webhook-parser";
@@ -139,7 +141,21 @@ const executionInclude = {
     },
   },
   sourceDelivery: true,
-  channel: { include: { connection: { select: { provider: true } } } },
+  channel: {
+    include: {
+      connection: {
+        select: {
+          provider: true,
+          // Gate of Umbler/Unnichat rules for all numbers (any connection).
+          status: true,
+          removedAt: true,
+          parserRelease: {
+            select: { provider: true, version: true, status: true },
+          },
+        },
+      },
+    },
+  },
   purchaseReview: {
     include: {
       items: { orderBy: { position: "asc" } },
@@ -1954,6 +1970,15 @@ export class ProviderConversionProductionService
     const channel = execution.channel;
     const manuallyApproved = this.automationManualReplayApproved(execution);
     const channelScoped = executionChannelInRuleScope(execution);
+    // An Umbler/Unnichat rule for all numbers is gated by the connection of
+    // the number that produced the event; its own connection only stores
+    // the delivery (anchor). Every other rule keeps the historical gate.
+    const spansConnections =
+      providerRuleScope(rule) === "all_numbers" &&
+      providerRuleSpansProviderConnections(rule);
+    const gate = spansConnections
+      ? (channel?.connection ?? null)
+      : (rule.connection ?? null);
 
     if (
       // The Umbler automation always keeps its connection binding.
@@ -1966,9 +1991,11 @@ export class ProviderConversionProductionService
       !rule.productionActivatedAt ||
       !inboundParserProductionEligible(rule.parserRelease) ||
       rule.parserRelease.version !== UMBLER_AUTOMATION_V1_PARSER_VERSION ||
-      rule.connection.removedAt ||
-      rule.connection.status !== "production" ||
-      !inboundParserProductionEligible(rule.connection.parserRelease) ||
+      !gate ||
+      gate.removedAt ||
+      gate.status !== "production" ||
+      !gate.parserRelease ||
+      !inboundParserProductionEligible(gate.parserRelease) ||
       rule.connectionId !== delivery.connectionId ||
       delivery.parserVersion !== UMBLER_AUTOMATION_V1_PARSER_VERSION ||
       delivery.purpose !== "conversion_automation" ||
@@ -2248,15 +2275,22 @@ export class ProviderConversionProductionService
   }
 
   /**
-   * Automations arrive on the entry connection itself. A sale callback (Payt)
-   * sits on its rule's endpoint, so its origin is the scoped channel, which
-   * must belong to the connection of the verified CTWA entry.
+   * Unnichat automations arrive on the entry connection itself. A sale
+   * callback (Payt) sits on its rule's endpoint (any WhatsApp connection of the
+   * workspace), so its origin is the scoped channel, which must belong to the
+   * connection of the verified CTWA entry. An Unnichat/Umbler rule for all
+   * numbers stores its callbacks on its anchor connection while the number
+   * may be on another connection of the provider: same channel-based check.
    */
   private ctwaOriginConnectionMatches(
     execution: ExecutionRecord,
     intent: { channelId: string; connectionId: string },
   ): boolean {
-    if (String(execution.providerRule.parserRelease?.provider) === "payt")
+    if (
+      String(execution.providerRule.parserRelease?.provider) === "payt" ||
+      (providerRuleScope(execution.providerRule) === "all_numbers" &&
+        providerRuleSpansProviderConnections(execution.providerRule))
+    )
       return Boolean(
         execution.channel &&
         execution.channel.id === intent.channelId &&

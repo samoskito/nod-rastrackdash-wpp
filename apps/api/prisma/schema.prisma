@@ -1018,6 +1018,11 @@ model ProviderConversionRuleConfig {
   connectionId              String?
   parserReleaseId           String?
   scope                     ProviderConversionRuleScope           @default(specific_numbers)
+  /// Fase 6.1a (porte do #159): Umbler/Unnichat "Todos os números da
+  /// <plataforma> (todas as conexões)". true só para regras criadas/editadas
+  /// com a opção nova ou geradas pelo "Unificar" de automações. NULL/false =
+  /// números da conexão da regra.
+  crossConnectionScope      Boolean?
   /// Set when "Unificar" replaced this rule by a workspace-wide one; the rule
   /// is kept (paused) with its whole history.
   unifiedIntoProviderRuleId String?

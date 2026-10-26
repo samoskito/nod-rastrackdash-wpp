@@ -8,12 +8,14 @@ import {
   emptyRuleFilters,
   filterRuleRows,
   ineligibleNumbers,
+  numberRemovedNote,
   numbersForOrigin,
   offeredRuleOrigins,
   sortRuleRows,
   toConversionNumbers,
 } from "../src/app/(app)/conversions/conversion-rules-view";
 import {
+  automationSingleConnectionNote,
   buildRulePayload,
   emptyRuleDraft,
   resolveRuleConnectionId,
@@ -129,6 +131,22 @@ describe("conversions view: provider rules", () => {
       scopeLabel: "Todos os números de Umbler Recepção",
       platformLabel: "Umbler Recepção",
     });
+    // Fase 6.1a (#159): a rule "Todos os números" created before the
+    // explicit scope stays on its connection (labelled so), never widened.
+    expect(rows[1]!.notes).toContain(
+      "Vale só para os números de Umbler Recepção. Para valer em todas as conexões, use Gerenciar > “Ampliar para todas as conexões”.",
+    );
+    const [cross] = buildProviderRuleRows(
+      [{ ...rules[1]!, crossConnectionScope: true }],
+      numbers,
+      connections,
+      capabilities,
+    );
+    expect(cross).toMatchObject({
+      scopeLabel: "Todos os números da Umbler (todas as conexões)",
+      triggerDetail: "URL do evento (todas as conexões)",
+    });
+    expect(cross!.notes).toEqual([]);
     expect(rows[3]).toMatchObject({ status: "unified", statusLabel: "Unificada" });
     expect(rows[3]!.notes).toEqual([
       "Unificada em “Global”, que vale para todos os números.",
@@ -635,10 +653,15 @@ describe("rule draft: scope and payload", () => {
     ).toBeNull();
   });
 
-  it("requires the connection of Umbler automations and limits its numbers", () => {
-    expect(scopeIssue(draft("automation_umbler"), context)).toBe(
-      "Escolha a conexão que vai chamar o endereço desta regra.",
-    );
+  it("anchors Umbler automations automatically and limits their numbers", () => {
+    // Fase 6.1a (#159): no connection to choose; a new rule for all numbers
+    // spans every Umbler connection (crossConnectionScope) and its anchor is
+    // a live Umbler connection.
+    expect(scopeIssue(draft("automation_umbler"), context)).toBeNull();
+    expect(buildRulePayload(draft("automation_umbler"), context)).toMatchObject({
+      ok: true,
+      value: { connectionId: "conn_umbler", scope: "all_numbers", crossConnectionScope: true },
+    });
     const umbler = draft("automation_umbler", { connectionId: "conn_umbler" });
     expect(buildRulePayload(umbler, context)).toEqual({
       ok: true,
@@ -650,6 +673,7 @@ describe("rule draft: scope and payload", () => {
         mode: "observation",
         triggerType: "provider_automation",
         eventName: "QualifiedLead",
+        crossConnectionScope: true,
       },
     });
     expect(

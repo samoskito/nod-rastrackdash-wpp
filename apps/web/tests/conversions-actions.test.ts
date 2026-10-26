@@ -396,8 +396,11 @@ describe("conversions actions: unify", () => {
     );
   });
 
-  it("refuses fewer than two rules and shows the license lock", async () => {
-    expect(await unifyConversionRulesAction(unifyForm(["a"]))).toMatchObject({ ok: false });
+  it("refuses an empty selection and shows the license lock", async () => {
+    // Fase 6.1a (#159): one rule is accepted (Unnichat/Umbler: a
+    // per-connection rule folded into the existing rule for all numbers; the
+    // API asks two for the other origins).
+    expect(await unifyConversionRulesAction(unifyForm([]))).toMatchObject({ ok: false });
     expect(serverApiFetch).not.toHaveBeenCalled();
 
     serverApiFetch.mockRejectedValueOnce(licenseLocked());

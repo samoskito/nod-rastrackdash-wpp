@@ -47,6 +47,7 @@ import {
 } from "../integrations/single-url/single-url-panels";
 import type { ConversionScreenActionResult } from "./actions";
 import {
+  automationPlatformOf,
   contactMessageProviders,
   crmManageHref,
   hubProviderForInbound,
@@ -66,6 +67,7 @@ import {
 } from "./conversion-rules-view";
 import type { ComingSoonNumber } from "./conversions-data";
 import {
+  automationSingleConnectionNote,
   buildRulePayload,
   emptyRuleDraft,
   mintRequestKey,
@@ -809,6 +811,7 @@ export function ScopeStep({
   onChange,
   disabled,
   connectionLocked = false,
+  initialCrossConnection = true,
   legend = "Em quais números esta regra vale?",
 }: {
   draft: RuleDraft;
@@ -820,20 +823,21 @@ export function ScopeStep({
   disabled: boolean;
   /** Edição: a conexão de uma automação por endereço não muda. */
   connectionLocked?: boolean;
+  /** Editing: whether the saved rule already spans every connection. */
+  initialCrossConnection?: boolean;
   legend?: string;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
-  const connectionOptions = connectionsForOrigin(
-    draft.origin,
-    connections,
-    capabilities,
-  );
-  const connectionBound = definition.connection === "same_provider";
+  // Umbler/Unnichat (Fase 6.1a, porte do #159): "Todos os números" pode
+  // valer para todas as conexões do provedor; números específicos vêm de UMA
+  // conexão (a da própria regra ao editar).
+  const automation = definition.connection === "provider_anchor";
+  const platformOf = automationPlatformOf(draft.origin);
   const connection = connections.find((item) => item.id === draft.connectionId);
   const available = numbersForOrigin(
     draft.origin,
     numbers,
-    connectionBound ? (draft.connectionId ?? "__none__") : null,
+    automation && connectionLocked ? (draft.connectionId ?? "__none__") : null,
     capabilities,
     draft.messageAuthorScope,
   );
@@ -843,10 +847,23 @@ export function ScopeStep({
   const wrongAuthor = numbersForOrigin(
     draft.origin,
     numbers,
-    connectionBound ? (draft.connectionId ?? "__none__") : null,
+    automation && connectionLocked ? (draft.connectionId ?? "__none__") : null,
     capabilities,
     "both",
   ).filter((number) => !availableIds.has(number.id));
+  // Umbler/Unnichat "Todos os números": só a conexão da regra (formato
+  // antigo) ou todas as conexões do provedor (explícito).
+  const allOfConnection =
+    automation && draft.scope === "all_numbers" && !draft.crossConnection;
+  const allOfProvider =
+    draft.scope === "all_numbers" && (!automation || draft.crossConnection);
+  const legacyCross = initialCrossConnection;
+  // Números específicos de uma automação ficam numa conexão só: depois do
+  // primeiro número, os das outras conexões ficam desabilitados.
+  const lockedConnectionId = automation
+    ? (numbers.find((number) => draft.channelIds.includes(number.id))
+        ?.connectionId ?? null)
+    : null;
   const grouped = new Map<string, ConversionNumber[]>();
   for (const number of available) {
     grouped.set(number.connectionId, [...(grouped.get(number.connectionId) ?? []), number]);
@@ -863,56 +880,67 @@ export function ScopeStep({
     <fieldset className="conversion-flow-fieldset" disabled={disabled}>
       <legend>{legend}</legend>
 
-      {connectionBound && connectionLocked ? (
+      {automation ? (
         <p className="action-note">
-          Conexão que chama o endereço:{" "}
-          <strong>{connection?.displayName ?? "conexão removida"}</strong>
+          Uma regra serve para todos os números {platformOf}: a mesma URL
+          vale em todos os fluxos, de qualquer conexão.
         </p>
-      ) : connectionBound ? (
-        <label className="conversion-field">
-          <span className="field-label">Conexão que chama o endereço</span>
-          <select
-            value={draft.connectionId ?? ""}
-            onChange={(event) =>
-              onChange({
-                connectionId: event.target.value || null,
-                channelIds: [],
-              })
-            }
-          >
-            <option value="">Escolha a conexão</option>
-            {connectionOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.displayName}
-              </option>
-            ))}
-          </select>
-          <small className="action-note">
-            Automações por endereço ficam ligadas à conexão que as chama.
-          </small>
-        </label>
       ) : null}
 
       <div className="conversion-scope-options" role="radiogroup" aria-label="Alcance">
+        {automation && connectionLocked ? (
+          // Editing an Umbler/Unnichat rule: its own connection only (the
+          // historical "Todos os números"), or widened to every connection.
+          <label
+            className={`conversion-scope-option${allOfConnection ? " is-selected" : ""}`}
+          >
+            <input
+              type="radio"
+              name="conversion-scope"
+              value="all_numbers_connection"
+              checked={allOfConnection}
+              onChange={() =>
+                onChange({ scope: "all_numbers", crossConnection: false, channelIds: [] })
+              }
+            />
+            <span>
+              <strong>
+                Todos os números de {connection?.displayName ?? "conexão removida"}
+              </strong>
+              <small>
+                {allOfConnection
+                  ? "Vale só para os números desta conexão. Os números das outras conexões ficam de fora."
+                  : "Só os números desta conexão."}
+              </small>
+            </span>
+          </label>
+        ) : null}
         <label
-          className={`conversion-scope-option${draft.scope === "all_numbers" ? " is-selected" : ""}`}
+          className={`conversion-scope-option${allOfProvider ? " is-selected" : ""}`}
         >
           <input
             type="radio"
             name="conversion-scope"
             value="all_numbers"
-            checked={draft.scope === "all_numbers"}
-            onChange={() => onChange({ scope: "all_numbers", channelIds: [] })}
+            checked={allOfProvider}
+            onChange={() =>
+              onChange({ scope: "all_numbers", crossConnection: true, channelIds: [] })
+            }
           />
           <span>
             <strong>
-              {connectionBound && connection
-                ? `Todos os números de ${connection.displayName}`
+              {automation
+                ? `Todos os números ${platformOf} (todas as conexões)`
                 : "Todos os números"}
             </strong>
             <small>
-              Vale para todos os números que funcionam com esta origem,
-              inclusive os que você conectar depois.
+              {automation && connectionLocked && !legacyCross
+                ? allOfProvider
+                  ? `Ampliar para todas as conexões: passa a valer para todos os números ${platformOf}, inclusive os que você conectar depois.`
+                  : "Ampliar para todas as conexões."
+                : automation
+                  ? `Vale para todos os números ${platformOf} conectados aqui, de todas as conexões, inclusive os que você conectar depois.`
+                  : "Vale para todos os números que funcionam com esta origem, inclusive os que você conectar depois."}
             </small>
           </span>
         </label>
@@ -929,11 +957,13 @@ export function ScopeStep({
           <span>
             <strong>Números específicos</strong>
             <small>
-              {connectionBound
-                ? "Escolha um ou mais números desta conexão."
-                : draft.origin === "automation_payt"
-                  ? "Escolha um ou mais números de uma mesma conexão."
-                  : "Escolha um ou mais números, de qualquer conexão."}
+              {draft.scope !== "specific_numbers"
+                ? "Escolha um ou mais números."
+                : automation && connectionLocked
+                  ? `Escolha um ou mais números de ${connection?.displayName ?? "conexão removida"}, a conexão desta regra.`
+                  : automation || draft.origin === "automation_payt"
+                    ? "Escolha um ou mais números de uma mesma conexão."
+                    : "Escolha um ou mais números, de qualquer conexão."}
             </small>
           </span>
         </label>
@@ -950,13 +980,17 @@ export function ScopeStep({
           Em “Todos os números”, a etiqueta é reconhecida pelo nome em todas as
           instâncias Uazapi: escreva o nome igual ao da etiqueta no WhatsApp.
         </p>
+      ) : automation && draft.scope === "specific_numbers" && !connectionLocked ? (
+        <p className="action-note conversion-scope-note">
+          {automationSingleConnectionNote(draft.origin)}
+        </p>
       ) : null}
 
       {draft.scope === "specific_numbers" ? (
         available.length === 0 ? (
           <p className="action-note warn">
-            {connectionBound && !draft.connectionId
-              ? "Escolha a conexão para ver os números."
+            {automation && connectionLocked
+              ? "O número da conexão desta regra foi removido. Use “Todos os números” ou crie uma regra nova."
               : "Nenhum número conectado funciona com esta origem."}
           </p>
         ) : (
@@ -969,6 +1003,10 @@ export function ScopeStep({
                     <input
                       type="checkbox"
                       checked={draft.channelIds.includes(number.id)}
+                      disabled={
+                        lockedConnectionId !== null &&
+                        number.connectionId !== lockedConnectionId
+                      }
                       onChange={() => toggle(number.id)}
                     />
                     <RuleLogo

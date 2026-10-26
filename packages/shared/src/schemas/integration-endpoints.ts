@@ -177,6 +177,8 @@ export const integrationUnattributedReasons = {
   rule_unavailable: "A regra escolhida não está mais ativa",
   rule_declined:
     "A regra do número não converteu (filtro, outro número, lead ou bloqueio; veja os eventos recebidos da regra)",
+  multiple_rules_for_event:
+    "Duas regras para o mesmo evento neste número — unifique as regras",
 } as const;
 export type IntegrationUnattributedReasonDto =
   keyof typeof integrationUnattributedReasons;

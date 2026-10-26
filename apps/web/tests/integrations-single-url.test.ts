@@ -815,6 +815,48 @@ describe("Regra da Payt: filtro de produto e URL nova", () => {
   });
 });
 
+// Fase 6.1a: porte do SaaS (42ccbc7c, #159).
+describe("Conversions: URL tab state is coherent", () => {
+  it("a rule created for the event URL only never says “sem URL ativa” nor shows an empty old-URL block", () => {
+    const rule = {
+      ...providerRule({
+        id: "rule_event_only",
+        triggerType: "provider_automation",
+        origin: "automation_unnichat",
+        eventName: "QualifiedLead",
+        connectionId: "conn_unnichat",
+        scope: "all_numbers",
+      }),
+      endpoint: null,
+    };
+    render(
+      createElement(RuleEndpoint, {
+        rule,
+        origin: "automation_unnichat",
+        canManage: true,
+        rotateAction: vi.fn(),
+        onRotated: vi.fn(),
+        onDismiss: vi.fn(),
+        integrationEndpoint: endpoint({
+          id: "ie_q",
+          provider: "unnichat",
+          kind: "automation_event",
+          eventName: "QualifiedLead",
+          url: null,
+          lastDeliveryAt: at,
+        }),
+        singleUrlActions: { ...actions(), reveal: vi.fn() },
+      }),
+    );
+    // The event URL keeps the masked "Mostrar URL" pattern and its own status.
+    expect(screen.getByRole("button", { name: /Mostrar URL/ })).toBeTruthy();
+    expect(screen.getByText("Último recebimento")).toBeTruthy();
+    expect(screen.queryByText("Esta regra não tem um endereço ativo.")).toBeNull();
+    expect(screen.queryByText("Último evento recebido")).toBeNull();
+    expect(screen.queryByRole("region", { name: /URL antiga/ })).toBeNull();
+  });
+});
+
 describe("Card da Payt no Hub", () => {
   it("URL criada e nenhuma regra ainda fica ativo com aviso", () => {
     const cards = buildIntegrationCards({
