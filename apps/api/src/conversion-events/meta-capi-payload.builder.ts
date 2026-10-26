@@ -11,6 +11,8 @@ export type MetaCapiPayloadInput = {
   eventTime: Date;
   eventId: string;
   phoneHash: string;
+  /** SHA-256 of the normalized first name (see meta-capi-first-name.ts). */
+  firstNameHash?: string | null;
   ctwaClid: string;
   pageId: string;
   /** null only on the authorized CTWA page/pixel path (no known ad). */
@@ -31,6 +33,7 @@ export type MetaCapiPayload = {
     messaging_channel: "whatsapp";
     user_data: {
       ph: string[];
+      fn?: string[];
       ctwa_clid: string;
       page_id: string;
     };
@@ -83,6 +86,7 @@ export function buildMetaCapiPayload(
         messaging_channel: "whatsapp",
         user_data: {
           ph: [input.phoneHash],
+          ...(input.firstNameHash ? { fn: [input.firstNameHash] } : {}),
           ctwa_clid: input.ctwaClid,
           page_id: input.pageId
         },

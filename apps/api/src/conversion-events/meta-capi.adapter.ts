@@ -8,6 +8,7 @@ import {
   isMetaAuthFailureResponse,
   metaGraphErrorCodeFromResponse,
 } from "./conversion-event-retry";
+import { metaCapiFirstNameHash } from "./meta-capi-first-name";
 import {
   buildMetaCapiPayload,
   type MetaCapiPayload,
@@ -58,6 +59,8 @@ export type MetaCapiSendEventInput = {
   eventName: ConversionEventNameDto;
   dedupeKey: string;
   phoneHash: string | null;
+  /** Raw lead name; only its normalized, hashed first name is ever sent. */
+  leadName?: string | null;
   adId: string | null;
   ctwaClid: string | null;
   valueCents?: number | null;
@@ -113,6 +116,7 @@ export class MetaCapiAdapter {
       eventTime: input.eventTime ?? new Date(),
       eventId: input.dedupeKey,
       phoneHash: phoneHash!,
+      firstNameHash: metaCapiFirstNameHash(input.leadName, this.env),
       ctwaClid: ctwaClid!,
       pageId: pageId!,
       adId: adId || null,
