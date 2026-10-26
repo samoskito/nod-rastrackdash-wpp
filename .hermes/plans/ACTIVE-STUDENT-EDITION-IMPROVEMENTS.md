@@ -63,11 +63,11 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
 | Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A MERGEADA — SMOKE REAL PAUSADO** | PR #43 merge `a48e93d`; API deployada; listagem autenticada OK no workspace `cmtbvwoop0000qa2swt9x8amu`; create/test MySQL real pausado até MySQL público fictício no Dokploy; PostgreSQL ainda não suportado |
 | Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; GupShup/Umbler existem como inbound webhook no código, mas a UX/aluno e a paridade com o app de referência ainda precisam de fechamento |
-| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 e 6.1a NA BRANCH DE INTEGRAÇÃO (PR #105, #106); 6.1b IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
+| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0, 6.1a e 6.1b NA BRANCH DE INTEGRAÇÃO (PR #105, #106, #107); 6.1c IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026; regra fixa "produção direta" desde a 6.1c) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
 
 ### Fase 6 — status das subfases
 
-Plano da fase: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md` (Gate 1 aprovado pelo Samuel em 26/10/2026). Ordem (atualizada em 26/10, depois da auditoria): 6.0 → 6.1a → 6.1b → 6.1c (proposta) → 6.2a → 6.2b → 6.3a → 6.3b → 6.4 → 6.5 → 6.6 → 6.7 → 6.8 → 6.8b (GoHighLevel, reservada) → 6.9. Base das subfases: branch `integracao/fase-6`.
+Plano da fase: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md` (Gate 1 aprovado pelo Samuel em 26/10/2026). Ordem (atualizada em 26/10, depois da auditoria): 6.0 → 6.1a → 6.1b → 6.1c → 6.2a → 6.2b → 6.3a → 6.3b → 6.4 → 6.5 → 6.6 → 6.7 → 6.8 → 6.8b (GoHighLevel, reservada) → 6.9. Base das subfases: branch `integracao/fase-6`.
 
 #### 6.0 — Envio para a Meta: correções críticas
 
@@ -119,6 +119,21 @@ Env nova: META_CAPI_SEND_FIRST_NAME (opcional, desligada por padrão)
 Testes: lista da §6.1b + licensing-client + brand-footer/app-layout/navigation
 Resultado: typecheck api/web/shared OK; API 2809 ok / 48 skipped (integração: 2741 ok / 48 skipped); web 1349 ok / 3 falhas iguais à integração; shared 187 ok / 18 falhas iguais à integração; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe na integração; pnpm setup --dry-run e scripts/setup.test.mjs ok; revisão independente feita (achados corrigidos em 3dd4975c)
 Limitações: SQL agregado validado só com mocks (sem PostgreSQL real); reenvio de itens de replay com falha fica para a 6.1c; sem validação em instalação real
+```
+
+#### 6.1c — Produção direta, alerta de desconexão e reenvio de replay
+
+```text
+Status: IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO
+Branch: feat/fase-6.1c-producao-direta (a partir de origin/integracao/fase-6)
+Executor: Claude Code
+Modelo/reasoning: Claude Opus 5.5
+Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.1c (+ regra fixa "produção direta" na §0)
+Escopo: produção direta (conexões, números e regras de integrações validadas nascem em produção; promoção uma vez dos dados em observação; textos sem observação/teste/certificar), alerta de desconexão por conexão Uazapi BYO/WAHA com 2 leituras (SaaS #63), "Reenviar os que falharam" na recuperação do aluno (SaaS #91), plano atualizado (regra fixa; no nod não existe QR)
+Migrations: 20261027125000_production_direct_validated_integrations (só dados: UPDATE + auditoria; nenhuma DDL)
+Env: INBOUND_CONVERSION_PRODUCTION_ENABLED sem valor passa a acompanhar INBOUND_CONVERSION_RULES_ENABLED; nenhuma variável obrigatória nova
+Resultado: typecheck api/web/shared OK; API 2897 ok / 48 skipped (integração: 2809 ok / 48 skipped); web 1353 ok / 3 falhas iguais à integração (+ suíte kommo-responsive-layout que já falha); shared 187 ok / 18 falhas iguais à integração; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe na integração; pnpm setup --dry-run e scripts/setup.test.mjs ok; revisão independente feita (achados corrigidos antes do commit)
+Limitações: migration conferida só pelo texto (sem PostgreSQL); alerta validado com leituras simuladas; conexões Meta Cloud em observação não são promovidas pela migration (dependem de META_APP_SECRET; ativar em Integrações); sem validação em instalação real
 ```
 
 ### Checkpoint MySQL — pausado em 2026-09-04

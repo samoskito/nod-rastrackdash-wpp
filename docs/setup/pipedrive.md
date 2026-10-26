@@ -62,10 +62,12 @@ sempre exige a licença válida.
    (qualquer provedor em produção) os leads podem vir. Sem número autorizado
    nada é associado.
 5. **Regras de etapa.** Para cada etapa, escolha o evento de conversão; ou use
-   **Negócio ganho** do funil para **Compra** com valor e moeda do negócio. Toda
-   regra nasce em **observação** (registra o que aconteceria, sem enviar). Quando
-   os registros estiverem certos, mude a regra para **produção**: só avisos
-   recebidos depois dessa ativação são enviados — nada antigo é reenviado.
+   **Negócio ganho** do funil para **Compra** com valor e moeda do negócio.
+   Produção direta (o Pipedrive foi validado no SaaS): com a conexão pronta
+   (credencial, webhook e números autorizados), a regra já nasce enviando; só
+   avisos recebidos depois da criação são enviados — nada antigo é reenviado.
+   Sem isso, ela nasce com o envio desligado e **Ativar envio automático** mostra
+   o que falta.
 6. **URL do webhook.** Clique em gerar a URL do webhook. Ela aparece **uma
    única vez** (contém o token secreto); copie na hora. Gerar de novo invalida a
    anterior.

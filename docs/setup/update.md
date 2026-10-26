@@ -97,7 +97,7 @@ Por que isso é obrigatório: telas novas (como a opção Data Crazy) só existe
 ### Exemplo: depois da atualização com Data Crazy
 
 - Em `/integrations` → aba **Atendimento e vendas**, o card **Data Crazy** aparece (em **Disponíveis** ou **Ativos**).
-- Ao gerar o webhook, a conexão nasce **em observação** — é esperado. Ela só vai para produção depois de uma entrega **CTWA real** ser processada e de você ativar a produção (conexão e cada regra). O parser **Data Crazy v1** já vem certificado pela migration `20261016090300_validated_parser_certification`.
+- Ao gerar o webhook, a conexão já nasce **em produção** (produção direta, Fase 6.1c): o número que aparecer na primeira entrega já envia e cada regra nasce enviando. Configure a rota Meta do número; sem rota, nada é enviado. O parser **Data Crazy v1** já vem certificado pela migration `20261016090300_validated_parser_certification`.
 - Não existe canal/número provisório: o canal aparece sozinho após o primeiro webhook. E só mensagens inbound com **CTWA** viram lead.
 - Passo a passo completo da conexão: [`whatsapp-providers.md`](whatsapp-providers.md#data-crazy--conexão-de-webhook-de-entrada-ctwa) e passo 10.2 do [Guia do Aluno](../GUIA-ALUNO.md#102-painel-webhooks-de-entrada--umbler-gupshup-data-crazy-e-meta-whatsapp-cloud-api).
 

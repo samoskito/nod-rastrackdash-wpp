@@ -189,7 +189,7 @@ Segredos gerados (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EXTERNAL_CONNECTOR
 
 - **`UAZAPI_*`, `WAHA_*`, `ZAPI_*`, `NOD_API_BROKER_URL` são opcionais.** As conexões de WhatsApp de cada workspace são criadas na própria UI (`/integrations`), com as credenciais digitadas lá; essas variáveis só servem como **padrão do deployment** quando a conexão não traz aquele campo. Leia [`whatsapp-providers.md`](whatsapp-providers.md) antes de escolher — nem todo provedor tem receiver inbound pronto.
 - **`API_PUBLIC_URL` precisa estar correta** (passo 6.2) para o botão **Gerar receiver** funcionar: a URL do receiver é montada a partir dela.
-- **`META_APP_SECRET`** — o App Secret do app Meta. Só é opcional enquanto uma conexão **Meta WhatsApp (Cloud API)** estiver em observação; sem ele, ativar o envio automático faz a API **recusar** os POSTs da Meta. Se você pretende usar essa origem em produção, preencha agora.
+- **`META_APP_SECRET`** — o App Secret do app Meta. Preencha antes de criar uma conexão **Meta WhatsApp (Cloud API)**: com ele, a conexão já nasce enviando (produção direta). Sem ele, a conexão fica com o envio desligado (a API só aceita POSTs da Meta sem assinatura nesse estado) e a tela pede o segredo antes de ativar.
 
 **Nunca** cole esses valores em um `.env` commitado no repositório nem em um chat de IA — preencha direto no formulário do Dokploy. Se um agente de IA estiver conduzindo esta etapa, ele deve **pedir para você digitar cada segredo diretamente no Dokploy**, nunca pedir para você colá-lo na conversa.
 

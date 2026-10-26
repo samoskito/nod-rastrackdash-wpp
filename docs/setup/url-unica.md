@@ -84,7 +84,7 @@ A URL antiga de cada regra **continua funcionando**. Não há corte automático.
   lead de outro número, bloqueio), ele aparece em **Vendas/Eventos sem atribuição** com o motivo
   "A regra do número não converteu...", e os detalhes ficam em **Eventos recebidos** da regra.
 - **Tentar de novo** avalia a venda na data em que ela chegou: venda de antes de a regra entrar em
-  produção fica em observação (para enviar, use **Reprocessar** na própria regra).
+  produção fica sem envio (para enviar, use **Reprocessar** na própria regra).
 - Para desativar a URL antiga, a URL nova da plataforma (ou do evento) precisa existir; sem ela, a
   desativação é recusada.
 - Quando a plataforma já estiver postando no endereço novo, **desative a URL antiga** regra por regra

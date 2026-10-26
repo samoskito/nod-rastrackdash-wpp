@@ -66,17 +66,17 @@ A Payt **não** tem conexão própria no Hub: a regra de venda é criada em **Co
    recebidos**, cada postback aparece com o que aconteceu: reconhecido, ignorado (outro evento, ou
    comprador que não é lead rastreado), venda já reconhecida em outro callback, ou bloqueado com o
    motivo.
-5. **Ative a produção.** A regra nasce **em observação**: nada é enviado à Meta. Quando as primeiras
-   vendas aparecerem certas em Eventos recebidos, ative o envio automático da regra. Os parsers
-   Payt v1 e Payt automation-v1 já vêm certificados pela migration, então não há passo de
-   certificação.
+5. **Pronto: a regra já envia.** Produção direta (a Payt foi validada no SaaS): a regra nasce
+   enviando, sem etapa de observação e sem "Ativar envio". Os parsers Payt v1 e Payt automation-v1
+   já vêm certificados pela migration. Para parar o envio, use **Pausar** na regra.
 
 ### Reprocessar
 
 Em **Eventos recebidos**, **Reprocessar selecionados** reavalia postbacks já recebidos:
 
-- com a regra **em observação**, o postback é reavaliado e o resultado aparece como "Reavaliado em
-  observação" — **nada é enviado à Meta**;
+- com a regra **com o envio desligado** (pausada e retomada antes desta versão, ou o servidor com
+  `INBOUND_CONVERSION_PRODUCTION_ENABLED=false`), o postback é reavaliado e o resultado aparece
+  como "reavaliado sem envio" — **nada é enviado à Meta**;
 - com a regra **em produção**, o envio só acontece com a sua confirmação explícita, e a venda é
   conferida de novo antes de enviar (comprador, número de origem e anúncio). Venda já reconhecida
   continua contando uma vez só.

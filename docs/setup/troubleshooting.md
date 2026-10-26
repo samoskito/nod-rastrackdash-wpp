@@ -94,11 +94,11 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** recrie/rotacione a conexão, copie **URL de callback** e **Verify token** em campos separados na Meta, e confirme as envs `INBOUND_*`.
 - **Verificação:** a Meta aceita e salva o webhook; a assinatura do campo `messages` fica disponível.
 
-## Meta WhatsApp (Cloud API): parou de receber depois de "Ativar envios automáticos"
+## Meta WhatsApp (Cloud API): parou de receber depois de ativar o envio
 
 - **Diagnóstico:** a Meta passa a registrar falha de entrega; a API responde `404` nos POSTs daquela conexão. O log tinha, antes disso, o aviso `inbound_webhook.meta_cloud_signature_unverified`.
-- **Causa:** sem `META_APP_SECRET` preenchida, a API só aceita POSTs de uma conexão `meta_cloud` enquanto ela está em **observação**. Ao colocar a conexão em produção, as entregas passam a exigir a assinatura `x-hub-signature-256` — que não pode ser validada sem o segredo.
-- **Correção:** preencha `META_APP_SECRET` com o **App Secret do mesmo app Meta** (não é o token permanente do Graph), redeploy a API. Se precisar voltar a receber já, use **Voltar para observação** na conexão enquanto configura.
+- **Causa:** sem `META_APP_SECRET` preenchida, a API só aceita POSTs de uma conexão `meta_cloud` enquanto o envio dela está desligado. Com a conexão enviando, as entregas passam a exigir a assinatura `x-hub-signature-256` — que não pode ser validada sem o segredo. Desde a produção direta (Fase 6.1c), uma conexão nova só nasce enviando com o segredo configurado e a tela não deixa ativar o envio sem ele; isto acontece se o segredo foi removido ou trocado depois.
+- **Correção:** preencha `META_APP_SECRET` com o **App Secret do mesmo app Meta** (não é o token permanente do Graph), redeploy a API.
 - **Verificação:** os POSTs voltam a ser aceitos com `202` e o aviso `meta_cloud_signature_unverified` some do log.
 
 ## Meta WhatsApp (Cloud API): chegam mensagens mas nenhum lead
@@ -232,7 +232,7 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Diagnóstico seguro:** confira (1) se o seu deploy usa o repositório público na `main` ou um fork seu — e, se for fork, se ele foi sincronizado; (2) a data/commit do último deploy da **API** no Dokploy e do último deploy do **web** na Vercel; (3) se o log de boot da API mostrou as migrations aplicadas.
 - **Causa provável:** só um dos lados foi atualizado (API nova com web antigo, ou o contrário), o fork não foi sincronizado, ou o web foi "reiniciado" em vez de ganhar um build novo — telas novas e `NEXT_PUBLIC_*` só entram em build novo.
 - **Correção:** siga [`update.md`](update.md): sincronize o fork (se houver) → redeploy da API no Dokploy (as migrations rodam sozinhas no boot) → novo deploy de produção do web a partir da `main`. **Não reinstale**: banco, administrador, `LICENSE_*` e chaves de criptografia continuam os mesmos. Se o painel **Webhooks de entrada** aparece como indisponível, a causa é outra — confira as envs `INBOUND_*` em [Recebo leads/webhooks mas não aparece Nova regra](#recebo-leadswebhooks-mas-não-aparece-nova-regra).
-- **Verificação:** `/health/ready` retorna `200`, o login segue com o mesmo administrador, e o card **Data Crazy** aparece em `/integrations` (aba **Atendimento e vendas**; a conexão nasce em observação — é esperado).
+- **Verificação:** `/health/ready` retorna `200`, o login segue com o mesmo administrador, e o card **Data Crazy** aparece em `/integrations` (aba **Atendimento e vendas**; a conexão nasce em produção — produção direta).
 
 ## `/backoffice` diz "Não foi possível verificar atualizações"
 

@@ -1,6 +1,6 @@
 # PLANO — Fase 6: paridade com o SaaS (dash-com-ia até #187)
 
-> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0 e a 6.1a estão na branch de integração `integracao/fase-6` (PR #105 e #106); a 6.1b está implementada e aguarda revisão (branch `feat/fase-6.1b-motivos-e-leitura`). A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
+> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0, a 6.1a e a 6.1b estão na branch de integração `integracao/fase-6` (PR #105, #106 e #107); a 6.1c está implementada e aguarda revisão (branch `feat/fase-6.1c-producao-direta`). **Regra fixa "produção direta" (26/10/2026) na §0, valendo para todas as fases seguintes.** A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
 >
 > - Plano canônico de execução: `.hermes/plans/ACTIVE-STUDENT-EDITION-IMPROVEMENTS.md`. Este arquivo é o plano da fase. Quando a implementação começar, o ACTIVE recebe a linha "Fase 6" com o protocolo de status, conforme a seção "Protocolo de atualização".
 > - Base do levantamento:
@@ -11,6 +11,15 @@
 
 ## 0. Regras que valem para todas as subfases
 
+- **Produção direta (regra fixa do produto, definida pelo Samuel em 26/10/2026; vale para a 6.1c e para todas as fases seguintes, da 6.5 à 6.8b).** O que foi validado no SaaS vai para o aluno **em produção**. O aluno **não retesta, não certifica e não libera nada**: a mesma plataforma manda o mesmo payload. Em cada porte:
+  - o leitor (parser release) de uma integração validada no SaaS entra **certificado** pela migration do próprio porte, citando a evidência da validação;
+  - as **conexões** dessa integração nascem **em produção** e cada número nasce com o envio ativo (`apps/api/src/inbound-webhooks/production-direct.ts`: `bornConnectionStatus` / `bornChannelState`);
+  - as **regras de conversão** nascem **enviando**: a criação não manda `mode` e a API decide (`bornRuleMode`); nada de "Ativar envio" para começar;
+  - a observação só existe para o que ainda não foi validado no SaaS; um leitor não validado não é portado até ser validado (decisão 6 do Gate 1);
+  - continuam valendo as travas que não são "teste": licença utilizável (423), rota Meta válida e destino com pixel e página (e, no Meta Cloud, `META_APP_SECRET`). Faltando algo, a tela diz exatamente o que configurar, nunca "em observação";
+  - nenhum texto novo da tela fala em observação, teste, liberar ou certificar.
+- **No nod não existe conexão por QR code.** As APIs não oficiais (Uazapi BYO e WAHA) são conectadas pela **URL do servidor + token**, e a URL de webhook é colada na plataforma; cada conexão tem um único número. Nunca escrever "QR" em texto, nota ou código novo do nod.
+
 - **Um escritor por worktree.** Branch `feat/fase-6.x-<slug>` a partir do `main` atualizado. Commit, push, PR e merge são gates separados.
 - **Commits portados citados** no CHANGELOG ("ported from the SaaS (`hash`, …)"), como nas fases 4 e 5.
 - **Nunca reintroduzir:**
@@ -18,7 +27,7 @@
   - vagas pagas (`WhatsappSeatProvider`, `package-billing.policy`);
   - o servidor de licença, a liberação de licença ou o WhatsApp da licença;
   - gates de integração privada (`*_WORKSPACE_IDS`, `WorkspacePrivateIntegration`).
-- **"Vaga paga" no SaaS vira licença utilizável no nod.** Com a licença bloqueada, toda escrita responde 423 pelo guard global. Para números QR, vale também a conexão `WhatsappInstance` `active`. É a mesma tradução usada no porte do #152.
+- **"Vaga paga" no SaaS vira licença utilizável no nod.** Com a licença bloqueada, toda escrita responde 423 pelo guard global. Para números Uazapi BYO e WAHA (conexão por URL do servidor + token), vale também a conexão `WhatsappInstance` `active`. É a mesma tradução usada no porte do #152.
 - **Pontos de adaptação obrigatórios no nod:**
   - a ponte WAHA (`waha:<canal>:<id>`, `inbound_webhook.waha_bridge_provisioned`);
   - Meta Cloud WABA (entrada CTWA `meta_cloud`);
@@ -40,7 +49,7 @@
 | 6.8 | `20261027170000_roichat_provider` + `20261027170100_roichat_parser_releases` | `20261025150000/150100` (#183), **sem** `ALTER TYPE "WhatsappSeatProvider"` |
 | 6.8b | `20261027180000_*` (reservado; nomes definidos quando o GoHighLevel estiver terminado no SaaS) | branch `feat/gohighlevel-automation` do dash-com-ia (em revisão) |
 
-- A 6.1c (alerta de desconexão por instância e reenvio de itens de replay que falharam) não tem migration prevista. Se precisar de uma, ela entra entre a da 6.1a e a da 6.4 (`20261027125000_*`).
+- A 6.1c usou o horário reservado: `20261027125000_production_direct_validated_integrations` (só dados: promoção da produção direta), entre a da 6.1a e a da 6.4.
 
 - **Notas de versão.** Cada PR atualiza `docs/releases/unreleased.json` (consolidado; sem versão inventada) e o `CHANGELOG.md` `[Unreleased]`, no mesmo PR do código. Toda subfase com migration pede backup do PostgreSQL antes do redeploy, conforme o Passo "Antes de começar" de `docs/setup/update.md`. Não há tag nem Release sem autorização.
 - **Testes:** `pnpm typecheck` em api, web e shared, mais os testes do PR do SaaS adaptados aos caminhos do nod (`apps/api/test/<área>/…`, Vitest). As suítes de licença, onboarding e rodapé rodam sempre:
@@ -111,7 +120,7 @@ Conferido lendo o código do nod, não só os nomes de arquivo.
 | Item SaaS | Estado no nod | Classe | Fase | Tam. |
 |---|---|---|---|---|
 | Braip (09d7303a, f83522af, 072bb61a, 25a7cd76, b3124d65) e a base `sales-platform-sale.ts` | Não portado (o shared só cita `braip` em teste de rejeição) | PORTAR | 6.5 | G |
-| b4d71afc: tela de versões do leitor e certificação no backoffice | Não portado (o nod certifica por migration) | ADAPTAR | 6.5 | M |
+| b4d71afc: tela de versões do leitor e certificação no backoffice | Não portado (o nod certifica por migration) | ADAPTAR: com a produção direta (§0) o aluno não certifica nada; no máximo uma tela só de leitura das versões | 6.5 | M |
 | 7ac17df7: evento parado em `ready_to_send` há mais de 10 min pode ser reenviado (`isStalledReadyToSendConversionEvent`) | Parcial (`CTWA_SEND_SKIPPED` já veio) | PORTAR | 6.0 (mesmo arquivo do #181) | P |
 | #106, #110, #114–#119: Visão Geral e Relatórios por campanha (multi) e por número WhatsApp, combobox com busca | Não portado | PORTAR | 6.3b | G |
 | #121–#124: filtros aplicados automaticamente (Relatórios, Leads, Eventos, Revisão de compras) | Não portado (ainda há "Aplicar") | PORTAR | 6.3b | M |
@@ -133,8 +142,8 @@ Conferido lendo o código do nod, não só os nomes de arquivo.
 | #69 (`45f18c2b`): cards de KPI da Visão Geral configuráveis por funil | Não portado | PORTAR | 6.3a | M |
 | #83 (`58d5e51b`, parcial): preservar os períodos já sincronizados da Meta | Parcial | PORTAR só a parte de relatórios (a parte de client-swap não se aplica) | 6.3a | P |
 | #62 (`d2a5f76e`): barra de filtros dos Relatórios agrupada em período / escopo / ações | Não portado | PORTAR | 6.3b (primeiro item) | P |
-| #63 (`6be4bdcd` / `86aaac21`): alerta de desconexão do WhatsApp por instância, só depois de 2 leituras seguidas | No nod o alerta por instância **nunca roda** | ADAPTAR (Uazapi e WAHA). **Decisão de 26/10: VAI** | 6.1c (proposta) | P/M |
-| #91 (`f7c61c07`): reenviar os itens de replay que falharam, com o payload retido | Não portado | ADAPTAR como recurso novo no backoffice do aluno. **Decisão de 26/10: VAI** | 6.1c (proposta) | M |
+| #63 (`6be4bdcd` / `86aaac21`): alerta de desconexão do WhatsApp por instância, só depois de 2 leituras seguidas | No nod o alerta por instância **nunca roda** | ADAPTAR (Uazapi e WAHA). **Decisão de 26/10: VAI** | 6.1c | P/M |
+| #91 (`f7c61c07`): reenviar os itens de replay que falharam, com o payload retido | Não portado | ADAPTAR na recuperação do aluno (owner), onde o replay vive no nod. **Decisão de 26/10: VAI** | 6.1c | M |
 | 7570fe14 (parcial, Kommo): revalidar `/integrations` depois das ações do CRM | Parcial | PORTAR só a parte do Kommo (e Pipedrive); Guimo não se aplica | 6.5 | P |
 | Guimo (CRM de um cliente só: `guimo-conversion-panel`, migrations `guimo_*`) | Não portado | **NÃO SE APLICA** (decisão de 26/10: é de um cliente só) | — | — |
 | #120, #134–#142, #144, #148, #151, cc5412f0, 7ca3a69f/56f19a94/ed5fe229, correções Unnichat (b22b651e…), correções Payt CTWA (6f9c2297…), 0cffd7b8, 4b5e674a, #104 | **JÁ NO NOD** (fases 3 a 5, nod #63–#69). #134/#135 são o Kommo (front e back) | — | — | — |
@@ -302,20 +311,27 @@ O resto foi incluído pela mudança de escopo.
   - variável opcional (finalidade e padrão).
 - **Estimativa:** ~5 dias.
 
-### 6.1c — Operação do aluno: alerta de desconexão por instância e reenvio de itens de replay (proposta; sem migration prevista)
+### 6.1c — Produção direta, alerta de desconexão por conexão e reenvio de itens de replay (migration de dados)
 
-Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois itens VÃO). Fica logo depois da 6.1b porque os dois mexem em prontidão e operação dos números, e não depende das fases de relatório nem das plataformas.
+Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois itens VÃO). Fica logo depois da 6.1b porque os dois mexem em prontidão e operação dos números, e não depende das fases de relatório nem das plataformas. Em 26/10 o Samuel acrescentou a **produção direta** (regra fixa da §0) como item 1 da 6.1c.
+
+- **Produção direta (implementado):**
+  - levantamento dos pontos que nasciam em observação ou exigiam ativação manual: conexão genérica (Umbler, Gupshup, Data Crazy, Meta Cloud, Unnichat e o número da Unnichat), ponte Uazapi/WAHA (conexão e número), número descoberto pela entrega, número cadastrado à mão, regras (frase, catálogo, etiqueta, automação Umbler/Unnichat, Payt e regra antiga adaptada) com `mode` padrão `observation` no contrato, Kommo e Pipedrive (`mode` padrão `observation`), "Retomar" voltando em observação, e o servidor com `INBOUND_CONVERSION_PRODUCTION_ENABLED` desligado por padrão (a documentação mandava manter `false`). Releases no banco em `observation_only`: só `meta_cloud v1` (o código já o tratava como certificado). Leitor não validado no nod: nenhum;
+  - o que mudou: `production-direct.ts` (nascimento), criação de conexões/números/ponte, `bornRuleMode` nas regras (o contrato deixou de forçar `observation`), "Retomar" volta enviando, Kommo/Pipedrive nascem em produção (Pipedrive só com a conexão pronta), padrão novo da env, textos das telas e da documentação;
+  - Meta Cloud: nasce em produção só com `META_APP_SECRET` (em produção a API exige a assinatura e recusaria as entregas);
+  - migration `20261027125000_production_direct_validated_integrations` (só dados, horário reservado da 6.1c): promove uma vez o que estava em observação, respeitando pausas, unificações, remoções, decisões explícitas (conexão voltada para observação; regra que já esteve em produção) e replay em curso; Meta Cloud fica de fora (depende do segredo). Escolhida no lugar de uma rotina de boot porque roda uma única vez, dentro da transação do deploy, depois do backup pedido nas notas, fica registrada em `_prisma_migrations` e não volta a promover algo que o aluno desligar depois.
 
 - **Itens:**
   - alerta de desconexão do WhatsApp **por instância** (SaaS #63: `6be4bdcd`, `86aaac21`, sobre a base do #26 `832cb677`). No nod esse alerta nunca roda. No SaaS ele só dispara depois de **2 leituras seguidas** de "desconectado" (pending/qr/error/hibernado/offline são ambíguos e não contam nem quebram a sequência; uma leitura "conectado" zera a sequência; falha no `getStatus` nunca alerta);
-  - reenviar os itens de replay que falharam, com o payload retido (SaaS #91, `f7c61c07`), como **recurso novo no backoffice do aluno**.
+  - reenviar os itens de replay que falharam, com o payload retido (SaaS #91, `f7c61c07`). **Implementado na recuperação do aluno** (owner do workspace, Integrações → Meta Cloud → "Recuperar CTWAs anteriores"), onde o replay vive no nod; o nod não tem replay no backoffice.
 - **Adaptações:**
   - o alerta vale para Uazapi e WAHA (`WhatsappInstance`), por workspace, com o destino de alerta que o aluno já configura em `ops-alerts`; sem WhatsApp da licença PalmUP;
   - o alerta respeita a licença: com a licença bloqueada, nada é enviado (como a ativação automática);
-  - o reenvio é uma ação do backoffice do aluno (`platform_owner`/`platform_operator`), por lote de replay, só para itens com payload ainda retido (`INBOUND_WEBHOOK_RAW_RETENTION_DAYS`); é escrita, então responde 423 com a licença bloqueada.
+  - o reenvio é uma ação do owner na recuperação do aluno, por lote de replay, só para itens com payload ainda retido (`INBOUND_WEBHOOK_RAW_RETENTION_DAYS`), revalidando cada item como uma autorização nova e nunca reenviando um CTWA que já gerou evento; é escrita, então responde 423 com a licença bloqueada.
+  - o alerta é conferido para toda conexão Uazapi BYO/WAHA ativa (aparece em Integrações mesmo sem telefone); a mensagem só sai com alerta ligado, telefone e licença utilizável. WAHA: `STOPPED` e a sessão esperando novo pareamento contam; `STARTING`, `FAILED` e desconhecido são ambíguos.
 - **Testes:** os do SaaS (`ops-alerts` com a sequência de 2 leituras, `inbound-webhook-replay` do #91) adaptados, mais: WAHA desconectada duas vezes alerta uma vez; uma leitura ambígua não alerta; reenvio com licença bloqueada responde 423; item sem payload retido não é reenviado.
 - **Riscos:** onboarding (o alerta precisa de destino configurado; sem destino, não faz nada e não quebra o `/onboarding/status`); rodapé intacto (tela do backoffice).
-- **Notas:** "Migration: não se aplica" (se precisar, `20261027125000_*`); nenhuma variável obrigatória nova.
+- **Notas:** migration de dados `20261027125000_production_direct_validated_integrations` (backup obrigatório); nenhuma variável obrigatória nova; padrão novo de `INBOUND_CONVERSION_PRODUCTION_ENABLED` (sem valor acompanha `INBOUND_CONVERSION_RULES_ENABLED`); `OPS_ALERT_UAZAPI_BASE_URL`/`OPS_ALERT_UAZAPI_TOKEN`/`OPS_ALERT_SCAN_INTERVAL_MS` (já existentes, opcionais) documentadas.
 - **Estimativa:** ~3 a 4 dias.
 
 ### 6.2a — Lead recebido pela regra e conversão manual no lead
@@ -449,10 +465,8 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
   - 7570fe14 (parcial, achado da auditoria): revalidar `/integrations` depois das ações do Kommo (e do Pipedrive); a parte do Guimo não se aplica.
 - **Migrations:**
   - `20261027140000_braip_provider` (enum, aditiva);
-  - `20261027140100_braip_parser_release` (release **não certificada**).
-- **Decisão do Samuel (Gate 1):**
-  - **(a) Recomendado:** o aluno, como `platform_owner`/`platform_operator` da própria instalação, certifica o leitor no app com um evento real ("Liberar plataforma", #166/#169).
-  - **(b) Alternativa:** o leitor só sai de observação por uma migration de certificação da PalmUP, depois que o SaaS validar. Mantém o modelo atual, mas atrasa Braip e Hotmart.
+  - `20261027140100_braip_parser_release`: **certificada** (produção direta, §0), citando a validação do SaaS (#168, postback oficial). Sem validação no SaaS, a Braip não é portada.
+- **Produção direta (§0, substitui a decisão (a)/(b) do Gate 1):** o leitor entra certificado; a conexão (quando houver) e a regra nascem em produção. "Liberar plataforma" (#166/#169) **não** vira passo do aluno: no máximo, uma ação de suporte/diagnóstico sem efeito no envio.
 - **Adaptações:**
   - o card aparece sempre no hub, sem gate;
   - sem `package-billing.policy`;
@@ -462,7 +476,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
   - delta de `integration-endpoints`;
   - web `braip-integration`, `unattributed-sale-*`, telas de leitores.
 - **Riscos:**
-  - **licença:** certificar ou liberar é escrita (423);
+  - **licença:** criar e editar regra são escrita (423);
   - **onboarding:** um card novo no hub, e o teste `integrations-hub-registry` precisa ser atualizado.
 - **Notas:**
   - **backup obrigatório**;
@@ -472,7 +486,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 ### 6.6 — Hotmart (migrations)
 
 - **Itens:** #182 (`b134534b`).
-- **Migrations:** `20261027150000_hotmart_provider` e `…150100_hotmart_parser_release` (não certificada).
+- **Migrations:** `20261027150000_hotmart_provider` e `…150100_hotmart_parser_release`, **certificada** pela produção direta (§0) se o SaaS já tiver validado a Hotmart; sem essa validação, a Hotmart espera.
 - **Adaptações:** sem billing.
 - **Testes:** `hotmart-*` (parser, certification, migration), integration-endpoints, web.
 - **Notas:** backup obrigatório.
@@ -482,9 +496,9 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 
 - **Itens:** #186 (`1889af48`) e #187 (`087df11b`).
 - **Migrations:** `20261027160000_yampi_provider` e `…160100_yampi_parser_release`.
-- **"Já certificados":**
-  - se, na hora do porte, o SaaS já tiver validado a Yampi com venda real, a release entra **certificada por migration** (como `20261016090300_validated_parser_certification`), citando a evidência;
-  - sem essa evidência, ela entra não certificada e com `PENDENTE:` nas notas.
+- **Produção direta (§0):**
+  - se, na hora do porte, o SaaS já tiver validado a Yampi com venda real, a release entra **certificada por migration** (como `20261016090300_validated_parser_certification`), citando a evidência, e as regras nascem enviando;
+  - sem essa evidência, a Yampi não é portada (fica com `PENDENTE:` no plano, não nas notas do aluno).
 - **Adaptações:** liberada, sem `private-sales-platform-gate` nem `yampi-feature-gate`; os tokens de login continuam ocultos nos links.
 - **Testes:** `yampi-*`, `unattributed-sale-certify` (#187).
 - **Notas:** backup obrigatório.
@@ -596,7 +610,7 @@ Use uma instância de teste com uma licença real de teste, num workspace sem da
 3. **GoHighLevel VAI.** Antes disso, a integração precisa ser **terminada no SaaS (dash-com-ia)**, porque hoje ela só observa. O Samuel tem um exemplo para isso. Depois, entra como fase própria no nod.
 4. **PR #90 (qualificação manual) será fechado.** Quem o substitui são o #158 (conversão manual) e o #176 (Kanban). Os PRs **#91 e #92 entram na 6.9**, depois do porte.
 5. **Importação #92:** só foi rodada em teste, não em aluno real. Não há dados a corrigir.
-6. **Certificação:** um leitor validado com venda real no SaaS vai **certificado por migration** para o nod. O aluno não precisa liberar nada; a regra continua começando em observação e é ativada pelo aluno. Leitor ainda não validado no SaaS (hoje, o ROI Chat) só é portado depois de validado.
+6. **Certificação:** um leitor validado com venda real no SaaS vai **certificado por migration** para o nod. O aluno não precisa liberar nada. ~~a regra continua começando em observação e é ativada pelo aluno~~ **Substituído em 26/10 pela produção direta (§0): conexões e regras nascem em produção.** Leitor ainda não validado no SaaS (hoje, o ROI Chat) só é portado depois de validado.
 7. **Escopo:** levar **tudo** que afeta o uso dos alunos, sem entregar pela metade. O prazo não é o problema.
 
 ## Decisões do Samuel (26/10/2026, depois da auditoria)
@@ -607,8 +621,8 @@ A auditoria de 26/10 releu o histórico do SaaS anterior ao #152 e achou itens q
 |---|---|---|
 | #66 (`37572ad9`), #85 (`ff28d8a1`), #86 (`71e69a95`) | 6.1a (antes do #159) | A ativação da regra não trava com número órfão ou duplicado. Cobre a ponte WAHA/Uazapi |
 | 75f6f4b3 (parcial) | 6.1b | Janela de 7 dias da Meta também nos eventos com anúncio das automações |
-| #63 (alerta de desconexão por instância, 2 leituras) | 6.1c (proposta) | **VAI.** No nod o alerta por instância nunca roda |
-| #91 do SaaS (reenviar itens de replay que falharam) | 6.1c (proposta) | **VAI**, como recurso novo no backoffice do aluno |
+| #63 (alerta de desconexão por instância, 2 leituras) | 6.1c | **VAI.** No nod o alerta por instância nunca roda |
+| #91 do SaaS (reenviar itens de replay que falharam) | 6.1c | **VAI**; implementado na recuperação do aluno (owner) |
 | #61, #69, #83 (parcial) | 6.3a | #83: só a parte de relatórios |
 | #62 | 6.3b (primeiro item) | Base da barra de filtros |
 | 7570fe14 (parcial, Kommo) | 6.5 | Sem a parte do Guimo |
@@ -617,4 +631,8 @@ A auditoria de 26/10 releu o histórico do SaaS anterior ao #152 e achou itens q
 
 - Correção do inventário: "client-swap" é o SaaS #102 (`52d255dc`, mais a parte de client-swap do #83), e não "#134/#135"; #134/#135 são o Kommo (front e back), que já está no nod.
 - Ordem atualizada: 6.0 → 6.1a → 6.1b → 6.1c → 6.2a → 6.2b → 6.3a → 6.3b → 6.4 → 6.5 → 6.6 → 6.7 → 6.8 → 6.8b → 6.9.
-- **PENDENTE:** confirmar com o Samuel a fase proposta para o alerta de desconexão e o reenvio de replay (6.1c, logo depois da 6.1b).
+- Confirmado: a 6.1c (alerta de desconexão, reenvio de replay e, desde 26/10, produção direta) fica logo depois da 6.1b.
+
+## Regra fixa: produção direta (26/10/2026)
+
+Registrada a pedido do Samuel, que já a repetiu muitas vezes; vale para todas as fases seguintes (6.5 a 6.8b) e está detalhada na §0. Resumo: o que foi validado no SaaS chega ao aluno **em produção**. Os leitores entram **certificados**; conexões e regras nascem **em produção**; o aluno não retesta, não certifica e não libera nada. Observação só para o que não foi validado (e isso não é portado). As travas reais (licença, rota Meta, pixel e página, `META_APP_SECRET` no Meta Cloud) continuam, e a tela diz o que configurar. No nod **não existe QR**: Uazapi BYO e WAHA conectam por URL do servidor + token, uma conexão por número.

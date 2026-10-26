@@ -72,7 +72,7 @@ conversão, estas variáveis são **obrigatórias**, não opcionais:
 | `INBOUND_WEBHOOK_ENCRYPTION_KEY` | **Sim** | Você gera (comando abaixo) — Base64 de 32 bytes, string de 44 caracteres terminando em `=` | `.env` da API / env do serviço | **Sim** |
 | `INBOUND_CONVERSION_RULES_ENABLED` | **Sim** — defina `true` | Fixo | `.env` da API / env do serviço | Não |
 | `INBOUND_WEBHOOK_PRODUCTION_ENABLED` | **Sim em produção** (Dokploy/deploy do aluno) | Fixo | `.env` da API / env do serviço | Não |
-| `INBOUND_CONVERSION_PRODUCTION_ENABLED` | Não — mantenha `false` a menos que você queira intencionalmente habilitar envio em produção | Fixo | `.env` da API | Não |
+| `INBOUND_CONVERSION_PRODUCTION_ENABLED` | Não — deixe **sem valor** (produção direta, Fase 6.1c): sem valor, o envio das regras acompanha `INBOUND_CONVERSION_RULES_ENABLED`. `false` explícito desliga o envio de todas as regras (interruptor do servidor). Se a sua API tem `false` copiado do `.env.example` antigo, troque para `true` ou apague a variável | Fixo | `.env` da API | Não |
 | `INBOUND_WEBHOOK_REPLAY_ENABLED` | Não — mantenha `false` a menos que precise reprocessar webhooks | Fixo | `.env` da API | Não |
 
 Gere a chave de criptografia (Base64 de 32 bytes) com Node — mesmo comando em
@@ -428,6 +428,17 @@ e o que ainda não, está em
 | `API_PUBLIC_URL` | **Sim, para gerar receiver** | URL pública da sua API (já obrigatória na seção Core) | `.env` da API / env do serviço | Não |
 | `DISCONNECT_ALERTS_ENABLED`, `DISCONNECT_ALERT_STREAK`, `DISCONNECT_ALERT_INTERVAL_MS` | Não (opcional) | Decisão sua | `.env` da API | Não |
 | `OPS_ALERT_WEBHOOK_URL` | Só se `DISCONNECT_ALERTS_ENABLED=true` | Webhook do seu Slack/Discord/etc. | `.env` local / env do serviço | **Sim** (trate a URL como sensível — permite postar no seu canal) |
+| `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` | Não (opcional) — só para a mensagem dos Alertas WhatsApp sair por WhatsApp. Sem elas o aviso de desconexão aparece só em Integrações | URL do servidor e token de uma instância Uazapi sua que envia o aviso | `.env` da API / env do serviço | `OPS_ALERT_UAZAPI_TOKEN` **sim** |
+| `OPS_ALERT_SCAN_INTERVAL_MS` | Não (padrão 15 minutos; mínimo 60000) | Decisão sua | `.env` da API | Não |
+
+**Alerta de desconexão por conexão (Fase 6.1c):** a API confere cada conexão
+Uazapi BYO e WAHA ativa pela API de status do próprio provedor (a mesma URL do
+servidor + token salvos na conexão). O aviso "WhatsApp desconectado" aparece em
+Integrações só depois de **2 leituras seguidas** de desconectado; estados
+passageiros (subindo, hibernada, offline) e erros de leitura nunca alertam, e
+uma leitura conectada tira o aviso. A mensagem por WhatsApp sai uma vez (com o
+intervalo de repetição de Configurações > Alertas WhatsApp) quando os alertas
+estão ligados no workspace, há telefone cadastrado e a licença está utilizável.
 
 O receiver de cada conexão é gerado na UI (botão **Gerar receiver**) na
 forma `{API_PUBLIC_URL}/webhooks/whatsapp/{ID_DA_CONEXAO}?token=...`. Sem

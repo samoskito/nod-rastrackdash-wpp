@@ -120,9 +120,11 @@ salvar rotas.
 1. Mande uma mensagem de teste por um anúncio CTWA (ou espere o próximo lead) e confira no card os
    contadores da conexão (CTWA roteado, sem rota, ignorado sem CTWA) e a prontidão do número
    (par página + pixel verificado ou o motivo de não estar pronto).
-2. A conexão, o número e cada regra nascem **em observação**: nada é enviado à Meta. Ative o número,
-   depois a conexão (produção) e, em Conversões, o envio automático de cada regra. Os parsers **Unnichat v1** e **Unnichat automation-v1** já vêm certificados pela migration;
-   não há passo de certificação.
+2. Produção direta (o Unnichat foi validado no SaaS): a conexão, o número e cada regra já nascem
+   **enviando**, sem etapa de observação e sem "Ativar envio". Os parsers **Unnichat v1** e
+   **Unnichat automation-v1** já vêm certificados pela migration. Com a página e o pixel do
+   workspace (ou rotas próprias do número) configurados, cada conversa de anúncio vai para a Meta;
+   sem isso, a prontidão do número diz o que falta.
 3. Em produção, os leads aparecem em **Leads** com origem Unnichat e os eventos em **Eventos Meta**
    (`LeadSubmitted` na entrada; o evento da regra na automação). Na regra, **Eventos recebidos**
    mostra cada chamada e o resultado.

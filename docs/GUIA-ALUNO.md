@@ -152,16 +152,17 @@ canal é diferente:
    fazem parte do parser v1.
 5. O parser **Data Crazy v1** já vem certificado pela atualização (é o mesmo
    contrato validado com CTWAs reais no SaaS); não há passo de certificação.
-   Depois que uma entrega CTWA real for processada em observação, configure
-   a rota Meta e ative produção (a conexão e cada regra, uma a uma), no mesmo
-   gate de Gupshup e Meta Cloud. Nada vai para produção sozinho.
+   Produção direta: a conexão nasce em produção, o número já envia quando
+   aparece e cada regra nasce enviando. Configure a rota Meta (página e
+   pixel) do número: sem rota, nada é enviado e a prontidão do número diz o
+   que falta.
 
 **Payt** (plataforma de venda) não tem conexão própria: as vendas viram
 conversões por uma regra em **Conversões → Nova regra → origem Payt**, uma
 regra por evento (Compra aprovada → `Purchase`, Pix/boleto gerado →
 `InitiateCheckout`, Carrinho abandonado (beta) → `CartAbandoned`). Copie o
 endereço da regra para o Postback da Payt e confira em **Eventos recebidos**;
-a regra nasce em observação. Só vendas de leads CTWA (com `ctwa_clid`) dos
+a regra já nasce enviando. Só vendas de leads CTWA (com `ctwa_clid`) dos
 números da regra são enviadas; sem ID do anúncio, só de leads que entraram por
 um número Unnichat (par único página + pixel). Passo a passo, verificação e
 rollback em [`setup/payt.md`](setup/payt.md).
@@ -174,7 +175,7 @@ regra por evento e chame a URL dela no ponto do fluxo. Sem `ctwa_clid` nada é
 enviado; lead com `ctwa_clid` e sem ID do anúncio vai pelo único par página +
 pixel do número. Cada número escolhe o roteamento Meta: **Herdar do workspace**
 (padrão) ou **Configurar neste número**, com a prontidão e o motivo. Parsers certificados pela migration; conexão,
-número e regras nascem em observação. Passo a passo, verificação e rollback em
+número e regras já nascem enviando. Passo a passo, verificação e rollback em
 [`setup/unnichat.md`](setup/unnichat.md).
 
 ### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
@@ -222,7 +223,7 @@ suportado como conexão inbound por webhook, conforme o passo 10.2.
 
 Detalhe completo de cada variável em [`setup/environment.md`](setup/environment.md#gatilhos-de-conversão--obrigatórias-no-caminho-do-aluno).
 
-A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). **Data Crazy** segue o fluxo CTWA de observação e ativação de produção do passo 10.2 (o parser já vem certificado); o canal só é descoberto após o primeiro webhook. Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. A **WAHA** também cria a origem automaticamente (regras de frase da equipe, sem etiquetas). A **Z-API** está "Em breve": não recebe lead de anúncio nem tem regras de frase por enquanto.
+A origem aparece na central de Gatilhos assim que existe uma conexão inbound (Umbler, Gupshup, Meta Cloud). **Data Crazy** segue o fluxo CTWA do passo 10.2 (o parser já vem certificado e a conexão nasce em produção); o canal só é descoberto após o primeiro webhook. Para **Uazapi**, a origem é criada automaticamente pelo produto quando chega a primeira mensagem **enviada pelo número conectado** ou uma mudança de etiqueta. A **WAHA** também cria a origem automaticamente (regras de frase da equipe, sem etiquetas). A **Z-API** está "Em breve": não recebe lead de anúncio nem tem regras de frase por enquanto.
 
 ### 10.4 Aba CRM — cards Kommo e Pipedrive (opcional)
 
@@ -238,8 +239,8 @@ WhatsApp que já existe no workspace. **Sem `ctwa_clid` nada é enviado.**
 - **Pipedrive:** gere uma chave nova com `openssl rand -base64 32` e preencha
   `PIPEDRIVE_CRM_ENCRYPTION_KEY` na env da API — **diferente** da chave do
   Kommo (igual ou inválida, a API não sobe). Depois: token de API do Pipedrive →
-  conectar → atualizar catálogo → números autorizados → regras de etapa (nascem
-  em observação) → gerar a URL do webhook (aparece uma vez) → criar no Pipedrive
+  conectar → atualizar catálogo → números autorizados → regras de etapa (já
+  nascem enviando) → gerar a URL do webhook (aparece uma vez) → criar no Pipedrive
   o webhook v2 de **negócio alterado**. Passo a passo em
   [`setup/pipedrive.md`](setup/pipedrive.md).
 

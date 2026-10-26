@@ -342,15 +342,16 @@ local com fixtures; nenhum envio Meta real foi feito nesta entrega.
 permanente do Graph usado em [`meta-manual.md`](meta-manual.md)) faz a API
 validar o header `x-hub-signature-256` de cada POST.
 
-| `META_APP_SECRET` | Conexão em **observação** | Conexão em **produção** (envio automático) |
+| `META_APP_SECRET` | Conexão com o **envio desligado** | Conexão em **produção** (envio automático) |
 |---|---|---|
 | Preenchido | POST aceito só com assinatura válida | POST aceito só com assinatura válida |
 | Vazio | POST aceito (a API registra o aviso `meta_cloud_signature_unverified`) | **POST recusado com `404`** |
 
-Ou seja: dá para homologar sem ele, mas **antes de clicar em "Ativar
-envios automáticos" numa conexão `meta_cloud`, preencha
-`META_APP_SECRET` do próprio app e reinicie a API**. A ativação e a
-autorização de recuperação são bloqueadas enquanto estiver vazio. Uma
+Ou seja: **preencha `META_APP_SECRET` do próprio app e reinicie a API
+antes de criar a conexão `meta_cloud`**. Produção direta (Fase 6.1c): com o
+segredo, a conexão já nasce enviando; sem ele, nasce com o envio desligado
+(para não recusar as entregas da Meta) e a ativação e a autorização de
+recuperação ficam bloqueadas até o segredo existir. Uma
 conexão em produção continua recusando POSTs sem assinatura válida. Nunca
 use o segredo PalmUP nem envie o valor por chat.
 
@@ -376,10 +377,10 @@ credencial ou variável de ambiente própria neste template.
    provedor não fazem parte do parser Data Crazy v1.
 6. O parser **Data Crazy v1** já vem certificado pela migration
    `20261016090300_validated_parser_certification` (contrato validado com
-   CTWAs reais no SaaS). Após uma entrega CTWA real ser processada em
-   observação, configure a rota Meta do canal e ative a conexão em
-   produção, no mesmo gate usado por Gupshup e Meta Cloud; cada regra
-   continua precisando da própria ativação.
+   CTWAs reais no SaaS). Produção direta (Fase 6.1c): a conexão nasce em
+   produção, o canal já envia quando aparece e cada regra nasce enviando.
+   Configure a rota Meta do canal: sem rota, nada é enviado e a prontidão
+   do número diz o que falta.
 
 ## Umbler Talk e Gupshup — conexão de webhook de entrada
 
@@ -399,11 +400,11 @@ credencial ou variável de ambiente própria neste template.
    devem converter.
 5. Os parsers **Umbler v1** e **Gupshup v1** (mensagens) já vêm
    certificados pela migration `20261016090300_validated_parser_certification`
-   (os mesmos contratos em produção no SaaS). Isso só os torna elegíveis:
-   a conexão e cada regra continuam em observação até você ativar a
-   produção, uma a uma. A certificação também permite autorizar o
+   (os mesmos contratos em produção no SaaS). Produção direta (Fase 6.1c):
+   a conexão nasce em produção, cada número já envia e cada regra nasce
+   enviando; a rota Meta de cada número continua obrigatória para enviar. A certificação também permite autorizar o
    **replay controlado** de uma conexão Umbler, Gupshup ou Data Crazy
-   ainda em observação (antes ele pedia o parser certificado).
+   com o envio desligado (antes ele pedia o parser certificado).
 
 Umbler Talk entrega também as mensagens do atendente, então regras de
 frase com autor "equipe" funcionam. Gupshup entrega apenas o que o

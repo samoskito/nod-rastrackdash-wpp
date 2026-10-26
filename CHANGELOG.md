@@ -7,9 +7,94 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One additive migration (Fase 6.1a): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`.
 
 ### Added
+
+- **Fase 6.1c — Production direct (nod product rule; API, shared and web)**:
+  what was validated in the SaaS reaches the student in production; the
+  student never re-tests, certifies or releases anything.
+  - New `inbound-webhooks/production-direct.ts`: with a production-eligible
+    parser release (`inboundParserProductionEligible`), an inbound connection
+    is born `production` (with `productionActivatedAt`) and each number is
+    born `active`: Umbler, Gupshup, Data Crazy, Unnichat (its bound number),
+    Meta Cloud (only with `META_APP_SECRET`: in production the API requires the
+    Meta signature and would reject the deliveries), the Uazapi BYO/WAHA bridge
+    (server URL + token, one number per connection), a manually provisioned
+    number and a number discovered by its first delivery (active since that
+    delivery's `firstReceivedAt`, so its first CTWA is sent). A paused
+    connection stays paused (its new number is active, stamped on resume).
+    An unvalidated or retired release keeps the observation step.
+  - Conversion rules (phrase, catalog, label, Umbler/Unnichat automation,
+    Payt, adapted legacy rules) are born `production` when the create omits
+    `mode` (shared `providerConversionRuleCreateInputSchema.mode` is now
+    optional; the web no longer sends it): no "Ativar envio" click. An
+    explicitly requested mode still applies; with the server switch off or
+    an unvalidated reader the rule is born `observation`. A defaulted
+    production create does not run the strict number cascade (numbers are
+    already born live; operator pauses are never undone implicitly).
+    "Retomar" a paused rule resumes it sending; resuming a paused connection
+    or number (`productionDirectResume`) no longer demands a Meta route on
+    every number (numbers are born active; the route is enforced at send
+    time), while the validated reader, `META_APP_SECRET` and replay-in-flight
+    checks still apply. Kommo rules default to
+    `production` (shared schema); Pipedrive rules default to `production`
+    when the connection has what sending needs, otherwise `observation`
+    (no creation failure).
+  - `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset now follows
+    `INBOUND_CONVERSION_RULES_ENABLED`; an explicit `false` remains the server
+    switch, and the screens say exactly which variable to set.
+  - Data-only migration `20261027125000_production_direct_validated_integrations`
+    (slot reserved for 6.1c): certifies the Meta Cloud v1 row (already
+    eligible in code), promotes observation connections with a certified
+    reader of their own provider (Meta Cloud excluded: its promotion depends
+    on `META_APP_SECRET`), activates never-activated numbers of production
+    connections (Uazapi/WAHA only with an active WhatsApp connection; no
+    rediscovered duplicate of an active number; between two discovered
+    identities of a number only the last seen), stamps active numbers
+    without activation date, and promotes active observation rules (provider
+    rules with a certified or no own release whose bound connection is
+    production or paused; Kommo only when its connection has no event still
+    queued, since Kommo has no activation fence; Pipedrive with its
+    activation fence). Kept as is: paused, unified or removed rules; rules
+    that had been in production and were taken off (audit
+    `resultStatus = production`); connections an operator put back in
+    observation (and rules bound to them); connections with a replay in
+    flight. Activation dates are
+    the migration's (nothing is sent retroactively). Idempotent, with
+    deterministic system audit ids (`production_direct_6_1c:*`).
+  - Screens: no observation, test, release or certification steps for the
+    student. Rule status "Observação" became "Envio desligado"; no "Voltar
+    para observação"/"Observar" (Pausar is the off switch); Kommo/Pipedrive
+    forms no longer offer "Observar primeiro"; Integrations connection labels,
+    notes and messages, received-events reasons ("Por que não foi enviado"),
+    and student docs (guide, Payt, Unnichat, Pipedrive, Data Crazy, Meta
+    Cloud, troubleshooting, environment) were updated.
+- **Fase 6.1c — WhatsApp disconnect alert per connection (API, shared and
+  web)**, ported from the SaaS (`6be4bdcd`/`86aaac21`, #63), adapted: the
+  check never ran in this edition (it only recorded "unavailable"). Each scan
+  reads every active Uazapi BYO and WAHA connection through the provider's
+  status API (`WhatsappConnectionsService.readConnectionStatusForAlert`,
+  read-only). It alerts only after 2 consecutive definitive "disconnected"
+  readings (Uazapi `disconnected/closed/logged_out`; WAHA `STOPPED` or a
+  session waiting to be paired again); ambiguous states neither count nor
+  reset; a connected reading resets; a read error never alerts (Uazapi now
+  exposes `providerStatusText`, as in the SaaS). The streak lives in
+  `WorkspaceOpsAlertDelivery` rows. The confirmed alert shows in
+  Integrations (`disconnectAlert` on the WhatsApp connections list, optional
+  in the shared schema); the WhatsApp message goes out only with the
+  workspace alerts on, a phone and a usable license.
+- **Fase 6.1c — "Reenviar os que falharam" in the student recovery (API,
+  shared and web)**, ported from the SaaS (`f7c61c07`, #91), adapted to the
+  owner-scoped Meta Cloud recovery: `POST …/recovery/batches/:batchId/retry`
+  re-queues the failed items of a batch while the original payload is still
+  retained, re-checking each one like a new authorization (active channel,
+  one active valid route, identity, 7-day window) and never re-sending a
+  CTWA that already has a conversion event. The batch authorization is
+  renewed with the current context (latest authorize audit wins). 423 with
+  a locked license (global guard and service). `retryableFailedCount` and the
+  new `retryableFailed` of the result count failed items with a retained
+  payload, whatever their error code (as in #91).
 
 - **Fase 6.1b — Why an event stayed in observation (API, shared and web)**,
   ported from the SaaS (`d4c6a419`, #171), adapted to the student edition:
