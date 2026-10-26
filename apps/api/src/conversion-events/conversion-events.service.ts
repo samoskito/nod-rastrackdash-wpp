@@ -856,6 +856,22 @@ export class ConversionEventsService {
           ownDedupeKey: input.dedupeKey,
         },
       );
+      // nod: a concurrent writer of the SAME record (same dedupeKey, e.g. the
+      // live entry and its replay) may have committed while this one waited
+      // for the identity lock. Reconcile with it here instead of hitting the
+      // unique index, which would abort this transaction (no "duplicate").
+      const committed = (await client.conversionEventLog.findUnique({
+        where: { dedupeKey: input.dedupeKey },
+      })) as ConversionEventLogRecord | null;
+      if (committed) {
+        if (committed.workspaceId !== input.workspaceId)
+          throw new ConversionRecordError("conversion_workspace_mismatch");
+        return this.reconcileExistingExternalConversion(
+          committed,
+          input,
+          client,
+        );
+      }
     }
 
     // No ctwa_clid, no CTWA path: the page/pixel destination exists only for a

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type {
   ConversionEventNameDto,
   ProviderConversionDecisionDto,
@@ -884,5 +886,37 @@ describe("nod: WAHA bridge and Meta Cloud entry under the once-per-lead rule", (
     await store.recordEntry({ eventKey: "wamid_4", channelId: "channel_meta_cloud", lead: leadA, provider: "meta_cloud" });
     store.receivePhrase({ id: "qualified", channelId: "channel_waha", lead: leadA, provider: "waha" });
     await expect(store.process("qualified")).resolves.toEqual({ status: "materialized" });
+  });
+
+  it("the same entry written twice at once (live + replay) is one record, the second a duplicate", async () => {
+    const store = createStore();
+    const results = await Promise.all([
+      store.recordEntry({ eventKey: "wamid_race", channelId: "channel_meta_cloud", lead: leadA, provider: "meta_cloud" }),
+      store.recordEntry({ eventKey: "wamid_race", channelId: "channel_meta_cloud", lead: leadA, provider: "meta_cloud" }),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(["created", "duplicate"]);
+    expect(new Set(results.map((result) => result.conversionEventLogId)).size).toBe(1);
+    expect(store.logs).toHaveLength(1);
+  });
+
+  it("the real CTWA entry writers pass the once-per-lead guard (source contract)", () => {
+    const source = (path: string) =>
+      readFileSync(resolve(__dirname, "../../src", path), "utf8");
+    const guardCall =
+      /leadLifetimeGuard: \{\s*channelId: event\.channelId,\s*pipeline: "ctwa_entry",\s*inTransaction: (true|false),/g;
+    const guardCalls = (text: string) => text.match(guardCall) ?? [];
+    // Unnichat (in the caller transaction) + generic path (Meta Cloud and the
+    // other inbound providers, own transaction).
+    expect(
+      guardCalls(source("inbound-webhook-production/inbound-webhook-production.service.ts")),
+    ).toHaveLength(2);
+    expect(
+      guardCalls(source("inbound-webhook-replay/inbound-webhook-replay.service.ts")),
+    ).toHaveLength(1);
+    expect(
+      source("inbound-webhook-production/ctwa-entry-materialization.ts"),
+    ).toMatch(
+      /leadLifetimeGuard: \{\s*channelId: event\.channelId,\s*pipeline: "ctwa_entry",\s*inTransaction: true,/,
+    );
   });
 });
