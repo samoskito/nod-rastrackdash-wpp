@@ -33,6 +33,18 @@ import {
   requireInboundWebhookConnection,
 } from "./inbound-webhook-production-activation";
 import { UazapiConversionBridgeService } from "./uazapi-conversion-bridge.service";
+import {
+  type BridgedWhatsappProvider,
+  isBridgedWhatsappProvider,
+} from "./bridged-whatsapp-providers";
+
+/**
+ * Porte do #105 do SaaS, com a ponte WAHA: a conexão-ponte de uma conexão
+ * WhatsApp (Uazapi/WAHA) recebe pelo webhook da instância, não por esta URL.
+ * Gerar URL aqui não ajuda e confunde: bloqueado.
+ */
+const bridgeSecretRotationBlockedMessage =
+  "Conexões Uazapi e WAHA recebem pelo webhook da própria conexão WhatsApp. Não gere URL aqui: confira o webhook da conexão WhatsApp em Integrações.";
 import { effectiveInboundParserStatus } from "./inbound-webhook-parser-eligibility";
 import { normalizePhoneIdentity } from "../common/phone/phone-identity";
 import { reanchorSpanningAutomationRules } from "../conversion-rules/provider-rule-reanchor";
@@ -150,6 +162,18 @@ export class InboundWebhookConnectionsService {
       workspaceId,
       connectionId,
     );
+
+    // Porte do #103 do SaaS, com a ponte WAHA: a ponte Uazapi/WAHA não usa o
+    // pipeline genérico de observação. O CTWA vira lead direto pelo webhook
+    // da instância, então ler InboundWebhookEvent mostraria a conexão vazia.
+    if (isBridgedWhatsappProvider(connection.provider)) {
+      return this.getBridgeOverview(
+        workspaceId,
+        connection,
+        connection.provider,
+      );
+    }
+
     const [eventCounts, deliveries] = await Promise.all([
       this.prisma.inboundWebhookEvent.groupBy({
         by: ["classification"],
@@ -202,6 +226,63 @@ export class InboundWebhookConnectionsService {
         invalid: deliveries.filter(
           (delivery) => delivery.classification === "invalid_payload",
         ).length,
+      },
+    };
+  }
+
+  private async getBridgeOverview(
+    workspaceId: string,
+    connection: PersistedInboundWebhookConnection,
+    provider: BridgedWhatsappProvider,
+  ): Promise<InboundWebhookConnectionOverviewDto> {
+    const empty = {
+      eligibleRouted: 0,
+      eligibleUnresolved: 0,
+      ignoredNoCtwa: 0,
+      duplicate: 0,
+      invalid: 0,
+    };
+    const channel = await this.prisma.inboundWebhookChannel.findFirst({
+      where: {
+        workspaceId,
+        connectionId: connection.id,
+        whatsappInstanceId: { not: null },
+      },
+      select: { whatsappInstanceId: true },
+    });
+    const whatsappInstanceId = channel?.whatsappInstanceId;
+    if (!whatsappInstanceId) {
+      return { connection: this.toDto(connection), counters: empty };
+    }
+
+    const [eligibleRouted, latestLog] = await Promise.all([
+      this.prisma.lead.count({
+        where: {
+          workspaceId,
+          whatsappInstanceId,
+          source: provider,
+          ctwaClid: { not: null },
+        },
+      }),
+      this.prisma.webhookLog.findFirst({
+        where: { workspaceId, whatsappInstanceId, source: provider },
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+        select: { receivedAt: true },
+      }),
+    ]);
+
+    return {
+      connection: this.toDto(connection, latestLog?.receivedAt ?? null),
+      counters: {
+        // A bridge lead is only created for an inbound message with ctwaClid.
+        eligibleRouted,
+        // The bridge has no persisted unresolved route state: never invented.
+        eligibleUnresolved: 0,
+        // WebhookLog keeps a redacted payload, not a queryable CTWA outcome.
+        ignoredNoCtwa: 0,
+        // Duplicate and invalid attempts return before a distinct log exists.
+        duplicate: 0,
+        invalid: 0,
       },
     };
   }
@@ -337,6 +418,15 @@ export class InboundWebhookConnectionsService {
     connectionId: string,
     actorUserId: string,
   ): Promise<InboundWebhookConnectionRotateSecretResultDto> {
+    const existing = await this.requireConnection(
+      this.prisma,
+      workspaceId,
+      connectionId,
+    );
+    if (isBridgedWhatsappProvider(existing.provider)) {
+      throw new ConflictException(bridgeSecretRotationBlockedMessage);
+    }
+
     const config = this.requireEnabledConfig();
     const secret = this.generateSecret();
     const secretHash = this.hashSecret(secret);
@@ -347,6 +437,9 @@ export class InboundWebhookConnectionsService {
         workspaceId,
         connectionId,
       );
+      if (isBridgedWhatsappProvider(current.provider)) {
+        throw new ConflictException(bridgeSecretRotationBlockedMessage);
+      }
       const updatedAt = this.nextMutationTime(current.updatedAt);
       const claimed = await transaction.inboundWebhookConnection.updateMany({
         where: this.activeMutationWhere(current),
@@ -621,6 +714,7 @@ export class InboundWebhookConnectionsService {
 
   private toDto(
     connection: PersistedInboundWebhookConnection,
+    lastDeliveryAt: Date | null = connection.lastDeliveryAt,
   ): InboundWebhookConnectionDto {
     return {
       id: connection.id,
@@ -632,7 +726,7 @@ export class InboundWebhookConnectionsService {
       status: connection.status,
       productionActivatedAt:
         connection.productionActivatedAt?.toISOString() ?? null,
-      lastDeliveryAt: connection.lastDeliveryAt?.toISOString() ?? null,
+      lastDeliveryAt: lastDeliveryAt?.toISOString() ?? null,
       lastSuccessfulParseAt:
         connection.lastSuccessfulParseAt?.toISOString() ?? null,
       createdAt: connection.createdAt.toISOString(),

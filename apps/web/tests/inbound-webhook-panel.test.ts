@@ -822,3 +822,27 @@ describe("inbound webhook panel: leitura dos números e “Bloqueado” com moti
     expect(html).toContain("2 CTWA estão sendo processados agora.");
   });
 });
+
+// Fase 6.1b — porte do #105 do SaaS (e69a5e91), com a ponte WAHA.
+describe("inbound webhook panel: “Gerar nova URL” na ponte Uazapi/WAHA", () => {
+  function withProvider(provider: string) {
+    return {
+      ...connectionView,
+      overview: {
+        ...connectionView.overview,
+        connection: { ...connectionView.overview.connection, provider },
+      },
+    } as InboundWebhookConnectionView;
+  }
+
+  it.each(["uazapi", "waha"])("%s: não oferece gerar URL e explica por quê", (provider) => {
+    const html = renderPanel({ connections: [withProvider(provider)] });
+    expect(html).not.toContain("Gerar nova URL");
+    expect(html).toContain("recebe pelo webhook da conexão");
+  });
+
+  it("Umbler segue com o botão", () => {
+    const html = renderPanel({ connections: [withProvider("umbler")] });
+    expect(html).toContain("Gerar nova URL");
+  });
+});

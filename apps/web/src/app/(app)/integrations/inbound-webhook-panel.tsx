@@ -654,27 +654,37 @@ export function InboundWebhookPanel({
                           ? "Retomar observação"
                           : "Pausar conexão"}
                       </button>
-                      <button
-                        className="button"
-                        type="button"
-                        disabled={Boolean(connectionPending)}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              "Gerar uma nova URL inválida a URL atual. Continuar?",
-                            )
-                          ) {
-                            void runConnectionAction(
-                              `rotate-${connection.id}`,
-                              rotateSecretAction,
-                              { connectionId: connection.id },
-                            );
-                          }
-                        }}
-                      >
-                        <RefreshCw size={15} aria-hidden="true" />
-                        Gerar nova URL
-                      </button>
+                      {connection.provider === "uazapi" ||
+                      connection.provider === "waha" ? (
+                        // Porte do #105 do SaaS (com a ponte WAHA): a ponte
+                        // recebe pelo webhook da conexão WhatsApp.
+                        <span className="muted">
+                          Esta conexão recebe pelo webhook da conexão
+                          WhatsApp; gerar URL aqui não se aplica.
+                        </span>
+                      ) : (
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={Boolean(connectionPending)}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Gerar uma nova URL inválida a URL atual. Continuar?",
+                              )
+                            ) {
+                              void runConnectionAction(
+                                `rotate-${connection.id}`,
+                                rotateSecretAction,
+                                { connectionId: connection.id },
+                              );
+                            }
+                          }}
+                        >
+                          <RefreshCw size={15} aria-hidden="true" />
+                          Gerar nova URL
+                        </button>
+                      )}
                       <button
                         className="button danger"
                         type="button"
