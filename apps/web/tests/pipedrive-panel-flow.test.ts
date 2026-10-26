@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import {
   conversionEventCarriesValue,
-  conversionEventDisplayLabels,
   conversionEventNameSchema,
   conversionEventValuePolicy,
 } from "@wpptrack/shared";
@@ -23,6 +22,7 @@ import {
   sentForm,
 } from "./support/pipedrive-panel-harness";
 import { WorkspaceCurrencyProvider } from "../src/components/workspace-currency";
+import { accentedEventDisplayLabel } from "../src/app/(app)/conversions/event-copy";
 
 const { routerRefresh } = vi.hoisted(() => ({ routerRefresh: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -376,7 +376,7 @@ describe("Pipedrive rule CRUD", () => {
     const optionLabels = Array.from(select.options).map((option) => option.textContent);
 
     expect(allEvents).toHaveLength(14);
-    expect(optionLabels).toEqual(allEvents.map((name) => conversionEventDisplayLabels[name]));
+    expect(optionLabels).toEqual(allEvents.map((name) => accentedEventDisplayLabel(name)));
   });
 
   it("groups stages by pipeline and sends pipelineId and stageId (not names)", async () => {

@@ -1,4 +1,7 @@
-import { conversionEventBuilderLabel } from "@wpptrack/shared";
+import {
+  conversionEventBuilderLabel,
+  conversionEventDisplayLabel,
+} from "@wpptrack/shared";
 
 /**
  * O catálogo de eventos do pacote shared é ASCII de propósito (teste de
@@ -34,6 +37,14 @@ export function accentEventCopy(text: string): string {
 /** Rótulo do evento com acentos, para as telas de Conversões. */
 export function ruleEventLabel(eventName: string): string {
   return accentEventCopy(conversionEventBuilderLabel(eventName));
+}
+
+/**
+ * Rótulo curto do evento (funil) com acentos, para as telas de CRM (Kommo,
+ * Pipedrive). Fase 6.1a, porte do #160.
+ */
+export function accentedEventDisplayLabel(eventName: string): string {
+  return accentEventCopy(conversionEventDisplayLabel(eventName));
 }
 
 /**

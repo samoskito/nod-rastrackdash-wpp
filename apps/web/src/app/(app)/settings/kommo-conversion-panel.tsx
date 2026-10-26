@@ -13,7 +13,6 @@ import type {
 } from "@wpptrack/shared";
 import {
   conversionEventCarriesValue,
-  conversionEventDisplayLabels,
   conversionEventNameSchema,
   conversionEventRequiresValue,
   formatMoney,
@@ -59,6 +58,7 @@ import type {
   KommoRuleActionResult,
 } from "../integrations/kommo-actions";
 import { KommoAuditPanel } from "./kommo-audit-panel";
+import { accentedEventDisplayLabel } from "../conversions/event-copy";
 
 type ConnectionAction = (formData: FormData) => Promise<KommoActionResult>;
 type RuleAction = (formData: FormData) => Promise<KommoRuleActionResult>;
@@ -137,7 +137,7 @@ type RouteOption = CrmChannelOption;
 const conversionEventOptions = conversionEventNameSchema.options;
 
 function eventLabel(eventName: ConversionEventNameDto): string {
-  return conversionEventDisplayLabels[eventName];
+  return accentedEventDisplayLabel(eventName);
 }
 
 function connectionStatusLabel(

@@ -6,7 +6,6 @@ import type {
 } from "@wpptrack/shared";
 import {
   conversionEventCarriesValue,
-  conversionEventDisplayLabels,
   conversionEventNameSchema,
   conversionEventValuePolicy,
   formatMoney,
@@ -58,6 +57,7 @@ import type {
   PipedrivePipelineDto,
   PipedriveRuleActionResult,
 } from "../integrations/pipedrive-actions";
+import { accentedEventDisplayLabel } from "../conversions/event-copy";
 
 type ConnectionAction = (formData: FormData) => Promise<PipedriveActionResult>;
 type RuleAction = (formData: FormData) => Promise<PipedriveRuleActionResult>;
@@ -154,7 +154,7 @@ type RouteOption = CrmChannelOption;
 const conversionEventOptions = conversionEventNameSchema.options;
 
 function eventLabel(eventName: ConversionEventNameDto): string {
-  return conversionEventDisplayLabels[eventName];
+  return accentedEventDisplayLabel(eventName);
 }
 
 function valuePolicyHint(eventName: ConversionEventNameDto): string {

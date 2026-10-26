@@ -874,3 +874,90 @@ describe("Card da Payt no Hub", () => {
     expect(payt?.status.label).toBe("URL criada, sem regras");
   });
 });
+
+// Fase 6.1a: porte do SaaS (5141e217, #160), com os textos do nod.
+describe("Conversions: legacy URL section copy", () => {
+  function legacyRule(origin: "automation_unnichat" | "automation_umbler") {
+    return {
+      ...providerRule({
+        id: "rule_legacy",
+        triggerType: "provider_automation",
+        origin,
+        eventName: "QualifiedLead",
+        connectionId: "conn_umbler",
+        channelIds: ["ch_01"],
+        phrases: [],
+      }),
+      endpoint: {
+        id: "ep_1",
+        workspaceId: "workspace_1",
+        providerRuleId: "rule_legacy",
+        secretVersion: 1,
+        lastDeliveryAt: at,
+        lastSuccessfulParseAt: at,
+        rotatedAt: at,
+        removedAt: null,
+        publicUrlDisabledAt: null,
+        createdAt: at,
+        updatedAt: at,
+      },
+    };
+  }
+
+  it("asks to generate the event URL first and never offers to rotate the old one", () => {
+    render(
+      createElement(RuleEndpoint, {
+        rule: legacyRule("automation_umbler"),
+        origin: "automation_umbler",
+        canManage: true,
+        rotateAction: vi.fn(),
+        onRotated: vi.fn(),
+        onDismiss: vi.fn(),
+        integrationEndpoint: null,
+        singleUrlActions: actions(),
+      }),
+    );
+    expect(
+      screen.getByText(
+        /Esta regra ainda recebe pela URL antiga desta conexão .*Gere a URL do evento acima, cole na Umbler em todos os números e depois desative a antiga\./,
+      ),
+    ).toBeTruthy();
+    const legacy = screen.getByRole("region", { name: "URL antiga desta conexão" });
+    expect(within(legacy).getByText("Último evento recebido nela")).toBeTruthy();
+    expect(
+      within(legacy).queryByRole("button", { name: /Gerar novo endereço/ }),
+    ).toBeNull();
+    expect(screen.queryByText("Endereço gerado de novo em")).toBeNull();
+    expect(screen.getByRole("button", { name: "Desativar URL antiga" })).toBeTruthy();
+  });
+
+  it("with the event URL ready, asks to paste it in every number before disabling the old one", () => {
+    render(
+      createElement(RuleEndpoint, {
+        rule: legacyRule("automation_unnichat"),
+        origin: "automation_unnichat",
+        canManage: true,
+        rotateAction: vi.fn(),
+        onRotated: vi.fn(),
+        onDismiss: vi.fn(),
+        integrationEndpoint: endpoint({
+          id: "ie_q",
+          provider: "unnichat",
+          kind: "automation_event",
+          eventName: "QualifiedLead",
+          url: null,
+          lastDeliveryAt: at,
+        }),
+        singleUrlActions: actions(),
+      }),
+    );
+    expect(
+      screen.getByText(
+        /Depois de colar a URL do evento no Unnichat em todos os números, desative a antiga aqui/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "URL antiga (desta conexão)" }),
+    ).toBeTruthy();
+  });
+});
