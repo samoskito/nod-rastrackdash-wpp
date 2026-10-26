@@ -101,6 +101,7 @@ Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.1a
 Escopo: #66/#85/#86 (ativação não trava com número órfão/duplicado, com a ponte WAHA), #159 (regra única por evento Unnichat/Umbler, todas as conexões, número removido), #160 (seção da URL antiga), #161 (exclusão em lote); atualização do plano com a auditoria de 26/10
 Migrations: 20261027120000_provider_rule_cross_connection_scope (aditiva, ADD COLUMN nullable)
 Testes: lista da §6.1a + licensing-client + brand-footer/app-layout/navigation
+Resultado: typecheck api/web/shared OK; API 2741 ok / 48 skipped (integração: 2696 ok); web 1331 ok / 3 falhas iguais à integração; shared 187 ok / 18 falhas iguais à integração; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe na integração; revisão independente feita (achados corrigidos em 86a2cf12)
 Limitações: entregas recebidas antes de uma reancoragem ficam na âncora antiga e não são reenviadas (igual ao SaaS); sem validação em instalação real
 ```
 
