@@ -435,7 +435,7 @@ function globalWorld(numbers: GNumber[]) {
     state.channels.find((item) => item.id === `channel_${key}`)!;
   const connection = (key: string) =>
     state.connections.find((item) => item.id === `connection_${key}`)!;
-  return { service, prisma, state, channel, connection, clock };
+  return { service, prisma, state, channel, connection, clock, releases };
 }
 
 function globalMessageInput(overrides: Record<string, unknown> = {}) {
@@ -1628,5 +1628,111 @@ describe("Envio ativo: número Uazapi/WAHA excluído em Integrações (revisão 
         "user_1",
       ),
     ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+/**
+ * Fase 6.1b — porte do #171 do SaaS (`d4c6a419`): regra Payt "Todos os
+ * números" em envio automático. O número do lead (aqui na ponte WAHA) estava
+ * ativo, mas a PRÓPRIA conexão dele em observação: a lista dizia que o número
+ * já enviava (a regra só olhava a conexão âncora) e cada venda ficava "em
+ * observação" sem motivo.
+ */
+describe("Payt “Todos os números”: o número do lead na própria conexão (porte do #171)", () => {
+  function paytWorld() {
+    const world = globalWorld([
+      {
+        key: "anchor",
+        provider: "umbler",
+        connectionStatus: "production",
+        channelStatus: "active",
+      },
+      {
+        key: "lead",
+        provider: "waha",
+        connectionStatus: "observation",
+        channelStatus: "active",
+      },
+    ]);
+    world.releases.push({
+      id: "release_payt",
+      provider: "payt",
+      version: "automation-v1",
+      status: "certified",
+    });
+    world.state.conversionRules.push({
+      id: "conversion_payt",
+      workspaceId: "workspace_1",
+      name: "Venda na Payt - Carrinho abandonado",
+      triggerType: "provider_automation",
+      triggerValue: "payt",
+      matchMode: "exact",
+      eventName: "CartAbandoned",
+      pixelId: null,
+      defaultValueCents: 5_000,
+      defaultCurrency: "BRL",
+      defaultContentName: null,
+      defaultItems: null,
+      active: true,
+      createdAt: gNow,
+      updatedAt: gNow,
+    });
+    world.state.providerRules.push({
+      id: "provider_rule_payt",
+      workspaceId: "workspace_1",
+      conversionRuleId: "conversion_payt",
+      connectionId: "connection_anchor",
+      parserReleaseId: "release_payt",
+      scope: "all_numbers",
+      crossConnectionScope: false,
+      mode: "production",
+      productionActivatedAt: new Date(gNow.getTime() - 86_400_000),
+      messageTriggerPhrases: [],
+      messageAuthorScope: null,
+      productFilterCodes: [],
+      removedAt: null,
+      unifiedIntoProviderRuleId: null,
+      publicUrlDisabledAt: null,
+      createdByUserId: "user_1",
+      createdAt: new Date(gNow.getTime() - 86_400_000),
+      updatedAt: gNow,
+    });
+    return world;
+  }
+
+  it("lista o número do lead como pendente na própria conexão (senão ele nunca envia)", async () => {
+    const world = paytWorld();
+    const rule = (await world.service.listRules("workspace_1")).find(
+      (item) => item.id === "provider_rule_payt",
+    )!;
+
+    expect(rule.pendingNumbers).toEqual([
+      expect.objectContaining({
+        channelId: "channel_lead",
+        connectionId: "connection_lead",
+        reason: "connection_not_production",
+        activatable: true,
+      }),
+    ]);
+  });
+
+  it("só o clique em “Ativar envio neste número” promove essa conexão", async () => {
+    const world = paytWorld();
+
+    await world.service.autoActivateGlobalNumbers("workspace_1", "reconcile");
+    expect(world.connection("lead").status).toBe("observation");
+    expect(world.channel("lead").productionActivatedAt).toBeNull();
+
+    const activated = await world.service.activateGlobalRuleNumber(
+      "workspace_1",
+      "provider_rule_payt",
+      "channel_lead",
+      "user_1",
+    );
+    expect(activated.outcome).toBe("promoted");
+    expect(world.connection("lead").status).toBe("production");
+    expect(world.channel("lead").productionActivatedAt).toBeInstanceOf(Date);
+    expect(world.connection("anchor").status).toBe("production");
+    expect(activated.rule.pendingNumbers).toEqual([]);
   });
 });

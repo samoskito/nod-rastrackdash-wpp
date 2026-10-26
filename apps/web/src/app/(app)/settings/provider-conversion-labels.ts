@@ -1,4 +1,54 @@
-import type { PurchaseReviewDto } from "@wpptrack/shared";
+import type {
+  ProviderConversionObservationDetailDto,
+  PurchaseReviewDto,
+} from "@wpptrack/shared";
+
+/**
+ * Why a recognized event stayed in observation, and what a reprocess does
+ * with it (ported from the SaaS, #171: every case read only "Reconhecido em
+ * observação").
+ */
+export const observationDetailCopy: Record<
+  ProviderConversionObservationDetailDto,
+  { label: string; reprocess: string }
+> = {
+  rule_observation_at_receipt: {
+    label: "A regra estava em observação quando o evento chegou",
+    reprocess: "Com a regra em envio automático, reprocessar envia à Meta.",
+  },
+  production_sending_disabled: {
+    label: "Envio de conversões desligado no servidor",
+    reprocess: "Reprocessar não envia enquanto o envio estiver desligado.",
+  },
+  lead_number_legacy_engine: {
+    label: "Número do lead ainda no motor antigo de conversões",
+    reprocess:
+      "Reprocessar não envia enquanto o número estiver no motor antigo.",
+  },
+  rule_not_activated: {
+    label: "Regra sem envio ativo registrado",
+    reprocess: "Ative o envio da regra; depois reprocessar envia à Meta.",
+  },
+  received_before_rule_activation: {
+    label: "Recebido antes do envio ativo da regra",
+    reprocess: "Reprocessar envia à Meta.",
+  },
+  lead_number_not_production: {
+    label: "Número do lead ainda em observação",
+    reprocess:
+      "Use “Ativar envio neste número” na regra; depois reprocessar envia à Meta.",
+  },
+  received_before_number_activation: {
+    label: "Recebido antes do envio ativo do número do lead",
+    reprocess: "Reprocessar envia à Meta.",
+  },
+};
+
+export function observationDetailLabel(
+  detail: ProviderConversionObservationDetailDto | null | undefined,
+): { label: string; reprocess: string } | null {
+  return detail ? (observationDetailCopy[detail] ?? null) : null;
+}
 
 export function purchaseReviewStatusLabel(
   status: PurchaseReviewDto["status"],
@@ -51,17 +101,21 @@ export function executionReasonLabel(reasonCode: string | null): string {
 
   const labels: Record<string, string> = {
     catalog_matched: "Catálogo reconhecido",
-    catalog_matched_observation: "Reconhecido em observação",
+    catalog_matched_observation:
+      "Catálogo reconhecido com a regra em observação: nada enviado à Meta",
     message_matched: "Mensagem reconhecida",
-    message_matched_observation: "Reconhecido em observação",
+    message_matched_observation:
+      "Mensagem reconhecida com a regra em observação: nada enviado à Meta",
     automation_matched: "Automação reconhecida",
-    automation_matched_observation: "Reconhecido em observação",
+    automation_matched_observation:
+      "Recebido com a regra em observação: nada enviado à Meta",
     automation_manual_reprocess_approved: "Reprocessamento autorizado",
     automation_event_mismatch: "Evento diferente da regra",
     automation_channel_unresolved: "Canal não localizado",
     automation_paid_lead_missing: "Lead pago não localizado",
     automation_value_missing: "Valor médio não configurado",
-    before_production_activation: "Histórico preservado",
+    before_production_activation:
+      "Recebido antes do envio ativo (regra ou número do lead): nada enviado à Meta",
     production_context_invalid: "Configuração incompleta",
     rule_production_not_activated: "Regra ainda sem envio ativo",
     rule_parser_not_certified: "Parser da regra não certificado",
@@ -107,7 +161,8 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Número da venda não identificado ou ambíguo",
     payt_lead_other_channel:
       "Lead de outro número: a regra desse número envia a venda",
-    automation_matched_payt_observation: "Reconhecido em observação",
+    automation_matched_payt_observation:
+      "Número do lead no motor antigo de conversões: nada enviado à Meta",
     payt_automation_v1_not_purchase: "Status da Payt não gera conversão",
     payt_automation_v1_event_not_in_rule: "Evento da Payt fora desta regra",
     // Unnichat (Fase 4b).

@@ -3,6 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { buildProviderPurchaseIdentity } from "../conversion-rules/provider-purchase-identity";
 import { PAYT_LEAD_OTHER_CHANNEL_REASON } from "../conversion-rules/provider-purchase-routing";
 import {
+  observationDetailOf,
+  observedReprocessMessage,
+} from "../conversion-rules/provider-conversion-observation-detail";
+import {
   PROVIDER_RULE_OVERRIDDEN_REASON,
   providerRuleScope,
   providerRuleSpansProviderConnections,
@@ -1223,6 +1227,11 @@ export class InboundConversionAutomationIngestionService {
         deliveryNormalized?.paidLeadResolved === true,
       payloadAvailable,
       payloadExpiresAt: delivery.payloadExpiresAt.toISOString(),
+      observationDetail: observationDetailOf({
+        status,
+        reasonCode: execution?.reasonCode,
+        normalizedResult: execution?.normalizedResult,
+      }),
       reprocessable:
         payloadAvailable &&
         (execution
@@ -1401,7 +1410,29 @@ export class InboundConversionAutomationIngestionService {
         executionId: observed.executionId,
         status: "skipped",
         reasonCode: observed.reasonCode,
-        message: "A regra ainda permanece em observação",
+        message: observedReprocessMessage(observed.observationDetail),
+      };
+    }
+    // Sales platforms: re-evaluating a sale that is STILL observed returns
+    // its own observed execution through the observation purchase claim
+    // ("purchase_duplicate"). Nothing was sent: say why, not "não exige envio".
+    if (
+      observed.reasonCode === "purchase_duplicate" &&
+      currentExecution?.status === "observed" &&
+      observed.executionId === currentExecution.id
+    ) {
+      return {
+        deliveryId,
+        executionId: currentExecution.id,
+        status: "skipped",
+        reasonCode: currentExecution.reasonCode ?? observed.reasonCode,
+        message: observedReprocessMessage(
+          observationDetailOf({
+            status: currentExecution.status,
+            reasonCode: currentExecution.reasonCode,
+            normalizedResult: currentExecution.normalizedResult,
+          }),
+        ),
       };
     }
 

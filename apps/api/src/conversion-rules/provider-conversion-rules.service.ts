@@ -95,6 +95,8 @@ import {
   scanWorkspaceScopeChannels,
   providerRuleCoversChannel,
   providerRuleGateConnectionId,
+  providerRuleIsSalesPlatform,
+  providerRuleNumberGateConnectionId,
   providerRuleOrigin,
   providerRuleOriginRequiresConnection,
   providerRuleOriginUnifiable,
@@ -2889,13 +2891,17 @@ export class ProviderConversionRulesService {
     })) as PendingChannelRow[];
     const byId = new Map(rows.map((row) => [row.id, row]));
     // Bound rules: their own connection. Unbound rules and Umbler/Unnichat
-    // rules for all numbers: the connection of each covered number.
+    // rules for all numbers: the connection of each covered number. Payt
+    // (porte do #171): the anchor, then the number's own connection (a
+    // number live only on the anchor never sends).
     const gateOf = (rule: PersistedProviderRule, channel: PendingChannelRow) =>
       rule.connectionId &&
       rule.connection &&
-      providerRuleGateConnectionId(rule, {
-        connectionId: channel.connection.id,
-      }) === rule.connectionId
+      providerRuleNumberGateConnectionId(
+        rule,
+        { connectionId: channel.connection.id },
+        rule.connection.status,
+      ) === rule.connectionId
         ? {
             id: rule.connection.id,
             provider: rule.connection.provider as string,
@@ -2989,7 +2995,8 @@ export class ProviderConversionRulesService {
         (number) =>
           number.activatable &&
           number.channelStatus !== "paused" &&
-          number.connectionStatus !== "paused",
+          number.connectionStatus !== "paused" &&
+          !this.salesNumberOwnConnectionGate(rule, number),
       );
       const results: GlobalNumberActivation[] = [];
       for (const number of candidates.slice(0, GLOBAL_RULE_CASCADE_LIMIT)) {
@@ -3054,6 +3061,23 @@ export class ProviderConversionRulesService {
   }
 
   /**
+   * A sales-platform number held back by its OWN connection (the anchor is
+   * live). Only the explicit "Ativar envio neste número" promotes that
+   * connection: it may carry other rules and numbers, so neither the save
+   * cascade nor the automatic activation touches it.
+   */
+  private salesNumberOwnConnectionGate(
+    rule: PersistedProviderRule,
+    number: Pick<ProviderConversionRulePendingNumberDto, "connectionId">,
+  ): boolean {
+    return (
+      providerRuleIsSalesPlatform(rule) &&
+      rule.connectionId !== null &&
+      number.connectionId !== rule.connectionId
+    );
+  }
+
+  /**
    * Promotes ONE covered number with the same activation the Integrations
    * buttons run (channel "Ativar envio", then the connection's "Ativar envios
    * automáticos"), inside its own transaction.
@@ -3076,11 +3100,26 @@ export class ProviderConversionRulesService {
           workspaceId,
           channelId,
         );
-        const gate = await requireInboundWebhookConnection(
+        const anchorGate = await requireInboundWebhookConnection(
           transaction,
           workspaceId,
           providerRuleGateConnectionId(input.rule, channel),
         );
+        // Payt: with the anchor live, the number's own connection is the
+        // gate that still holds the number back.
+        const numberGateId = providerRuleNumberGateConnectionId(
+          input.rule,
+          channel,
+          anchorGate.status,
+        );
+        const gate =
+          numberGateId === anchorGate.id
+            ? anchorGate
+            : await requireInboundWebhookConnection(
+                transaction,
+                workspaceId,
+                numberGateId,
+              );
         if (gate.status === "production" && channel.status === "active") {
           return { channelId, outcome: "already_live" as const, reason: null };
         }
@@ -3227,7 +3266,8 @@ export class ProviderConversionRulesService {
         if (
           !number.activatable ||
           number.channelStatus === "paused" ||
-          number.connectionStatus === "paused"
+          number.connectionStatus === "paused" ||
+          this.salesNumberOwnConnectionGate(rule, number)
         ) {
           continue;
         }

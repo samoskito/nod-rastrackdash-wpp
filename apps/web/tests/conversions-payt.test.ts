@@ -582,7 +582,7 @@ describe("Payt: endereço e eventos recebidos", () => {
       "Evento da Payt fora desta regra",
     );
     expect(executionReasonLabel("automation_matched_payt_observation")).toBe(
-      "Reconhecido em observação",
+      "Número do lead no motor antigo de conversões: nada enviado à Meta",
     );
   });
 

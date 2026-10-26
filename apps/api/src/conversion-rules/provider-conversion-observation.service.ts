@@ -8,6 +8,7 @@ import type {
   ProviderConversionDecisionCatalogSnapshotDto,
   ProviderConversionDecisionDto,
   ProviderConversionDecisionRuleSnapshotDto,
+  ProviderConversionObservationDetailDto,
   ProviderConversionPaidLeadResolutionDto,
 } from "@wpptrack/shared";
 import {
@@ -184,6 +185,8 @@ export type ProviderConversionAutomationObservationResult = {
   reviewId: string | null;
   channelId: string | null;
   leadResolved: boolean;
+  /** Why an observed decision sent nothing (only when observed). */
+  observationDetail?: ProviderConversionObservationDetailDto | null;
 };
 
 export type ProviderConversionEvaluationMode =
@@ -568,6 +571,10 @@ export class ProviderConversionObservationService {
       reviewId: orchestration.reviewId,
       channelId: channel?.id ?? null,
       leadResolved: leadResolution.status === "resolved",
+      observationDetail:
+        disposition.state === "observed" && !orchestration.purchaseDuplicate
+          ? (disposition.detail ?? null)
+          : null,
     };
   }
 
@@ -1492,13 +1499,13 @@ export class ProviderConversionObservationService {
     // Payt is only sent by the canonical engine; legacy/shadow channels keep
     // its sales audit-only. Canonical production still requires every live
     // certification, activation and feature gate below.
-    if (
-      input.rule.parserRelease?.provider === "payt" &&
-      input.channel.conversionEngineMode !== "canonical"
-    ) {
+    // Sales platform of the student edition: Payt (Braip arrives in 6.5).
+    const salesPlatform = input.rule.parserRelease?.provider === "payt";
+    if (salesPlatform && input.channel.conversionEngineMode !== "canonical") {
       return {
         state: "observed",
         reasonCode: `${input.decision.reasonCode}_payt_observation`,
+        detail: "lead_number_legacy_engine",
       };
     }
     // Manual recovery reuses the frozen decision snapshot (including the mode
@@ -1515,6 +1522,9 @@ export class ProviderConversionObservationService {
       return {
         state: "observed",
         reasonCode: `${input.decision.reasonCode}_observation`,
+        detail: !input.config.conversionProductionEnabled
+          ? "production_sending_disabled"
+          : "rule_observation_at_receipt",
       };
     }
     // An unbound rule has no parser of its own: the occurrence connection's
@@ -1536,16 +1546,32 @@ export class ProviderConversionObservationService {
         reasonCode: "production_context_invalid",
       };
     }
+    // Sales platforms (porte do #171): a lead's number that was never
+    // activated in production on its own connection is NOT a callback
+    // "received before activation". The production worker refuses it
+    // (channel.productionActivatedAt) even with the operator approval, so a
+    // manual reprocess must not queue it to fail: it stays observed, with the
+    // reason the screen shows ("ative o envio neste número").
+    const leadNumberNotProduction =
+      !input.channel.productionActivatedAt &&
+      (!input.manualRecovery || salesPlatform);
     if (
       !input.rule.productionActivatedAt ||
+      leadNumberNotProduction ||
       (!input.manualRecovery &&
-        (!input.channel.productionActivatedAt ||
-          input.deliveryReceivedAt < input.rule.productionActivatedAt ||
-          input.deliveryReceivedAt < input.channel.productionActivatedAt))
+        (input.deliveryReceivedAt < input.rule.productionActivatedAt ||
+          input.deliveryReceivedAt < input.channel.productionActivatedAt!))
     ) {
       return {
         state: "observed",
         reasonCode: "before_production_activation",
+        detail: !input.rule.productionActivatedAt
+          ? "rule_not_activated"
+          : leadNumberNotProduction
+            ? "lead_number_not_production"
+            : input.deliveryReceivedAt < input.rule.productionActivatedAt
+              ? "received_before_rule_activation"
+              : "received_before_number_activation",
       };
     }
 

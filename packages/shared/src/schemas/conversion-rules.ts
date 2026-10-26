@@ -1233,6 +1233,33 @@ export const providerConversionAutomationAuditStatusSchema = z.enum([
   "invalid_payload",
 ]);
 
+/**
+ * Por que um evento reconhecido ficou EM OBSERVAÇÃO (nada enviado à Meta),
+ * gravado no momento da decisão (porte do SaaS, #171: tudo aparecia só como
+ * "Reconhecido em observação"):
+ *  - rule_observation_at_receipt: a regra estava em observação quando o
+ *    evento chegou (reprocessar com a regra em envio ativo envia);
+ *  - production_sending_disabled: envio de conversões desligado no servidor;
+ *  - lead_number_legacy_engine: o número do lead ainda usa o motor antigo de
+ *    conversões (reprocessar não envia);
+ *  - rule_not_activated: a regra não tem data de ativação do envio;
+ *  - received_before_rule_activation: chegou antes do envio ativo da regra
+ *    (reprocessar envia);
+ *  - lead_number_not_production: o número do lead não está em produção na
+ *    própria conexão (ativar envio neste número e depois reprocessar);
+ *  - received_before_number_activation: chegou antes do envio ativo do
+ *    número do lead (reprocessar envia).
+ */
+export const providerConversionObservationDetailSchema = z.enum([
+  "rule_observation_at_receipt",
+  "production_sending_disabled",
+  "lead_number_legacy_engine",
+  "rule_not_activated",
+  "received_before_rule_activation",
+  "lead_number_not_production",
+  "received_before_number_activation",
+]);
+
 export const providerConversionAutomationAuditItemSchema = z.object({
   deliveryId: idSchema,
   executionId: idSchema.nullable(),
@@ -1256,6 +1283,10 @@ export const providerConversionAutomationAuditItemSchema = z.object({
   payloadAvailable: z.boolean(),
   payloadExpiresAt: z.string().datetime(),
   reprocessable: z.boolean(),
+  /** Motivo da observação (só para status observed; opcional: versões antigas). */
+  observationDetail: providerConversionObservationDetailSchema
+    .nullable()
+    .optional(),
 });
 
 export const providerConversionAutomationAuditSchema = z.object({
@@ -1651,6 +1682,9 @@ export type ProviderConversionAutomationAuditStatusDto = z.infer<
 >;
 export type ProviderConversionAutomationAuditItemDto = z.infer<
   typeof providerConversionAutomationAuditItemSchema
+>;
+export type ProviderConversionObservationDetailDto = z.infer<
+  typeof providerConversionObservationDetailSchema
 >;
 export type ProviderConversionAutomationAuditDto = z.infer<
   typeof providerConversionAutomationAuditSchema

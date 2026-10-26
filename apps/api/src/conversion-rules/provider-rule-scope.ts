@@ -271,6 +271,53 @@ export function providerRuleGateConnectionId(
   return rule.connectionId;
 }
 
+/**
+ * Sales-platform postback rules. In the student edition: Payt (Braip comes
+ * with Fase 6.5; Brink Park is not part of the student edition).
+ */
+export function providerRuleIsSalesPlatform(
+  rule: Pick<
+    ScopedProviderRule,
+    "conversionRule" | "parserRelease" | "connection"
+  >,
+): boolean {
+  return providerRuleOrigin(rule) === "automation_payt";
+}
+
+/**
+ * Connection that still holds a covered number back (porte do #171, SaaS
+ * `d4c6a419`). A sales-platform rule (Payt) is bound to an anchor connection,
+ * but each sale is only sent when the lead's number is live on ITS OWN
+ * connection too (Uazapi/WAHA bridge, Meta Cloud, Umbler...): the channel's
+ * productionActivatedAt (gate of the observation) is only set while that
+ * connection is in production, and the production worker re-checks it. With
+ * the anchor live, the number's own connection is the remaining gate; every
+ * other rule keeps providerRuleGateConnectionId.
+ */
+export function providerRuleNumberGateConnectionId(
+  rule: Pick<
+    ScopedProviderRule,
+    | "connectionId"
+    | "conversionRule"
+    | "parserRelease"
+    | "connection"
+    | "scope"
+    | "crossConnectionScope"
+  >,
+  channel: { connectionId: string },
+  anchorStatus: string | null | undefined,
+): string {
+  const gate = providerRuleGateConnectionId(rule, channel);
+  if (
+    providerRuleIsSalesPlatform(rule) &&
+    gate !== channel.connectionId &&
+    anchorStatus === "production"
+  ) {
+    return channel.connectionId;
+  }
+  return gate;
+}
+
 /** Origins whose rule must keep a connection binding (signed endpoint). */
 export function providerRuleOriginRequiresConnection(
   origin: ProviderRuleOrigin,

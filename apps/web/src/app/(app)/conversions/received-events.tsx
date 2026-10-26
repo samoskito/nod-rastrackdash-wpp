@@ -12,7 +12,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { ruleEventLabelForOrigin } from "./event-copy";
 import type { ProviderConversionRuleActionResult } from "./actions";
-import { executionReasonLabel } from "../settings/provider-conversion-labels";
+import {
+  executionReasonLabel,
+  observationDetailLabel,
+} from "../settings/provider-conversion-labels";
 
 type RuleAction = (formData: FormData) => Promise<ProviderConversionRuleActionResult>;
 
@@ -381,6 +384,10 @@ export function ReceivedEvents({
             const status = statusLabels[item.status];
             const payload = payloads[item.deliveryId];
             const when = formatDateTime(item.receivedAt);
+            const observation =
+              item.status === "observed"
+                ? observationDetailLabel(item.observationDetail)
+                : null;
             return (
               <li key={item.deliveryId}>
                 <div className="conversion-executions-head">
@@ -411,6 +418,12 @@ export function ReceivedEvents({
                   {" · "}
                   {executionReasonLabel(item.reasonCode)}
                 </p>
+                {observation ? (
+                  <p className="muted conversion-received-observation">
+                    Por que ficou em observação: {observation.label}.
+                    {mode === "production" ? ` ${observation.reprocess}` : ""}
+                  </p>
+                ) : null}
                 {item.status === "ignored" ? null : (
                   <p className="muted">
                     {item.channel ? (
