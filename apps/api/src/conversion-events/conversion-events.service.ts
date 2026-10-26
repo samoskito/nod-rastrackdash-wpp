@@ -91,6 +91,7 @@ import {
   preflightMetaCapiEvent,
   type MetaCapiSendEventErrorCode,
 } from "./meta-capi.adapter";
+import { metaCapiFirstNameEnabled } from "./meta-capi-first-name";
 import { LicenseClientService } from "../licensing-client/license-client.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
@@ -2617,6 +2618,8 @@ export class ConversionEventsService {
     leadId?: string | null;
     workspaceId?: string | null;
   }): Promise<string | null> {
+    // Desligado (padrão): nem consulta o lead. Mesmo env do MetaCapiAdapter.
+    if (!metaCapiFirstNameEnabled(process.env)) return null;
     if (!log.leadId || !log.workspaceId) return null;
     try {
       const lead = await this.prisma.lead.findFirst({

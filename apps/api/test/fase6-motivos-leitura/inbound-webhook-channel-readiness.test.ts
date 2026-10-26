@@ -968,6 +968,8 @@ describe("adaptação nod: ponte WAHA e Meta Cloud", () => {
       totalCtwa: 2,
       alreadyMaterializedCtwa: 2,
     });
+    // A ponte não guarda rota no canal: "rota não configurada" não se aplica.
+    expect(result!.readiness.blockers).not.toContain("route_not_configured");
     expect(prisma.lead.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

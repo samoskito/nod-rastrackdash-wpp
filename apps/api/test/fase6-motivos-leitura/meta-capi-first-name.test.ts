@@ -260,7 +260,24 @@ describe("ConversionEventsService.leadNameForCapi", () => {
     return service;
   }
 
+  it("desligado (padrão): nem consulta o lead", async () => {
+    const findFirst = vi.fn(async () => ({ name: "Maria Fictícia" }));
+    vi.stubEnv("META_CAPI_SEND_FIRST_NAME", "");
+    try {
+      await expect(
+        reader({ lead: { findFirst } }).leadNameForCapi({
+          leadId: "lead_1",
+          workspaceId: "workspace_1",
+        }),
+      ).resolves.toBeNull();
+      expect(findFirst).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("lê o nome do lead no workspace do evento", async () => {
+    vi.stubEnv("META_CAPI_SEND_FIRST_NAME", "true");
     const findFirst = vi.fn(async () => ({ name: "Maria Fictícia" }));
     await expect(
       reader({ lead: { findFirst } }).leadNameForCapi({
@@ -272,9 +289,11 @@ describe("ConversionEventsService.leadNameForCapi", () => {
       where: { id: "lead_1", workspaceId: "workspace_1" },
       select: { name: true },
     });
+    vi.unstubAllEnvs();
   });
 
   it("sem lead ou com falha na leitura: envia sem fn (null)", async () => {
+    vi.stubEnv("META_CAPI_SEND_FIRST_NAME", "true");
     const findFirst = vi.fn(async () => {
       throw new Error("db down");
     });
@@ -290,5 +309,6 @@ describe("ConversionEventsService.leadNameForCapi", () => {
         workspaceId: "workspace_1",
       }),
     ).resolves.toBeNull();
+    vi.unstubAllEnvs();
   });
 });

@@ -1639,7 +1639,7 @@ describe("Envio ativo: número Uazapi/WAHA excluído em Integrações (revisão 
  * observação" sem motivo.
  */
 describe("Payt “Todos os números”: o número do lead na própria conexão (porte do #171)", () => {
-  function paytWorld() {
+  function paytWorld(leadProvider: "umbler" | "waha" = "umbler") {
     const world = globalWorld([
       {
         key: "anchor",
@@ -1649,7 +1649,7 @@ describe("Payt “Todos os números”: o número do lead na própria conexão (
       },
       {
         key: "lead",
-        provider: "waha",
+        provider: leadProvider,
         connectionStatus: "observation",
         channelStatus: "active",
       },
@@ -1734,5 +1734,23 @@ describe("Payt “Todos os números”: o número do lead na própria conexão (
     expect(world.channel("lead").productionActivatedAt).toBeInstanceOf(Date);
     expect(world.connection("anchor").status).toBe("production");
     expect(activated.rule.pendingNumbers).toEqual([]);
+  });
+
+  it("adaptação nod: a ponte WAHA (uma conexão por número) é ativada sozinha, como na regra de frase", async () => {
+    const world = paytWorld("waha");
+    const before = (await world.service.listRules("workspace_1")).find(
+      (item) => item.id === "provider_rule_payt",
+    )!;
+    expect(before.pendingNumbers).toEqual([
+      expect.objectContaining({
+        channelId: "channel_lead",
+        connectionId: "connection_lead",
+        provider: "waha",
+      }),
+    ]);
+
+    await world.service.autoActivateGlobalNumbers("workspace_1", "reconcile");
+    expect(world.connection("lead").status).toBe("production");
+    expect(world.channel("lead").productionActivatedAt).toBeInstanceOf(Date);
   });
 });

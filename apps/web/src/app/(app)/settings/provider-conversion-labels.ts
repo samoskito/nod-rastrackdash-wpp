@@ -36,7 +36,7 @@ export const observationDetailCopy: Record<
   lead_number_not_production: {
     label: "Número do lead ainda em observação",
     reprocess:
-      "Use “Ativar envio neste número” na regra; depois reprocessar envia à Meta.",
+      "Ative o envio do número (“Ativar envio neste número” na regra ou a conexão dele em Integrações); depois reprocessar envia à Meta.",
   },
   received_before_number_activation: {
     label: "Recebido antes do envio ativo do número do lead",

@@ -51,7 +51,7 @@ export function observedReprocessMessage(
     case "lead_number_legacy_engine":
       return "O número do lead ainda usa o motor antigo de conversões; reprocessar não envia";
     case "lead_number_not_production":
-      return "O número do lead ainda não está em produção na própria conexão; ative o envio neste número e reprocesse";
+      return "O número do lead ainda não está em produção na própria conexão; ative o envio neste número (na regra ou em Integrações) e reprocesse";
     case "production_sending_disabled":
       return "O envio de conversões está desligado no servidor";
     case "rule_not_activated":

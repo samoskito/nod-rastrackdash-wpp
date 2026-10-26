@@ -87,6 +87,7 @@ import {
   ruleAcceptsReprocess,
 } from "./provider-rule-blocked-reprocess";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
+import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
 import {
   listWorkspaceScopeChannels,
   PROVIDER_RULE_GLOBAL_PRECEDENCE,
@@ -3065,15 +3066,23 @@ export class ProviderConversionRulesService {
    * live). Only the explicit "Ativar envio neste número" promotes that
    * connection: it may carry other rules and numbers, so neither the save
    * cascade nor the automatic activation touches it.
+   *
+   * Adaptação nod: a ponte Uazapi/WAHA é uma conexão por número (1:1 com a
+   * conexão WhatsApp do aluno), a mesma que a regra global de frase já ativa
+   * sozinha; ela segue o cascade e a ativação automática normais.
    */
   private salesNumberOwnConnectionGate(
     rule: PersistedProviderRule,
-    number: Pick<ProviderConversionRulePendingNumberDto, "connectionId">,
+    number: Pick<
+      ProviderConversionRulePendingNumberDto,
+      "connectionId" | "provider"
+    >,
   ): boolean {
     return (
       providerRuleIsSalesPlatform(rule) &&
       rule.connectionId !== null &&
-      number.connectionId !== rule.connectionId
+      number.connectionId !== rule.connectionId &&
+      !isBridgedWhatsappProvider(number.provider)
     );
   }
 
@@ -3298,12 +3307,17 @@ export class ProviderConversionRulesService {
       },
     });
     const channelById = new Map(channelRows.map((row) => [row.id, row]));
+    // Payt (porte do #171): with the anchor live, the gate is the number's
+    // own connection (only the Uazapi/WAHA bridge reaches here; see
+    // salesNumberOwnConnectionGate).
     const gateOf = (target: { rule: PersistedProviderRule; channelId: string }) => {
       const channelConnectionId = channelById.get(target.channelId)?.connectionId;
       return channelConnectionId
-        ? providerRuleGateConnectionId(target.rule, {
-            connectionId: channelConnectionId,
-          })
+        ? providerRuleNumberGateConnectionId(
+            target.rule,
+            { connectionId: channelConnectionId },
+            target.rule.connection?.status,
+          )
         : (target.rule.connectionId ?? null);
     };
     const gateIds = [

@@ -1897,9 +1897,13 @@ export class InboundWebhookChannelRoutesService {
     if (channel.status === "paused") {
       blockers.push("channel_paused");
     }
-    if (policy ? !policy.eligible : routeCount === 0) {
+    // Ponte Uazapi/WAHA: o destino Meta é resolvido por anúncio no envio, sem
+    // rota salva no canal; "rota não configurada" não se aplica a ela.
+    const bridged = isBridgedWhatsappProvider(channel.connection.provider);
+    if (!bridged && (policy ? !policy.eligible : routeCount === 0)) {
       blockers.push("route_not_configured");
     } else if (
+      !bridged &&
       policy?.source !== "inherit_workspace" &&
       validRouteCount !== routeCount
     ) {

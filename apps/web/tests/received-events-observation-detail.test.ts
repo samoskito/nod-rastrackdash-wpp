@@ -97,7 +97,7 @@ describe("Eventos recebidos: por que ficou em observação", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText(/Use “Ativar envio neste número” na regra; depois reprocessar envia à Meta\./u),
+      screen.getByText(/Ative o envio do número \(“Ativar envio neste número” na regra ou a conexão dele em Integrações\); depois reprocessar envia à Meta\./u),
     ).toBeTruthy();
   });
 
