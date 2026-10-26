@@ -7,6 +7,67 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). No migration, no new environment variable.
+
+### Fixed
+
+- **Fase 6.0 — One conversion per lead per pixel across numbers (API, shared
+  and web)**, ported from the SaaS (`972f6179`, #153), adapted to the
+  student edition:
+  - A once-per-lead catalog event (QualifiedLead, LeadSubmitted) goes to Meta
+    once per lead and Meta destination (pixel), whichever number or path saw
+    it: provider rules (phrase, catalog, automation) and the CTWA entry.
+    New `lead-lifetime-conversion-guard.ts`: lead identity by the canonical
+    phone line (55 / 9th digit, `phone-identity.ts`), a transaction advisory
+    lock per identity + event (always taken last) and a scan of the covered
+    `ConversionEventLog` rows (`inbound_webhook:*`). Purchases and the
+    other +-24h events are not covered.
+  - Covered in the nod: team phrase rules on the WAHA bridge
+    (`inbound_webhook:waha:*`) and on Uazapi, the Unnichat entry (live,
+    replay and no-ad page/pixel) and, through the generic production and
+    replay writers, the **Meta Cloud CTWA entry**
+    (`inbound_webhook:meta_cloud`). A repeated entry keeps its own
+    `not_eligible` receipt (proof of origin, reports) and is never queued.
+  - New once-per-lead conversions get a deterministic `event_id`
+    (`lead_<event>_<hash>` per workspace + phone line + event); ids already
+    sent never change.
+  - "Reprocessar bloqueadas" leaves out (and counts in the new optional
+    `alreadyConverted`) what would only be a duplicate. The nod's
+    conservative exclusions run first and are unchanged.
+  - Executions show "Lead já convertido por outro número" / "pela entrada do
+    anúncio".
+  - nod difference: the provider-rule execution check was already
+    workspace-wide here (the SaaS per-number scope, #84, was never ported),
+    so a phrase rule still never sends the same once-per-lead event twice
+    for a lead even to a second pixel, and purchases keep the existing 24h
+    window across numbers. The `auto_lead` entry (Uazapi/WAHA connections)
+    keeps its own per-lead dedupe; it joins this rule with #155 (6.2a).
+- **Fase 6.0 — "Reenviar bloqueados" also resends Meta login failures
+  (190/102) (API, shared and web)**, ported from the SaaS (`4d2fbf83`, #181,
+  plus the stalled `ready_to_send` part of `7ac17df7`):
+  - Events refused by the CAPI for a dead token or login checkpoint
+    (`error.code` 190, any subcode, or 102) inside Meta's 7-day window join
+    the bulk resend; older ones are skipped and counted as `expired`;
+    Kommo/Pipedrive (single-dispatch ledger) stay out. Conditional claim,
+    `event_id`, workspace and the 500 cap are unchanged.
+  - Button "Reenviar bloqueados e falhas de login da Meta" with tooltip;
+    `summary.metaAuthRetryable` (optional) counts them; the row explains
+    the login failure. A `ready_to_send` without error stuck for more than
+    10 minutes can be retried from the audit.
+  - nod difference: the nod CAPI adapter never stored the body of a
+    rejection (PII). It now stores only the numeric Graph `error.code`
+    next to `httpStatus`; rejections recorded before this version have no
+    code and stay out of the resend.
+  - Locked license: both resends and "Reprocessar bloqueadas" are writes and
+    answer `423` (global guard; explicit test).
+- **Fase 6.0 — Payt times in Brasília time; `event_time` never in the
+  future (API)**, ported from the SaaS (`a1b600c2`, #173): naive Payt dates
+  ("2026-10-23 21:39:30.000000") are read as America/Sao_Paulo by the new
+  `sao-paulo-timestamp.ts` (an explicit zone is kept), and a time after the
+  arrival + 5 min is capped at the arrival (`firstReceivedAt` on
+  re-evaluations, now on live ingestion). The dedupe identity does not use
+  the time; no backfill. The Brink Park part does not apply.
+
 ## [1.2.0] - 2026-10-24
 
 Upgrade notes for students: [`docs/releases/1.2.0.json`](docs/releases/1.2.0.json). No migration, no new environment variable.
