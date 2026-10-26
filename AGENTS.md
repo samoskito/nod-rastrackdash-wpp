@@ -14,6 +14,7 @@ Resumo operacional:
 4. Criar workspace + conectar Meta + WhatsApp provider
 5. Whitelabel opcional via `BRAND_*` — **nunca** remover footer `RastrackDash · powered by PalmUP`
 6. Não reintroduzir Asaas/Guru/UAZAPI_ADMIN/license private key PalmUP
+7. Aluno pediu para **atualizar** ou mudar variável/fluxo: siga a seção "Quando o aluno pedir para atualizar ou mudar algo" de [`docs/AI_AGENTS.md`](docs/AI_AGENTS.md) (CHANGELOG + notas + `environment.md` + `docs/setup/update.md`)
 
 Spec e plano: `docs/superpowers/`.
 ## Notas de atualização para a comunidade

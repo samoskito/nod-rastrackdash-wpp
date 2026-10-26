@@ -636,3 +636,17 @@ A auditoria de 26/10 releu o histórico do SaaS anterior ao #152 e achou itens q
 ## Regra fixa: produção direta (26/10/2026)
 
 Registrada a pedido do Samuel, que já a repetiu muitas vezes; vale para todas as fases seguintes (6.5 a 6.8b) e está detalhada na §0. Resumo: o que foi validado no SaaS chega ao aluno **em produção**. Os leitores entram **certificados**; conexões e regras nascem **em produção**; o aluno não retesta, não certifica e não libera nada. Observação só para o que não foi validado (e isso não é portado). As travas reais (licença, rota Meta, pixel e página, `META_APP_SECRET` no Meta Cloud) continuam, e a tela diz o que configurar. No nod **não existe QR**: Uazapi BYO e WAHA conectam por URL do servidor + token, uma conexão por número.
+
+## Regra fixa: documentar para a IA do aluno (26/10/2026)
+
+Pedido do Samuel, válido para todas as fases. Toda mudança que pede ação do aluno precisa estar escrita no repositório, para que o Claude ou o Codex do aluno saibam exatamente o que fazer quando ele atualizar ou mexer na instalação. Isso vale para variável nova ou com padrão alterado, passo diferente na atualização e mudança no fluxo de uso.
+
+A fase só fecha com os seguintes arquivos atualizados no mesmo commit:
+- `.env.example`;
+- `docs/setup/environment.md`;
+- a linha de notas de atualização do `CHANGELOG.md`;
+- o guia de `docs/releases/unreleased.json`;
+- `docs/setup/update.md`, se o procedimento mudar;
+- o guia da integração afetada.
+
+A seção "Quando o aluno pedir para atualizar ou mudar algo" do `docs/AI_AGENTS.md` aponta a IA do aluno para esses arquivos.

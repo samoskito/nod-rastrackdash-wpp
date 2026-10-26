@@ -11,6 +11,8 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
 
 ### Added
 
+- **Docs for the student AI**: `docs/AI_AGENTS.md` (and `AGENTS.md`) now tell the student Claude/Codex how to handle "update" or "change a variable/flow" requests (follow `docs/setup/update.md`, read the upgrade notes, explain every new or changed variable from `environment.md`). Maintainers must document every change that needs student action in the same commit.
+
 - **Fase 6.1c — Production direct (nod product rule; API, shared and web)**:
   what was validated in the SaaS reaches the student in production; the
   student never re-tests, certifies or releases anything.
