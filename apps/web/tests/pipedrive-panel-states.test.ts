@@ -150,7 +150,7 @@ describe("Pipedrive received events (bounded, read-only diagnostics)", () => {
       });
     });
 
-    expect(await screen.findByText(/Ganho do negócio \/ .*Observado/)).toBeTruthy();
+    expect(await screen.findByText(/Ganho do negócio \/ .*Registrado sem envio/)).toBeTruthy();
     expect(screen.getByText(/199,90/)).toBeTruthy();
     expect(screen.getByText(/Regra removida/)).toBeTruthy();
     expect(screen.getByText(/Moeda do negócio diferente/)).toBeTruthy();
@@ -167,7 +167,7 @@ describe("Pipedrive received events (bounded, read-only diagnostics)", () => {
     expect(screen.queryByText(/Nenhum evento recebido ainda/)).toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Tentar novamente" })[0]!);
-    await screen.findByText("Observado", { selector: ".event-chip" });
+    await screen.findByText("Registrado sem envio", { selector: ".event-chip" });
   });
 
   it("flags a malformed events response without rendering it", async () => {

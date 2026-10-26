@@ -280,6 +280,14 @@ export async function applyInboundWebhookConnectionStatus(
     requireValidMetaRoute: boolean;
     seats: ExternalChannelSeatHook;
     env?: RuntimeEnv;
+    /**
+     * Fase 6.1c (produção direta): retomar uma conexão pausada de integração
+     * validada. Os números nascem ativos sem exigir rota (a rota é conferida
+     * no envio), então a retomada não exige canal ativo nem rota em cada
+     * canal; leitor validado, META_APP_SECRET (Meta Cloud) e replay em curso
+     * continuam valendo.
+     */
+    productionDirectResume?: boolean;
   },
 ): Promise<PersistedInboundWebhookConnection> {
   const { workspaceId, connectionId, status, actorUserId } = input;
@@ -293,6 +301,8 @@ export async function applyInboundWebhookConnectionStatus(
     assertMetaCloudSigningConfigured(current.provider, input.env ?? process.env);
     await assertProductionReady(transaction, current, {
       requireValidMetaRoute: input.requireValidMetaRoute,
+      productionDirectResume:
+        input.productionDirectResume === true && current.status === "paused",
     });
     await activateProductionSeats(transaction, current, {
       actorUserId,
@@ -400,12 +410,17 @@ export function channelStatusAuditSummary(
 async function assertProductionReady(
   transaction: Prisma.TransactionClient,
   connection: PersistedInboundWebhookConnection,
-  options: { requireValidMetaRoute: boolean },
+  options: { requireValidMetaRoute: boolean; productionDirectResume?: boolean },
 ): Promise<void> {
   if (connection.parserRelease.provider !== connection.provider || !inboundParserProductionEligible(connection.parserRelease)) {
     throw new ConflictException(
       "Certifique o parser antes de ativar o envio automático. Esta versão da integração não é nativa validada ou foi retirada.",
     );
+  }
+
+  if (options.productionDirectResume) {
+    await assertNoReplayInFlight(transaction, connection);
+    return;
   }
 
   const activeChannels = await transaction.inboundWebhookChannel.findMany({
@@ -457,6 +472,13 @@ async function assertProductionReady(
     }
   }
 
+  await assertNoReplayInFlight(transaction, connection);
+}
+
+async function assertNoReplayInFlight(
+  transaction: Prisma.TransactionClient,
+  connection: PersistedInboundWebhookConnection,
+): Promise<void> {
   const activeReplay = await transaction.inboundWebhookReplayBatch.count({
     where: {
       workspaceId: connection.workspaceId,

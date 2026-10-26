@@ -112,7 +112,8 @@ const kommoConversionRuleBaseSchema = z
     pipelineId: idSchema,
     statusId: idSchema,
     eventName: conversionEventNameSchema,
-    mode: kommoRuleModeSchema.default("observation"),
+    // Fase 6.1c (produção direta): a Kommo foi validada no SaaS; a regra nasce enviando.
+    mode: kommoRuleModeSchema.default("production"),
     active: z.boolean().default(true),
   })
   .merge(ruleValueFields)

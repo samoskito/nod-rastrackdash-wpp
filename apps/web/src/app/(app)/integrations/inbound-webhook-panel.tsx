@@ -477,7 +477,7 @@ export function InboundWebhookPanel({
             <div>
               <strong>Nenhum webhook configurado</strong>
               <p className="muted">
-                Crie uma conexão para receber o primeiro payload de teste.
+                Crie uma conexão para começar a receber os eventos.
               </p>
             </div>
           </div>
@@ -564,7 +564,7 @@ export function InboundWebhookPanel({
                     />
                   </div>
 
-                  {connection.provider === "meta_cloud" ? <p>Canal habilitado recebe eventos; a conexão precisa de envios automáticos ativos para enviar novos CTWAs. CTWA roteado não significa enviado. Ativar envios automáticos não recupera o histórico.</p> : null}
+                  {connection.provider === "meta_cloud" ? <p>Com a conexão enviando, cada novo CTWA de um canal ativo e com rota válida vai para a Meta. CTWA roteado não significa enviado. O histórico anterior não é reenviado automaticamente.</p> : null}
                   {connection.provider === "meta_cloud" ? (
                     <MetaCloudWabaSubscriptionPanel
                       connectionId={connection.id}
@@ -583,7 +583,7 @@ export function InboundWebhookPanel({
                           onClick={() => {
                             if (
                               window.confirm(
-                                "Ativar o envio automático? Apenas canais habilitados e com rota válida enviarão novos eventos.",
+                                "Ativar o envio desta conexão? Apenas canais ativos e com rota válida enviarão novos eventos.",
                               )
                             ) {
                               void runConnectionAction(
@@ -598,35 +598,11 @@ export function InboundWebhookPanel({
                           }}
                         >
                           <Send size={15} aria-hidden="true" />
-                          Ativar envios automáticos
+                          Ativar envio
                         </button>
                       ) : null}
-                      {connection.status === "production" ? (
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={Boolean(connectionPending)}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                "Voltar para observação? Novas mensagens continuarão registradas, mas não gerarão conversões automáticas.",
-                              )
-                            ) {
-                              void runConnectionAction(
-                                `observation-${connection.id}`,
-                                setConnectionStatusAction,
-                                {
-                                  connectionId: connection.id,
-                                  status: "observation",
-                                },
-                              );
-                            }
-                          }}
-                        >
-                          <Pause size={15} aria-hidden="true" />
-                          Voltar para observação
-                        </button>
-                      ) : null}
+                      {/* Fase 6.1c (produção direta): sem "voltar para
+                          observação"; para parar o envio, Pausar conexão. */}
                       <button
                         className="button"
                         type="button"
@@ -637,9 +613,12 @@ export function InboundWebhookPanel({
                             setConnectionStatusAction,
                             {
                               connectionId: connection.id,
+                              // Fase 6.1c: retomar volta a enviar.
                               status:
                                 connection.status === "paused"
-                                  ? "observation"
+                                  ? capabilities.productionEnabled
+                                    ? "production"
+                                    : "observation"
                                   : "paused",
                             },
                           )
@@ -651,7 +630,7 @@ export function InboundWebhookPanel({
                           <Pause size={15} aria-hidden="true" />
                         )}
                         {connection.status === "paused"
-                          ? "Retomar observação"
+                          ? "Retomar conexão"
                           : "Pausar conexão"}
                       </button>
                       {connection.provider === "uazapi" ||
@@ -740,10 +719,10 @@ export function InboundWebhookPanel({
                     ) : channels.length === 0 ? (
                       <p className="muted inbound-channel-empty">
                         {connection.provider === "data_crazy"
-                          ? "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar. Envie uma mensagem de teste para liberar as regras."
+                          ? "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar; a partir daí ele já envia e pode receber regras."
                           : connection.provider === "unnichat"
                             ? "Esta conexão ainda não tem o número do cliente. Remova-a e crie de novo informando o número de WhatsApp atendido pelo Unnichat."
-                            : "Nenhum canal cadastrado ainda. Cadastre o número conectado para liberar as regras de conversão antes do primeiro lead chegar."}
+                            : "Nenhum canal cadastrado ainda. Cadastre o número conectado para criar as regras de conversão antes do primeiro lead chegar."}
                       </p>
                     ) : (
                       channels.map((channel) => {
@@ -1166,9 +1145,9 @@ function ChannelReadiness({
         </p>
       )}
       <p className="muted">
-        A prontidão da rota não ativa envios: a conexão ainda exige parser
-        certificado e produção habilitada. CTWA anteriores à ativação não são
-        enviados automaticamente.
+        Com a conexão e o canal enviando, cada novo CTWA com rota pronta vai
+        para a Meta. CTWA anteriores à ativação não são enviados
+        automaticamente.
       </p>
 
       {readiness.alreadyMaterializedCtwa > 0 ? (
@@ -1269,7 +1248,7 @@ function connectionStatusLabel(
   }
 
   if (status === "observation") {
-    return "Observando";
+    return "Envio desligado";
   }
 
   return "Pausada";

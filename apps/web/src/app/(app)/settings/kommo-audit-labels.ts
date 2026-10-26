@@ -134,7 +134,7 @@ export function describeAuditErrorCode(code: string | null): string | null {
 const statusNames: Record<string, string> = {
   accepted: "Recebido, aguardando processamento",
   processing: "Em processamento",
-  observed: "Observado (nada enviado)",
+  observed: "Avaliado sem envio (nada enviado)",
   duplicate: "Duplicado (nada novo enviado)",
   blocked: "Bloqueado",
   materialized: "Conversão registrada (ainda não enviada)",
@@ -242,7 +242,7 @@ export function describeAuditResult(result: KommoEventResultDto): {
   switch (result.status) {
     case "observed":
       return {
-        text: "Regra em observação: o evento foi avaliado, mas nada foi criado nem enviado.",
+        text: "Regra com o envio desligado: o evento foi avaliado, mas nada foi criado nem enviado.",
         tone: "neutral",
       };
     case "blocked":
@@ -379,7 +379,7 @@ export function summarizeAuditEvent(event: KommoEventDto): AuditEventSummary {
           : "no",
       note: anyMaterialized
         ? "Existe uma conversão registrada para este evento."
-        : "Nenhuma conversão registrada (observação, bloqueio ou sem regra).",
+        : "Nenhuma conversão registrada (envio desligado, bloqueio ou sem regra).",
     },
     {
       key: "queued",
@@ -421,7 +421,7 @@ export function summarizeAuditEvent(event: KommoEventDto): AuditEventSummary {
     detail = base;
   } else if (event.status === "observed") {
     detail =
-      "Regra em observação: o evento foi avaliado, mas nada foi criado nem enviado.";
+      "Regra com o envio desligado: o evento foi avaliado, mas nada foi criado nem enviado.";
   } else if (confirmedSent) {
     detail = "A conversão foi enviada e o envio está confirmado.";
   } else if (event.status === "queued") {

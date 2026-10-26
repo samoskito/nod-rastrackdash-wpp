@@ -8,6 +8,13 @@ export const studentInboundReplayAuthorizeSchema = z
   })
   .strict();
 
+/** Fase 6.1c (porte do SaaS #91): reenviar os itens que falharam de um lote. */
+export const studentInboundReplayRetrySchema = z
+  .object({
+    confirmation: z.string().min(1).max(200),
+  })
+  .strict();
+
 export const studentInboundReplayItemStateSchema = z.enum([
   "pending",
   "processing",
@@ -24,6 +31,9 @@ export const studentInboundReplayResultSchema = z.object({
   failed: z.number().int().nonnegative(),
   pending: z.number().int().nonnegative(),
   unknown: z.number().int().nonnegative(),
+  // Fase 6.1c (porte do SaaS #91): falhas que ainda podem ser reenviadas
+  // (payload original retido, nenhum evento gravado para o mesmo CTWA).
+  retryableFailed: z.number().int().nonnegative().default(0),
   items: z.array(
     z.object({
       id: z.string(),
@@ -46,6 +56,9 @@ export const studentInboundReplayPreviewSchema = z.object({
 });
 export type StudentInboundReplayAuthorizeDto = z.infer<
   typeof studentInboundReplayAuthorizeSchema
+>;
+export type StudentInboundReplayRetryDto = z.infer<
+  typeof studentInboundReplayRetrySchema
 >;
 export type StudentInboundReplayPreviewDto = z.infer<
   typeof studentInboundReplayPreviewSchema

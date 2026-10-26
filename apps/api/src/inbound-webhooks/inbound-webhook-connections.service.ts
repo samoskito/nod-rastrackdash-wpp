@@ -46,6 +46,11 @@ import {
 const bridgeSecretRotationBlockedMessage =
   "Conexões Uazapi e WAHA recebem pelo webhook da própria conexão WhatsApp. Não gere URL aqui: confira o webhook da conexão WhatsApp em Integrações.";
 import { effectiveInboundParserStatus } from "./inbound-webhook-parser-eligibility";
+import {
+  bornChannelState,
+  bornConnectionStatus,
+  productionDirectEligible,
+} from "./production-direct";
 import { normalizePhoneIdentity } from "../common/phone/phone-identity";
 import { reanchorSpanningAutomationRules } from "../conversion-rules/provider-rule-reanchor";
 
@@ -351,10 +356,20 @@ export class InboundWebhookConnectionsService {
 
       if (!release) {
         throw new ConflictException(
-          "Versão de observação do provedor indisponível",
+          "Versão do leitor do provedor indisponível",
         );
       }
 
+      // Fase 6.1c (produção direta): integração validada nasce em produção;
+      // só um leitor ainda não validado começa em observação. Meta Cloud sem
+      // META_APP_SECRET também: em produção a API passa a exigir a assinatura
+      // da Meta e recusaria as entregas; a tela pede o segredo e "Ativar
+      // envio" confere de novo.
+      const bornAt = new Date();
+      const status =
+        input.provider === "meta_cloud" && !this.env.META_APP_SECRET?.trim()
+          ? "observation"
+          : bornConnectionStatus(release);
       const created = await transaction.inboundWebhookConnection.create({
         data: {
           workspaceId,
@@ -362,7 +377,8 @@ export class InboundWebhookConnectionsService {
           displayName: input.displayName,
           parserReleaseId: release.id,
           secretHash,
-          status: "observation",
+          status,
+          productionActivatedAt: status === "production" ? bornAt : null,
           createdByUserId: actorUserId,
         },
         include: {
@@ -371,6 +387,7 @@ export class InboundWebhookConnectionsService {
       });
 
       if (unnichatBind) {
+        const channelState = bornChannelState(created, release, bornAt);
         await transaction.inboundWebhookChannel.create({
           data: {
             metaRoutingMode: "inherit_workspace",
@@ -380,7 +397,8 @@ export class InboundWebhookConnectionsService {
             providerChannelId: unnichatBind.providerChannelId,
             connectedPhone: unnichatBind.connectedPhone,
             channelName: unnichatBind.channelName,
-            status: "discovered",
+            status: channelState.status,
+            productionActivatedAt: channelState.productionActivatedAt,
             conversionEngineMode: "canonical",
             firstSeenAt: created.createdAt,
             lastSeenAt: created.createdAt,
@@ -515,6 +533,12 @@ export class InboundWebhookConnectionsService {
         requireValidMetaRoute: metaRouteRequiredForProvider(current.provider),
         seats: this.seatHook(),
         env: this.env,
+        // Fase 6.1c: "Retomar conexão" de uma integração validada volta a
+        // enviar sem exigir rota em cada número (conferida no envio).
+        productionDirectResume:
+          current.status === "paused" &&
+          input.status === "production" &&
+          productionDirectEligible(current.parserRelease),
       });
     });
 

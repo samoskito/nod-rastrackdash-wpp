@@ -24,6 +24,7 @@ import type {
   WhatsappProviderActionResult,
   WhatsappReceiverSecret,
 } from "./whatsapp-provider-actions";
+import { whatsappDisconnectAlertText } from "./whatsapp-disconnect-alert";
 
 type WhatsappProviderAction = (
   formData: FormData,
@@ -667,6 +668,14 @@ export function WhatsappProviderPanel({
                 {providerCards.find((card) => card.id === connection.provider)
                   ?.title ?? connection.provider}
               </span>
+              {whatsappDisconnectAlertText(connection) ? (
+                <p
+                  className="action-note warn whatsapp-disconnect-alert"
+                  role="alert"
+                >
+                  {whatsappDisconnectAlertText(connection)}
+                </p>
+              ) : null}
               {canManage ? (
                 <div className="inbound-connection-actions">
                   <button

@@ -390,7 +390,7 @@ export function NewRuleFlow({
             ruleId={result.ruleId}
             pendingNumbers={result.pendingNumbers}
             numbers={numbers}
-            mode={result.ruleMode ?? "observation"}
+            mode={result.ruleMode ?? "production"}
             canManage
           />
         ) : null}
@@ -1473,8 +1473,11 @@ function DetailsStep({
           </div>
         ) : null}
         <div>
-          <dt>Começa em</dt>
-          <dd>Observação: nada é enviado à Meta até você ativar o envio.</dd>
+          <dt>Envio</dt>
+          <dd>
+            Já começa enviando: cada conversão reconhecida vai para a Meta pelo
+            destino (pixel e página) de cada número.
+          </dd>
         </div>
       </dl>
     </fieldset>

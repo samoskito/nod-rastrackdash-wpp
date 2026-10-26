@@ -34,6 +34,11 @@ import type {
 } from "./whatsapp-provider.types";
 import { normalizeProviderBaseUrl } from "./whatsapp-provider-http";
 import { UazapiConversionBridgeService } from "../../inbound-webhooks/uazapi-conversion-bridge.service";
+import {
+  DISCONNECT_ALERT_PROVIDERS,
+  readDisconnectAlertStates,
+  type WhatsappDisconnectAlertState,
+} from "../../ops-alerts/instance-disconnect-streak";
 
 type WorkspaceActor = {
   workspaceId: string;
@@ -92,9 +97,35 @@ export class WhatsappConnectionsService {
       where: { workspaceId },
       orderBy: { createdAt: "asc" },
     })) as WhatsappConnectionRecord[];
-    return connections
-      .filter((connection) => this.isProvider(connection.provider))
-      .map((connection) => this.toDto(connection));
+    const listed = connections.filter((connection) =>
+      this.isProvider(connection.provider),
+    );
+    // Fase 6.1c (porte do SaaS #63): desconexão confirmada pelo alerta (2
+    // leituras seguidas) das conexões ativas Uazapi BYO e WAHA.
+    let alerts = new Map<string, WhatsappDisconnectAlertState>();
+    try {
+      alerts = await readDisconnectAlertStates(
+        this.prisma as never,
+        workspaceId,
+        listed
+          .filter(
+            (connection) =>
+              connection.status === "active" &&
+              (DISCONNECT_ALERT_PROVIDERS as readonly string[]).includes(
+                connection.provider,
+              ),
+          )
+          .map((connection) => connection.id),
+      );
+    } catch {
+      // O aviso é informativo: a lista de conexões nunca falha por ele.
+    }
+    return listed.map((connection) => ({
+      ...this.toDto(connection),
+      ...(alerts.has(connection.id)
+        ? { disconnectAlert: alerts.get(connection.id) }
+        : {}),
+    }));
   }
 
   async createConnection(
@@ -384,6 +415,49 @@ export class WhatsappConnectionsService {
       ...(providerStatus && /^[A-Za-z_]{1,40}$/u.test(providerStatus)
         ? { providerStatus }
         : {}),
+    };
+  }
+
+  /**
+   * Fase 6.1c (porte do SaaS #63): leitura do status de uma conexão Uazapi
+   * BYO ou WAHA para o alerta de desconexão, como ator de sistema. Só lê:
+   * não grava saúde, auditoria nem ponte. Usa a API de status do próprio
+   * provedor (Uazapi: status da instância; WAHA: sessão). Falha de leitura
+   * lança o erro (o alerta nunca dispara por erro de leitura).
+   */
+  async readConnectionStatusForAlert(
+    workspaceId: string,
+    id: string,
+  ): Promise<{
+    provider: WhatsappProviderId;
+    status: string;
+    providerStatus: string | null;
+  }> {
+    const connection = await this.findForWorkspace(workspaceId, id);
+    const provider = this.requireProvider(connection.provider);
+    const config = this.decryptConfig(connection);
+    if (!config) {
+      return { provider, status: "error", providerStatus: null };
+    }
+    if (provider === "uazapi_byo" && config.provider === "uazapi_byo") {
+      const result = this.uazapiByo
+        ? await this.uazapiByo.testSavedConnection(config)
+        : null;
+      if (result) {
+        return {
+          provider,
+          status: result.health.status,
+          providerStatus: this.safeSessionStatus(
+            result.providerStatusText ?? null,
+          ),
+        };
+      }
+    }
+    const health = await this.registry.require(provider).getHealth(config);
+    return {
+      provider,
+      status: health.status,
+      providerStatus: this.safeSessionStatus(health.providerStatus ?? null),
     };
   }
 

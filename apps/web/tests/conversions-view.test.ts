@@ -192,7 +192,7 @@ describe("conversions view: provider rules", () => {
     );
 
     expect(row!.warnings).toEqual([
-      "Em Recepção: a regra global roda no canal em observação; outro canal do mesmo número está em produção.",
+      "Em Recepção: a regra global roda num canal com o envio desligado; outro canal do mesmo número já envia.",
     ]);
     // Pausada: sem aviso.
     const [paused] = buildProviderRuleRows(
@@ -557,7 +557,6 @@ describe("rule draft: scope and payload", () => {
         name: "Regra de teste",
         scope: "all_numbers",
         channelIds: [],
-        mode: "observation",
         triggerType: "message_phrase",
         eventName: "QualifiedLead",
         valueMode: "fixed",
@@ -670,7 +669,6 @@ describe("rule draft: scope and payload", () => {
         connectionId: "conn_umbler",
         scope: "all_numbers",
         channelIds: [],
-        mode: "observation",
         triggerType: "provider_automation",
         eventName: "QualifiedLead",
         crossConnectionScope: true,

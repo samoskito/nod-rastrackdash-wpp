@@ -54,6 +54,15 @@ export function studentReplayFixture() {
       event.replayItem = items.find((i) => i.eventId === event.id) ?? null;
     for (const batch of batches)
       batch.items = items.filter((i) => i.batchId === batch.id);
+    // Fase 6.1c: filtros por "event" (payload retido) nos itens. Não
+    // enumerável para não criar ciclo item -> event -> replayItem.
+    for (const item of items)
+      if (!Object.getOwnPropertyDescriptor(item, "event"))
+        Object.defineProperty(item, "event", {
+          get: () => events.find((e) => e.id === item.eventId),
+          enumerable: false,
+          configurable: true,
+        });
   };
   const read = (rows: any[], args: any) => {
     refreshRelations();
@@ -118,7 +127,14 @@ export function studentReplayFixture() {
       update: vi.fn(async ({ where, data }) => {
         const row = batches.find((r) => matches(r, where));
         if (!row) throw new Error("fixture batch missing");
-        Object.assign(row, data);
+        // Prisma numeric operations (Fase 6.1c: retry increments).
+        for (const [key, value] of Object.entries<any>(data)) {
+          if (value && typeof value === "object" && "increment" in value)
+            row[key] = (row[key] ?? 0) + value.increment;
+          else if (value && typeof value === "object" && "decrement" in value)
+            row[key] = (row[key] ?? 0) - value.decrement;
+          else row[key] = value;
+        }
         refreshRelations();
         return row;
       }),

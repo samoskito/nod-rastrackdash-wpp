@@ -176,10 +176,14 @@ describe("conversion rules controller: Conversões (Fase 3)", () => {
       expect.objectContaining({
         scope: "all_numbers",
         channelIds: [],
-        mode: "observation",
       }),
       "user_1",
     );
+    // Fase 6.1c (produção direta): sem modo no pedido, a API decide (a regra
+    // de integração validada nasce enviando); o schema não força observação.
+    const forwarded = providerConversionRulesService.createRule.mock
+      .calls[0]?.[1] as Record<string, unknown>;
+    expect(forwarded.mode).toBeUndefined();
     await app.close();
   });
 

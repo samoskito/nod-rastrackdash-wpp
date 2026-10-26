@@ -325,7 +325,10 @@ const providerConversionRuleBaseSchema = z.object({
   scope: providerConversionRuleScopeSchema.optional(),
   // Vazio somente quando scope = "all_numbers".
   channelIds: uniqueChannelIdsSchema.default([]),
-  mode: providerConversionRuleModeSchema.default("observation"),
+  // Fase 6.1c (produção direta): ausente = a API decide. Regra de uma
+  // integração validada nasce enviando ("production"); só um leitor ainda
+  // não validado (ou o envio desligado no servidor) nasce em observação.
+  mode: providerConversionRuleModeSchema.optional(),
 });
 
 const providerConversionRuleBaseShape = providerConversionRuleBaseSchema.shape;

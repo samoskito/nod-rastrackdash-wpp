@@ -53,10 +53,10 @@ export function observedReprocessMessage(
     case "lead_number_not_production":
       return "O número do lead ainda não está em produção na própria conexão; ative o envio neste número (na regra ou em Integrações) e reprocesse";
     case "production_sending_disabled":
-      return "O envio de conversões está desligado no servidor";
+      return "O envio de conversões está desligado no servidor: defina INBOUND_CONVERSION_PRODUCTION_ENABLED=true na API (ou remova a variável) e faça o redeploy";
     case "rule_not_activated":
       return "A regra ainda não tem o envio ativo registrado";
     default:
-      return "A regra ainda permanece em observação";
+      return "A regra continua sem envio; retome o envio dela e reprocesse";
   }
 }

@@ -107,7 +107,7 @@ describe("integrations hub", () => {
     const [convActive, convAvailable] =
       within(conversions).getAllByRole("region");
     expect(within(convActive).getByText("Umbler Talk")).toBeTruthy();
-    expect(within(convActive).getByText("Em teste")).toBeTruthy();
+    expect(within(convActive).getByText("Envio desligado")).toBeTruthy();
     expect(within(convActive).queryByText("Meta Ads")).toBeNull();
     expect(within(convAvailable).getByText("Gupshup")).toBeTruthy();
     expect(within(convAvailable).queryByText("Umbler Talk")).toBeNull();

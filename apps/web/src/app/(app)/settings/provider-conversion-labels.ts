@@ -13,12 +13,13 @@ export const observationDetailCopy: Record<
   { label: string; reprocess: string }
 > = {
   rule_observation_at_receipt: {
-    label: "A regra estava em observação quando o evento chegou",
-    reprocess: "Com a regra em envio automático, reprocessar envia à Meta.",
+    label: "A regra estava sem envio quando o evento chegou",
+    reprocess: "Com a regra enviando, reprocessar envia à Meta.",
   },
   production_sending_disabled: {
     label: "Envio de conversões desligado no servidor",
-    reprocess: "Reprocessar não envia enquanto o envio estiver desligado.",
+    reprocess:
+      "Defina INBOUND_CONVERSION_PRODUCTION_ENABLED=true na API (ou remova a variável) e faça o redeploy; depois reprocessar envia à Meta.",
   },
   lead_number_legacy_engine: {
     label: "Número do lead ainda no motor antigo de conversões",
@@ -34,7 +35,7 @@ export const observationDetailCopy: Record<
     reprocess: "Reprocessar envia à Meta.",
   },
   lead_number_not_production: {
-    label: "Número do lead ainda em observação",
+    label: "Número do lead com o envio desligado",
     reprocess:
       "Ative o envio do número (“Ativar envio neste número” na regra ou a conexão dele em Integrações); depois reprocessar envia à Meta.",
   },
@@ -102,13 +103,13 @@ export function executionReasonLabel(reasonCode: string | null): string {
   const labels: Record<string, string> = {
     catalog_matched: "Catálogo reconhecido",
     catalog_matched_observation:
-      "Catálogo reconhecido com a regra em observação: nada enviado à Meta",
+      "Catálogo reconhecido com a regra sem envio: nada enviado à Meta",
     message_matched: "Mensagem reconhecida",
     message_matched_observation:
-      "Mensagem reconhecida com a regra em observação: nada enviado à Meta",
+      "Mensagem reconhecida com a regra sem envio: nada enviado à Meta",
     automation_matched: "Automação reconhecida",
     automation_matched_observation:
-      "Recebido com a regra em observação: nada enviado à Meta",
+      "Recebido com a regra sem envio: nada enviado à Meta",
     automation_manual_reprocess_approved: "Reprocessamento autorizado",
     automation_event_mismatch: "Evento diferente da regra",
     automation_channel_unresolved: "Canal não localizado",
@@ -118,13 +119,14 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Recebido antes do envio ativo (regra ou número do lead): nada enviado à Meta",
     production_context_invalid: "Configuração incompleta",
     rule_production_not_activated: "Regra ainda sem envio ativo",
-    rule_parser_not_certified: "Parser da regra não certificado",
-    connection_parser_not_certified: "Parser da conexão não certificado",
+    rule_parser_not_certified: "Leitor da regra ainda não validado",
+    connection_parser_not_certified: "Leitor da conexão ainda não validado",
     parser_release_mismatch: "Parser da regra difere da conexão",
     connection_removed: "Conexão removida",
-    connection_not_production: "Conexão ainda não está em produção",
+    connection_not_production:
+      "Envio da conexão desligado: ative em Integrações",
     channel_unresolved: "Canal não localizado",
-    channel_not_active: "Canal ainda não está ativo",
+    channel_not_active: "Envio do número desligado: ative em Integrações",
     purchase_within_24h: "Compra repetida em menos de 24h",
     provider_conversion_paid_lead_missing: "Lead pago não localizado",
     provider_conversion_catalog_mismatch: "Mensagem divergiu do catálogo",
@@ -148,7 +150,7 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Lead já convertido pela entrada do anúncio: nada novo enviado à Meta",
     // Venda da Payt (Fase 4a).
     purchase_duplicate: "Venda repetida: recibo registrado, nada novo enviado",
-    rule_in_observation: "Regra em observação: nada é enviado à Meta",
+    rule_in_observation: "Regra sem envio: nada é enviado à Meta",
     payt_purchase_identity_missing:
       "Venda sem vendedor ou pedido identificados",
     payt_currency_unsupported:

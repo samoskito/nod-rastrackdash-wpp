@@ -24,7 +24,7 @@ const statusLabels: Record<
   ProviderConversionRuleExecutionAuditDto["items"][number]["status"],
   { label: string; tone: "" | "warn" | "bad" | "neutral" }
 > = {
-  observed: { label: "Reconhecida em observação", tone: "neutral" },
+  observed: { label: "Reconhecida sem envio", tone: "neutral" },
   eligible: { label: "Na fila de envio", tone: "neutral" },
   materialized: { label: "Evento enviado", tone: "" },
   duplicate: { label: "Repetida", tone: "warn" },
@@ -155,7 +155,7 @@ export function RuleExecutions({
           <dd>{audit.summary.materialized}</dd>
         </div>
         <div>
-          <dt>Em observação</dt>
+          <dt>Sem envio</dt>
           <dd>{audit.summary.observed}</dd>
         </div>
         <div>
@@ -304,12 +304,12 @@ function BlockedReprocessPanel({
             Reenviamos só conversas dos últimos {summary.windowDays} dias
             (limite da Meta) e nunca enviamos a mesma conversão duas vezes.
             Conversas de números sem envio ativo, pausados de propósito na época
-            ou que não são QR ficam como estão.
+            ou que não são Uazapi/WAHA ficam como estão.
           </p>
           {rulePaused ? (
             <p className="action-note warn">
-              A regra está pausada ou em observação: nada é reenviado até
-              você ativar o envio automático dela.
+              A regra está pausada ou com o envio desligado: nada é reenviado
+              até você retomar o envio dela.
             </p>
           ) : summary.ready === 0 && summary.stillBlocked > 0 ? (
             <p className="action-note warn">

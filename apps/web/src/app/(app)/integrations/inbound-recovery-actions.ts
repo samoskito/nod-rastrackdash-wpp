@@ -4,6 +4,7 @@ import {
   studentInboundReplayAuthorizeSchema,
   studentInboundReplayPreviewSchema,
   studentInboundReplayResultSchema,
+  studentInboundReplayRetrySchema,
   type StudentInboundReplayPreviewDto,
   type StudentInboundReplayResultDto,
 } from "@wpptrack/shared";
@@ -22,6 +23,12 @@ const safeErrors = new Set([
   "Não foi possível iniciar o replay; tente novamente",
   "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
   "Replay de webhooks ainda não está habilitado",
+  // Fase 6.1c (porte do SaaS #91): reenviar os que falharam.
+  "Esta recuperação não tem itens com falha para reenviar",
+  "Ative o canal e valide a rota Meta antes de reenviar",
+  "Nenhuma falha possui payload disponível para reenviar",
+  "Não foi possível reenviar agora; tente novamente",
+  "A licença precisa estar utilizável antes de recuperar CTWAs",
 ]);
 function failure(error: unknown): { ok: false; message: string } {
   return {
@@ -65,6 +72,30 @@ export async function authorizeInboundRecoveryAction(
       };
     const response = await serverApiFetch<unknown>(
       `${path(connectionId, channelId)}/authorize`,
+      { method: "POST", body: JSON.stringify(parsed.data) },
+    );
+    return { ok: true, data: studentInboundReplayResultSchema.parse(response) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+/** Fase 6.1c (porte do SaaS #91): reenvia os itens que falharam do lote. */
+export async function retryInboundRecoveryAction(
+  connectionId: string,
+  channelId: string,
+  batchId: string,
+  input: unknown,
+): Promise<RecoveryActionResult<StudentInboundReplayResultDto>> {
+  try {
+    if (!batchId) throw new Error();
+    const parsed = studentInboundReplayRetrySchema.safeParse(input);
+    if (!parsed.success)
+      return {
+        ok: false,
+        message: "Digite o nome da conexão para confirmar o reenvio.",
+      };
+    const response = await serverApiFetch<unknown>(
+      `${path(connectionId, channelId)}/batches/${encodeURIComponent(batchId)}/retry`,
       { method: "POST", body: JSON.stringify(parsed.data) },
     );
     return { ok: true, data: studentInboundReplayResultSchema.parse(response) };

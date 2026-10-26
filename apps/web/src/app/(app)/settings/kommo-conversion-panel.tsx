@@ -712,7 +712,7 @@ export function KommoConversionPanel({
         <div className="provider-conversion-empty">
           <Database size={18} aria-hidden="true" />
           <span>
-            Nenhuma conexão Kommo ainda. Conecte a conta para liberar o gatilho de
+            Nenhuma conexão Kommo ainda. Conecte a conta para usar o gatilho de
             mudança de estágio.
           </span>
         </div>
@@ -1956,7 +1956,7 @@ function KommoConnectionCard({
               <ConfirmBox
                 title={
                   pendingCreatePayload
-                    ? "Criar esta regra já com envio automático ativo? Negócios sem lead previamente reconhecido continuam apenas na auditoria."
+                    ? "Criar esta regra? Ela já começa enviando para a Meta. Negócios sem lead previamente reconhecido continuam apenas na auditoria."
                     : "O estado da conexão mudou. Cancele e revise a regra antes de confirmar novamente."
                 }
                 onCancel={() => {
@@ -2058,9 +2058,10 @@ function KommoConnectionCard({
       <p className="action-note">
         Só negócios já vinculados a um lead existente no WppTrack (telefone reconhecido
         e atribuição de anúncio válida) geram conversão; os demais ficam apenas na
-        auditoria. Regras em observação não enviam nada ao Meta. Salvar uma regra não
-        envia nada, e o aceite (202) do webhook da Kommo só significa que o evento
-        entrou para processamento: confirme o resultado na auditoria.
+        auditoria. A regra já começa enviando: cada negócio que chegar ao estágio
+        escolhido depois de salvar vira conversão, e o aceite (202) do webhook da
+        Kommo só significa que o evento entrou para processamento: confirme o
+        resultado na auditoria.
       </p>
     </article>
   );
@@ -2081,7 +2082,9 @@ function buildRulePayload(
   const stageValue = String(data.get("stage") ?? "");
   const [pipelineId, statusId] = stageValue.split("::");
   const eventName = String(data.get("eventName") ?? "");
-  const mode = String(data.get("mode") ?? "observation");
+  // Fase 6.1c (produção direta): a Kommo foi validada no SaaS; a criação não
+  // escolhe modo e a API faz a regra nascer enviando.
+  const mode = data.get("mode");
   const valueMode = String(data.get("valueMode") ?? "lead_price");
   const currency = String(data.get("currency") ?? "").trim();
   const contentName = String(data.get("contentName") ?? "").trim();
@@ -2107,7 +2110,7 @@ function buildRulePayload(
     valueMode: carriesValue ? valueMode : "lead_price",
   };
 
-  if (!isUpdate) {
+  if (!isUpdate && (mode === "observation" || mode === "production")) {
     payload.mode = mode;
   }
 
@@ -2298,18 +2301,10 @@ function KommoRuleForm({
       </p>
 
       {!initial ? (
-        <label className="provider-conversion-initial-mode">
-          <span className="field-label">Modo inicial</span>
-          <select name="mode" defaultValue="observation" disabled={pending}>
-            <option value="observation">Observar primeiro (nada é enviado ao Meta)</option>
-            <option value="production">Ativar envio agora (produção)</option>
-          </select>
-          <small className="action-note">
-            Em observação a regra só registra o que aconteceria, sem criar nem enviar
-            conversão. O envio só ocorre quando o negócio tiver um lead previamente
-            reconhecido.
-          </small>
-        </label>
+        <p className="action-note provider-conversion-initial-mode">
+          A regra já começa enviando para a Meta. O envio só ocorre quando o negócio
+          tiver um lead previamente reconhecido.
+        </p>
       ) : null}
 
       {carriesValue ? (
@@ -2536,7 +2531,7 @@ function KommoRuleListItem({
   }
 
   const resumingIntoProduction = !rule.active && rule.mode === "production";
-  const resumeLabel = resumingIntoProduction ? "Retomar envio automático" : "Retomar observação";
+  const resumeLabel = resumingIntoProduction ? "Retomar envio automático" : "Retomar regra";
 
   async function toggleActive() {
     if (pending || mutationsBlocked || !guards().allowed) return;
@@ -2621,7 +2616,7 @@ function KommoRuleListItem({
       ? connectionDispatching
         ? { tone: "success", label: "Envio ativo (produção)" }
         : { tone: "warn", label: "Produção em espera (conexão não está enviando)" }
-      : { tone: "neutral", label: "Observação (nada é enviado)" };
+      : { tone: "neutral", label: "Envio desligado (nada é enviado)" };
 
   return (
     <article className="provider-conversion-rule">
@@ -2650,22 +2645,18 @@ function KommoRuleListItem({
 
       {canManage ? (
         <div className="provider-conversion-rule-actions">
-          {rule.active ? (
+          {/* Fase 6.1c (produção direta): sem "voltar para observação";
+              para parar o envio, pause a regra. */}
+          {rule.active && activating ? (
             <button
               className="icon-button"
               type="button"
               title={
                 productionTransitionBlocked && activating
                   ? "Estado da conexão não confirmado; aguarde a confirmação"
-                  : rule.mode === "production"
-                    ? "Voltar para observação"
-                    : "Ativar envio automático"
+                  : "Ativar envio automático"
               }
-              aria-label={
-                rule.mode === "production"
-                  ? `Voltar para observação: ${rule.name}`
-                  : `Ativar envio automático: ${rule.name}`
-              }
+              aria-label={`Ativar envio automático: ${rule.name}`}
               disabled={
                 mutationsBlocked ||
                 Boolean(pending) ||

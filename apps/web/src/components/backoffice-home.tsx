@@ -23,7 +23,7 @@ const destinations: Array<{
     href: "/backoffice/inbound-webhooks",
     icon: Webhook,
     label: "Webhooks WhatsApp",
-    meta: "Observação de provedores",
+    meta: "Eventos recebidos dos provedores",
   },
   {
     description:

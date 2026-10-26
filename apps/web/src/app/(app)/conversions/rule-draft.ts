@@ -427,8 +427,9 @@ function catalogPayload(
 }
 
 /**
- * Create payload for POST /conversion-rules/providers. Rules always start in
- * observation (nothing is sent to Meta until "Ativar envio automático").
+ * Create payload for POST /conversion-rules/providers. Fase 6.1c (produção
+ * direta): no mode is sent, so the API decides; a rule of a validated
+ * integration is born sending to Meta.
  */
 export function buildRulePayload(
   draft: RuleDraft,
@@ -462,7 +463,6 @@ export function buildRulePayload(
     ...(connectionId ? { connectionId } : {}),
     ...(draft.scope === "all_numbers" ? { scope: "all_numbers" } : {}),
     channelIds: draft.scope === "all_numbers" ? [] : [...draft.channelIds],
-    mode: "observation",
   };
 
   switch (draft.origin) {

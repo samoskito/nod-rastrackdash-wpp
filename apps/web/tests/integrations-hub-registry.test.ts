@@ -353,7 +353,7 @@ describe("buildIntegrationCards", () => {
     );
     expect(
       withExisting.find((card) => card.id === "data_crazy")?.status.label,
-    ).toBe("Em teste");
+    ).toBe("Envio desligado");
   });
 
   it("keeps inbound cards, flagged, when the connections could not be read", () => {

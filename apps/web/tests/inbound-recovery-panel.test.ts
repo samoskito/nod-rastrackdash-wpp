@@ -51,6 +51,7 @@ const result = (
   pending: ["pending", "processing"].includes(state) ? 1 : 0,
   failed: state === "failed" ? 1 : 0,
   unknown: state === "delivery_unknown" ? 1 : 0,
+  retryableFailed: 0,
   items: [{ id: "item", state }],
 });
 async function click(name: string) {

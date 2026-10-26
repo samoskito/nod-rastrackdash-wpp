@@ -116,7 +116,7 @@ describe("Meta Cloud production UI actions", () => {
     const p = props();
     render(createElement(InboundWebhookPanel, p));
     const button = screen.getByRole("button", {
-      name: "Ativar envios automáticos",
+      name: "Ativar envio",
       hidden: true,
     });
     vi.spyOn(window, "confirm")
@@ -153,7 +153,7 @@ describe("Meta Cloud production UI actions", () => {
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", {
-          name: "Ativar envios automáticos",
+          name: "Ativar envio",
           hidden: true,
         }),
       );
@@ -188,7 +188,7 @@ describe("Meta Cloud production UI actions", () => {
     );
     expect(
       screen.queryByRole("button", {
-        name: "Ativar envios automáticos",
+        name: "Ativar envio",
         hidden: true,
       }),
     ).toBeNull();

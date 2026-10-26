@@ -173,7 +173,11 @@ const pipedriveConversionRuleBaseSchema = z
     pipelineId: idSchema,
     stageId: idSchema.nullable().optional(),
     eventName: conversionEventNameSchema,
-    mode: pipedriveRuleModeSchema.default("observation"),
+    // Fase 6.1c (produção direta): ausente = a API decide. O Pipedrive foi
+    // validado no SaaS: a regra nasce enviando quando a conexão já tem o que o
+    // envio exige (credencial, webhook e números autorizados); sem isso, nasce
+    // com o envio desligado e "Ativar envio" diz o que falta.
+    mode: pipedriveRuleModeSchema.optional(),
     active: z.boolean().default(true),
   })
   .merge(ruleValueFields)

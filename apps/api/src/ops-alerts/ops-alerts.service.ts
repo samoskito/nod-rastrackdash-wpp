@@ -1,12 +1,34 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import {
   workspaceOpsAlertSettingsSchema,
   type WorkspaceOpsAlertSettingsInput,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { WhatsappConnectionsService } from "../integrations/whatsapp-providers/whatsapp-connections.service";
+import { LicenseClientService } from "../licensing-client/license-client.service";
 import { OpsAlertNotifier } from "./ops-alert.notifier";
+import {
+  CONNECTED_OBSERVED_DETAIL,
+  classifyDisconnectReading,
+  DISCONNECT_ALERT_PROVIDERS,
+  DISCONNECT_CONFIRMATIONS,
+  DISCONNECT_CONFIRMED_DETAIL,
+  DISCONNECT_OBSERVED_DETAIL,
+  disconnectAlertKey,
+  disconnectStreakFromDetail,
+  isConfirmedDisconnectDetail,
+} from "./instance-disconnect-streak";
 
 type ScanResult = { checked: number; notified: number; skipped: number };
+
+type AlertSetting = {
+  workspaceId: string;
+  enabled: boolean;
+  alertPhonesE164: string[];
+  disconnectAlerts: boolean;
+  debounceHours: number;
+  workspace: { name: string };
+};
 
 @Injectable()
 export class OpsAlertService {
@@ -15,6 +37,12 @@ export class OpsAlertService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(OpsAlertNotifier) private readonly notifier: OpsAlertNotifier,
+    @Optional()
+    @Inject(WhatsappConnectionsService)
+    private readonly whatsappConnections?: WhatsappConnectionsService,
+    @Optional()
+    @Inject(LicenseClientService)
+    private readonly license?: LicenseClientService,
   ) {}
 
   async getSettings(workspaceId: string) {
@@ -94,6 +122,7 @@ export class OpsAlertService {
 
   async runScan(now = new Date()): Promise<ScanResult> {
     const result: ScanResult = { checked: 0, notified: 0, skipped: 0 };
+    await this.scanInstanceDisconnects(result, now);
     const settings = await this.prisma.workspaceOpsAlertSettings.findMany({
       where: { enabled: true, alertPhonesE164: { isEmpty: false } },
       include: { workspace: { select: { name: true } }, },
@@ -101,26 +130,6 @@ export class OpsAlertService {
 
     for (const setting of settings) {
       if (setting.alertPhonesE164.length === 0) continue;
-      const instances = await this.prisma.whatsappInstance.findMany({
-        where: { workspaceId: setting.workspaceId, status: "active", provider: "uazapi", providerTokenEncrypted: { not: null } },
-        select: { id: true, name: true },
-      });
-      for (const instance of instances) {
-        result.checked += 1;
-        if (!setting.disconnectAlerts) {
-          result.skipped += 1;
-          await this.record(setting.workspaceId, `disconnect:${instance.id}`, "skipped", "disconnect_alert_disabled");
-          continue;
-        }
-        // rastrackdash sanitize (rewrite_rules.ops-alerts-whatsapp-connections-stub):
-        // WhatsappConnectionsService (billing-only instance marketplace) is
-        // stripped in this edition. Re-wiring this check directly against
-        // UazapiAdapter is a real feature change left for a follow-up slice
-        // (F3.3/F4 TODO); skip rather than guess at the replacement call shape.
-        result.skipped += 1;
-        await this.record(setting.workspaceId, `disconnect:${instance.id}`, "skipped", "disconnect_status_check_unavailable");
-      }
-
       const connections = await this.prisma.inboundWebhookConnection.findMany({
         where: { workspaceId: setting.workspaceId, removedAt: null, status: { in: ["production", "observation"] } },
         select: { id: true, displayName: true, status: true, createdAt: true, lastDeliveryAt: true },
@@ -143,6 +152,152 @@ export class OpsAlertService {
       }
     }
     return result;
+  }
+
+  /**
+   * Fase 6.1c (porte do SaaS #63): confere o status de cada conexão Uazapi
+   * BYO e WAHA ativa pela API de status do próprio provedor (URL do servidor
+   * + token do aluno). O alerta só vale depois de DISCONNECT_CONFIRMATIONS
+   * leituras seguidas de "desconectado"; ele aparece na tela de Integrações
+   * mesmo sem telefone de alerta. A mensagem no WhatsApp só sai com os
+   * alertas ligados no workspace, telefone cadastrado e licença utilizável.
+   */
+  private async scanInstanceDisconnects(
+    result: ScanResult,
+    now: Date,
+  ): Promise<void> {
+    if (!this.whatsappConnections) return;
+    const instances = await this.prisma.whatsappInstance.findMany({
+      where: {
+        status: "active",
+        provider: { in: [...DISCONNECT_ALERT_PROVIDERS] },
+        configEncrypted: { not: null },
+        workspace: { operationalStatus: "active" },
+      },
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        workspaceId: true,
+      },
+      orderBy: [{ workspaceId: "asc" }, { id: "asc" }],
+    });
+    if (instances.length === 0) return;
+    const settings = new Map<string, AlertSetting>(
+      (
+        await this.prisma.workspaceOpsAlertSettings.findMany({
+          where: {
+            workspaceId: {
+              in: [...new Set(instances.map((item) => item.workspaceId))],
+            },
+          },
+          include: { workspace: { select: { name: true } } },
+        })
+      ).map((setting) => [setting.workspaceId, setting]),
+    );
+    let licenseLocked: boolean | null = null;
+
+    for (const instance of instances) {
+      result.checked += 1;
+      const alertKey = disconnectAlertKey(instance.id);
+      let reading: {
+        provider: string;
+        status: string;
+        providerStatus: string | null;
+      };
+      try {
+        reading = await this.whatsappConnections.readConnectionStatusForAlert(
+          instance.workspaceId,
+          instance.id,
+        );
+      } catch {
+        // Erro ao ler o status não é prova de desconexão: nunca alerta.
+        this.logger.warn(
+          `ops_alert_disconnect_status_failed workspace=${instance.workspaceId} instance=${instance.id}`,
+        );
+        continue;
+      }
+      const observation = classifyDisconnectReading(reading);
+      const last = await this.lastDelivery(instance.workspaceId, alertKey);
+      if (observation === "connected") {
+        if (disconnectStreakFromDetail(last?.detail) > 0) {
+          await this.record(
+            instance.workspaceId,
+            alertKey,
+            "skipped",
+            CONNECTED_OBSERVED_DETAIL,
+          );
+        }
+        continue;
+      }
+      // Estados passageiros ou desconhecidos não alertam e não quebram a
+      // sequência de leituras de desconectado.
+      if (observation === "ambiguous") continue;
+
+      const streak = disconnectStreakFromDetail(last?.detail) + 1;
+      if (streak < DISCONNECT_CONFIRMATIONS) {
+        result.skipped += 1;
+        await this.record(
+          instance.workspaceId,
+          alertKey,
+          "skipped",
+          `${DISCONNECT_OBSERVED_DETAIL}${streak}`,
+        );
+        continue;
+      }
+
+      const setting = settings.get(instance.workspaceId);
+      let blockedReason: string | null = null;
+      if (
+        !setting?.enabled ||
+        setting.alertPhonesE164.length === 0 ||
+        !setting.disconnectAlerts
+      ) {
+        blockedReason = "notify_disabled";
+      } else {
+        licenseLocked ??= await this.licenseLocked();
+        if (licenseLocked) blockedReason = "license_locked";
+      }
+      if (blockedReason !== null || !setting) {
+        result.skipped += 1;
+        // Já confirmado e sem envio: uma linha basta para a tela.
+        if (!isConfirmedDisconnectDetail(last?.detail)) {
+          await this.record(
+            instance.workspaceId,
+            alertKey,
+            "skipped",
+            `${DISCONNECT_CONFIRMED_DETAIL}${streak} ${blockedReason ?? "notify_disabled"}`,
+          );
+        }
+        continue;
+      }
+      const label = instance.displayName?.trim() || instance.name;
+      await this.notify(
+        setting,
+        alertKey,
+        `[WppTrack] WhatsApp desconectado no workspace "${setting.workspace.name}" (conexão "${label}"). Reconecte no painel do seu provedor e confira em Integrações.`,
+        result,
+        now,
+      );
+    }
+  }
+
+  private async lastDelivery(workspaceId: string, alertKey: string) {
+    return this.prisma.workspaceOpsAlertDelivery.findFirst({
+      where: { workspaceId, alertKey },
+      orderBy: { createdAt: "desc" },
+      select: { detail: true, createdAt: true },
+    });
+  }
+
+  /** Licença bloqueada, desconhecida ou sem cliente de licença: nada é enviado. */
+  private async licenseLocked(): Promise<boolean> {
+    if (!this.license) return true;
+    try {
+      return (await this.license.getLockState()).locked;
+    } catch {
+      return true;
+    }
   }
 
   private async notify(setting: { workspaceId: string; alertPhonesE164: string[]; debounceHours: number }, alertKey: string, message: string, result: ScanResult, now: Date) {

@@ -485,7 +485,7 @@ function screenProps(overrides: Partial<ConversionsScreenProps> = {}): Conversio
     },
     legacyActions: {
       update: vi.fn(async (_formData: FormData) => ({ ok: true, message: "Regra antiga pausada." })),
-      adapt: ok("Regra conectada aos números, em observação."),
+      adapt: ok("Regra conectada aos números e enviando para a Meta."),
     },
     ...overrides,
   };
@@ -796,7 +796,7 @@ describe("Regras antigas", () => {
     expect(
       (within(dialog).getByRole("checkbox", { name: /Recepção/ }) as HTMLInputElement).checked,
     ).toBe(true);
-    await user.click(within(dialog).getByRole("button", { name: /Conectar em observação/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Conectar aos números/ }));
 
     await waitFor(() => expect(props.legacyActions!.adapt).toHaveBeenCalledTimes(1));
     const adapt = formOf(props.legacyActions!.adapt);

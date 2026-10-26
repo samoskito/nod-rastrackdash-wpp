@@ -715,7 +715,8 @@ describe("provider rules API: workspace scope", () => {
       origin: "automation_unnichat",
       // "All numbers" of an Unnichat automation = numbers of its connection.
       effectiveChannelIds: ["channel_unnichat"],
-      mode: "observation",
+      // Fase 6.1c (produção direta): Unnichat validado nasce enviando.
+      mode: "production",
     });
     expect(created.webhookUrl).toMatch(
       /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
@@ -800,6 +801,8 @@ describe("provider rules API: workspace scope", () => {
       messageInput({
         connectionId: "connection_umbler",
         channelIds: ["channel_umbler"],
+        // Escopo, não envio: com o envio desligado nada é promovido.
+        mode: "observation",
       }),
       "user_1",
     );
@@ -2150,5 +2153,189 @@ describe("provider rules API: excluir regras unificadas e em lote", () => {
       "removed",
     ]);
     expect(result.removedCount).toBe(1);
+  });
+});
+
+describe("Fase 6.1c: produção direta (regras nascem enviando)", () => {
+  const payt = {
+    name: "Venda Payt",
+    triggerType: "provider_automation",
+    automationSource: "payt",
+    eventName: "Purchase",
+    scope: "specific_numbers",
+    connectionId: "connection_umbler",
+    channelIds: ["channel_umbler"],
+  };
+  const umbler = {
+    name: "Venda Umbler",
+    triggerType: "provider_automation",
+    eventName: "QualifiedLead",
+    scope: "all_numbers",
+    connectionId: "connection_umbler",
+  };
+  const unnichat = {
+    name: "Comprou no Unnichat",
+    triggerType: "provider_automation",
+    eventName: "Purchase",
+    defaultValueCents: 15000,
+    defaultCurrency: "BRL",
+    scope: "all_numbers",
+    channelIds: [],
+    connectionId: "connection_unnichat",
+  };
+  const label = {
+    name: "Tag comprou",
+    triggerType: "provider_automation",
+    triggerLabels: [{ id: "551199:3", name: "Comprou" }],
+    eventName: "QualifiedLead",
+    scope: "all_numbers",
+  };
+  const catalog = {
+    name: "Catálogo",
+    triggerType: "structured_catalog",
+    eventName: "Purchase",
+    messageAuthorScope: "team",
+    scope: "all_numbers",
+    triggerPhrases: ["pedido confirmado"],
+    catalog: {
+      name: "Camas",
+      productName: "Cama elástica",
+      currency: "BRL",
+      attributes: [{ key: "tamanho", label: "Tamanho" }],
+      variants: [{ attributeValues: ["3,05"], aliases: [], valueCents: 199_000 }],
+    },
+  };
+
+  it.each([
+    ["frase da equipe (Uazapi/WAHA, todos os números)", () => messageInput({ scope: "all_numbers" })],
+    [
+      "frase num número específico (Uazapi)",
+      () =>
+        messageInput({
+          channelIds: [
+            createWorld().channels.find(
+              (channel) => channel.whatsappInstanceId === "instance_a",
+            )!.id,
+          ],
+        }),
+    ],
+    ["etiqueta Uazapi", () => providerConversionRuleCreateInputSchema.parse(label)],
+    ["Payt", () => providerConversionRuleCreateInputSchema.parse(payt)],
+    ["Umbler (automação)", () => providerConversionRuleCreateInputSchema.parse(umbler)],
+    ["Unnichat (automação)", () => providerConversionRuleCreateInputSchema.parse(unnichat)],
+  ])("%s: nasce em produção, sem modo pedido e sem clicar em Ativar envio", async (_name, input) => {
+    const world = createWorld();
+    const parsed = input();
+    expect(parsed.mode).toBeUndefined();
+    const { rule } = await world.service.createRule(workspaceId, parsed, "user_1");
+    expect(rule.mode).toBe("production");
+    expect(rule.productionActivatedAt).toEqual(expect.any(String));
+    const created = world.audits.find(
+      (audit) => audit.action === "provider_conversion_rule.created",
+    );
+    expect(created).toMatchObject({
+      resultStatus: "production",
+      afterSummary: expect.objectContaining({
+        mode: "production",
+        productionDirect: true,
+      }),
+    });
+  });
+
+  it("catálogo estruturado também nasce em produção", async () => {
+    const world = createWorld();
+    const parsed = providerConversionRuleCreateInputSchema.safeParse(catalog);
+    // O contrato do catálogo é validado pelo schema; se mudar, o teste avisa.
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    Object.assign(world.prisma, {
+      conversionCatalog: {
+        create: vi.fn(async ({ data }: Row) => ({ id: "catalog_1", ...data })),
+      },
+      conversionCatalogAttribute: {
+        createMany: vi.fn(async ({ data }: Row) => ({ count: data.length })),
+      },
+      conversionCatalogVariant: {
+        createMany: vi.fn(async ({ data }: Row) => ({ count: data.length })),
+      },
+    });
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      parsed.data,
+      "user_1",
+    );
+    expect(rule.mode).toBe("production");
+  });
+
+  it("um modo pedido explicitamente continua valendo (observação só por escolha)", async () => {
+    const world = createWorld();
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers", mode: "observation" }),
+      "user_1",
+    );
+    expect(rule.mode).toBe("observation");
+    expect(rule.productionActivatedAt).toBeNull();
+  });
+
+  it("com o envio de regras desligado no servidor (false explícito), nasce sem envio em vez de falhar", async () => {
+    const world = createWorld();
+    const service = new ProviderConversionRulesService(world.prisma as never, {
+      ...env,
+      INBOUND_CONVERSION_PRODUCTION_ENABLED: "false",
+    });
+    const { rule } = await service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers" }),
+      "user_1",
+    );
+    expect(rule.mode).toBe("observation");
+  });
+
+  it("um leitor ainda não validado mantém a observação (a única que sobra)", async () => {
+    const world = createWorld();
+    const findRelease = world.prisma.inboundWebhookParserRelease.findFirst;
+    world.prisma.inboundWebhookParserRelease.findFirst = vi.fn(
+      async (args: Row) => {
+        const release = await findRelease(args);
+        return release && release.id === "release_umbler_automation"
+          ? { ...release, status: "observation_only" }
+          : release;
+      },
+    );
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse(umbler),
+      "user_1",
+    );
+    expect(rule.mode).toBe("observation");
+    expect(rule.productionActivatedAt).toBeNull();
+  });
+
+  it("Retomar uma regra pausada volta enviando, sem passar por observação", async () => {
+    const world = createWorld();
+    const { rule } = await world.service.createRule(
+      workspaceId,
+      messageInput({ scope: "all_numbers" }),
+      "user_1",
+    );
+    const paused = await world.service.updateRule(
+      workspaceId,
+      rule.id,
+      providerConversionRuleUpdateInputSchema.parse({ active: false }),
+      "user_1",
+    );
+    expect(paused.conversionRule.active).toBe(false);
+    expect(paused.mode).toBe("observation");
+
+    const resumed = await world.service.updateRule(
+      workspaceId,
+      rule.id,
+      providerConversionRuleUpdateInputSchema.parse({ active: true }),
+      "user_1",
+    );
+    expect(resumed.conversionRule.active).toBe(true);
+    expect(resumed.mode).toBe("production");
+    expect(resumed.productionActivatedAt).toEqual(expect.any(String));
   });
 });

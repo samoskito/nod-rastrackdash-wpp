@@ -17,7 +17,6 @@ import {
   Check,
   Copy,
   Database,
-  Eye,
   KeyRound,
   Pause,
   Pencil,
@@ -370,7 +369,7 @@ const errorCodeText: Record<string, string> = {
   lead_destination_mismatch:
     "Destino Meta do anúncio diferente do canal autorizado; nada foi enviado.",
   pipedrive_production_disabled:
-    "Envio automático desativado neste ambiente; mantido apenas como observado.",
+    "Envio automático desativado neste ambiente; registrado sem envio.",
   ordering_ambiguous: "Movimentos conflitantes no mesmo instante.",
   rule_value_invalid: "Valor da regra inválido.",
   event_price_missing_or_nonpositive:
@@ -385,9 +384,9 @@ const errorCodeText: Record<string, string> = {
     "Tentativas esgotadas. Não é reprocessado automaticamente.",
   lease_lost: "Processamento interrompido.",
   production_activation_fence:
-    "Movimento anterior à ativação do envio automático: mantido apenas como observado.",
+    "Movimento anterior à ativação do envio automático: registrado sem envio.",
   channel_activation_fence:
-    "Movimento anterior à autorização do canal: mantido apenas como observado.",
+    "Movimento anterior à autorização do canal: registrado sem envio.",
   pipedrive_materialization_incomplete:
     "A conversão não foi registrada por completo; nada foi enviado.",
   pipedrive_semantic_identity_conflict:
@@ -514,10 +513,11 @@ function ruleValueSummary(rule: PipedriveConversionRuleDto): string {
 }
 
 /**
- * Pipedrive opt-in CRM origin. Every rule defaults to observation (records
- * what WOULD match, sends nothing). Production is an explicit, confirmed
- * opt-in gated by the server capabilities; the UI never reports an event as
- * sent unless the backend delivery status says so.
+ * Pipedrive opt-in CRM origin. Fase 6.1c (produção direta): Pipedrive was
+ * validated in the SaaS, so a new rule is born sending (the creation is still
+ * confirmed and gated by the server capabilities, which say what is missing).
+ * The UI never reports an event as sent unless the backend delivery status
+ * says so.
  */
 export function PipedriveConversionPanel({
   unsettledOperations,
@@ -736,9 +736,8 @@ export function PipedriveConversionPanel({
           <h3>Pipedrive CRM</h3>
           <p className="muted">
             Escolha qual etapa do funil (ou o negócio ganho) vira cada evento
-            de conversão. Toda regra começa em observação: registra o
-            movimento e não envia nada. Com o envio automático (ativado por
-            você, com confirmação) o evento segue para a Meta.
+            de conversão. A regra já começa enviando: assim que for criada,
+            cada movimento segue para a Meta.
           </p>
         </div>
         <div className="provider-conversion-heading-actions">
@@ -1668,7 +1667,7 @@ function PipedriveConnectionCard({
             >
               {productionActiveCount > 0
                 ? `Envio automático em ${productionActiveCount} regra(s)`
-                : "Observação (padrão)"}
+                : "Nenhuma regra enviando"}
             </span>
             {!canonical.credentialHealthy ? (
               <span className="event-chip warn">Credencial inválida</span>
@@ -1805,7 +1804,7 @@ function PipedriveConnectionCard({
 
       {canManage && confirmingKey === statusKey ? (
         <InlineConfirm
-          message="Pausar a conexão Pipedrive? Novos movimentos de etapa deixam de ser processados (observados ou enviados) até retomar."
+          message="Pausar a conexão Pipedrive? Novos movimentos de etapa deixam de ser processados (registrados ou enviados) até retomar."
           confirmLabel="Pausar conexão"
           tone="danger"
           disabled={Boolean(pending) || locked}
@@ -2015,8 +2014,8 @@ function PipedriveConnectionCard({
         {createRuleOpen && canManage && productionDraft && confirmingKey === createProductionKey ? (
           <>
             <InlineConfirm
-              message={`Criar a regra "${String(productionDraft.payload.name)}" já com envio automático ativo? Novos movimentos enviam o evento ${eventLabel(productionDraft.payload.eventName as ConversionEventNameDto)} para a Meta. Negócios sem lead de WhatsApp reconhecido continuam apenas observados.`}
-              confirmLabel="Criar com envio automático"
+              message={`Criar a regra "${String(productionDraft.payload.name)}"? Ela já começa enviando: novos movimentos enviam o evento ${eventLabel(productionDraft.payload.eventName as ConversionEventNameDto)} para a Meta. Negócios sem lead de WhatsApp reconhecido ficam só registrados.`}
+              confirmLabel="Criar regra"
               tone="primary"
               disabled={
                 Boolean(pending) ||
@@ -2090,8 +2089,8 @@ function PipedriveConnectionCard({
         Um movimento só é associado quando a pessoa do negócio tem telefone
         igual ao de um lead de WhatsApp que já existe neste workspace, em um canal
         autorizado; nenhum lead é criado. Mudanças só de campos personalizados
-        são ignoradas e negócio perdido não gera conversão. Regras em
-        observação não enviam nada; com envio automático o resultado de cada
+        são ignoradas e negócio perdido não gera conversão. Regras com o
+        envio desligado não enviam nada; com envio automático o resultado de cada
         envio aparece em Eventos recebidos e só é mostrado como enviado quando
         confirmado. Histórico anterior não é reenviado.
       </p>
@@ -2131,7 +2130,7 @@ function ProductionGate({
       {capsView.phase === "ready" && !capsView.capabilities.productionEnabled ? (
         <small role="alert">
           Envio automático desativado nesta instalação. Nada será enviado até
-          ser habilitado; a regra continua em observação.
+          ser habilitado; a regra fica com o envio desligado.
         </small>
       ) : null}
       {capsView.phase === "ready" && capsView.capabilities.productionEnabled ? (
@@ -2148,7 +2147,7 @@ function ProductionGate({
       {capsView.phase === "missing" ? (
         <small role="alert">
           Não foi possível confirmar se o envio automático está disponível. A
-          ativação fica indisponível; a regra continua em observação.
+          ativação fica indisponível; a regra fica com o envio desligado.
         </small>
       ) : null}
       {capsView.phase === "unavailable" ? (
@@ -2244,7 +2243,7 @@ function eventStatusLabel(status: string): { label: string; tone: string } {
     case "processing":
       return { label: "Processando", tone: "neutral" };
     case "observed":
-      return { label: "Observado", tone: "success" };
+      return { label: "Registrado sem envio", tone: "success" };
     case "materialized":
       return { label: "Conversão registrada", tone: "neutral" };
     case "duplicate":
@@ -2717,8 +2716,14 @@ function buildRulePayload(
     valueMode: carriesValue ? valueMode : "deal",
   };
 
-  if (!isUpdate) {
-    payload.mode = String(data.get("mode") ?? "") === "production" ? "production" : "observation";
+  // Fase 6.1c (produção direta): a criação não escolhe modo; a API faz a
+  // regra nascer enviando quando a conexão já tem o que o envio exige.
+  const requestedMode = data.get("mode");
+  if (
+    !isUpdate &&
+    (requestedMode === "observation" || requestedMode === "production")
+  ) {
+    payload.mode = requestedMode;
   }
 
   if (carriesValue && valueMode === "fixed") payload.fixedValueCents = fixedValueCents;
@@ -2814,7 +2819,7 @@ function PipedriveRuleForm({
     initial ? (initial.currency ?? "") : null,
   );
   const [contentName, setContentName] = useState(initial?.contentName ?? "");
-  const [mode, setMode] = useState<"observation" | "production">("observation");
+  const mode: "observation" | "production" = "production";
   const wonSelected = stage.endsWith(`::${WON_STAGE_VALUE}`);
   const currency = currencyChoice ?? (wonSelected ? "" : workspaceCurrency);
   const effectiveEvent: ConversionEventNameDto = wonSelected
@@ -2924,40 +2929,11 @@ function PipedriveRuleForm({
         {initial
           ? initial.mode === "production"
             ? "Esta regra está com envio automático: alterações valem para os próximos movimentos."
-            : "Esta regra está em observação: nada é enviado à Meta."
+            : "Esta regra está com o envio desligado: nada é enviado à Meta."
           : mode === "production"
-            ? "Com envio automático, cada movimento envia o evento para a Meta. Você confirma antes de criar."
-            : "Em observação, a regra apenas registra o movimento: nada é enviado à Meta."}
+            ? "A regra já começa enviando: cada movimento envia o evento para a Meta (com a credencial, o webhook e os números autorizados da conexão em dia)."
+            : "Com o envio desligado, a regra apenas registra o movimento: nada é enviado à Meta."}
       </p>
-      {!initial ? (
-        <fieldset className="provider-conversion-value-modes">
-          <legend className="field-label">Modo da regra</legend>
-          <div>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                value="observation"
-                checked={mode === "observation"}
-                onChange={() => setMode("observation")}
-                disabled={inert}
-              />
-              <span>Observação (padrão): nada é enviado</span>
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                value="production"
-                checked={mode === "production"}
-                onChange={() => setMode("production")}
-                disabled={inert}
-              />
-              <span>Envio automático: envia o evento para a Meta</span>
-            </label>
-          </div>
-        </fieldset>
-      ) : null}
       <p className="action-note">
         {wonSelected
           ? "O valor e a moeda vêm do negócio ganho no Pipedrive (ou use um valor fixo)."
@@ -3062,9 +3038,7 @@ function PipedriveRuleForm({
             ? "Salvando..."
             : initial
               ? "Salvar regra"
-              : mode === "production"
-                ? "Revisar e ativar envio automático"
-                : "Criar regra"}
+              : "Criar regra"}
         </button>
       </div>
     </form>
@@ -3249,7 +3223,7 @@ function PipedriveRuleListItem({
             <strong>{rule.name}</strong>
             <span className="event-chip neutral">{eventLabel(rule.eventName)}</span>
             <span className={`event-chip ${rule.active ? "success" : "warn"}`}>
-              {!rule.active ? "Pausada" : isProduction ? "Envio automático" : "Observando"}
+              {!rule.active ? "Pausada" : isProduction ? "Envio automático" : "Envio desligado"}
             </span>
           </div>
           <span>
@@ -3285,30 +3259,18 @@ function PipedriveRuleListItem({
 
       {canManage ? (
         <div className="provider-conversion-rule-actions">
-          {rule.active ? (
+          {/* Fase 6.1c (produção direta): sem "voltar para observação";
+              para parar o envio, pause a regra. */}
+          {rule.active && !isProduction ? (
             <button
               className="icon-button"
               type="button"
-              title={isProduction ? "Voltar para observação" : "Ativar envio automático"}
-              aria-label={
-                isProduction
-                  ? `Voltar para observação a regra ${rule.name}`
-                  : `Ativar envio automático da regra ${rule.name}`
-              }
+              title="Ativar envio automático"
+              aria-label={`Ativar envio automático da regra ${rule.name}`}
               disabled={mutationsBlocked || Boolean(pending)}
-              onClick={() => {
-                if (isProduction) {
-                  void submitPartial(modeKey, { mode: "observation" });
-                  return;
-                }
-                openProductionConfirm("activate");
-              }}
+              onClick={() => openProductionConfirm("activate")}
             >
-              {isProduction ? (
-                <Eye size={15} aria-hidden="true" />
-              ) : (
-                <Send size={15} aria-hidden="true" />
-              )}
+              <Send size={15} aria-hidden="true" />
             </button>
           ) : null}
           <button
@@ -3319,7 +3281,7 @@ function PipedriveRuleListItem({
                 ? "Pausar regra"
                 : isProduction
                   ? "Retomar envio automático"
-                  : "Retomar observação"
+                  : "Retomar regra"
             }
             aria-label={
               rule.active
@@ -3362,7 +3324,7 @@ function PipedriveRuleListItem({
       {canManage && productionConfirm && productionConfirmValid ? (
         <>
           <InlineConfirm
-            message={`${productionConfirm.kind === "activate" ? "Ativar envio automático" : "Retomar envio automático"} para "${rule.name}"? Novos movimentos (${stage?.name ?? "etapa selecionada"}) enviam o evento ${eventLabel(rule.eventName)} (${ruleValueSummary(rule)}) para a Meta. Movimentos anteriores continuam apenas observados.`}
+            message={`${productionConfirm.kind === "activate" ? "Ativar envio automático" : "Retomar envio automático"} para "${rule.name}"? Novos movimentos (${stage?.name ?? "etapa selecionada"}) enviam o evento ${eventLabel(rule.eventName)} (${ruleValueSummary(rule)}) para a Meta. Movimentos anteriores não são enviados.`}
             confirmLabel={
               productionConfirm.kind === "activate" ? "Ativar envio automático" : "Retomar envio automático"
             }
@@ -3383,7 +3345,7 @@ function PipedriveRuleListItem({
 
       {canManage && confirmingDelete ? (
         <InlineConfirm
-          message="Remover esta regra? Esta ação não pode ser desfeita; o histórico já observado é preservado."
+          message="Remover esta regra? Esta ação não pode ser desfeita; o histórico é preservado."
           confirmLabel="Remover"
           tone="danger"
           disabled={mutationsBlocked || Boolean(pending)}

@@ -232,7 +232,6 @@ describe("Unnichat: rascunho e payload", () => {
           connectionId: "conn_unnichat",
           scope: "all_numbers",
           channelIds: [],
-          mode: "observation",
           triggerType: "provider_automation",
           eventName,
         },
@@ -374,7 +373,7 @@ describe("Unnichat: Nova regra", () => {
       ruleId: "rule_unnichat",
       webhookUrl: "https://api.example.test/webhooks/inbound/conversions/e1?token=t",
       message:
-        "Regra criada em observação. Copie o endereço agora: ele não é exibido de novo.",
+        "Regra criada e enviando. Copie o endereço agora: ele não é exibido de novo.",
     }));
     renderFlow(createAction);
 
@@ -417,7 +416,6 @@ describe("Unnichat: Nova regra", () => {
       connectionId: "conn_unnichat",
       scope: "all_numbers",
       crossConnectionScope: true,
-      mode: "observation",
       defaultValueCents: 19700,
     });
     expect(

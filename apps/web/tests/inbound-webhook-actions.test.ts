@@ -180,7 +180,7 @@ describe("inbound webhook server actions", () => {
 
   it.each([
     ["paused", "Conexão pausada. Novas entregas não serão processadas."],
-    ["observation", "Conexão mantida em modo de observação."],
+    ["observation", "Envio da conexão desligado."],
     ["production", "Envio automático ativado nos canais habilitados."],
   ] as const)(
     "updates the connection status to %s",
@@ -232,7 +232,7 @@ describe("inbound webhook server actions", () => {
     );
     expect(result).toEqual({
       ok: true,
-      message: "Conexão removida. O histórico de observação foi preservado.",
+      message: "Conexão removida. O histórico foi preservado.",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });
@@ -300,7 +300,7 @@ describe("inbound webhook server actions", () => {
   it.each([
     [
       "active",
-      "Canal habilitado para envio quando a conexão estiver em produção.",
+      "Canal com o envio ativo. Ele envia enquanto a conexão estiver enviando.",
     ],
     ["paused", "Canal pausado. Os demais canais continuam inalterados."],
   ] as const)("updates the channel status to %s", async (status, message) => {

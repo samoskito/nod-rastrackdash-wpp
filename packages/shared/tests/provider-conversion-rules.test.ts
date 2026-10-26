@@ -149,9 +149,11 @@ describe("provider conversion rule contracts", () => {
     });
 
     expect(parsed).toMatchObject({
-      mode: "observation",
       eventName: "QualifiedLead",
     });
+    // Fase 6.1c (produção direta): o contrato não força observação; a API
+    // faz a regra de integração validada nascer enviando.
+    expect(parsed.mode).toBeUndefined();
     expect("defaultValueCents" in parsed).toBe(false);
   });
 
@@ -193,8 +195,8 @@ describe("provider conversion rule contracts", () => {
       eventName: "InitiateCheckout",
       defaultValueCents: 25000,
       defaultCurrency: "BRL",
-      mode: "observation",
     });
+    expect(parsed.mode).toBeUndefined();
 
     expect(
       providerConversionRuleCreateInputSchema.safeParse({
@@ -538,9 +540,9 @@ describe("provider conversion rule contracts", () => {
     expect(parsed).toMatchObject({
       triggerType: "message_phrase",
       eventName: "QualifiedLead",
-      mode: "observation",
       valueMode: "fixed",
     });
+    expect(parsed.mode).toBeUndefined();
     expect("defaultValueCents" in parsed).toBe(false);
     expect("defaultCurrency" in parsed).toBe(false);
   });

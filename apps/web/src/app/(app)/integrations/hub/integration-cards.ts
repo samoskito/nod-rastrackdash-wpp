@@ -142,7 +142,7 @@ function inboundDecision(
         production > 0
           ? { label: "Enviando conversões", tone: "ok" }
           : observation > 0
-            ? { label: "Em teste", tone: "ok" }
+            ? { label: "Envio desligado", tone: "warn" }
             : { label: "Pausada", tone: "warn" },
       detail: plural(connections.length, "conexão", "conexões"),
     };

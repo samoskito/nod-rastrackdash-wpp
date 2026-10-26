@@ -93,7 +93,7 @@ describe("Eventos recebidos: por que ficou em observação", () => {
 
     expect(
       await screen.findByText(
-        /Por que ficou em observação: Número do lead ainda em observação\./u,
+        /Por que não foi enviado: Número do lead com o envio desligado\./u,
       ),
     ).toBeTruthy();
     expect(
@@ -123,7 +123,7 @@ describe("Eventos recebidos: por que ficou em observação", () => {
 
     expect(
       await screen.findByText(
-        /Por que ficou em observação: A regra estava em observação quando o evento chegou\.$/u,
+        /Por que não foi enviado: A regra estava sem envio quando o evento chegou\.$/u,
       ),
     ).toBeTruthy();
   });
@@ -134,7 +134,7 @@ describe("Eventos recebidos: por que ficou em observação", () => {
     expect(
       await screen.findByText(/Recebido antes do envio ativo \(regra ou número do lead\)/u),
     ).toBeTruthy();
-    expect(screen.queryByText(/Por que ficou em observação/u)).toBeNull();
+    expect(screen.queryByText(/Por que não foi enviado/u)).toBeNull();
   });
 });
 

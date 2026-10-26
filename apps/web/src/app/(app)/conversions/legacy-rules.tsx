@@ -78,7 +78,7 @@ type Notice = { tone: "success" | "warn"; message: string };
  * Old keyword/label rules (before connections), moved here from Settings.
  * They keep working; here they can be paused, have product and value
  * edited, or be connected to numbers (becoming a "Frase na conversa" rule,
- * in observation, with their history).
+ * sending to Meta from the start, with their history; Fase 6.1c).
  */
 export function LegacyRules({
   rules,
@@ -439,7 +439,7 @@ function LegacyAdaptForm({
       const result = await action(formData);
       if (result.ok) {
         onDone(
-          `“${rule.name}” agora é uma regra de frase nos números escolhidos, em observação. O histórico foi mantido.`,
+          `“${rule.name}” agora é uma regra de frase nos números escolhidos e já envia para a Meta. O histórico foi mantido.`,
         );
         return;
       }
@@ -534,7 +534,7 @@ function LegacyAdaptForm({
       </fieldset>
       <p className="action-note">
         A regra mantém o histórico, passa a valer só nos números escolhidos e
-        começa em observação: nada é enviado à Meta até você ativar o envio.
+        já começa enviando para a Meta.
       </p>
       {licenseLocked ? (
         <p className="action-note warn" role="status">
@@ -549,7 +549,7 @@ function LegacyAdaptForm({
       <div className="conversion-flow-actions">
         <button className="button primary" type="submit" disabled={pending || licenseLocked}>
           <Link2 size={15} aria-hidden="true" />
-          {pending ? "Conectando..." : "Conectar em observação"}
+          {pending ? "Conectando..." : "Conectar aos números"}
         </button>
       </div>
     </form>

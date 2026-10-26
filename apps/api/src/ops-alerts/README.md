@@ -6,8 +6,22 @@ happen to share a directory:
 - **Per-workspace ops alerts** (`OpsAlertService`/`OpsAlertsController`/
   `OpsAlertNotifier`) — DB-backed (`WorkspaceOpsAlertSettings`), sends
   WhatsApp text messages to phone numbers a workspace manager configures,
-  covers webhook silence + (currently stubbed) instance disconnects. Pre-
-  existing feature, unrelated to F5.7 below.
+  covers webhook silence + per-connection disconnects. Pre-existing feature,
+  unrelated to F5.7 below.
+  - **Fase 6.1c (port of SaaS #63, `86aaac21`):** every scan reads the status
+    of each active Uazapi BYO and WAHA connection through the provider's own
+    status API (`WhatsappConnectionsService.readConnectionStatusForAlert`,
+    read-only, server URL + token saved on the connection). A disconnect is
+    confirmed only after **2 consecutive** definitive readings
+    (`instance-disconnect-streak.ts`): Uazapi `disconnected/closed/logged_out`;
+    WAHA `STOPPED` or the session waiting to be paired again. Starting,
+    hibernated, offline, failed or unknown states are ambiguous (no count, no
+    reset); a connected reading resets; a status-read error never alerts. The
+    streak lives in `WorkspaceOpsAlertDelivery` rows (`disconnect:<id>`), so it
+    survives restarts and is shared by API instances. The confirmed state is
+    shown in Integrations (`disconnectAlert` on the WhatsApp connections list)
+    even without alert phones; the WhatsApp message is sent only with the
+    workspace alerts on, a phone configured and the license usable.
 - **WhatsApp provider disconnect alerts** (`WhatsappDisconnectAlertsService`,
   F5.7) — global, in-memory, watches the `WhatsappProviderRegistry`
   adapters (`uazapi_byo`/`nod_api`/`waha`/`zapi`) and logs + optionally

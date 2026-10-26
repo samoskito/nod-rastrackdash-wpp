@@ -103,8 +103,9 @@ export function UnnichatEntrySetupPanel() {
         opcional.
       </p>
       <p className="action-note">
-        A conexão já guarda o seu número de WhatsApp e começa em observação:
-        nada é enviado à Meta até você ativar o número e o envio automático.
+        A conexão já guarda o seu número de WhatsApp e já começa enviando: com
+        a página e o pixel do workspace (ou rotas próprias do número)
+        configurados, cada conversa de anúncio vai para a Meta.
       </p>
     </div>
   );

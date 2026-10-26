@@ -5,6 +5,7 @@ import {
   BRIDGE_PROVISIONED_EVENT,
   type BridgedWhatsappProvider,
 } from "./bridged-whatsapp-providers";
+import { bornChannelState, bornConnectionStatus } from "./production-direct";
 
 export type UazapiBridgeInstance = {
   id: string;
@@ -83,6 +84,12 @@ export class UazapiConversionBridgeService {
         update: {},
       });
 
+      // Fase 6.1c (produção direta): a Uazapi e a WAHA foram validadas no
+      // SaaS, então a ponte nasce em produção e o número com o envio ativo
+      // (cada conexão tem um único número). Uma release retirada pelo
+      // operador continua fora de produção.
+      const bornAt = new Date();
+      const status = bornConnectionStatus(release);
       const connection = await transaction.inboundWebhookConnection.create({
         data: {
           workspaceId: instance.workspaceId,
@@ -90,10 +97,12 @@ export class UazapiConversionBridgeService {
           displayName:
             instance.name?.trim() || (provider === "waha" ? "WAHA" : "UAZAPI"),
           parserReleaseId: release.id,
-          status: "observation",
+          status,
+          productionActivatedAt: status === "production" ? bornAt : null,
         },
-        select: { id: true },
+        select: { id: true, status: true },
       });
+      const channelState = bornChannelState(connection, release, bornAt);
 
       const channel = await transaction.inboundWebhookChannel.create({
         data: {
@@ -110,6 +119,8 @@ export class UazapiConversionBridgeService {
             instance.id,
           channelName: instance.name,
           whatsappInstanceId: instance.id,
+          status: channelState.status,
+          productionActivatedAt: channelState.productionActivatedAt,
         },
         select: { id: true },
       });
@@ -127,7 +138,7 @@ export class UazapiConversionBridgeService {
           targetId: channel.id,
           reason: null,
           sourceIp: null,
-          resultStatus: "observation",
+          resultStatus: status,
           afterSummary: {
             connectionId: connection.id,
             whatsappInstanceId: instance.id,

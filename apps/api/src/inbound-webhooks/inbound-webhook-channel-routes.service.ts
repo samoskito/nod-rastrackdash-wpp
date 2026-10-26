@@ -54,6 +54,7 @@ import {
   provisionalChannelOrganizationId,
   provisionalChannelProviderChannelId,
 } from "./inbound-webhook-provisional-channel";
+import { bornChannelState } from "./production-direct";
 
 const validRouteStatus = "valid";
 const removedRouteStatus = "inactive";
@@ -324,7 +325,9 @@ export class InboundWebhookChannelRoutesService {
             provisionalChannelProviderChannelId(normalizedPhone),
           connectedPhone: normalizedPhone,
           channelName,
-          status: "discovered",
+          // Fase 6.1c (produção direta): o número cadastrado à mão numa
+          // integração validada já nasce com o envio ativo.
+          ...bornChannelState(connection, connection.parserRelease, now),
           conversionEngineMode: "canonical",
           firstSeenAt: now,
           lastSeenAt: now,
@@ -623,9 +626,12 @@ export class InboundWebhookChannelRoutesService {
         channelId,
         status: input.status,
         actorUserId,
-        requireValidMetaRoute: metaRouteRequiredForProvider(
-          current.connection.provider,
-        ),
+        // Fase 6.1c (produção direta): retomar um número pausado não exige
+        // rota (ele nasceu ativo sem exigir rota; a rota é conferida no envio
+        // e a prontidão do número diz o que falta).
+        requireValidMetaRoute:
+          metaRouteRequiredForProvider(current.connection.provider) &&
+          current.status !== "paused",
         seats: this.seatHook(),
       });
     });
@@ -1393,7 +1399,12 @@ export class InboundWebhookChannelRoutesService {
   private async requireCreatableConnection(
     workspaceId: string,
     connectionId: string,
-  ): Promise<{ id: string; provider: string }> {
+  ): Promise<{
+    id: string;
+    provider: string;
+    status: string;
+    parserRelease: { provider: string; version: string; status: string };
+  }> {
     const connection = await this.prisma.inboundWebhookConnection.findFirst({
       where: {
         id: connectionId,
@@ -1403,6 +1414,10 @@ export class InboundWebhookChannelRoutesService {
       select: {
         id: true,
         provider: true,
+        status: true,
+        parserRelease: {
+          select: { provider: true, version: true, status: true },
+        },
       },
     });
 

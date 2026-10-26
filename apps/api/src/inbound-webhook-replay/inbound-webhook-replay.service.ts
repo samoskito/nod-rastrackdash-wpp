@@ -62,11 +62,22 @@ const replaySelectionLimits: Record<InboundWebhookReplaySelectionDto, number> =
     canary_10: 10,
     remaining: REPLAY_BATCH_LIMIT,
   };
-const transientReplayErrorCodes = [
-  "inbound_webhook_replay_disabled",
-  "inbound_webhook_replay_queue_unavailable",
-  "inbound_webhook_replay_unexpected",
-] as const;
+/**
+ * Porte do SaaS #91 (f7c61c07): uma falha pode ser reenviada enquanto o
+ * payload original continua retido (INBOUND_WEBHOOK_RAW_RETENTION_DAYS), seja
+ * qual for o código da falha. Sem payload, a falha é permanente.
+ */
+function retainedPayloadWhere(now: Date) {
+  return {
+    delivery: {
+      payloadExpiresAt: { gt: now },
+      encryptedPayload: { not: null },
+      payloadIv: { not: null },
+      payloadTag: { not: null },
+      encryptionKeyVersion: { not: null },
+    },
+  } satisfies Prisma.InboundWebhookEventWhereInput;
+}
 const terminalItemStatuses = new Set([
   "materialized",
   "duplicate",
@@ -403,6 +414,21 @@ export class InboundWebhookReplayService {
     );
     const count = (state: StudentInboundReplayResultDto["state"]) =>
       items.filter((i) => i.state === state).length;
+    // Porte do SaaS #91: falhas do lote que ainda podem ser reenviadas
+    // (payload retido e nenhum evento já gravado para o mesmo CTWA).
+    const retryableFailed = ["completed_with_failures", "failed"].includes(
+      batch.status,
+    )
+      ? await client.inboundWebhookReplayItem.count({
+          where: {
+            workspaceId: batch.workspaceId,
+            batchId: batch.id,
+            status: "failed",
+            conversionEventLogId: null,
+            event: retainedPayloadWhere(new Date()),
+          },
+        })
+      : 0;
     const delivered = count("delivered"),
       failed = count("failed"),
       unknown = count("delivery_unknown");
@@ -424,8 +450,253 @@ export class InboundWebhookReplayService {
       failed,
       unknown,
       pending: count("pending") + count("processing"),
+      retryableFailed,
       items,
     };
+  }
+
+  /**
+   * Fase 6.1c — porte do SaaS #91 (f7c61c07), adaptado à recuperação do
+   * aluno: reenvia os itens que falharam de um lote, enquanto o payload
+   * original continua retido. Só o owner do workspace, com a licença
+   * utilizável (escrita: 423 com a licença bloqueada) e digitando o nome da
+   * conexão. Cada item é reavaliado como numa autorização nova (canal ativo,
+   * rota Meta válida, identidade e janela de 7 dias); item cujo CTWA já
+   * gerou evento não é reenviado (nunca duplica um envio). A autorização do
+   * lote é renovada com a configuração atual; nada é enviado sem ela.
+   */
+  async retryStudentFailedItems(
+    actor: StudentReplayActor,
+    connectionId: string,
+    channelId: string,
+    batchId: string,
+    confirmation: string,
+  ): Promise<StudentInboundReplayResultDto> {
+    this.assertReplayEnabled();
+    await this.assertStudentReplayLicense();
+    await requireStudentReplayOwner(this.prisma, actor);
+    const connection = await this.loadConnection(
+      connectionId,
+      actor.workspaceId,
+    );
+    if (confirmation !== connection.displayName) {
+      throw new BadRequestException(
+        "Digite exatamente o nome da conexão para autorizar",
+      );
+    }
+    assertMetaCloudSigningConfigured(connection.provider, this.env);
+    const now = new Date();
+
+    const reset = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "InboundWebhookConnection" WHERE "id" = ${connection.id} AND "workspaceId" = ${actor.workspaceId} FOR UPDATE`;
+      await requireStudentReplayOwner(tx, actor);
+      await this.assertStudentReplayLicense();
+      const batch = await tx.inboundWebhookReplayBatch.findFirst({
+        where: {
+          id: batchId,
+          workspaceId: actor.workspaceId,
+          connectionId: connection.id,
+          channelId,
+          status: { in: ["completed_with_failures", "failed"] },
+        },
+      });
+      if (!batch || batch.channelId !== channelId)
+        throw new ConflictException(
+          "Esta recuperação não tem itens com falha para reenviar",
+        );
+      const activeBatch = await tx.inboundWebhookReplayBatch.findFirst({
+        where: {
+          workspaceId: actor.workspaceId,
+          connectionId: connection.id,
+          id: { not: batch.id },
+          status: { in: ["queued", "processing"] },
+        },
+        select: { id: true },
+      });
+      if (
+        activeBatch ||
+        (await studentReplayDispatchUnsettled(
+          tx,
+          actor.workspaceId,
+          connection.id,
+        ))
+      )
+        throw new ConflictException(
+          "Esta conexão já possui um replay em andamento",
+        );
+      const context = await studentReplayContext(
+        tx,
+        actor.workspaceId,
+        connection.id,
+        channelId,
+      );
+      if (!context)
+        throw new ConflictException(
+          "Ative o canal e valide a rota Meta antes de reenviar",
+        );
+      const failed = await tx.inboundWebhookReplayItem.findMany({
+        where: {
+          workspaceId: actor.workspaceId,
+          batchId: batch.id,
+          status: "failed",
+          conversionEventLogId: null,
+          event: retainedPayloadWhere(now),
+        },
+        include: replayItemInclude,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      });
+      const ads = await tx.metaAd.findMany({
+        where: {
+          workspaceId: actor.workspaceId,
+          adId: {
+            in: failed
+              .map((item) => item.event.adId)
+              .filter((adId): adId is string => adId !== null),
+          },
+        },
+        select: { adId: true, adAccountId: true },
+      });
+      const adAccountsByAd = new Map(ads.map((ad) => [ad.adId, ad.adAccountId]));
+      const retry: typeof failed = [];
+      for (const item of failed) {
+        const event = item.event;
+        // A mesma conferência do envio: exatamente uma rota ativa e válida
+        // que corresponde ao destino resolvido do evento.
+        const routeStillActive =
+          event.channel.routes.filter(
+            (route) =>
+              route.workspaceId === event.workspaceId &&
+              route.active &&
+              route.validationStatus === "valid" &&
+              inboundMetaRouteMatches(route, {
+                businessConnectionId: event.resolvedBusinessConnectionId,
+                reportingAccountId: event.resolvedReportingAccountId,
+                conversionDestinationId: event.resolvedConversionDestinationId,
+              }),
+          ).length === 1;
+        if (
+          !routeStillActive ||
+          event.workspaceId !== actor.workspaceId ||
+          event.connectionId !== connection.id ||
+          event.channelId !== channelId ||
+          !this.studentIdentityReady(event) ||
+          !this.replayWindowEligible(event, connection) ||
+          !this.routeReady(
+            event,
+            event.adId ? (adAccountsByAd.get(event.adId) ?? null) : null,
+          ) ||
+          !(await this.currentRouteReady(tx, actor.workspaceId, event))
+        )
+          continue;
+        if (
+          await tx.conversionEventLog.findFirst({
+            where: {
+              workspaceId: actor.workspaceId,
+              dedupeKey: `inbound-webhook:${connection.id}:${event.dedupeKey}`,
+            },
+            select: { id: true },
+          })
+        )
+          continue;
+        retry.push(item);
+      }
+      if (retry.length === 0)
+        throw new BadRequestException(
+          "Nenhuma falha possui payload disponível para reenviar",
+        );
+      const itemIds = retry.map((item) => item.id);
+      await tx.inboundWebhookReplayItem.updateMany({
+        where: {
+          workspaceId: actor.workspaceId,
+          batchId: batch.id,
+          id: { in: itemIds },
+          status: "failed",
+        },
+        data: { status: "queued", errorCode: null, processedAt: null },
+      });
+      const updated = await tx.inboundWebhookReplayBatch.update({
+        where: { id: batch.id },
+        data: {
+          status: "queued",
+          failedCount: { decrement: retry.length },
+          retryableFailedCount: 0,
+          retryCount: { increment: 1 },
+          completedAt: null,
+          lastRetriedAt: now,
+        },
+      });
+      // Autorização renovada com a configuração atual: é ela que cada item
+      // confere antes de gravar e antes de enfileirar o envio (e o envio à
+      // Meta confere de novo). Os itens já gravados do lote continuam
+      // cobertos: as impressões deles passam para a autorização nova (cada
+      // uma só vale enquanto o evento continuar idêntico).
+      const previous = await tx.auditLog.findFirst({
+        where: {
+          workspaceId: actor.workspaceId,
+          targetId: batch.id,
+          action: "inbound_webhook.replay.authorize",
+          actorUserId: { not: null },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { afterSummary: true },
+      });
+      const previousHashes =
+        (
+          previous?.afterSummary as {
+            studentEventHashes?: Record<string, string>;
+          } | null
+        )?.studentEventHashes ?? {};
+      await tx.auditLog.create({
+        data: {
+          workspaceId: actor.workspaceId,
+          actorUserId: actor.id,
+          actorType: actor.role,
+          action: "inbound_webhook.replay.authorize",
+          targetType: "inbound_webhook_replay_batch",
+          targetId: batch.id,
+          sourceIp: null,
+          resultStatus: "retry_queued",
+          afterSummary: {
+            connectionId: connection.id,
+            channelId,
+            parserReleaseId: connection.parserRelease.id,
+            selection: batch.selection,
+            retryOfFailedItems: true,
+            retryItemCount: retry.length,
+            retryCount: updated.retryCount,
+            studentContext: context,
+            studentEventHashes: {
+              ...previousHashes,
+              ...Object.fromEntries(
+                retry.map((item) => [
+                  item.event.id,
+                  studentReplayEventHash(item.event),
+                ]),
+              ),
+            },
+          },
+        },
+      });
+      return { batch: updated, itemIds };
+    });
+
+    try {
+      await this.replayQueue.enqueueBatch({
+        workspaceId: reset.batch.workspaceId,
+        batchId: reset.batch.id,
+      });
+    } catch {
+      await this.markRetryQueueUnavailable(reset.batch, reset.itemIds);
+      throw new ServiceUnavailableException(
+        "Não foi possível reenviar agora; tente novamente",
+      );
+    }
+    return this.getStudentReplayResult(
+      actor,
+      connectionId,
+      channelId,
+      reset.batch.id,
+    );
   }
 
   private async studentCanarySucceeded(
@@ -449,12 +720,14 @@ export class InboundWebhookReplayService {
       take: REPLAY_HISTORY_LIMIT,
     });
     for (const canary of canaries) {
+      // Fase 6.1c: um reenvio renova a autorização; vale a mais recente.
       const audit = await client.auditLog.findFirst({
         where: {
           workspaceId: actor.workspaceId,
           targetId: canary.id,
           action: "inbound_webhook.replay.authorize",
         },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: { afterSummary: true },
       });
       if (
@@ -740,18 +1013,7 @@ export class InboundWebhookReplayService {
           items: {
             where: {
               status: "failed",
-              errorCode: {
-                in: [...transientReplayErrorCodes],
-              },
-              event: {
-                delivery: {
-                  payloadExpiresAt: { gt: now },
-                  encryptedPayload: { not: null },
-                  payloadIv: { not: null },
-                  payloadTag: { not: null },
-                  encryptionKeyVersion: { not: null },
-                },
-              },
+              event: retainedPayloadWhere(now),
             },
             select: { id: true },
           },
@@ -1635,9 +1897,7 @@ export class InboundWebhookReplayService {
           batchId,
           workspaceId,
           status: "failed",
-          errorCode: {
-            in: [...transientReplayErrorCodes],
-          },
+          event: retainedPayloadWhere(new Date()),
         },
       }),
     ]);
@@ -1727,9 +1987,7 @@ export class InboundWebhookReplayService {
           workspaceId: batch.workspaceId,
           batchId: batch.id,
           status: "failed",
-          errorCode: {
-            in: [...transientReplayErrorCodes],
-          },
+          event: retainedPayloadWhere(new Date()),
         },
       });
 
@@ -1816,9 +2074,7 @@ export class InboundWebhookReplayService {
           workspaceId: batch.workspaceId,
           batchId: batch.id,
           status: "failed",
-          errorCode: {
-            in: [...transientReplayErrorCodes],
-          },
+          event: retainedPayloadWhere(new Date()),
         },
       });
 

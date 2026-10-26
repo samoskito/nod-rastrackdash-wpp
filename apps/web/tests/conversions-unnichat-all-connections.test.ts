@@ -305,7 +305,7 @@ describe("alcance explícito, diferenças no Unificar e textos", () => {
     );
     expect(
       screen.getByText(
-        /As regras têm modo \(observação\/envio automático\) e valor diferentes/,
+        /As regras têm envio \(ligado\/desligado\) e valor diferentes/,
       ),
     ).toBeTruthy();
     expect(

@@ -271,11 +271,11 @@ describe("inbound webhook panel", () => {
       connections: [connectionViewWithoutChannels({ provider: "data_crazy" })],
     });
 
-    expect(html).toContain("Data Crazy - Observando");
+    expect(html).toContain("Data Crazy - Envio desligado");
     expect(html).not.toContain("Cadastrar canal/número");
     expect(html).not.toContain("Nenhum canal cadastrado ainda");
     expect(html).toContain(
-      "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar.",
+      "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar; a partir daí ele já envia e pode receber regras.",
     );
   });
 
@@ -483,7 +483,7 @@ describe("inbound webhook panel", () => {
 
     for (const command of [
       "Adicionar conexão",
-      "Ativar envios automáticos",
+      "Ativar envio",
       "Pausar conexão",
       "Gerar nova URL",
       "Remover",

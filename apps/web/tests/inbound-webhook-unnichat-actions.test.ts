@@ -133,7 +133,7 @@ describe("Unnichat connection creation", () => {
 
   it("explains the unavailable observation version for Unnichat", async () => {
     serverApiFetch.mockRejectedValueOnce(
-      new Error("Versão de observação do provedor indisponível"),
+      new Error("Versão do leitor do provedor indisponível"),
     );
 
     const result = await createInboundWebhookConnectionAction(

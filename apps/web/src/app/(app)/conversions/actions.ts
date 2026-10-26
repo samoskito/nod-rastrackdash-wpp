@@ -347,9 +347,10 @@ export async function createConversionRuleAction(
       ruleMode: result.data.rule.mode,
       pendingNumbers: result.data.rule.pendingNumbers ?? [],
       ...(result.data.webhookUrl ? { webhookUrl: result.data.webhookUrl } : {}),
-      message: result.data.webhookUrl
-        ? "Regra criada em observação. Copie o endereço agora: ele não é exibido de novo."
-        : "Regra criada em observação. Nada é enviado à Meta até você ativar o envio automático.",
+      message: createdRuleMessage(
+        result.data.rule.mode,
+        Boolean(result.data.webhookUrl),
+      ),
     };
   } catch (error) {
     const message = (error as Error | null)?.message?.trim() ?? "";
@@ -663,7 +664,7 @@ export async function reprocessBlockedExecutionsAction(
         message:
           apiCode(error) === "provider_rule_reprocess_in_progress"
           ? "Já existe um reprocessamento em andamento para esta regra. Aguarde ele terminar."
-          : "A regra está pausada ou em observação. Ative o envio automático da regra antes de reprocessar.",
+          : "A regra está pausada ou com o envio desligado. Retome o envio da regra antes de reprocessar.",
       };
     }
     return failure(
@@ -672,6 +673,24 @@ export async function reprocessBlockedExecutionsAction(
       reprocessUnknownMessage,
     );
   }
+}
+
+/**
+ * Fase 6.1c (produção direta): a regra de uma integração validada já nasce
+ * enviando. Sem envio, só quando o servidor está com o envio de regras
+ * desligado ou o leitor da integração ainda não foi validado.
+ */
+function createdRuleMessage(
+  mode: "observation" | "production",
+  hasWebhookUrl: boolean,
+): string {
+  const base =
+    mode === "production"
+      ? "Regra criada e enviando: cada conversão reconhecida vai para a Meta pelo destino de cada número."
+      : "Regra criada com o envio desligado: o servidor está com o envio de regras desligado (INBOUND_CONVERSION_PRODUCTION_ENABLED=false) ou esta integração ainda não foi validada.";
+  return hasWebhookUrl
+    ? `${base} Copie o endereço agora: ele não é exibido de novo.`
+    : base;
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -688,7 +707,7 @@ function reprocessSummary(
   ];
   if (result.stillBlocked > 0) {
     parts.push(
-      `${plural(result.stillBlocked, "fica como está", "ficam como estão")} (número ainda sem envio ativo, pausado de propósito na época ou que não é QR)`,
+      `${plural(result.stillBlocked, "fica como está", "ficam como estão")} (número ainda sem envio ativo, pausado de propósito na época ou que não é Uazapi/WAHA)`,
     );
   }
   if ((result.alreadyConverted ?? 0) > 0) {
@@ -833,7 +852,13 @@ export async function adaptProviderConversionRuleAction(
     }
 
     revalidateRules();
-    return { ok: true, message: "Regra conectada aos números, em observação." };
+    return {
+      ok: true,
+      message:
+        result.data.mode === "production"
+          ? "Regra conectada aos números e enviando para a Meta."
+          : "Regra conectada aos números, com o envio desligado.",
+    };
   } catch (error) {
     return failure(
       error,

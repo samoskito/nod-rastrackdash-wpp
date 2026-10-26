@@ -81,7 +81,12 @@ afterEach(() => {
 
 describe("conversions actions: create", () => {
   it("creates a rule without connection and accepts its connection-less receipt", async () => {
-    const rule = providerRule({ id: "rule_1", scope: "all_numbers" });
+    // Fase 6.1c (produção direta): a API devolve a regra já enviando.
+    const rule = providerRule({
+      id: "rule_1",
+      scope: "all_numbers",
+      mode: "production",
+    });
     serverApiFetch.mockResolvedValueOnce({
       outcome: "created",
       receipt: { ruleId: "rule_1", connectionId: null, createdAt: rule.createdAt },
@@ -100,7 +105,8 @@ describe("conversions actions: create", () => {
     // No connection is invented for a rule of every number.
     expect(JSON.parse(init.body)).toEqual(globalPayload);
     expect(result).toMatchObject({ ok: true, ruleId: "rule_1" });
-    expect(result.message).toContain("observação");
+    expect(result.message).toContain("Regra criada e enviando");
+    expect(result.message).not.toMatch(/observação/u);
     expect(revalidatePath).toHaveBeenCalledWith("/conversions");
   });
 
@@ -528,7 +534,9 @@ describe("conversions actions: manage, legacy and history", () => {
   });
 
   it("connects a legacy rule to numbers", async () => {
-    serverApiFetch.mockResolvedValueOnce(providerRule({ id: "legacy_1" }));
+    serverApiFetch.mockResolvedValueOnce(
+      providerRule({ id: "legacy_1", mode: "production" }),
+    );
     const payload = {
       connectionId: "conn_1",
       channelIds: ["ch_1"],
@@ -546,7 +554,7 @@ describe("conversions actions: manage, legacy and history", () => {
     );
     expect(result).toEqual({
       ok: true,
-      message: "Regra conectada aos números, em observação.",
+      message: "Regra conectada aos números e enviando para a Meta.",
     });
   });
 

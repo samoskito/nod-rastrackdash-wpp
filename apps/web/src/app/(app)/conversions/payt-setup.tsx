@@ -41,8 +41,8 @@ export function PaytSetupPanel({
           URL.
         </li>
         <li>
-          A regra começa em observação: nada é enviado à Meta até você ativar o
-          envio automático.
+          A regra já começa enviando: cada venda reconhecida vai para a Meta
+          pelo destino (pixel e página) do número do comprador.
         </li>
       </ol>
     </div>

@@ -280,8 +280,13 @@ describe("observationDetailOf e a mensagem do Reprocessar", () => {
     expect(observedReprocessMessage("lead_number_not_production")).toMatch(
       /ative o envio neste número/u,
     );
+    // Fase 6.1c (produção direta): sem "observação" na tela do aluno, e o
+    // envio desligado no servidor diz exatamente o que configurar.
     expect(observedReprocessMessage(null)).toBe(
-      "A regra ainda permanece em observação",
+      "A regra continua sem envio; retome o envio dela e reprocesse",
+    );
+    expect(observedReprocessMessage("production_sending_disabled")).toMatch(
+      /INBOUND_CONVERSION_PRODUCTION_ENABLED=true/u,
     );
     for (const detail of [
       "lead_number_legacy_engine",
@@ -290,7 +295,9 @@ describe("observationDetailOf e a mensagem do Reprocessar", () => {
       "rule_not_activated",
       "rule_observation_at_receipt",
     ] as const) {
-      expect(observedReprocessMessage(detail)).not.toMatch(/suporte|vaga/iu);
+      expect(observedReprocessMessage(detail)).not.toMatch(
+        /suporte|vaga|observação/iu,
+      );
     }
   });
 });

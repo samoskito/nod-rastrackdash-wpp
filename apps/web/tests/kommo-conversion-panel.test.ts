@@ -1091,13 +1091,6 @@ describe("Kommo panel: rules", () => {
     return view;
   }
 
-  function chooseProductionMode() {
-    const select = screen
-      .getByRole("form", { name: "Nova regra Kommo" })
-      .querySelector("select[name=mode]") as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "production" } });
-  }
-
   function fillBasics(stage = "pipeline_1::status_1") {
     const form = within(screen.getByRole("form", { name: "Nova regra Kommo" }));
     fireEvent.change(form.getByLabelText("Nome da regra"), { target: { value: "Compra ganha" } });
@@ -1106,16 +1099,18 @@ describe("Kommo panel: rules", () => {
     });
   }
 
-  it("creates an observation rule without confirmation and labels it as no-send", async () => {
+  it("Fase 6.1c: creates a rule that is born sending, with no mode to pick", async () => {
     const createRuleAction = vi.fn().mockResolvedValue({
       ok: true,
       message: "Regra Kommo criada.",
-      rule: { ...observationRule, id: "rule_new", name: "Compra ganha" },
+      rule: { ...productionRule, id: "rule_new", name: "Compra ganha" },
     } satisfies KommoRuleActionResult);
     await openRuleForm({ createRuleAction });
-    expect(
-      screen.getByRole("option", { name: "Observar primeiro (nada é enviado ao Meta)" }),
-    ).toBeTruthy();
+    const form = screen.getByRole("form", { name: "Nova regra Kommo" });
+    // Produção direta: nada de "Observar primeiro" nem escolha de modo.
+    expect(form.querySelector("select[name=mode]")).toBeNull();
+    expect(form.textContent).not.toMatch(/observa/iu);
+    expect(form.textContent).toContain("A regra já começa enviando para a Meta.");
     fillBasics();
     await act(async () => {
       fireEvent.submit(screen.getByRole("form", { name: "Nova regra Kommo" }));
@@ -1127,11 +1122,9 @@ describe("Kommo panel: rules", () => {
       name: "Compra ganha",
       pipelineId: "pipeline_1",
       statusId: "status_1",
-      mode: "observation",
     });
-    await waitFor(() =>
-      expect(screen.getAllByText("Observação (nada é enviado)").length).toBeGreaterThanOrEqual(2),
-    );
+    // A API (schema compartilhado) faz a regra nascer em produção.
+    expect(payload).not.toHaveProperty("mode");
   });
 
   it("requires the currency for a value-carrying event", async () => {
@@ -1245,52 +1238,17 @@ describe("Kommo panel: rules", () => {
     expect(createRuleAction).not.toHaveBeenCalled();
   });
 
-  it("creating straight into production needs an explicit confirmation", async () => {
-    const createRuleAction = vi.fn().mockResolvedValue({
-      ok: true,
-      message: "Regra Kommo criada.",
-      rule: { ...productionRule, id: "rule_new2" },
-    } satisfies KommoRuleActionResult);
-    await openRuleForm({ createRuleAction });
-    fillBasics();
-    chooseProductionMode();
-    await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: "Nova regra Kommo" }));
-    });
-    expect(createRuleAction).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("alertdialog");
-    expect(dialog.textContent).toContain("Criar esta regra já com envio automático ativo?");
-    await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: "Criar e ativar envio" }));
-    });
-    expect(createRuleAction).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String((createRuleAction.mock.calls[0] as [FormData])[0].get("payload"))).mode).toBe(
-      "production",
-    );
-  });
-
-  it("an approved production creation is dropped if the state changes before the final click", async () => {
-    const createRuleAction = vi.fn();
-    const view = await openRuleForm({ createRuleAction });
-    fillBasics();
-    chooseProductionMode();
-    await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: "Nova regra Kommo" }));
-    });
-    expect(screen.getByRole("alertdialog")).toBeTruthy();
-    view.rerenderWith({ canManage: false });
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(createRuleAction).not.toHaveBeenCalled();
-  });
-
   it("renders honest rule chips and per-rule actions", () => {
     renderPanel({ connections: [conn({ rules: [observationRule, productionRule, { ...observationRule, id: "rule_p", name: "Parada", active: false }] })] });
-    expect(screen.getByText("Observação (nada é enviado)")).toBeTruthy();
+    expect(screen.getByText("Envio desligado (nada é enviado)")).toBeTruthy();
     expect(screen.getByText("Envio ativo (produção)")).toBeTruthy();
     expect(screen.getByText("Pausada", { selector: ".event-chip" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pausar regra Negociação avançada" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Ativar envio automático: Negociação avançada" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Voltar para observação: Compra ganha" })).toBeTruthy();
+    // Fase 6.1c (produção direta): para parar o envio, Pausar; não há volta
+    // para observação.
+    expect(screen.queryByRole("button", { name: /Voltar para observação/u })).toBeNull();
+    expect(screen.getByRole("button", { name: "Pausar regra Compra ganha" })).toBeTruthy();
   });
 
   it("activating a rule asks for confirmation before any mutation", async () => {
@@ -1323,7 +1281,8 @@ describe("Kommo panel: rules", () => {
 
   it("explains what 202 and observation mean and never promises a send", () => {
     const { container } = renderPanel();
-    expect(container.textContent).toContain("Regras em observação não enviam nada ao Meta.");
+    expect(container.textContent).toContain("A regra já começa enviando");
+    expect(container.textContent).not.toContain("Regras em observação");
     expect(container.textContent).toContain("o aceite (202) do webhook da Kommo só significa que o evento entrou para processamento");
   });
 });

@@ -82,7 +82,10 @@ export type RuleStatus =
   | "number_removed";
 
 export const ruleStatusLabels: Record<RuleStatus, string> = {
-  observation: "Observação",
+  // Fase 6.1c (produção direta): regra ativa sem envio só existe quando o
+  // envio foi desligado (pelo operador ou no servidor) ou a integração ainda
+  // não foi validada. Não há mais etapa de observação para o aluno.
+  observation: "Envio desligado",
   production: "Envio automático",
   paused: "Pausada",
   unified: "Unificada",
@@ -178,7 +181,7 @@ export type PendingNumberView = {
    * activate: "Ativar envio neste número";
    * integrations: precisa de algo em Integrações (WhatsApp, rota Meta ou
    * conexão pausada);
-   * null: nada a fazer aqui (a própria regra ainda está em observação).
+   * null: nada a fazer aqui (o envio da própria regra está desligado).
    */
   action: "activate" | "integrations" | null;
 };
@@ -200,7 +203,7 @@ export function pendingNumberDetail(
         ? "O envio deste número está pausado."
         : "O envio deste número ainda não foi ativado.";
     case "connection_not_production":
-      return "A conexão deste número ainda está em observação.";
+      return "O envio da conexão deste número está desligado. Ative em Integrações.";
     case "connection_paused":
       return "A conexão deste número foi pausada em Integrações. Retome por lá se quiser voltar a enviar.";
   }
@@ -319,7 +322,7 @@ const executionLabels: Record<
   NonNullable<ProviderConversionRuleDto["lastExecution"]>["status"],
   { label: string; tone: RuleRowExecution["tone"] }
 > = {
-  observed: { label: "Reconhecida em observação", tone: "neutral" },
+  observed: { label: "Reconhecida sem envio", tone: "neutral" },
   eligible: { label: "Na fila de envio", tone: "neutral" },
   materialized: { label: "Evento enviado", tone: "ok" },
   duplicate: { label: "Repetida, não reenviada", tone: "warn" },
@@ -365,13 +368,13 @@ export function providerRuleWarnings(input: {
   return warnings;
 }
 
-/** Telefone cuja regra global roda num canal em observação enquanto outro canal já envia. */
+/** Telefone cuja regra global roda num canal sem envio enquanto outro canal já envia. */
 export function observationCanonicalWarning(
   channelIds: readonly string[],
   numbersById: ReadonlyMap<string, ConversionNumber>,
 ): string {
   const where = numberNames(channelIds, numbersById);
-  return `Em ${where}: a regra global roda no canal em observação; outro canal do mesmo número está em produção.`;
+  return `Em ${where}: a regra global roda num canal com o envio desligado; outro canal do mesmo número já envia.`;
 }
 
 function triggerDetailForProviderRule(

@@ -71,7 +71,7 @@ describe("Nova regra flow", () => {
     const createAction = vi.fn(async () => ({
       ok: true,
       ruleId: "rule_1",
-      message: "Regra criada em observação.",
+      message: "Regra criada e enviando.",
     }));
     renderFlow(createAction);
 
@@ -99,10 +99,12 @@ describe("Nova regra flow", () => {
       triggerType: "message_phrase",
       eventName: "QualifiedLead",
       triggerPhrases: ["vou te passar os valores"],
-      mode: "observation",
       name: "Frase na conversa - Lead qualificado",
     });
     expect(payload.connectionId).toBeUndefined();
+    // Fase 6.1c (produção direta): a tela não escolhe modo; a API faz a
+    // regra de integração validada nascer enviando.
+    expect(payload).not.toHaveProperty("mode");
   });
 
   it("lets numbers of any connection be picked and shows the ones not eligible as Em breve", async () => {
@@ -449,10 +451,12 @@ describe("Conversions screen", () => {
     render(createElement(ConversionsScreen, screenProps));
 
     expect(screen.queryByRole("button", { name: /^Reativar/ })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Retomar observação de Etiqueta Pagou" }));
-    const dialog = screen.getByRole("dialog", { name: "Retomar observação" });
-    expect(dialog.textContent).toContain("nada é enviado à Meta");
-    await user.click(within(dialog).getByRole("button", { name: "Retomar observação" }));
+    await user.click(screen.getByRole("button", { name: "Retomar Etiqueta Pagou" }));
+    const dialog = screen.getByRole("dialog", { name: "Retomar regra" });
+    // Fase 6.1c (produção direta): retomar volta a enviar, sem observação.
+    expect(dialog.textContent).toContain("a enviar para a Meta");
+    expect(dialog.textContent).not.toMatch(/observação/u);
+    await user.click(within(dialog).getByRole("button", { name: "Retomar" }));
 
     await waitFor(() => expect(screenProps.updateRuleAction).toHaveBeenCalledTimes(1));
     const formData = (screenProps.updateRuleAction as ReturnType<typeof vi.fn>).mock
@@ -477,7 +481,7 @@ describe("Conversions screen", () => {
     expect([...status.options].map((option) => option.textContent)).toEqual([
       "Todos",
       "Envio automático",
-      "Observação",
+      "Envio desligado",
       // Fase 6.1a (#159): also the rules whose number was removed.
       "Pausadas ou sem número",
       "Unificadas",
@@ -497,10 +501,10 @@ describe("Conversions screen", () => {
 
     await user.click(screen.getByRole("button", { name: "Revisar e unificar" }));
     const dialog = screen.getByRole("dialog", { name: "Unificar regras iguais" });
-    expect(within(dialog).getByText("Canal em observação (1)")).toBeTruthy();
+    expect(within(dialog).getByText("Canal com o envio desligado (1)")).toBeTruthy();
     expect(
       within(dialog).getByText(
-        "Em Pós-venda: a regra global roda no canal em observação; outro canal do mesmo número está em produção.",
+        "Em Pós-venda: a regra global roda num canal com o envio desligado; outro canal do mesmo número já envia.",
       ),
     ).toBeTruthy();
   });

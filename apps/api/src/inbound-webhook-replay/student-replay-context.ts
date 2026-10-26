@@ -207,14 +207,17 @@ export async function studentBatchAuthorizationValid(
     where: { id: batchId, workspaceId },
   });
   if (!batch?.channelId) return false;
+  // Fase 6.1c (porte do SaaS #91): "Reenviar os que falharam" renova a
+  // autorização do lote; vale sempre a mais recente, de um owner ativo.
   const audit = await client.auditLog.findFirst({
     where: {
       workspaceId,
       targetId: batchId,
       action: "inbound_webhook.replay.authorize",
-      actorUserId: batch.requestedByUserId,
+      actorUserId: { not: null },
     },
-    select: { afterSummary: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { afterSummary: true, actorUserId: true },
   });
   const summary = audit?.afterSummary as {
     studentContext?: string;
@@ -223,7 +226,7 @@ export async function studentBatchAuthorizationValid(
   if (!summary?.studentContext) return false;
   try {
     await requireStudentReplayOwner(client, {
-      id: batch.requestedByUserId,
+      id: audit?.actorUserId ?? batch.requestedByUserId,
       role: "owner",
       workspaceId,
     });

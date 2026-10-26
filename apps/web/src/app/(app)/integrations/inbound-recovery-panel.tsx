@@ -9,13 +9,14 @@ import {
   authorizeInboundRecoveryAction,
   inboundRecoveryResultAction,
   previewInboundRecoveryAction,
+  retryInboundRecoveryAction,
 } from "./inbound-recovery-actions";
 
 const labels: Record<StudentInboundReplayResultDto["state"], string> = {
   pending: "Pendente — ainda não enviado",
   processing: "Processando — aguarde confirmação",
   delivered: "Entrega confirmada pela Meta",
-  failed: "Falhou — nenhum novo envio autorizado",
+  failed: "Falhou",
   delivery_unknown: "Entrega incerta (UNKNOWN) — não tente reenviar",
 };
 
@@ -115,6 +116,41 @@ export function InboundRecoveryPanel({
       clearTimeout(timeout);
     };
   }, [open, result, connectionId, channelId]);
+
+  /** Fase 6.1c (porte do SaaS #91): reenvia os itens que falharam. */
+  async function retryFailed() {
+    if (
+      !result ||
+      busy ||
+      result.retryableFailed === 0 ||
+      confirmation !== connectionName
+    )
+      return;
+    const text = `Reenviar ${result.retryableFailed} ${result.retryableFailed === 1 ? "item que falhou" : "itens que falharam"}? Cada um é conferido de novo e enviado como conversão CTWA real para a Meta.`;
+    if (!window.confirm(text)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await retryInboundRecoveryAction(
+        connectionId,
+        channelId,
+        result.batchId,
+        { confirmation },
+      );
+      if (response.ok) {
+        setResult(response.data);
+        setConfirmation("");
+      } else {
+        setMessage(response.message);
+      }
+    } catch {
+      setMessage(
+        "Não foi possível confirmar o reenvio. Atualize o resultado antes de tentar de novo.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function authorize(selection: "canary_1" | "remaining") {
     if (
@@ -263,6 +299,43 @@ export function InboundRecoveryPanel({
                   </li>
                 ))}
               </ul>
+              {result.retryableFailed > 0 ? (
+                <div className="inbound-recovery-retry">
+                  <p>
+                    {result.retryableFailed}{" "}
+                    {result.retryableFailed === 1
+                      ? "item que falhou ainda pode ser reenviado"
+                      : "itens que falharam ainda podem ser reenviados"}{" "}
+                    (o payload original continua guardado).
+                  </p>
+                  {!preview?.previewToken ? (
+                    <label>
+                      Digite o nome da conexão para confirmar: {connectionName}
+                      <input
+                        aria-label="Nome da conexão para confirmar o reenvio"
+                        value={confirmation}
+                        onChange={(event) =>
+                          setConfirmation(event.target.value)
+                        }
+                        autoComplete="off"
+                      />
+                    </label>
+                  ) : null}
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={busy || confirmation !== connectionName}
+                    onClick={() => void retryFailed()}
+                  >
+                    Reenviar os que falharam
+                  </button>
+                </div>
+              ) : result.failed > 0 ? (
+                <p>
+                  As falhas deste lote não podem ser reenviadas: o payload
+                  original já não está guardado ou o CTWA já gerou um evento.
+                </p>
+              ) : null}
               <p>
                 Entrar na fila não significa enviado. Uma entrega incerta
                 bloqueia nova tentativa; não há reenvio automático pela

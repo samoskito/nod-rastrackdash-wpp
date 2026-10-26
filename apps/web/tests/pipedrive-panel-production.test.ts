@@ -68,8 +68,8 @@ describe("Pipedrive production opt-in (existing rule)", () => {
       getCapabilitiesAction,
     });
 
-    expect(screen.getByText("Observando")).toBeTruthy();
-    expect(screen.getByText("Observação (padrão)", { selector: ".event-chip" })).toBeTruthy();
+    expect(screen.getByText("Envio desligado")).toBeTruthy();
+    expect(screen.getByText("Nenhuma regra enviando", { selector: ".event-chip" })).toBeTruthy();
     expect(getCapabilitiesAction).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: activateLabel }));
@@ -99,7 +99,7 @@ describe("Pipedrive production opt-in (existing rule)", () => {
 
     expect(screen.queryByRole("list", { name: "Requisitos para o envio automático" })).toBeNull();
     expect(updateRuleAction).not.toHaveBeenCalled();
-    expect(screen.getByText("Observando")).toBeTruthy();
+    expect(screen.getByText("Envio desligado")).toBeTruthy();
   });
 
   it("blocks activation while the production gate is off in this environment", async () => {
@@ -213,26 +213,18 @@ describe("Pipedrive production opt-in (existing rule)", () => {
 
     await screen.findByText("O envio automático está desativado nesta instalação");
     await waitFor(() => expect(getConnectionAction).toHaveBeenCalled());
-    expect(screen.getByText("Observando")).toBeTruthy();
+    expect(screen.getByText("Envio desligado")).toBeTruthy();
     expect(screen.queryByText(/Envio automático ativo desde/)).toBeNull();
   });
 
-  it("deactivates back to observation immediately (a safe, no-send change) without capabilities", async () => {
-    const updateRuleAction = updateReturning(ruleWith({ updatedAt: LATER }));
-    const getCapabilitiesAction = capsOk;
+  it("Fase 6.1c: a production rule offers no way back to observation, only Pausar", () => {
     renderPanel({
       connections: [revisionedConnectionWith({ rules: [productionRuleWith()] })],
-      updateRuleAction,
-      getCapabilitiesAction,
+      getCapabilitiesAction: capsOk,
     });
     expect(screen.getByText("Envio automático em 1 regra(s)")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: backLabel }));
-
-    await screen.findByText("Observando");
-    expect(payloadOf(updateRuleAction)).toEqual({ mode: "observation" });
-    expect(getCapabilitiesAction).not.toHaveBeenCalled();
-    expect(screen.getByText("Observação (padrão)", { selector: ".event-chip" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: backLabel })).toBeNull();
+    expect(screen.getByRole("button", { name: pauseLabel })).toBeTruthy();
   });
 
   it("pauses a production rule at once, and resuming it in production needs a fresh confirmation", async () => {
@@ -274,7 +266,7 @@ describe("Pipedrive production opt-in (existing rule)", () => {
       getCapabilitiesAction,
     });
     fireEvent.click(screen.getByRole("button", { name: "Retomar regra Ganho do negócio" }));
-    await screen.findByText("Observando");
+    await screen.findByText("Envio desligado");
     expect(payloadOf(updateRuleAction)).toEqual({ active: true });
     expect(getCapabilitiesAction).not.toHaveBeenCalled();
   });
@@ -310,15 +302,15 @@ describe("Pipedrive production opt-in (new rule)", () => {
     fireEvent.change(screen.getByLabelText("Evento da conversão"), { target: { value: "LeadSubmitted" } });
   }
 
-  it("keeps observation as the pre-selected mode", () => {
+  it("Fase 6.1c: offers no mode to pick (no observation step)", () => {
     renderPanel({ connections: [revisionedConnectionWith()] });
     fireEvent.click(screen.getByRole("button", { name: "Nova regra" }));
-    const observation = screen.getByRole("radio", { name: /Observação \(padrão\)/ }) as HTMLInputElement;
-    expect(observation.checked).toBe(true);
+    expect(screen.queryByRole("radio", { name: /Observação/ })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /Envio automático/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Criar regra" })).toBeTruthy();
   });
 
-  it("creates in production only after review and confirmation", async () => {
+  it("Fase 6.1c: creates the rule directly and the API makes it born sending", async () => {
     const created = productionRuleWith({ id: "rule_new", name: "Lead em produção", eventName: "LeadSubmitted" });
     const createRuleAction = vi.fn(async (_: FormData) => ({
       ok: true as const,
@@ -332,52 +324,17 @@ describe("Pipedrive production opt-in (new rule)", () => {
       getCapabilitiesAction,
     });
     fillNew();
-    fireEvent.click(screen.getByRole("radio", { name: /Envio automático: envia o evento/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Revisar e ativar envio automático" }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar regra" }));
 
-    expect(createRuleAction).not.toHaveBeenCalled();
-    await screen.findByText(/já com envio automático ativo/);
-    await screen.findByText(/Envio automático disponível nesta instalação/);
-
-    fireEvent.click(await confirmEnabled("Criar com envio automático"));
     await waitFor(() => expect(createRuleAction).toHaveBeenCalledTimes(1));
-    expect(payloadOf(createRuleAction)).toMatchObject({
-      mode: "production",
+    const payload = payloadOf(createRuleAction);
+    expect(payload).toMatchObject({
       eventName: "LeadSubmitted",
       pipelineId: "pipeline_1",
       stageId: "stage_1",
     });
+    expect(payload).not.toHaveProperty("mode");
     await screen.findByText(/Envio automático ativo desde/);
-  });
-
-  it("cancelling the creation review sends nothing", async () => {
-    const createRuleAction = vi.fn();
-    renderPanel({ connections: [revisionedConnectionWith()], createRuleAction, getCapabilitiesAction: capsOk });
-    fillNew();
-    fireEvent.click(screen.getByRole("radio", { name: /Envio automático: envia o evento/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Revisar e ativar envio automático" }));
-    await screen.findByText(/já com envio automático ativo/);
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(screen.queryByText(/já com envio automático ativo/)).toBeNull();
-    expect(createRuleAction).not.toHaveBeenCalled();
-  });
-
-  it("does not create when the gate is off", async () => {
-    const createRuleAction = vi.fn();
-    renderPanel({
-      connections: [revisionedConnectionWith()],
-      createRuleAction,
-      getCapabilitiesAction: caps({ ok: true, capabilities: capabilitiesDisabled }),
-    });
-    fillNew();
-    fireEvent.click(screen.getByRole("radio", { name: /Envio automático: envia o evento/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Revisar e ativar envio automático" }));
-    await screen.findByText(/Envio automático desativado nesta instalação/);
-    const confirm = screen.getByRole("button", { name: "Criar com envio automático" }) as HTMLButtonElement;
-    expect(confirm.disabled).toBe(true);
-    fireEvent.click(confirm);
-    expect(createRuleAction).not.toHaveBeenCalled();
   });
 });
 
@@ -643,7 +600,7 @@ describe("Pipedrive delivery results (events are read-only; only 'sent' is ever 
 
   it("never claims anything was sent for an observed result", async () => {
     await renderWithResult(resultWith({ status: "observed", valueCents: 19990, currency: "BRL" }));
-    await screen.findByText(/Ganho do negócio \/ .*Observado/);
+    await screen.findByText(/Ganho do negócio \/ .*Registrado sem envio/);
     expect(document.querySelector(".pipedrive-delivery")).toBeNull();
     expect(screen.queryAllByText("Enviado")).toHaveLength(0);
   });

@@ -64,7 +64,7 @@ export function unifyBannerTitle(
 }
 
 const differenceLabels: Record<string, string> = {
-  mode: "modo (observação/envio automático)",
+  mode: "envio (ligado/desligado)",
   value: "valor",
   currency: "moeda",
   contentName: "produto",
@@ -286,13 +286,13 @@ export function UnifyReviewModal({
               {ruleEventLabel(group.eventName)} ·{" "}
               {group.mode === "production"
                 ? "envio automático"
-                : "em observação"}
+                : "envio desligado"}
               . As regras atuais são pausadas e o histórico delas continua
               salvo.
             </p>
             <p className="action-note">
               Dá para desfazer: retome as regras pausadas (em “Regras”,
-              Retomar observação) e pause a regra para todos os números.
+              Retomar) e pause a regra para todos os números.
               Unificar é uma sugestão, nunca é obrigatório.
             </p>
 
@@ -325,7 +325,7 @@ export function UnifyReviewModal({
                             <span className="status-chip warn">número removido</span>
                           ) : null}
                         </td>
-                        <td>{member.mode === "production" ? "Envio automático" : "Observação"}</td>
+                        <td>{member.mode === "production" ? "Envio automático" : "Envio desligado"}</td>
                         <td>{formatMemberValue(member)}</td>
                         <td>{member.defaultContentName ?? "—"}</td>
                       </tr>
@@ -340,7 +340,7 @@ export function UnifyReviewModal({
                     </strong>
                     <span>
                       {target
-                        ? `Vão valer os de “${target.name}”: ${target.mode === "production" ? "envio automático" : "observação"}, ${formatMemberValue(target)}${target.defaultContentName ? `, produto “${target.defaultContentName}”` : ""}. Os das outras regras deixam de valer.`
+                        ? `Vão valer os de “${target.name}”: ${target.mode === "production" ? "envio automático" : "envio desligado"}, ${formatMemberValue(target)}${target.defaultContentName ? `, produto “${target.defaultContentName}”` : ""}. Os das outras regras deixam de valer.`
                         : "Vão valer os valores da regra mais antiga com número conectado."}
                     </span>
                     <label className="conversion-check conversion-unify-ack">
@@ -374,7 +374,7 @@ export function UnifyReviewModal({
                   <p className="action-note warn">
                     {group.mode === "production"
                       ? "Estes números começam a enviar este evento para a Meta."
-                      : "Estes números começam a ser observados por esta regra (nada é enviado à Meta em observação)."}
+                      : "Estes números passam a ser reconhecidos por esta regra, com o envio desligado (nada vai para a Meta)."}
                   </p>
                 </>
               ) : (
@@ -417,7 +417,7 @@ export function UnifyReviewModal({
             {observationCanonical.length > 0 ? (
               <section className="conversion-review-block">
                 <h3>
-                  Canal em observação ({observationCanonical.length})
+                  Canal com o envio desligado ({observationCanonical.length})
                 </h3>
                 <NumberList
                   ids={observationCanonical.map((item) => item.canonicalChannelId)}

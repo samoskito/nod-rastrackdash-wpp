@@ -57,6 +57,8 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
     health: WhatsappProviderHealthDto;
     providerInstanceId: string | null;
     connectedPhone: string | null;
+    /** Fase 6.1c: status bruto da Uazapi (alerta de desconexão). */
+    providerStatusText?: string | null;
   }> {
     const baseUrl = config.config.baseUrl.trim();
     const token = config.config.token.trim();
@@ -83,6 +85,7 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
       health: this.healthFromConnection(connection, checkedAt),
       providerInstanceId: connection.providerInstanceId,
       connectedPhone: connection.connectedPhone,
+      providerStatusText: connection.providerStatusText ?? null,
     };
   }
 

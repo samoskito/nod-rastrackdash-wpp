@@ -585,6 +585,7 @@ export class ProviderConversionRulesService {
         : providerRuleCreateIntentHash(workspaceId, input);
     this.assertUniqueCatalogVariants(input);
     let secret: string | null = null;
+    let ruleMode: "observation" | "production" = "observation";
     // Fase 5.3: a rule created for the workspace URL (perRuleUrl: false) keeps
     // its endpoint only as the internal anchor of the routed callbacks.
     let perRuleUrlDisabled = false;
@@ -800,10 +801,15 @@ export class ProviderConversionRulesService {
             );
           }
 
-          this.assertModeAllowed(
-            input.mode,
-            parserRelease ? effectiveInboundParserStatus(parserRelease) : null,
-          );
+          // Fase 6.1c (produção direta): sem modo pedido, a regra de uma
+          // integração validada nasce enviando. Observação só para leitor
+          // ainda não validado (ou com o envio desligado no servidor).
+          const parserStatus = parserRelease
+            ? effectiveInboundParserStatus(parserRelease)
+            : null;
+          const modeDefaulted = input.mode === undefined;
+          ruleMode = input.mode ?? this.bornRuleMode(config, parserStatus);
+          this.assertModeAllowed(ruleMode, parserStatus);
           let defaultValueCents: number | null = null;
           let defaultCurrency: string | null = null;
           let defaultContentName: string | null = null;
@@ -865,7 +871,7 @@ export class ProviderConversionRulesService {
                 parserReleaseId: bound ? parserRelease!.id : null,
                 scope,
                 ...(crossConnectionScope ? { crossConnectionScope: true } : {}),
-                mode: input.mode,
+                mode: ruleMode,
                 messageTriggerPhrases:
                   input.triggerType === "provider_automation"
                     ? automationTriggerPhrases
@@ -876,7 +882,7 @@ export class ProviderConversionRulesService {
                     : input.messageAuthorScope,
                 productFilterCodes,
                 productionActivatedAt:
-                  input.mode === "production" ? new Date() : null,
+                  ruleMode === "production" ? new Date() : null,
                 createdByUserId: actorUserId,
               },
             });
@@ -913,7 +919,13 @@ export class ProviderConversionRulesService {
             );
           }
 
-          if (input.mode === "production") {
+          // "Ativar envio" pedido explicitamente: a cascata estrita de sempre
+          // (promove números e conexão, ou recusa com o motivo). Nascendo em
+          // produção por padrão, os números de uma integração validada já
+          // nascem ativos; um número ou conexão que o operador pausou fica
+          // como está (nada é retomado implicitamente) e a regra mostra o
+          // motivo de cada número que ainda não envia.
+          if (ruleMode === "production" && !modeDefaulted) {
             await this.activateScopedProduction(transaction, {
               workspaceId,
               providerRuleId: providerRule.id,
@@ -929,7 +941,7 @@ export class ProviderConversionRulesService {
             actorUserId,
             action: "provider_conversion_rule.created",
             targetId: providerRule.id,
-            resultStatus: input.mode,
+            resultStatus: ruleMode,
             afterSummary: {
               eventName: input.eventName,
               triggerType: input.triggerType,
@@ -937,7 +949,10 @@ export class ProviderConversionRulesService {
               scope,
               origin,
               channelCount: input.channelIds.length,
-              mode: input.mode,
+              mode: ruleMode,
+              ...(modeDefaulted && ruleMode === "production"
+                ? { productionDirect: true }
+                : {}),
               endpointCreated: Boolean(secret),
               ...(productFilterCodes.length > 0
                 ? { productFilterCodes }
@@ -1221,7 +1236,16 @@ export class ProviderConversionRulesService {
           "Parser da conexao ainda nao esta disponivel",
         );
       }
-      this.assertModeAllowed("observation", connection.parserRelease.status);
+      // Fase 6.1c (produção direta): a regra adaptada de uma conexão
+      // validada já nasce enviando.
+      const adaptedMode = this.bornRuleMode(
+        this.requireRulesEnabled(),
+        effectiveInboundParserStatus(connection.parserRelease),
+      );
+      this.assertModeAllowed(
+        adaptedMode,
+        effectiveInboundParserStatus(connection.parserRelease),
+      );
 
       await transaction.conversionRule.update({
         where: { id: legacyRule.id },
@@ -1240,10 +1264,11 @@ export class ProviderConversionRulesService {
             conversionRuleId: legacyRule.id,
             connectionId: connection.id,
             parserReleaseId: connection.parserRelease.id,
-            mode: "observation",
+            mode: adaptedMode,
             messageTriggerPhrases: input.triggerPhrases,
             messageAuthorScope: input.messageAuthorScope,
-            productionActivatedAt: null,
+            productionActivatedAt:
+              adaptedMode === "production" ? new Date() : null,
             createdByUserId: actorUserId,
           },
         });
@@ -1261,7 +1286,7 @@ export class ProviderConversionRulesService {
         actorUserId,
         action: "provider_conversion_rule.adapted",
         targetId: providerRule.id,
-        resultStatus: "observation",
+        resultStatus: adaptedMode,
         afterSummary: {
           conversionRuleId: legacyRule.id,
           previousTriggerType: legacyRule.triggerType,
@@ -1269,7 +1294,7 @@ export class ProviderConversionRulesService {
           eventName: legacyRule.eventName,
           connectionId: connection.id,
           channelCount: input.channelIds.length,
-          mode: "observation",
+          mode: adaptedMode,
         },
       });
 
@@ -1398,7 +1423,25 @@ export class ProviderConversionRulesService {
         }
       }
 
-      const nextMode = input.active === false ? "observation" : input.mode;
+      // Fase 6.1c (produção direta): "Retomar" uma regra pausada de uma
+      // integração validada volta enviando (não existe mais a etapa de
+      // observação). Sem leitor validado ou com o envio desligado no
+      // servidor, ela volta como antes.
+      const resumeDefaultMode =
+        input.active === true &&
+        input.mode === undefined &&
+        !current.conversionRule.active
+          ? this.bornRuleMode(
+              this.requireRulesEnabled(),
+              unbind || !current.parserRelease
+                ? null
+                : effectiveInboundParserStatus(current.parserRelease),
+            )
+          : undefined;
+      const nextMode =
+        input.active === false
+          ? "observation"
+          : (input.mode ?? resumeDefaultMode);
       if (nextMode === "production") {
         this.assertModeAllowed(
           "production",
@@ -1458,6 +1501,7 @@ export class ProviderConversionRulesService {
 
       if (
         input.mode !== undefined ||
+        resumeDefaultMode !== undefined ||
         input.active === false ||
         input.triggerPhrases !== undefined ||
         input.triggerLabels !== undefined ||
@@ -1623,7 +1667,7 @@ export class ProviderConversionRulesService {
         effectiveMode === "production" &&
         staysActive &&
         (input.mode !== undefined ||
-          input.active === true ||
+          (input.active === true && resumeDefaultMode === undefined) ||
           input.channelIds !== undefined ||
           scopeChanged ||
           // "Ampliar para todas as conexões" on a rule already sending.
@@ -1641,6 +1685,11 @@ export class ProviderConversionRulesService {
         });
         // A global rule promotes its covered numbers after this commit, each
         // in its own transaction (see cascadeGlobalNumbers).
+        cascadeGlobal = nextScope === "all_numbers";
+      } else if (resumeDefaultMode === "production" && staysActive) {
+        // Fase 6.1c: "Retomar" sem pedir modo não retoma números nem
+        // conexões que o operador pausou; os números que nunca enviaram de
+        // uma regra para todos os números seguem a cascata de sempre.
         cascadeGlobal = nextScope === "all_numbers";
       }
 
@@ -3593,6 +3642,22 @@ export class ProviderConversionRulesService {
     }
 
     return config;
+  }
+
+  /**
+   * Fase 6.1c (produção direta): modo de nascimento de uma regra. Produção
+   * quando o envio de conversões está ligado no servidor e o leitor é
+   * validado (ou a regra abrange conexões: cada ocorrência é barrada pelo
+   * leitor da própria conexão). Do contrário, observação.
+   */
+  private bornRuleMode(
+    config: { conversionProductionEnabled: boolean },
+    parserStatus: "observation_only" | "certified" | "retired" | null,
+  ): "observation" | "production" {
+    return config.conversionProductionEnabled &&
+      (parserStatus === null || parserStatus === "certified")
+      ? "production"
+      : "observation";
   }
 
   private assertModeAllowed(

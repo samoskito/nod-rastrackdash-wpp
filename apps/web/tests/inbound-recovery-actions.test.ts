@@ -14,6 +14,7 @@ const result = {
   delivered: 0,
   failed: 0,
   unknown: 0,
+  retryableFailed: 0,
   pending: 1,
   items: [{ id: "item", state: "pending" }],
 };

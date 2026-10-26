@@ -220,7 +220,7 @@ describe("ações: Todos os números", () => {
     );
     expect(result).toMatchObject({ ok: true, reprocess: { reprocessed: 2 } });
     expect(result.message).toBe(
-      "2 conversas reenviadas para a fila de envio. 1 fica como está (número ainda sem envio ativo, pausado de propósito na época ou que não é QR). 3 são mais antigas que 7 dias e não podem mais ser enviadas à Meta.",
+      "2 conversas reenviadas para a fila de envio. 1 fica como está (número ainda sem envio ativo, pausado de propósito na época ou que não é Uazapi/WAHA). 3 são mais antigas que 7 dias e não podem mais ser enviadas à Meta.",
     );
   });
 
@@ -234,7 +234,7 @@ describe("ações: Todos os números", () => {
     );
     expect(
       (await reprocessBlockedExecutionsAction(form({ ruleId: "rule_global" }))).message,
-    ).toContain("pausada ou em observação");
+    ).toContain("pausada ou com o envio desligado");
 
     // The decision comes from the code, not from the wording of the message.
     serverApiFetch.mockRejectedValueOnce(
@@ -591,7 +591,7 @@ describe("Últimas execuções: Reprocessar bloqueadas", () => {
     );
 
     const panel = await screen.findByRole("region", { name: "Conversas bloqueadas antes do envio" });
-    expect(within(panel).getByText(/A regra está pausada ou em observação/)).toBeTruthy();
+    expect(within(panel).getByText(/A regra está pausada ou com o envio desligado/)).toBeTruthy();
     expect(within(panel).queryByRole("button")).toBeNull();
   });
 

@@ -79,7 +79,7 @@ describe("Hub: card do Unnichat", () => {
 
     expect(withStatus("observation")).toMatchObject({
       state: "active",
-      status: { label: "Em teste", tone: "ok" },
+      status: { label: "Envio desligado", tone: "warn" },
       detail: "1 conexão",
     });
     expect(withStatus("production")).toMatchObject({

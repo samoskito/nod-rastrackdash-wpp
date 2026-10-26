@@ -20,7 +20,6 @@ import {
   Send,
   Settings2,
   Trash2,
-  Undo2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -331,7 +330,7 @@ export function ConversionsScreen({
             {liveCount} com envio automático
           </span>
           <span className="status-chip neutral">
-            {observationCount} em observação
+            {observationCount} com envio desligado
           </span>
           <span className="conversions-summary-total">
             {rows.length} {rows.length === 1 ? "regra" : "regras"} no total
@@ -456,7 +455,7 @@ export function ConversionsScreen({
           >
             <option value="all">Todos</option>
             <option value="production">Envio automático</option>
-            <option value="observation">Observação</option>
+            <option value="observation">Envio desligado</option>
             <option value="paused">Pausadas ou sem número</option>
             <option value="unified">Unificadas</option>
           </select>
@@ -654,7 +653,7 @@ export function ConversionsScreen({
         open={newRuleOpen}
         onClose={closeNewRule}
         title="Nova regra"
-        description="Origem, evento, alcance e detalhes. Toda regra começa em observação."
+        description="Origem, evento, alcance e detalhes. A regra já começa enviando para a Meta."
         size="wide"
         id="conversion-new-rule"
       >
@@ -850,10 +849,10 @@ function confirmSuccess(confirm: PendingConfirm): string {
     return `“${confirm.row.name}” agora envia o evento para a Meta automaticamente.`;
   }
   if (confirm.patch.mode === "observation") {
-    return `“${confirm.row.name}” voltou para observação: nada é enviado à Meta.`;
+    return `“${confirm.row.name}” está com o envio desligado: nada é enviado à Meta.`;
   }
   return confirm.patch.active
-    ? `“${confirm.row.name}” voltou a reconhecer conversas, em observação.`
+    ? `“${confirm.row.name}” foi retomada.`
     : `“${confirm.row.name}” foi pausada.`;
 }
 
@@ -1056,22 +1055,22 @@ function RuleStateButtons({
         className="button ghost compact-button"
         type="button"
         disabled={disabled}
-        aria-label={`Retomar observação de ${row.name}`}
+        aria-label={`Retomar ${row.name}`}
         onClick={() =>
           onConfirm({
             row,
-            title: "Retomar observação",
+            title: "Retomar regra",
             body:
               row.status === "unified"
-                ? "Esta regra foi unificada. Ela volta a reconhecer conversas nos números dela, no lugar da regra para todos os números, em observação: nada é enviado à Meta até você ativar o envio."
-                : "A regra volta a reconhecer conversas em observação: nada é enviado à Meta até você ativar o envio automático de novo.",
-            confirmLabel: "Retomar observação",
+                ? "Esta regra foi unificada. Ela volta a reconhecer conversas nos números dela, no lugar da regra para todos os números, e a enviar para a Meta."
+                : "A regra volta a reconhecer as conversas e a enviar para a Meta. Números e conexões que você pausou continuam pausados.",
+            confirmLabel: "Retomar",
             patch: { active: true },
           })
         }
       >
         <Play size={14} aria-hidden="true" />
-        Retomar observação
+        Retomar
       </button>
     );
   }
@@ -1104,26 +1103,10 @@ function RuleStateButtons({
 
   return (
     <>
-      {row.mode === "production" ? (
-        <button
-          className="button ghost compact-button"
-          type="button"
-          disabled={disabled}
-          aria-label={`Voltar ${row.name} para observação`}
-          onClick={() =>
-            onConfirm({
-              row,
-              title: "Voltar para observação",
-              body: "A regra continua reconhecendo as conversas, mas nada é enviado à Meta.",
-              confirmLabel: "Voltar para observação",
-              patch: { mode: "observation" },
-            })
-          }
-        >
-          <Undo2 size={14} aria-hidden="true" />
-          Observar
-        </button>
-      ) : (
+      {/* Fase 6.1c (produção direta): sem "voltar para observação"; para
+          parar o envio, Pausar. "Ativar envio" só aparece para uma regra com
+          o envio desligado. */}
+      {row.mode === "production" ? null : (
         <button
           className="button ghost compact-button"
           type="button"

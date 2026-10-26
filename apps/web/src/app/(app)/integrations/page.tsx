@@ -1417,8 +1417,8 @@ export default async function IntegrationsPage({
             única vez.
           </li>
           <li>
-            A regra começa em observação; ative o envio quando conferir as
-            primeiras vendas.
+            A regra já começa enviando: cada venda reconhecida vai para a Meta
+            pelo destino do número do comprador.
           </li>
         </ol>
         {hasWhatsappNumber ? (

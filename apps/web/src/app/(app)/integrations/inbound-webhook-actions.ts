@@ -46,7 +46,7 @@ const connectionCreateOperationalErrors = new Set([
   "Conexões Unnichat exigem o número de WhatsApp do cliente",
 ]);
 const providerObservationUnavailableApiMessage =
-  "Versão de observação do provedor indisponível";
+  "Versão do leitor do provedor indisponível";
 
 function providerObservationUnavailableMessage(provider: string): string {
   const name = provider === "unnichat" ? "O Unnichat" : "Este provedor";
@@ -217,7 +217,7 @@ export async function setInboundWebhookConnectionStatusAction(
           ? "Conexão pausada. Novas entregas não serão processadas."
           : input.data.status === "production"
             ? "Envio automático ativado nos canais habilitados."
-            : "Conexão mantida em modo de observação.",
+            : "Envio da conexão desligado.",
     };
   } catch (error) {
     return failure(
@@ -244,7 +244,7 @@ export async function removeInboundWebhookConnectionAction(
     revalidatePath(integrationsPath);
     return {
       ok: true,
-      message: "Conexão removida. O histórico de observação foi preservado.",
+      message: "Conexão removida. O histórico foi preservado.",
     };
   } catch (error) {
     return failure(licenseLockedMessageFor(error) ?? "Não foi possível remover esta conexão.");
@@ -311,7 +311,7 @@ export async function setInboundWebhookChannelStatusAction(
       message:
         input.data.status === "paused"
           ? "Canal pausado. Os demais canais continuam inalterados."
-          : "Canal habilitado para envio quando a conexão estiver em produção.",
+          : "Canal com o envio ativo. Ele envia enquanto a conexão estiver enviando.",
     };
   } catch (error) {
     return failure(

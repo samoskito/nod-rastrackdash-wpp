@@ -20,6 +20,7 @@ import {
   provisionalChannelProviderChannelId,
 } from "./inbound-webhook-provisional-channel";
 import { inboundWebhookParserContext } from "./providers/inbound-webhook-parser";
+import { bornChannelState } from "./production-direct";
 import type {
   InboundWebhookDeliveryNormalizedSummary,
   InboundWebhookEventClassification,
@@ -921,7 +922,14 @@ export class InboundWebhookObservationService {
         providerChannelId: event.channel.providerChannelId,
         connectedPhone: event.channel.connectedPhone,
         channelName: event.channel.name,
-        status: "discovered",
+        // Fase 6.1c (produção direta): número novo de uma integração
+        // validada já nasce com o envio ativo, valendo desde a entrega que o
+        // revelou (a primeira conversa do número também segue para a Meta).
+        ...bornChannelState(
+          delivery.connection,
+          delivery.connection?.parserRelease,
+          delivery.firstReceivedAt,
+        ),
         conversionEngineMode: "canonical",
         // Unnichat numbers explicitly follow the workspace Meta configuration
         // (as in the SaaS); other providers keep the column default.

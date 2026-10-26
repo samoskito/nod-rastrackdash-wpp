@@ -27,7 +27,7 @@ type AuditStatus = ProviderConversionAutomationAuditItemDto["status"];
 export const reprocessBatchLimit = 50;
 
 const statusLabels: Record<AuditStatus, { label: string; tone: "" | "warn" | "bad" | "neutral" }> = {
-  observed: { label: "Reconhecido em observação", tone: "neutral" },
+  observed: { label: "Reconhecido sem envio", tone: "neutral" },
   eligible: { label: "Na fila de envio", tone: "neutral" },
   materialized: { label: "Virou conversão", tone: "" },
   duplicate: { label: "Repetido", tone: "warn" },
@@ -73,7 +73,7 @@ export function reprocessSummary(
   }
   if (result.observed) {
     parts.push(
-      `${result.observed} reavaliado${result.observed === 1 ? "" : "s"} em observação`,
+      `${result.observed} reavaliado${result.observed === 1 ? "" : "s"} sem envio`,
     );
   }
   if (result.blocked) {
@@ -91,7 +91,7 @@ export function reprocessConfirmText(
 ): string {
   const subject = `${count} evento${count === 1 ? "" : "s"} recebido${count === 1 ? "" : "s"}`;
   return mode === "observation"
-    ? `Reavaliar ${subject}? A regra está em observação: nada é enviado à Meta.`
+    ? `Reavaliar ${subject}? A regra está com o envio desligado: nada é enviado à Meta.`
     : `Reavaliar ${subject}? Só os que forem de um lead vindo de anúncio viram conversão e são enviados à Meta.`;
 }
 
@@ -276,7 +276,7 @@ export function ReceivedEvents({
           <dd>{audit.summary.materialized}</dd>
         </div>
         <div>
-          <dt>Em observação</dt>
+          <dt>Sem envio</dt>
           <dd>{audit.summary.observed}</dd>
         </div>
         <div>
@@ -420,7 +420,7 @@ export function ReceivedEvents({
                 </p>
                 {observation ? (
                   <p className="muted conversion-received-observation">
-                    Por que ficou em observação: {observation.label}.
+                    Por que não foi enviado: {observation.label}.
                     {mode === "production" ? ` ${observation.reprocess}` : ""}
                   </p>
                 ) : null}

@@ -137,7 +137,8 @@ describe("Pipedrive shared contracts", () => {
       };
       const created = pipedriveConversionRuleCreateInputSchema.parse(input);
       expect(created.eventName).toBe(eventName);
-      expect(created.mode).toBe("observation");
+      // Fase 6.1c (produção direta): sem modo, a API decide.
+      expect(created.mode).toBeUndefined();
       expect(created.valueMode).toBe("deal");
       expect(created.active).toBe(true);
       expect(
@@ -146,6 +147,7 @@ describe("Pipedrive shared contracts", () => {
       expect(
         pipedriveConversionRuleSchema.parse({
           ...created,
+          mode: created.mode ?? "production",
           id: "rule-synthetic",
           connectionId: "connection-synthetic",
           fixedValueCents: null,
@@ -227,16 +229,22 @@ describe("Pipedrive shared contracts", () => {
     ).toBe(false);
   });
 
-  it("accepts explicit production mode without auto-activating the default", () => {
+  it("accepts an explicit mode and leaves the default to the API (Fase 6.1c)", () => {
     expect(
       pipedriveConversionRuleCreateInputSchema.parse({
         ...rule,
         mode: "production",
       }).mode,
     ).toBe("production");
-    expect(pipedriveConversionRuleCreateInputSchema.parse(rule).mode).toBe(
-      "observation",
-    );
+    expect(
+      pipedriveConversionRuleCreateInputSchema.parse({
+        ...rule,
+        mode: "observation",
+      }).mode,
+    ).toBe("observation");
+    expect(
+      pipedriveConversionRuleCreateInputSchema.parse(rule).mode,
+    ).toBeUndefined();
     expect(
       pipedriveConversionRuleUpdateInputSchema.parse({ mode: "production" }),
     ).toEqual({ mode: "production" });
@@ -262,8 +270,8 @@ describe("Pipedrive shared contracts", () => {
     expect(parsed).toMatchObject({
       trigger: "deal_won",
       valueMode: "deal",
-      mode: "observation",
     });
+    expect(parsed.mode).toBeUndefined();
     expect(parsed.currency).toBeUndefined();
     for (const invalid of [
       { ...won, stageId: "stage-synthetic" },

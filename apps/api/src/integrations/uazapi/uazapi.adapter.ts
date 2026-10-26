@@ -28,6 +28,12 @@ export type UazapiConnectionResult = {
   qrCode: string | null;
   connectedPhone: string | null;
   message: string | null;
+  /**
+   * Fase 6.1c (porte do SaaS #63, 86aaac21): status bruto informado pela
+   * Uazapi, em minúsculas, para separar uma sessão encerrada de estados
+   * passageiros (hibernada/offline) que também viram "disconnected".
+   */
+  providerStatusText?: string | null;
 };
 
 export type UazapiLabelListResult = {
@@ -453,6 +459,7 @@ export class UazapiAdapter implements IntegrationAdapter {
         this.asString(payload.instance_id) ??
         fallbackInstanceId,
       connectionStatus: this.normalizeStatus(instanceStatus, status, qrCode),
+      providerStatusText: instanceStatus?.trim().toLowerCase() || null,
       qrCode,
       connectedPhone: this.firstNormalizedPhone(
         instance?.owner,

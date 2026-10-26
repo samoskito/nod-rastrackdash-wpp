@@ -47,6 +47,17 @@ export const whatsappConnectionsSchema = z.array(
       lastHealthCheckedAt: z.string().datetime().nullable(),
       connectedPhone: z.string().min(1).nullable().optional(),
       createdAt: z.string().datetime(),
+      // Fase 6.1c (porte do SaaS #63): desconexão confirmada por 2 leituras
+      // seguidas da API de status do provedor (Uazapi BYO e WAHA). Ausente ou
+      // null: sem alerta.
+      disconnectAlert: z
+        .object({
+          confirmedAt: z.string().datetime(),
+          lastCheckedAt: z.string().datetime(),
+        })
+        .strict()
+        .nullable()
+        .optional(),
     })
     .strict(),
 );
