@@ -600,6 +600,76 @@ describe("Unnichat routing mode per number", () => {
     );
   });
 
+  // Porte do d4d70274 do SaaS (o código já estava no nod; faltavam os testes).
+  it("opens a legacy number with active local routes on 'Configurar neste número'", () => {
+    renderPanel({
+      connections: [
+        view([
+          channel(
+            { routingSource: "legacy_unknown", routeCount: 1 },
+            { routes: [localRoute] },
+          ),
+        ]),
+      ],
+    });
+    openChannel();
+
+    expect(
+      (screen.getByLabelText("Configurar neste número") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Herdar do workspace") as HTMLInputElement).checked,
+    ).toBe(false);
+  });
+
+  it("opens a legacy number with only inactive routes on 'Herdar do workspace'", () => {
+    renderPanel({
+      connections: [
+        view([
+          channel(
+            { routingSource: "legacy_unknown" },
+            { routes: [{ ...localRoute, active: false }] },
+          ),
+        ]),
+      ],
+    });
+    openChannel();
+
+    expect(
+      (screen.getByLabelText("Herdar do workspace") as HTMLInputElement).checked,
+    ).toBe(true);
+  });
+
+  it("releases the pending state and reports an error when the save throws", async () => {
+    vi.stubGlobal("confirm", () => true);
+    const saveRoutes = vi.fn().mockRejectedValue(new Error("network"));
+    renderPanel({
+      saveRoutes,
+      connections: [view([channel({ routingSource: "legacy_unknown" })])],
+    });
+    openChannel();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Herdar do workspace/ }),
+      );
+    });
+
+    expect(saveRoutes).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: /Herdar do workspace/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /Não foi possível salvar o modo de roteamento/,
+      ),
+    );
+  });
+
   it("is read-only for someone who cannot manage integrations", () => {
     renderPanel({
       canManage: false,
