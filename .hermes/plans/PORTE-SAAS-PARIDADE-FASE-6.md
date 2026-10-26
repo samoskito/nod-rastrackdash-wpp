@@ -1,6 +1,6 @@
 # PLANO — Fase 6: paridade com o SaaS (dash-com-ia até #187)
 
-> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0 está na branch de integração `integracao/fase-6` (PR #105); a 6.1a está em implementação. A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
+> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0 e a 6.1a estão na branch de integração `integracao/fase-6` (PR #105 e #106); a 6.1b está implementada e aguarda revisão (branch `feat/fase-6.1b-motivos-e-leitura`). A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
 >
 > - Plano canônico de execução: `.hermes/plans/ACTIVE-STUDENT-EDITION-IMPROVEMENTS.md`. Este arquivo é o plano da fase. Quando a implementação começar, o ACTIVE recebe a linha "Fase 6" com o protocolo de status, conforme a seção "Protocolo de atualização".
 > - Base do levantamento:

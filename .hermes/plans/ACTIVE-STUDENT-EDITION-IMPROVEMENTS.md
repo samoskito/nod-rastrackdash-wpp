@@ -63,7 +63,7 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
 | Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A MERGEADA — SMOKE REAL PAUSADO** | PR #43 merge `a48e93d`; API deployada; listagem autenticada OK no workspace `cmtbvwoop0000qa2swt9x8amu`; create/test MySQL real pausado até MySQL público fictício no Dokploy; PostgreSQL ainda não suportado |
 | Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; GupShup/Umbler existem como inbound webhook no código, mas a UX/aluno e a paridade com o app de referência ainda precisam de fechamento |
-| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 NA BRANCH DE INTEGRAÇÃO (PR #105); 6.1a IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
+| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 e 6.1a NA BRANCH DE INTEGRAÇÃO (PR #105, #106); 6.1b IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
 
 ### Fase 6 — status das subfases
 
@@ -103,6 +103,22 @@ Migrations: 20261027120000_provider_rule_cross_connection_scope (aditiva, ADD CO
 Testes: lista da §6.1a + licensing-client + brand-footer/app-layout/navigation
 Resultado: typecheck api/web/shared OK; API 2741 ok / 48 skipped (integração: 2696 ok); web 1331 ok / 3 falhas iguais à integração; shared 187 ok / 18 falhas iguais à integração; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe na integração; revisão independente feita (achados corrigidos em 86a2cf12)
 Limitações: entregas recebidas antes de uma reancoragem ficam na âncora antiga e não são reenviadas (igual ao SaaS); sem validação em instalação real
+```
+
+#### 6.1b — Motivos e prontidão dos números
+
+```text
+Status: IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO
+Branch: feat/fase-6.1b-motivos-e-leitura (a partir de origin/integracao/fase-6)
+Executor: Claude Code
+Modelo/reasoning: Claude Opus 5.5
+Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.1b
+Escopo: #171 (motivo de "em observação", número do lead na própria conexão), #165 (prontidão por SQL agregado), #179 (Bloqueado com motivo; fn da CAPI) + #180 (fn desligado por padrão), #103/#105 adaptados com a ponte WAHA, d4d70274 (já no nod: só testes), 75f6f4b3 parcial (janela de 7 dias nas automações); b65753b7 não portado (parte Unnichat já no nod; o reenfileiramento vive num serviço de backoffice que o nod não tem). 6.1c fora.
+Migrations: nenhuma
+Env nova: META_CAPI_SEND_FIRST_NAME (opcional, desligada por padrão)
+Testes: lista da §6.1b + licensing-client + brand-footer/app-layout/navigation
+Resultado: typecheck api/web/shared OK; API 2809 ok / 48 skipped (integração: 2741 ok / 48 skipped); web 1349 ok / 3 falhas iguais à integração; shared 187 ok / 18 falhas iguais à integração; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe na integração; pnpm setup --dry-run e scripts/setup.test.mjs ok; revisão independente feita (achados corrigidos em 3dd4975c)
+Limitações: SQL agregado validado só com mocks (sem PostgreSQL real); reenvio de itens de replay com falha fica para a 6.1c; sem validação em instalação real
 ```
 
 ### Checkpoint MySQL — pausado em 2026-09-04

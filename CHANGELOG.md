@@ -7,9 +7,46 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One additive migration (Fase 6.1a): back up PostgreSQL before the redeploy.** No new environment variable.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One additive migration (Fase 6.1a): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default.
 
 ### Added
+
+- **Fase 6.1b — Why an event stayed in observation (API, shared and web)**,
+  ported from the SaaS (`d4c6a419`, #171), adapted to the student edition:
+  - The observed disposition records its reason with the execution
+    (`normalizedResult.observationDetail`): rule in observation at receipt,
+    production sending disabled, lead number on the legacy engine, rule
+    without activation, received before the rule's or the number's
+    activation, lead number not in production on its own connection.
+    "Eventos recebidos" shows it with what "Reprocessar" will do; reason-code
+    labels no longer all read "Reconhecido em observação". Older rows fall
+    back to the reason codes that say it unambiguously.
+  - Payt "Todos os números": with the anchor connection live, the lead
+    number's own connection (Uazapi/WAHA bridge, Meta Cloud, Umbler...) is the
+    remaining gate. The pending-numbers list shows it and "Ativar envio neste
+    número" promotes that connection. Student-edition adaptation: the
+    Uazapi/WAHA bridge (one connection per number) follows the save cascade
+    and the automatic activation like phrase rules; connections that may carry
+    several numbers wait for the explicit click.
+  - Adaptations: the only sales platform is Payt (no Braip/Brink Park yet);
+    no `ctwa_requires_canonical_engine` branch; messages never send the
+    student to "support".
+- **Fase 6.1b — First name (`fn`) in the Conversions API, off by default
+  (API)**, ported from the SaaS (`a7ccdab3`, #179, CAPI part; `c44dc9fb`,
+  #180): `user_data.fn` = SHA-256 of the normalized first name (lowercase,
+  no punctuation, UTF-8 accents kept); never empty, generic, emoji-only,
+  phone-like or single-initial names. New optional API variable
+  `META_CAPI_SEND_FIRST_NAME` (only `true`/`1`/`on`/`yes` enable it;
+  documented in `.env.example` and `docs/setup/environment.md`). With it
+  off the lead is not even read. `event_id` and dedupe are unchanged.
+- **Fase 6.1b — "Bloqueado" always comes with a reason (API, shared and
+  web)**, ported from the SaaS (`a7ccdab3`, #179, readiness part): new
+  readiness reasons `ctwa_send_failed` (a real block),
+  `ctwa_in_progress` and `ctwa_not_eligible` (informative: they leave the
+  number partial and never downgrade a ready one), with counts in the DTO.
+  `adUnavailableCtwa` now comes for every provider.
+- **Fase 6.1b — Tests for the Unnichat routing-mode selector (web)**, ported
+  from the SaaS (`d4d70274`); the behavior was already in the nod.
 
 - **Fase 6.1a — One rule per event for every Unnichat/Umbler number, across
   connections (API, shared and web)**, ported from the SaaS (`42ccbc7c`,
@@ -56,6 +93,40 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
   rule whose number was removed no longer answers 404.
 
 ### Fixed
+
+- **Fase 6.1b — Number listing without loading the whole CTWA history (API
+  and web)**, ported from the SaaS (`478f0f9a`, #165): channel readiness of
+  `GET /integrations/inbound-webhooks/:id/channels` comes from one aggregate
+  SQL query per listing (COUNT FILTER / MIN per channel, on the existing
+  `InboundWebhookEvent(channelId, occurredAt)` index), same meaning, no time
+  window, no migration. On SQL failure: PII-free log
+  `inbound_webhook.channels_readiness_sql_failed` and a bounded fallback
+  (90 days, 5,000 events). Logs `channels_listed` / `channels_list_failed`
+  carry ids and timings only. Integrations, Conversões and Kommo/Pipedrive
+  say the numbers could not be loaded instead of "no number" / "number
+  removed", and "Salvar canais" is blocked meanwhile. Covers Meta Cloud.
+- **Fase 6.1b — Real stats of the Uazapi/WAHA bridge (API and web)**, ported
+  from the SaaS (`4787a8f3`, #103) with the WAHA bridge: overview and
+  readiness count the instance's CTWA leads (`source` uazapi or waha) and the
+  last WebhookLog, instead of 0 and "Aguardando CTWA"; route reasons do not
+  apply to the bridge.
+- **Fase 6.1b — No "Gerar nova URL" on the Uazapi/WAHA bridge (API and
+  web)**, ported from the SaaS (`e69a5e91`, #105) with the WAHA bridge:
+  `rotateSecret` answers 409 without changing the secret (checked again in
+  the transaction) and the panel shows a note instead of the button.
+- **Fase 6.1b — A Payt reprocess no longer queues a sale whose number was
+  never live on its own connection** (part of `d4c6a419`, #171): it stays
+  observed with the reason, also when the observation claim returns its own
+  execution as `purchase_duplicate`.
+- **Fase 6.1b — Meta's 7-day window also for ad-attributed automation events
+  (API)**, ported from the SaaS (`75f6f4b3`, window part only; the operator
+  approval was already in the nod): Payt, Unnichat and Umbler automation
+  conversions older than 7 days become `not_eligible` /
+  `MetaEventTimeExpired` (technical delivery `blocked_configuration`)
+  instead of failing at Meta. Only the age is checked.
+- Not ported in 6.1b: `b65753b7` — its Unnichat occurrence proof is already
+  in the nod and its production requeue lives in a backoffice recovery
+  service the student edition does not have.
 
 - **Fase 6.0 — One conversion per lead per pixel across numbers (API, shared
   and web)**, ported from the SaaS (`972f6179`, #153), adapted to the
