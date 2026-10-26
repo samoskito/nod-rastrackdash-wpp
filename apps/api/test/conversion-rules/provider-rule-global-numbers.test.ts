@@ -106,7 +106,7 @@ const gEnv = {
 
 type GNumber = {
   key: string;
-  provider: "uazapi" | "umbler";
+  provider: "uazapi" | "umbler" | "waha";
   connectionStatus?: "observation" | "production" | "paused";
   channelStatus?: "discovered" | "active" | "paused";
   validRoute?: boolean;
@@ -119,6 +119,7 @@ function globalWorld(numbers: GNumber[]) {
   const releases: GRow[] = [
     { id: "release_umbler", provider: "umbler", version: "v1", status: "certified" },
     { id: "release_uazapi", provider: "uazapi", version: "v1", status: "certified" },
+    { id: "release_waha", provider: "waha", version: "v2", status: "certified" },
   ];
   const state = {
     connections: [] as GRow[],
@@ -139,8 +140,7 @@ function globalWorld(numbers: GNumber[]) {
       workspaceId: "workspace_1",
       provider: number.provider,
       displayName: number.key,
-      parserReleaseId:
-        number.provider === "uazapi" ? "release_uazapi" : "release_umbler",
+      parserReleaseId: `release_${number.provider}`,
       status: number.connectionStatus ?? "observation",
       productionActivatedAt:
         number.connectionStatus === "production" ? stamp : null,
@@ -149,7 +149,7 @@ function globalWorld(numbers: GNumber[]) {
       updatedAt: stamp,
     });
     const instanceId =
-      number.provider === "uazapi" ? `instance_${number.key}` : null;
+      number.provider !== "umbler" ? `instance_${number.key}` : null;
     if (instanceId) {
       state.instances.push({
         id: instanceId,
@@ -175,7 +175,7 @@ function globalWorld(numbers: GNumber[]) {
       createdAt: stamp,
       updatedAt: stamp,
       routes:
-        number.validRoute === false || number.provider === "uazapi"
+        number.validRoute === false || number.provider !== "umbler"
           ? []
           : [
               {
@@ -1308,5 +1308,241 @@ describe("Todos os números: motivos (Umbler/Unnichat)", () => {
       siblings: [],
     });
     expect(state).toMatchObject({ phone: null, reason: "channel_not_active" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Porte do SaaS #66 (3f59e2f7), #85 (ff28d8a1) e #86 (71e69a95): ligar o
+// "Envio ativo" de uma regra específica não trava com número órfão (conexão
+// removida, inclusive a ponte WAHA/Uazapi), nem com canal ativo sem carimbo,
+// nem com o número redescoberto com outra identidade na mesma conexão.
+// ---------------------------------------------------------------------------
+describe("Envio ativo: número órfão ou duplicado não trava a regra (#66/#85/#86)", () => {
+  it("#66 regra ligada a uma conexão: o número que saiu da conexão é tirado da regra e o resto ativa", async () => {
+    const world = globalWorld([
+      { key: "umbler", provider: "umbler" },
+      { key: "gone", provider: "umbler" },
+    ]);
+    // A second number on the rule's connection...
+    world.state.channels.push({
+      ...structuredClone(world.channel("umbler")),
+      id: "channel_umbler_2",
+      connectedPhone: "5511977776666",
+    });
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_umbler",
+      channelIds: ["channel_umbler", "channel_umbler_2"],
+      mode: "observation",
+    });
+    expect(rule.connectionId).toBe("connection_umbler");
+    // ...that was later moved to a connection that is now removed.
+    world.state.channels.find(
+      (item) => item.id === "channel_umbler_2",
+    )!.connectionId = "connection_gone";
+    world.connection("gone").removedAt = new Date(gNow);
+
+    const updated = (await world.service.updateRule(
+      "workspace_1",
+      rule.id,
+      { mode: "production" } as never,
+      "user_1",
+    )) as GRow;
+
+    expect(updated.mode).toBe("production");
+    expect(updated.channelIds).toEqual(["channel_umbler"]);
+    expect(world.connection("umbler").status).toBe("production");
+    expect(world.channel("umbler").status).toBe("active");
+    expect(world.state.audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "provider_conversion_rule.channel_scope_pruned",
+          targetId: rule.id,
+          afterSummary: expect.objectContaining({
+            connectionId: "connection_umbler",
+            prunedChannelIds: ["channel_umbler_2"],
+            remainingChannelIds: ["channel_umbler"],
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("#66 sem nenhum número válido: recusa com uma mensagem clara (e não 404 do webhook)", async () => {
+    const world = globalWorld([
+      { key: "umbler", provider: "umbler" },
+      { key: "gone", provider: "umbler" },
+    ]);
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_umbler",
+      channelIds: ["channel_umbler"],
+      mode: "observation",
+    });
+    world.channel("umbler").connectionId = "connection_gone";
+    world.connection("gone").removedAt = new Date(gNow);
+
+    await expect(
+      world.service.updateRule(
+        "workspace_1",
+        rule.id,
+        { mode: "production" } as never,
+        "user_1",
+      ),
+    ).rejects.toThrow(/Nenhum número válido na conexão da regra/);
+  });
+
+  it("#66 nod (ponte WAHA): regra com números de várias conexões ativa mesmo com a ponte WAHA removida", async () => {
+    const world = globalWorld([
+      { key: "waha", provider: "waha" },
+      { key: "qr", provider: "uazapi" },
+    ]);
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_waha",
+      channelIds: ["channel_waha", "channel_qr"],
+      mode: "observation",
+    });
+    // Unbound: the numbers sit on two connections.
+    expect(rule.connectionId).toBeNull();
+    // The WAHA bridge connection is removed in Integrations.
+    world.connection("waha").removedAt = new Date(gNow);
+
+    const updated = (await world.service.updateRule(
+      "workspace_1",
+      rule.id,
+      { mode: "production" } as never,
+      "user_1",
+    )) as GRow;
+
+    expect(updated.mode).toBe("production");
+    expect(updated.channelIds).toEqual(["channel_qr"]);
+    expect(world.connection("qr").status).toBe("production");
+    expect(world.connection("waha").status).toBe("observation");
+    expect(world.state.audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "provider_conversion_rule.channel_scope_pruned",
+          afterSummary: expect.objectContaining({
+            connectionId: null,
+            prunedChannelIds: ["channel_waha"],
+            remainingChannelIds: ["channel_qr"],
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("#66 nod (ponte WAHA): sem nenhuma conexão viva, recusa com mensagem clara", async () => {
+    const world = globalWorld([
+      { key: "waha", provider: "waha" },
+      { key: "qr", provider: "uazapi" },
+    ]);
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_waha",
+      channelIds: ["channel_waha", "channel_qr"],
+      mode: "observation",
+    });
+    world.connection("waha").removedAt = new Date(gNow);
+    world.connection("qr").removedAt = new Date(gNow);
+
+    await expect(
+      world.service.updateRule(
+        "workspace_1",
+        rule.id,
+        { mode: "production" } as never,
+        "user_1",
+      ),
+    ).rejects.toThrow(/Nenhum numero valido na regra/);
+  });
+
+  it("#66 nod (ponte WAHA): a regra ligada à ponte WAHA ativa a ponte sem rota Meta salva", async () => {
+    const world = globalWorld([{ key: "waha", provider: "waha" }]);
+
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_waha",
+      channelIds: ["channel_waha"],
+    });
+
+    expect(rule.mode).toBe("production");
+    expect(world.connection("waha").status).toBe("production");
+    expect(world.channel("waha").status).toBe("active");
+  });
+
+  it("#85 canal já ativo numa conexão em produção sem carimbo nem rota: a segunda regra ativa sem reescrever o canal", async () => {
+    const world = globalWorld([
+      {
+        key: "umbler",
+        provider: "umbler",
+        connectionStatus: "production",
+        channelStatus: "active",
+      },
+    ]);
+    // Legacy live channel: no productionActivatedAt and no saved route.
+    world.channel("umbler").productionActivatedAt = null;
+    world.channel("umbler").routes = [];
+
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_umbler",
+      channelIds: ["channel_umbler"],
+    });
+
+    expect(rule.mode).toBe("production");
+    expect(world.channel("umbler").status).toBe("active");
+    expect(world.prisma.inboundWebhookChannel.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("#86 número redescoberto com outra identidade: a regra fica no irmão ativo, sem pedir uma segunda rota", async () => {
+    const world = globalWorld([
+      {
+        key: "umbler",
+        provider: "umbler",
+        connectionStatus: "production",
+        channelStatus: "discovered",
+        validRoute: false,
+      },
+    ]);
+    world.state.channels.push({
+      ...structuredClone(world.channel("umbler")),
+      id: "channel_umbler_live",
+      providerChannelId: "provider_live",
+      status: "active",
+      productionActivatedAt: null,
+      routes: [],
+    });
+
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_umbler",
+      channelIds: ["channel_umbler"],
+    });
+
+    expect(rule.channelIds).toEqual(["channel_umbler_live"]);
+    expect(world.state.ruleChannels.map((scope) => scope.channelId)).toEqual([
+      "channel_umbler_live",
+    ]);
+    expect(world.channel("umbler").status).toBe("discovered");
+    expect(
+      world.state.channels.find((item) => item.id === "channel_umbler_live"),
+    ).toMatchObject({ status: "active" });
+    expect(world.prisma.inboundWebhookChannel.updateMany).not.toHaveBeenCalled();
+    expect(world.state.audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "provider_conversion_rule.channel_scope_remapped",
+          afterSummary: expect.objectContaining({
+            remappedChannels: [
+              {
+                fromChannelId: "channel_umbler",
+                toChannelId: "channel_umbler_live",
+              },
+            ],
+          }),
+        }),
+      ]),
+    );
   });
 });

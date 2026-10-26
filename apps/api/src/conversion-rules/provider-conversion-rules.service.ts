@@ -766,6 +766,7 @@ export class ProviderConversionRulesService {
           if (input.mode === "production") {
             await this.activateScopedProduction(transaction, {
               workspaceId,
+              providerRuleId: providerRule.id,
               boundConnectionId: bound ? connection!.id : null,
               scope,
               channelIds: input.channelIds,
@@ -1451,6 +1452,7 @@ export class ProviderConversionRulesService {
       ) {
         await this.activateScopedProduction(transaction, {
           workspaceId,
+          providerRuleId,
           boundConnectionId: nextConnectionId,
           scope: nextScope,
           channelIds:
@@ -2276,6 +2278,7 @@ export class ProviderConversionRulesService {
     transaction: Prisma.TransactionClient,
     input: {
       workspaceId: string;
+      providerRuleId: string;
       boundConnectionId: string | null;
       scope: ProviderConversionRuleScopeDto;
       channelIds: string[];
@@ -2289,6 +2292,7 @@ export class ProviderConversionRulesService {
     if (input.boundConnectionId !== null) {
       await this.cascadeProductionActivation(transaction, {
         workspaceId: input.workspaceId,
+        providerRuleId: input.providerRuleId,
         connectionId: input.boundConnectionId,
         channelIds: input.channelIds,
         actorUserId: input.actorUserId,
@@ -2297,10 +2301,42 @@ export class ProviderConversionRulesService {
     }
     const channels = await transaction.inboundWebhookChannel.findMany({
       where: { workspaceId: input.workspaceId, id: { in: input.channelIds } },
-      select: { id: true, connectionId: true },
+      select: {
+        id: true,
+        connectionId: true,
+        connection: { select: { removedAt: true } },
+      },
     });
+    // nod (porte do #66): a rule without a bound connection groups its
+    // numbers by connection. A number whose connection was removed (a WAHA or
+    // Uazapi bridge removed in Integrations, any removed inbound connection)
+    // used to send the whole activation to a 404 on that connection; its scope
+    // row is an orphan and is dropped here, the live numbers keep going.
+    const orphanIds = [
+      ...new Set([
+        ...input.channelIds.filter(
+          (channelId) => !channels.some((channel) => channel.id === channelId),
+        ),
+        ...channels
+          .filter((channel) => channel.connection.removedAt !== null)
+          .map((channel) => channel.id),
+      ]),
+    ];
+    if (orphanIds.length > 0) {
+      await this.dropOrphanChannelScopes(transaction, {
+        workspaceId: input.workspaceId,
+        providerRuleId: input.providerRuleId,
+        connectionId: null,
+        orphanIds,
+        remainingChannelIds: channels
+          .filter((channel) => channel.connection.removedAt === null)
+          .map((channel) => channel.id),
+        actorUserId: input.actorUserId,
+      });
+    }
     const byConnection = new Map<string, string[]>();
     for (const channel of channels) {
+      if (channel.connection.removedAt !== null) continue;
       byConnection.set(channel.connectionId, [
         ...(byConnection.get(channel.connectionId) ?? []),
         channel.id,
@@ -2314,6 +2350,7 @@ export class ProviderConversionRulesService {
     for (const [connectionId, channelIds] of byConnection) {
       await this.cascadeProductionActivation(transaction, {
         workspaceId: input.workspaceId,
+        providerRuleId: input.providerRuleId,
         connectionId,
         channelIds,
         actorUserId: input.actorUserId,
@@ -3098,6 +3135,7 @@ export class ProviderConversionRulesService {
     transaction: Prisma.TransactionClient,
     input: {
       workspaceId: string;
+      providerRuleId: string;
       connectionId: string;
       channelIds: string[];
       actorUserId: string;
@@ -3115,11 +3153,18 @@ export class ProviderConversionRulesService {
       connection.provider,
     );
     const seats = this.seatHook();
+    const channelIds = await this.pruneOrphanChannelScopes(transaction, {
+      workspaceId,
+      providerRuleId: input.providerRuleId,
+      connectionId,
+      channelIds: input.channelIds,
+      actorUserId,
+    });
 
     // Channels first: promoting the connection refuses to run without at least
     // one active channel, and it stamps productionActivatedAt on every channel
     // that is already active by then.
-    for (const channelId of [...new Set(input.channelIds)]) {
+    for (const channelId of channelIds) {
       const channel = await requireInboundWebhookChannel(
         transaction,
         workspaceId,
@@ -3132,14 +3177,14 @@ export class ProviderConversionRulesService {
         );
       }
 
-      // An already-active channel only needs a rewrite when the connection is
-      // production and its stamp was lost; otherwise the connection promote
-      // below stamps it.
-      if (
-        channel.status === "active" &&
-        (connection.status !== "production" ||
-          channel.productionActivatedAt !== null)
-      ) {
+      // Porte do #85 (ff28d8a1): a channel that is already active is already
+      // part of the connection's live input surface. Do not replay its
+      // activation just because a legacy row lacks productionActivatedAt:
+      // doing so re-runs the Meta-route guard while enabling an independent
+      // sibling rule. When a connection is promoted below it stamps all active
+      // channels; an already-production connection does not need this
+      // idempotent rewrite at all.
+      if (channel.status === "active") {
         continue;
       }
 
@@ -3165,6 +3210,198 @@ export class ProviderConversionRulesService {
       requireValidMetaRoute,
       seats,
       env: this.env,
+    });
+  }
+
+  /**
+   * Porte do #66 (3f59e2f7) e do #86 (71e69a95).
+   *
+   * A rule keeps its `ProviderConversionRuleChannel` rows when the channel they
+   * point at goes away with its connection: a bridge connection (Uazapi or
+   * WAHA) or any inbound connection removed in Integrations, a channel moved
+   * to another connection. The orphan is invisible in the builder but fatal
+   * on activation: the cascade used to walk it and fail with "Recurso de
+   * webhook não encontrado" (404) or "Um ou mais canais não pertencem a esta
+   * conexão e workspace", leaving the rule stuck in Observando with no way out
+   * from the UI.
+   *
+   * So drop the orphans here and keep going with the channels that are really
+   * on this rule's live connection. Only a rule left with no valid channel at
+   * all is a genuine dead end, and it says so instead of blaming the webhook.
+   *
+   * #86: discovery is keyed by provider channel + organization, not by phone,
+   * so a provider can rediscover a number under a new identity while its
+   * original channel is already the live input surface. The stale
+   * `discovered` row is remapped to its active sibling (same connection, same
+   * phone) instead of being promoted (which would demand a second Meta route).
+   */
+  private async pruneOrphanChannelScopes(
+    transaction: Prisma.TransactionClient,
+    input: {
+      workspaceId: string;
+      providerRuleId: string;
+      connectionId: string;
+      channelIds: string[];
+      actorUserId: string;
+    },
+  ): Promise<string[]> {
+    const { workspaceId, providerRuleId, connectionId } = input;
+    const requested = [...new Set(input.channelIds)];
+    const live = await transaction.inboundWebhookChannel.findMany({
+      where: {
+        workspaceId,
+        connectionId,
+        id: { in: requested },
+        connection: { is: { workspaceId, removedAt: null } },
+      },
+      select: { id: true, connectedPhone: true, status: true },
+    });
+
+    const liveIds = new Set(live.map((channel) => channel.id));
+    const orphanIds = requested.filter((channelId) => !liveIds.has(channelId));
+
+    const discoveredPhones = [
+      ...new Set(
+        live
+          .filter(
+            (channel) =>
+              channel.status === "discovered" && channel.connectedPhone,
+          )
+          .map((channel) => channel.connectedPhone),
+      ),
+    ];
+    const activeSiblings =
+      discoveredPhones.length === 0
+        ? []
+        : await transaction.inboundWebhookChannel.findMany({
+            where: {
+              workspaceId,
+              connectionId,
+              status: "active",
+              connectedPhone: { in: discoveredPhones },
+              connection: { is: { workspaceId, removedAt: null } },
+            },
+            select: { id: true, connectedPhone: true },
+            orderBy: { id: "asc" },
+          });
+    const activeSiblingByPhone = new Map<string, string>();
+    for (const sibling of activeSiblings) {
+      if (!activeSiblingByPhone.has(sibling.connectedPhone)) {
+        activeSiblingByPhone.set(sibling.connectedPhone, sibling.id);
+      }
+    }
+    const replacements = new Map<string, string>();
+    for (const channel of live) {
+      const activeSibling =
+        channel.status === "discovered"
+          ? activeSiblingByPhone.get(channel.connectedPhone)
+          : undefined;
+      if (activeSibling && activeSibling !== channel.id) {
+        replacements.set(channel.id, activeSibling);
+      }
+    }
+    const resolvedIds = [
+      ...new Set(
+        requested
+          .filter((channelId) => liveIds.has(channelId))
+          .map((channelId) => replacements.get(channelId) ?? channelId),
+      ),
+    ];
+
+    if (orphanIds.length > 0) {
+      await this.dropOrphanChannelScopes(transaction, {
+        workspaceId,
+        providerRuleId,
+        connectionId,
+        orphanIds,
+        remainingChannelIds: [...liveIds],
+        actorUserId: input.actorUserId,
+      });
+    }
+
+    if (replacements.size > 0) {
+      const staleIds = [...replacements.keys()];
+      await transaction.providerConversionRuleChannel.deleteMany({
+        where: {
+          workspaceId,
+          providerRuleId,
+          channelId: { in: staleIds },
+        },
+      });
+      const requestedSet = new Set(requested);
+      const replacementIds = [...new Set(replacements.values())].filter(
+        (channelId) => !requestedSet.has(channelId),
+      );
+      if (replacementIds.length > 0) {
+        await transaction.providerConversionRuleChannel.createMany({
+          data: replacementIds.map((channelId) => ({
+            workspaceId,
+            providerRuleId,
+            channelId,
+          })),
+          // nod: the sibling may already be on the rule without being in the
+          // requested list (an edit that sent a partial list).
+          skipDuplicates: true,
+        });
+      }
+      await this.createAudit(transaction, {
+        workspaceId,
+        actorUserId: input.actorUserId,
+        action: "provider_conversion_rule.channel_scope_remapped",
+        targetId: providerRuleId,
+        resultStatus: "remapped",
+        afterSummary: {
+          connectionId,
+          remappedChannels: [...replacements].map(
+            ([fromChannelId, toChannelId]) => ({
+              fromChannelId,
+              toChannelId,
+            }),
+          ),
+          remainingChannelIds: resolvedIds,
+        },
+      });
+    }
+
+    if (resolvedIds.length === 0) {
+      throw new ConflictException(
+        "Nenhum número válido na conexão da regra; reconecte o WhatsApp ou selecione outro número",
+      );
+    }
+
+    return resolvedIds;
+  }
+
+  /** Deletes orphan rule -> channel scope rows, audited (porte do #66). */
+  private async dropOrphanChannelScopes(
+    transaction: Prisma.TransactionClient,
+    input: {
+      workspaceId: string;
+      providerRuleId: string;
+      connectionId: string | null;
+      orphanIds: string[];
+      remainingChannelIds: string[];
+      actorUserId: string;
+    },
+  ): Promise<void> {
+    await transaction.providerConversionRuleChannel.deleteMany({
+      where: {
+        workspaceId: input.workspaceId,
+        providerRuleId: input.providerRuleId,
+        channelId: { in: input.orphanIds },
+      },
+    });
+    await this.createAudit(transaction, {
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      action: "provider_conversion_rule.channel_scope_pruned",
+      targetId: input.providerRuleId,
+      resultStatus: "pruned",
+      afterSummary: {
+        connectionId: input.connectionId,
+        prunedChannelIds: input.orphanIds,
+        remainingChannelIds: input.remainingChannelIds,
+      },
     });
   }
 
