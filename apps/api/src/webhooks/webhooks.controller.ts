@@ -23,6 +23,12 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { hashPhoneIdentity } from "../common/phone/phone-identity";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import { ConversionRulesService } from "../conversion-rules/conversion-rules.service";
+import {
+  leadSubmittedRuleOverrideEnabled,
+  resolveLeadSubmittedRuleOverride,
+} from "../conversion-rules/lead-submitted-rule-override";
+import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
+import { LicenseClientService } from "../licensing-client/license-client.service";
 import { DiagnosticsService } from "../diagnostics/diagnostics.service";
 import type {
   InboundWebhookParserResult,
@@ -125,6 +131,12 @@ export class WebhooksController {
     @Optional()
     @Inject(WahaLidResolverService)
     private readonly wahaLidResolver?: WahaLidResolverService,
+    @Optional()
+    @Inject(LicenseClientService)
+    private readonly license?: LicenseClientService,
+    @Optional()
+    @Inject(RUNTIME_ENV)
+    private readonly env: RuntimeEnv = process.env,
   ) {}
 
   @Get("meta")
@@ -688,6 +700,11 @@ export class WebhooksController {
       ctwaSourceUrl: parsed.ctwaSourceUrl,
       occurredAt: new Date(),
     });
+    const deferToProviderRule = await this.bridgedLeadSubmittedOverride(
+      "uazapi",
+      resolvedContext,
+      attribution.adId,
+    );
     const automatic =
       await this.conversionEventsService.recordAutomaticLeadSubmitted({
         workspaceId: resolvedContext.workspaceId,
@@ -697,6 +714,7 @@ export class WebhooksController {
         adSetId: attribution.adSetId,
         adId: attribution.adId,
         ctwaClid: parsed.ctwaClid,
+        deferToProviderRule,
       });
     const conversion = await this.conversionEventsService.recordRuleMatches({
       workspaceId: resolvedContext.workspaceId,
@@ -1047,6 +1065,16 @@ export class WebhooksController {
       ctwaSourceUrl: event.ad?.sourceUrl ?? undefined,
       occurredAt: event.occurredAt,
     });
+    // nod: the WAHA bridge number follows the same "Lead recebido pela
+    // regra" as Uazapi (Z-API has no bridge, so it never defers).
+    const deferToProviderRule =
+      provider === "waha"
+        ? await this.bridgedLeadSubmittedOverride(
+            "waha",
+            context,
+            attribution.adId,
+          )
+        : null;
     const automatic =
       await this.conversionEventsService.recordAutomaticLeadSubmitted({
         workspaceId: context.workspaceId,
@@ -1056,6 +1084,7 @@ export class WebhooksController {
         adSetId: attribution.adSetId,
         adId: attribution.adId,
         ctwaClid: event.ctwaClid,
+        deferToProviderRule,
       });
     const conversion = await this.conversionEventsService.recordRuleMatches({
       workspaceId: context.workspaceId,
@@ -1315,6 +1344,69 @@ export class WebhooksController {
    * old connection that stopped receiving. At most one write per minute per
    * number; best-effort (never fails the delivery).
    */
+  /**
+   * Porte do SaaS #155 ("Lead recebido pela regra"): an active production
+   * LeadSubmitted provider rule covering this bridged number (Uazapi BYO or
+   * WAHA, connected by server URL + token) sends the LeadSubmitted instead of
+   * the entry. Read-only: uses the existing bridge channel and never creates
+   * one (no bridge means no rule can cover the number yet, so the entry
+   * sends as today). The rule send needs the lead's ad route, a usable
+   * license and the WhatsApp connection active (checked by the resolver).
+   */
+  private async bridgedLeadSubmittedOverride(
+    provider: "uazapi" | "waha",
+    context: { workspaceId: string; whatsappInstanceId: string },
+    adId: string | null | undefined,
+  ): Promise<{
+    ruleIds: string[];
+    provider: "uazapi" | "waha";
+    channelId: string;
+    connectionId: string;
+  } | null> {
+    if (!leadSubmittedRuleOverrideEnabled(this.env)) return null;
+    if (!adId || !this.license) return null;
+    try {
+      const channel = await this.prisma.inboundWebhookChannel.findUnique({
+        where: { whatsappInstanceId: context.whatsappInstanceId },
+        select: {
+          id: true,
+          workspaceId: true,
+          connectionId: true,
+          connection: { select: { provider: true } },
+        },
+      });
+      if (
+        !channel ||
+        channel.workspaceId !== context.workspaceId ||
+        channel.connection?.provider !== provider
+      )
+        return null;
+      const override = await resolveLeadSubmittedRuleOverride(
+        this.prisma,
+        {
+          workspaceId: context.workspaceId,
+          channel: {
+            id: channel.id,
+            connectionId: channel.connectionId,
+            provider,
+          },
+          destination: { kind: "ad_route", adId },
+        },
+        { env: this.env, license: this.license },
+      );
+      return override
+        ? {
+            ruleIds: override.ruleIds,
+            provider,
+            channelId: channel.id,
+            connectionId: channel.connectionId,
+          }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async touchBridgedChannel(context: {
     workspaceId: string;
     whatsappInstanceId: string;

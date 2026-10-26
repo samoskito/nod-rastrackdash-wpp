@@ -16370,3 +16370,339 @@ button.meta-manual-entry[aria-expanded="true"] {
     justify-content: center;
   }
 }
+
+/* Porte do SaaS #158 (tarefa 21): conversão manual no lead. */
+.manual-conversion-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.manual-conversion-header > div {
+  display: grid;
+  gap: 6px;
+}
+
+.manual-conversion-form,
+.manual-conversion-confirm,
+.manual-conversion-outcome,
+.manual-conversion-recent {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.manual-conversion-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.manual-conversion-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 7px;
+}
+
+/* Same surface as the platform dropdown (docs/design/dropdowns.md). */
+.manual-conversion-form input:not([type="checkbox"]),
+.manual-conversion-form textarea,
+.manual-conversion-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background-color: rgba(5, 8, 7, 0.84);
+  box-shadow: none;
+  color: var(--ink);
+  color-scheme: dark;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.manual-conversion-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-muted) 50%),
+    linear-gradient(135deg, var(--ink-muted) 50%, transparent 50%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.015)
+    );
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%,
+    0 0;
+  background-size:
+    5px 5px,
+    5px 5px,
+    auto;
+  background-repeat: no-repeat;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.manual-conversion-form select option {
+  background-color: var(--graphite-900);
+  color: var(--ink);
+}
+
+.manual-conversion-form textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.manual-conversion-form input::placeholder,
+.manual-conversion-form textarea::placeholder {
+  color: var(--ink-muted);
+}
+
+.manual-conversion-form input:not([type="checkbox"]):hover,
+.manual-conversion-form textarea:hover,
+.manual-conversion-form select:hover {
+  border-color: rgba(190, 226, 215, 0.22);
+}
+
+.manual-conversion-form input:not([type="checkbox"]):focus,
+.manual-conversion-form textarea:focus,
+.manual-conversion-form select:focus {
+  border-color: rgba(66, 240, 168, 0.72);
+  box-shadow: 0 0 0 3px rgba(18, 184, 132, 0.16);
+}
+
+.manual-conversion-form [aria-invalid="true"] {
+  border-color: var(--coral);
+}
+
+.manual-conversion-hint {
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.manual-conversion-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.manual-conversion-checkbox input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--mint);
+}
+
+.manual-conversion-callout {
+  margin: 0;
+}
+
+/* Clearly disabled confirm (blocked duplicate / confirmation pending). */
+.manual-conversion-modal .button.primary:disabled,
+.manual-conversion-modal .button.primary[aria-disabled="true"] {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-muted);
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.manual-conversion-summary {
+  display: grid;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.manual-conversion-summary > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: baseline;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.manual-conversion-summary > div:last-child {
+  border-bottom: 0;
+}
+
+.manual-conversion-summary dt,
+.manual-conversion-summary dd {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.manual-conversion-summary dt {
+  color: var(--ink-muted);
+  font-weight: 700;
+}
+
+.manual-conversion-summary dd {
+  color: var(--ink);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.manual-conversion-outcome {
+  justify-items: start;
+}
+
+.manual-conversion-outcome-chip {
+  justify-self: start;
+  width: auto;
+}
+
+.manual-conversion-outcome p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.manual-conversion-outcome .conversion-flow-actions {
+  justify-self: stretch;
+}
+
+/* Lead history: Manual badge, author, note and action aligned in a block. */
+.manual-conversion-meta {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.manual-conversion-meta-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.manual-conversion-author {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.manual-conversion-author-name {
+  display: inline-block;
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.event-chip.manual::before {
+  background: var(--blue);
+  box-shadow: none;
+}
+
+/* Status dots of the lead history (same tones as the outcome chip). */
+.event-chip.info::before {
+  background: var(--blue);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.45);
+}
+
+.event-chip.neutral::before {
+  background: var(--ink-muted);
+  box-shadow: none;
+}
+
+/* Every column of the lead history starts on the same line. */
+.lead-detail-table td {
+  vertical-align: top;
+}
+
+/* Callout body with the regular secondary text token (readable on amber). */
+.manual-conversion-callout span {
+  color: var(--ink-soft);
+}
+
+.manual-conversion-note {
+  max-width: 320px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.manual-conversion-meta-action {
+  display: inline-flex;
+  align-items: center;
+}
+
+.manual-conversion-sent {
+  color: var(--ink-muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.manual-conversion-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.manual-conversion-cancel .button {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.event-audit-manual-note {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.event-audit-manual-note p {
+  margin: 0;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .manual-conversion-header,
+  .manual-conversion-row,
+  .manual-conversion-summary > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manual-conversion-summary > div {
+    gap: 4px;
+  }
+}

@@ -147,7 +147,12 @@ export function executionReasonLabel(reasonCode: string | null): string {
     lead_already_converted_other_number:
       "Lead já convertido por outro número: nada novo enviado à Meta",
     lead_already_converted_other_source:
-      "Lead já convertido pela entrada do anúncio: nada novo enviado à Meta",
+      "Lead já convertido pela entrada do anúncio ou manualmente: nada novo enviado à Meta",
+    lead_submitted_deferred_to_rule:
+      "Lead recebido adiado: será enviado pela regra",
+    purchase_registered_manually: "Compra já registrada manualmente",
+    lead_event_registered_manually:
+      "Já registrado manualmente nas últimas 24h",
     // Venda da Payt (Fase 4a).
     purchase_duplicate: "Venda repetida: recibo registrado, nada novo enviado",
     rule_in_observation: "Regra sem envio: nada é enviado à Meta",

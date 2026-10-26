@@ -20,6 +20,7 @@ import { partitionAlreadyConverted } from "../../src/conversion-rules/provider-r
 import { paidLeadSubmittedEventWhere } from "../../src/leads/lead-cohort";
 import { ProviderConversionProductionService } from "../../src/inbound-webhook-production/provider-conversion-production.service";
 import { InboundWebhookParserRegistry } from "../../src/inbound-webhooks/providers/inbound-webhook-parser.registry";
+import { ReportingMetricsEngine } from "../../src/reporting/reporting-metrics.engine";
 
 /**
  * Once-per-lead conversions across numbers and pipelines.
@@ -48,7 +49,14 @@ const leadB: LeadFixture = { id: "lead_b", phone: "5511912345678", adId: "ad_1" 
 const leadAOld: LeadFixture = { id: "lead_a_old", phone: "551187654321", adId: "ad_1" };
 
 function createStore(
-  options: { destinationByAd?: Record<string, string> } = {},
+  options: {
+    destinationByAd?: Record<string, string>;
+    /**
+     * Porte do SaaS #155: LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED on the
+     * services. nod: undefined = the default (ON); false = explicit "false".
+     */
+    overrideFlag?: boolean;
+  } = {},
 ) {
   const executions = new Map<string, any>();
   const logs: any[] = [];
@@ -145,8 +153,18 @@ function createStore(
               (where.eventName.in
                 ? where.eventName.in.includes(log.eventName)
                 : log.eventName === where.eventName) &&
-              log.sourceTrigger.startsWith(where.sourceTrigger.startsWith) &&
-              !where.status.notIn.includes(log.status),
+              // coveredConvertingLogWhere: entry/rule logs (+ "auto_lead"
+              // sending statuses with the tarefa 20 flag).
+              (where.OR ?? [where]).some((condition: any) =>
+                (typeof condition.sourceTrigger === "string"
+                  ? log.sourceTrigger === condition.sourceTrigger
+                  : log.sourceTrigger.startsWith(
+                      condition.sourceTrigger.startsWith,
+                    )) &&
+                (condition.status.in
+                  ? condition.status.in.includes(log.status)
+                  : !condition.status.notIn.includes(log.status)),
+              ),
           ),
         ),
         create: vi.fn(async ({ data }: any) => {
@@ -219,12 +237,19 @@ function createStore(
 
   // nod: the constructor also takes the connection resolver and the license
   // client (only Kommo/Pipedrive records consult the license here).
+  const overrideEnv: Record<string, string> =
+    options.overrideFlag === false
+      ? { LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED: "false" }
+      : options.overrideFlag === true
+        ? { LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED: "true" }
+        : {};
   const conversions = new ConversionEventsService(
     prisma,
     {} as never,
     {} as never,
     undefined,
     {} as never,
+    overrideEnv,
   );
   const record = vi.spyOn(conversions, "recordExternalConversion");
   const enqueueSend = vi.fn(async () => ({ status: "queued" }));
@@ -254,6 +279,7 @@ function createStore(
       INBOUND_CONVERSION_RULES_ENABLED: "true",
       INBOUND_CONVERSION_PRODUCTION_ENABLED: "true",
       INBOUND_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 23).toString("base64"),
+      ...overrideEnv,
     },
   );
 
@@ -390,8 +416,12 @@ function createStore(
     destinationId?: string;
     /** nod: the Meta Cloud (WABA) CTWA entry uses the same writer. */
     provider?: "uazapi" | "meta_cloud" | "unnichat";
+    /** Porte do SaaS #155: what resolveLeadSubmittedRuleOverride answered. */
+    deferToProviderRule?: { ruleIds: string[] } | null;
+    occurredAt?: Date;
   }) =>
     conversions.recordExternalConversion({
+      deferToProviderRule: input.deferToProviderRule ?? null,
       workspaceId,
       externalConnectorId: null,
       sourceEventId: input.eventKey,
@@ -409,7 +439,7 @@ function createStore(
       adSetId: "adset_1",
       adId: input.lead.adId,
       ctwaClid: `ctwa_${input.lead.id}`,
-      eventOccurredAt: recent(60),
+      eventOccurredAt: input.occurredAt ?? recent(60),
       sourcePayload: {
         provider: input.provider ?? "uazapi",
         connectionId: `connection_${input.channelId}`,
@@ -448,6 +478,7 @@ function createStore(
 
   return {
     addLead,
+    conversions,
     executions,
     logs,
     process,
@@ -925,5 +956,223 @@ describe("nod: WAHA bridge and Meta Cloud entry under the once-per-lead rule", (
     ).toMatch(
       /leadLifetimeGuard: \{\s*channelId: event\.channelId,\s*pipeline: "ctwa_entry",\s*inTransaction: true,/,
     );
+  });
+});
+
+describe("porte do SaaS #155: LeadSubmitted sent by the provider rule instead of the entry", () => {
+  const deferred = { ruleIds: ["rule_all_numbers"] };
+
+  it("defers the entry (receipt kept, never queued) and the rule sends it once with the entry attribution", async () => {
+    const store = createStore();
+    const entry = await store.recordEntry({
+      eventKey: "msg_a",
+      channelId: "channel_n1",
+      lead: leadA,
+      deferToProviderRule: deferred,
+    });
+    expect(entry).toMatchObject({ status: "created", deliveryStatus: "not_eligible" });
+    expect(store.logs[0]).toMatchObject({
+      sourceTrigger: "inbound_webhook:uazapi",
+      status: "not_eligible",
+      errorCode: "lead_submitted_deferred_to_rule",
+      errorMessage:
+        "Lead recebido será enviado pela regra de conversão (não enviado na entrada)",
+      adId: "ad_1",
+      campaignId: "campaign_1",
+      ctwaClid: "ctwa_lead_a",
+      metaConversionDestinationId: "destination_pixel_a",
+      sourcePayload: expect.objectContaining({
+        channelId: "channel_n1",
+        leadSubmittedDeferredToRuleIds: ["rule_all_numbers"],
+      }),
+    });
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(0);
+
+    const triggeredAt = recent(5);
+    store.receivePhrase({
+      id: "rule_fires",
+      channelId: "channel_n1",
+      lead: leadA,
+      eventName: "LeadSubmitted",
+      occurredAt: triggeredAt,
+    });
+    await expect(store.process("rule_fires")).resolves.toEqual({ status: "materialized" });
+    const sent = sentLogs(store, "LeadSubmitted");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      sourceTrigger: "inbound_webhook:uazapi:message_phrase",
+      ctwaClid: "ctwa_lead_a",
+      adId: "ad_1",
+      metaConversionDestinationId: "destination_pixel_a",
+    });
+    // event_time is the trigger's, not the entry's.
+    expect(new Date(sent[0].eventOccurredAt).getTime()).toBe(triggeredAt.getTime());
+    expect(store.enqueueSend).toHaveBeenCalledOnce();
+
+    // A second trigger (same or other number) never sends again.
+    store.receivePhrase({ id: "rule_again", channelId: "channel_n2", lead: leadA, eventName: "LeadSubmitted", occurredAt: recent(1) });
+    await expect(store.process("rule_again")).resolves.toEqual({ status: "duplicate" });
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+  });
+
+  it("redelivery of a deferred entry is idempotent (stays deferred, no second row)", async () => {
+    const store = createStore();
+    await store.recordEntry({ eventKey: "msg_a", channelId: "channel_n1", lead: leadA, deferToProviderRule: deferred });
+    // Even if the rule was paused in between (no deferral now): same receipt,
+    // still not_eligible, no retroactive send (decision B).
+    await expect(
+      store.recordEntry({ eventKey: "msg_a", channelId: "channel_n1", lead: leadA }),
+    ).resolves.toMatchObject({ status: "duplicate", deliveryStatus: "not_eligible" });
+    expect(store.logs).toHaveLength(1);
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(0);
+  });
+
+  it("rule created after the entry was sent: the rule never sends a second time", async () => {
+    const store = createStore();
+    await store.recordEntry({ eventKey: "msg_a", channelId: "channel_n1", lead: leadA });
+    store.receivePhrase({ id: "late_rule", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("late_rule")).resolves.toEqual({ status: "duplicate" });
+    expect(store.executions.get("late_rule")!.reasonCode).toBe(LEAD_CONVERTED_BY_ANOTHER_SOURCE);
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+  });
+
+  it("uncovered number B sends on entry; the rule on covered A is then deduped", async () => {
+    const store = createStore();
+    await store.recordEntry({ eventKey: "msg_a", channelId: "channel_n1", lead: leadA, deferToProviderRule: deferred });
+    await expect(
+      store.recordEntry({ eventKey: "msg_b", channelId: "channel_n2", lead: leadA }),
+    ).resolves.toMatchObject({ status: "created", deliveryStatus: "ready_to_send" });
+    store.receivePhrase({ id: "rule_a", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted", occurredAt: recent(2) });
+    await expect(store.process("rule_a")).resolves.toEqual({ status: "duplicate" });
+    expect(store.executions.get("rule_a")!.reasonCode).toBe(LEAD_CONVERTED_ON_ANOTHER_NUMBER);
+    expect(sentLogs(store, "LeadSubmitted").map((log) => log.sourceTrigger)).toEqual([
+      "inbound_webhook:uazapi",
+    ]);
+  });
+
+  it("returning lead already converted (decision C): entry deferred, rule deduped", async () => {
+    const store = createStore();
+    await store.recordEntry({ eventKey: "msg_old", channelId: "channel_n1", lead: leadA, occurredAt: recent(60 * 24 * 3) });
+    // Lifetime duplicate wins over the deferral: same not_eligible receipt.
+    await expect(
+      store.recordEntry({ eventKey: "msg_new", channelId: "channel_n2", lead: leadA, deferToProviderRule: deferred }),
+    ).resolves.toMatchObject({ status: "duplicate", duplicateReasonCode: LEAD_CONVERTED_ON_ANOTHER_NUMBER });
+    store.receivePhrase({ id: "rule_c", channelId: "channel_n2", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule_c")).resolves.toEqual({ status: "duplicate" });
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+  });
+
+  // Uazapi BYO / WAHA bridge entry ("auto_lead"), connected by server URL + token.
+  const recordBridgeEntry = (store: ReturnType<typeof createStore>, adId?: string) =>
+    store.conversions.recordAutomaticLeadSubmitted({
+      workspaceId,
+      leadId: leadA.id,
+      phoneHash: hashPhoneIdentity(leadA.phone)!,
+      ...(adId ? { campaignId: "campaign_1", adSetId: "adset_1", adId } : {}),
+      ...(adId ? { ctwaClid: "ctwa_lead_a" } : {}),
+    });
+
+  it("flag on (nod default): bridge entry (auto_lead) sent: the provider rule is deduped as 'pela entrada' (D)", async () => {
+    const store = createStore();
+    await recordBridgeEntry(store, "ad_1");
+    store.logs[0].status = "sent"; // the bridge entry went to Meta
+    store.receivePhrase({ id: "rule_bridge", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule_bridge")).resolves.toEqual({ status: "duplicate" });
+    // The bridge entry is the entry, never "outro número".
+    expect(store.executions.get("rule_bridge")!.reasonCode).toBe(LEAD_CONVERTED_BY_ANOTHER_SOURCE);
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+  });
+
+  it("flag on: bridge entry with a known destination blocks only that pixel", async () => {
+    const store = createStore({ overrideFlag: true });
+    await recordBridgeEntry(store, "ad_1");
+    Object.assign(store.logs[0], { status: "sent", metaConversionDestinationId: "destination_pixel_b" });
+    store.receivePhrase({ id: "rule_bridge", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule_bridge")).resolves.toEqual({ status: "materialized" });
+  });
+
+  it("flag on: an organic bridge message (pending_meta_context) never blocks a later ad conversion", async () => {
+    const store = createStore({ overrideFlag: true });
+    await recordBridgeEntry(store); // no ad, no click: stays pending forever
+    expect(store.logs[0]).toMatchObject({ sourceTrigger: "auto_lead", status: "pending_meta_context" });
+    store.receivePhrase({ id: "rule_after_ad", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule_after_ad")).resolves.toEqual({ status: "materialized" });
+    expect(sentLogs(store, "LeadSubmitted").map((log) => log.sourceTrigger)).toContain(
+      "inbound_webhook:uazapi:message_phrase",
+    );
+  });
+
+  it("flag on: a bridge entry only about to send (ready_to_send, unknown pixel) does not block", async () => {
+    const store = createStore({ overrideFlag: true });
+    await recordBridgeEntry(store, "ad_1");
+    expect(store.logs[0]).toMatchObject({ status: "ready_to_send" });
+    store.receivePhrase({ id: "rule_bridge", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule_bridge")).resolves.toEqual({ status: "materialized" });
+  });
+
+  it("explicit flag off (LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED=false): the bridge entry is not looked at", async () => {
+    const store = createStore({ overrideFlag: false });
+    await recordBridgeEntry(store, "ad_1");
+    store.logs[0].status = "sent";
+    store.receivePhrase({ id: "rule_bridge", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule_bridge")).resolves.toEqual({ status: "materialized" });
+  });
+
+  for (const provider of ["uazapi", "waha"] as const)
+    it(`${provider} bridge entry deferred: receipt not_eligible and the rule sends it`, async () => {
+      const store = createStore();
+      await store.conversions.recordAutomaticLeadSubmitted({
+        workspaceId,
+        leadId: leadA.id,
+        phoneHash: hashPhoneIdentity(leadA.phone)!,
+        adId: "ad_1",
+        ctwaClid: "ctwa_lead_a",
+        deferToProviderRule: {
+          ruleIds: ["rule_all_numbers"],
+          provider,
+          channelId: "channel_n1",
+          connectionId: "connection_channel_n1",
+        },
+      });
+      expect(store.logs[0]).toMatchObject({
+        sourceTrigger: "auto_lead",
+        status: "not_eligible",
+        errorCode: "lead_submitted_deferred_to_rule",
+        sourcePayload: expect.objectContaining({
+          provider,
+          leadSubmittedDeferredToRuleIds: ["rule_all_numbers"],
+        }),
+      });
+      store.receivePhrase({ id: "rule_bridge", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+      await expect(store.process("rule_bridge")).resolves.toEqual({ status: "materialized" });
+      expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+    });
+
+  it("reports count ONE conversation (the entry receipt), never the rule's LeadSubmitted", async () => {
+    const store = createStore();
+    await store.recordEntry({ eventKey: "msg_a", channelId: "channel_n1", lead: leadA, deferToProviderRule: deferred });
+    store.receivePhrase({ id: "rule_fires", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted", occurredAt: recent(5) });
+    await store.process("rule_fires");
+    expect(store.logs).toHaveLength(2);
+    const result = new ReportingMetricsEngine().calculate({
+      events: store.logs.map((log) => ({ ...log, eventOccurredAt: new Date(log.eventOccurredAt) })),
+      insight: { spendCents: 0, metaConversationsStarted: 1 },
+      leads: [],
+      scope: {},
+    });
+    expect(result.adConversationEvents).toBe(1);
+    expect(result.repeatConversationLeads).toBe(0);
+  });
+
+  it("no deferral answered (deferToProviderRule null): the entry sends", async () => {
+    const store = createStore();
+    await expect(
+      store.recordEntry({ eventKey: "msg_a", channelId: "channel_n1", lead: leadA, deferToProviderRule: null }),
+    ).resolves.toMatchObject({ status: "created", deliveryStatus: "ready_to_send" });
+    store.receivePhrase({ id: "rule", channelId: "channel_n1", lead: leadA, eventName: "LeadSubmitted" });
+    await expect(store.process("rule")).resolves.toEqual({ status: "duplicate" });
+    expect(sentLogs(store, "LeadSubmitted").map((log) => log.sourceTrigger)).toEqual([
+      "inbound_webhook:uazapi",
+    ]);
   });
 });

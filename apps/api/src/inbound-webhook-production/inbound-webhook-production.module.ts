@@ -9,6 +9,7 @@ import { ConversionEventsModule } from "../conversion-events/conversion-events.m
 import { ConversionRulesModule } from "../conversion-rules/conversion-rules.module";
 import { InboundWebhooksModule } from "../inbound-webhooks/inbound-webhooks.module";
 import { LeadsModule } from "../leads/leads.module";
+import { LicenseClientModule } from "../licensing-client/license-client.module";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
 import { InboundWebhookProductionProcessor } from "./inbound-webhook-production.processor";
 import { InboundWebhookProductionService } from "./inbound-webhook-production.service";
@@ -23,6 +24,7 @@ import { PurchaseReviewsService } from "./purchase-reviews.service";
     RuntimeModule,
     QueueModule,
     LeadsModule,
+    LicenseClientModule,
     ConversionEventsModule,
     ConversionRulesModule,
     InboundWebhooksModule,

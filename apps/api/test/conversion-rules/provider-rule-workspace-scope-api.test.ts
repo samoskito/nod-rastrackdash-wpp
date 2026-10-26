@@ -1608,6 +1608,8 @@ describe("provider rules API: Conversões screen support", () => {
     );
 
     expect(capabilities.workspaceScopeEnabled).toBe(true);
+    // Porte do SaaS #155: "Lead recebido pela regra" is on by default in the nod.
+    expect(capabilities.leadSubmittedRuleOverrideEnabled).toBe(true);
     expect(
       Object.fromEntries(
         capabilities.origins.map((origin) => [

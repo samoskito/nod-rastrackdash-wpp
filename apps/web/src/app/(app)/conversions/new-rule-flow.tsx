@@ -30,6 +30,7 @@ import {
   paytEventLabel,
   ruleEventLabelForOrigin,
 } from "./event-copy";
+import { LeadSubmittedOverrideNotice } from "./lead-submitted-override";
 import { conversionsLicenseLockedNote } from "./license-lock";
 import { NumbersWithoutRules } from "./numbers-without-rules";
 import { MessagePhraseFields } from "./message-phrase-fields";
@@ -789,6 +790,12 @@ function EventStep({
         <span className="micro-label">{accentEventCopy(metadata.label)}</span>
         <small>{accentEventCopy(metadata.description)}</small>
       </div>
+      {/* Produção direta: toda regra nova já nasce enviando. */}
+      <LeadSubmittedOverrideNotice
+        enabled={capabilities?.leadSubmittedRuleOverrideEnabled === true}
+        eventName={definition.lockedEvent ?? draft.eventName}
+        mode="production"
+      />
       {draft.origin === "automation_umbler" ? (
         <p className="action-note">
           A automação da Umbler reconhece Lead qualificado e Compra realizada.

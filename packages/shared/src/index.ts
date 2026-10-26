@@ -26,3 +26,4 @@ export * from "./lead-labels";
 export * from "./currency";
 export * from "./schemas/currency-settings";
 export * from "./schemas/integration-endpoints";
+export * from "./schemas/manual-conversions";

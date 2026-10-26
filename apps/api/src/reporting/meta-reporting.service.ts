@@ -93,14 +93,20 @@ import {
   WhatsappCampaignClassifierService,
   type WhatsappClassification,
 } from "./whatsapp-campaign-classifier.service";
+import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
+import { leadSubmittedRuleOverrideEnabled } from "../config/lead-submitted-rule-override-flag";
 import {
+  applyDeferredLeadNovoTiming,
   chunked,
+  isRuleOriginatedTrigger,
   leadFirstContactBeforeWhere,
   leadFirstContactInRangeWhere,
   loadLeadIdsByPhoneHash,
-  paidLeadSubmittedEventWhere,
+  paidLeadSubmittedWhereFor,
+  resolveRuleOverrideReportMode,
   phoneHashesWithoutLeadId,
   withFirstContactAttribution,
+  type LeadPeriodRange,
 } from "../leads/lead-cohort";
 import {
   ReportingMetricsEngine,
@@ -108,6 +114,8 @@ import {
   type ReportingMetricLead,
   type ReportingMetricScope,
 } from "./reporting-metrics.engine";
+import { readManualSourcePayload } from "../leads/manual-conversion-payload";
+import { dedupeLocalManualLifetimeEvents } from "./manual-conversion-report-dedupe";
 import {
   sortReportRowsByCurrency,
   type SortableReportRow,
@@ -343,6 +351,22 @@ type ConversionAuditFilters = {
   source?: ConversionAuditSourceDto;
 };
 
+/**
+ * Sender statuses outside conversionEventLogStatusSchema (CTWA/manual
+ * dispatch fence): always shown in Portuguese on Eventos Meta.
+ */
+const SENDER_STATUS_TEXT: Record<string, { label: string; detail: string }> = {
+  dispatching: {
+    label: "Enviando",
+    detail: "Envio à Meta em andamento",
+  },
+  delivery_unknown: {
+    label: "Envio não confirmado",
+    detail:
+      "Não foi possível confirmar se a Meta recebeu; sem reenvio automático",
+  },
+};
+
 type ConversionAuditEventRecord = {
   id: string;
   eventName: string;
@@ -365,6 +389,8 @@ type ConversionAuditEventRecord = {
   valueSource: "actual" | "configured_average" | "manual" | null;
   /** ready_to_send stuck > 10 min is retryable (7ac17df7). */
   createdAt?: Date | null;
+  /** Read for manual conversions ("Manual por <usuário>"). */
+  sourcePayload?: unknown;
 };
 
 type ConversionAuditEventDetailRecord = ConversionAuditEventRecord & {
@@ -471,6 +497,9 @@ export class MetaReportingService {
     @Optional()
     @Inject(ExchangeRateService)
     private readonly exchangeRates?: ExchangeRateService,
+    @Optional()
+    @Inject(RUNTIME_ENV)
+    private readonly env?: RuntimeEnv,
   ) {}
 
   async syncWorkspaceMetaStructure(
@@ -2006,7 +2035,9 @@ export class MetaReportingService {
           (event) =>
             event.eventName === "LeadSubmitted" &&
             event.status !== "skipped" &&
-            event.businessSource?.trim().toLowerCase() !== "organic",
+            event.businessSource?.trim().toLowerCase() !== "organic" &&
+            // A rule-sent LeadSubmitted is not a conversation (tarefa 20).
+            !isRuleOriginatedTrigger(event.sourceTrigger),
         ),
       ),
     );
@@ -2302,6 +2333,7 @@ export class MetaReportingService {
           valueCents: true,
           valueSource: true,
           createdAt: true,
+          sourcePayload: true,
         },
       }) as Promise<ConversionAuditEventRecord[]>,
       this.prisma.conversionEventLog.groupBy({
@@ -4321,6 +4353,9 @@ export class MetaReportingService {
       return Promise.resolve([]);
     }
 
+    // Tarefa 20: the origin is read only in the rule override mode, where a
+    // rule-sent LeadSubmitted is not a conversation (engine + filters).
+    const ruleOverride = await this.ruleOverrideMode(input);
     const events = await this.prisma.conversionEventLog.findMany({
       where: {
         workspaceId: input.workspaceId,
@@ -4330,6 +4365,10 @@ export class MetaReportingService {
       },
       select: {
         id: true,
+        // Always read (tarefa 21: manual logs); exposed to the engine only in
+        // the rule override mode or for a manual log (see the map below).
+        sourceTrigger: true,
+        metaConversionDestinationId: true,
         leadId: true,
         phoneHash: true,
         customerIdentityKey: true,
@@ -4353,11 +4392,25 @@ export class MetaReportingService {
       },
     });
 
-    return events.map(({ purchaseValueAdjustments, ...event }) => ({
-      ...event,
-      valueCents:
-        purchaseValueAdjustments?.[0]?.effectiveValueCents ?? event.valueCents,
-    })) as ConversionEventRecord[];
+    // Tarefa 21: a local-only manual once-per-lead event and the automation
+    // one of the same lead/pixel count once (dedupeLocalManualLifetimeEvents).
+    return dedupeLocalManualLifetimeEvents(events).map(
+      ({ purchaseValueAdjustments, metaConversionDestinationId, ...event }) => {
+        void metaConversionDestinationId;
+        return {
+          ...event,
+          // Today's semantics: the origin only matters in the rule override
+          // mode, except a manual LeadSubmitted, never a conversation.
+          sourceTrigger:
+            ruleOverride || event.sourceTrigger === "manual_conversion"
+              ? event.sourceTrigger
+              : undefined,
+          valueCents:
+            purchaseValueAdjustments?.[0]?.effectiveValueCents ??
+            event.valueCents,
+        };
+      },
+    ) as ConversionEventRecord[];
   }
 
   /**
@@ -4414,11 +4467,42 @@ export class MetaReportingService {
         createdAt: true,
       },
     })) as LeadRecord[];
+    // Tarefa 20 (override mode only): a lead whose entry LeadSubmitted was
+    // deferred to a provider rule is a lead novo when the rule sends it
+    // (shared helper, same rule as the Leads page).
+    const range = this.leadPeriodRange(input);
+    const ruleOverride = await this.ruleOverrideMode(input);
+    const periodLeads = range && ruleOverride
+      ? await applyDeferredLeadNovoTiming(
+          this.prisma,
+          input.workspaceId,
+          leads,
+          range,
+          async (ids) =>
+            (await this.prisma.lead.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                id: { in: ids },
+              },
+              select: {
+                id: true,
+                phoneHash: true,
+                campaignId: true,
+                adSetId: true,
+                adId: true,
+                ctwaClid: true,
+                firstMessageAt: true,
+                createdAt: true,
+              },
+            })) as LeadRecord[],
+        )
+      : leads;
     // Same first-contact rule as the Leads page filters (shared helper).
     const resolved = await withFirstContactAttribution(
       this.prisma,
       input.workspaceId,
-      leads,
+      periodLeads,
+      { ruleOverride },
     );
 
     return scoped
@@ -4433,7 +4517,7 @@ export class MetaReportingService {
     const events = (await this.prisma.conversionEventLog.findMany({
       where: {
         workspaceId: input.workspaceId,
-        ...paidLeadSubmittedEventWhere,
+        ...paidLeadSubmittedWhereFor(await this.ruleOverrideMode(input)),
         leadId: { not: null },
         ...this.metricScopeWhere(scope),
         ...this.eventPeriodWhere(input),
@@ -4490,7 +4574,7 @@ export class MetaReportingService {
     const events = (await this.prisma.conversionEventLog.findMany({
       where: {
         workspaceId: input.workspaceId,
-        ...paidLeadSubmittedEventWhere,
+        ...paidLeadSubmittedWhereFor(await this.ruleOverrideMode(input)),
         ...this.metricScopeWhere(scope),
         ...this.eventPeriodWhere(input),
       },
@@ -4878,13 +4962,52 @@ export class MetaReportingService {
   }
 
   private leadPeriodWhere(input: { since?: string; until?: string }) {
+    const range = this.leadPeriodRange(input);
+
+    return range ? leadFirstContactInRangeWhere(range) : {};
+  }
+
+  /**
+   * Tarefa 20 report mode, memoized for a few seconds per workspace+period
+   * (one report asks it several times). Flag off: false without any query.
+   */
+  private readonly ruleOverrideModes = new Map<
+    string,
+    { at: number; value: Promise<boolean> }
+  >();
+
+  private ruleOverrideMode(input: {
+    workspaceId: string;
+    since?: string;
+    until?: string;
+  }): Promise<boolean> {
+    const env = this.env ?? process.env;
+    // Same parser as the rules: on by default (produção direta).
+    if (!leadSubmittedRuleOverrideEnabled(env)) return Promise.resolve(false);
+    const key = `${input.workspaceId}|${input.since ?? ""}|${input.until ?? ""}`;
+    const now = Date.now();
+    const cached = this.ruleOverrideModes.get(key);
+    if (cached && now - cached.at < 30_000) return cached.value;
+    if (this.ruleOverrideModes.size > 500) this.ruleOverrideModes.clear();
+    const value = resolveRuleOverrideReportMode(
+      this.prisma,
+      input.workspaceId,
+      this.leadPeriodRange(input),
+      env,
+    ).catch(() => false);
+    this.ruleOverrideModes.set(key, { at: now, value });
+    return value;
+  }
+
+  private leadPeriodRange(input: {
+    since?: string;
+    until?: string;
+  }): LeadPeriodRange | null {
     if (!input.since || !input.until) {
-      return {};
+      return null;
     }
 
-    return leadFirstContactInRangeWhere(
-      dateRangeInTimezone(input.since, input.until, this.reportTimezone()),
-    );
+    return dateRangeInTimezone(input.since, input.until, this.reportTimezone());
   }
 
   private conversionAuditEventDto(
@@ -4913,10 +5036,20 @@ export class MetaReportingService {
         eventLabels.get(event.eventName) ??
         this.conversionEventLabel(event.eventName),
       deliveryState,
-      statusLabel: this.conversionAuditStatusLabel(event.status),
-      statusDetail: this.conversionAuditStatusDetail(event.status, event),
+      // Tarefa 20: entry receipt deferred to the provider rule (never queued).
+      ...(event.status === "not_eligible" &&
+      event.errorCode === "lead_submitted_deferred_to_rule"
+        ? {
+            statusLabel: "Adiado para a regra",
+            statusDetail:
+              "Entrada registrada; o Lead recebido vai para a Meta quando a regra for acionada",
+          }
+        : {
+            statusLabel: this.conversionAuditStatusLabel(event.status),
+            statusDetail: this.conversionAuditStatusDetail(event.status, event),
+          }),
       source,
-      sourceLabel: this.conversionAuditSourceLabel(source),
+      sourceLabel: this.conversionAuditSourceLabel(source, event.sourcePayload),
       leadId: lead?.id ?? null,
       leadName: lead?.name ?? null,
       phoneDisplay: lead?.phoneDisplay ?? null,
@@ -5308,13 +5441,23 @@ export class MetaReportingService {
       return { sourceTrigger: "manual_test" };
     }
 
+    if (source === "manual") {
+      return { sourceTrigger: "manual_conversion" };
+    }
+
     return {
       NOT: {
         OR: [
           { sourceTrigger: { startsWith: "external_mysql:" } },
           {
             sourceTrigger: {
-              in: ["keyword", "whatsapp_label", "auto_lead", "manual_test"],
+              in: [
+                "keyword",
+                "whatsapp_label",
+                "auto_lead",
+                "manual_test",
+                "manual_conversion",
+              ],
             },
           },
         ],
@@ -5330,9 +5473,9 @@ export class MetaReportingService {
       ConversionEventLogStatusDto[]
     > = {
       sent: ["sent"],
-      queued: ["ready_to_send", "queued"],
+      queued: ["ready_to_send", "queued", "dispatching" as ConversionEventLogStatusDto],
       blocked: ["pending_meta_context", "pending_value", "not_configured"],
-      failed: ["error"],
+      failed: ["error", "delivery_unknown" as ConversionEventLogStatusDto],
       not_eligible: ["not_eligible"],
       shadow: ["shadow_observed"],
       historical: ["imported"],
@@ -5390,7 +5533,7 @@ export class MetaReportingService {
       skipped: "Descartado",
     };
 
-    return labels[status];
+    return labels[status] ?? SENDER_STATUS_TEXT[status]?.label ?? "Status desconhecido";
   }
 
   private conversionAuditStatusDetail(
@@ -5413,7 +5556,7 @@ export class MetaReportingService {
       skipped: "Descartado pelas regras de validação",
     };
 
-    return details[status];
+    return details[status] ?? SENDER_STATUS_TEXT[status]?.detail ?? "Status sem descrição";
   }
 
   private conversionAuditNotEligibleDetail(
@@ -5445,15 +5588,27 @@ export class MetaReportingService {
       return "manual_test";
     }
 
+    if (sourceTrigger === "manual_conversion") {
+      return "manual";
+    }
+
     return "other";
   }
 
-  private conversionAuditSourceLabel(source: ConversionAuditSourceDto): string {
+  private conversionAuditSourceLabel(
+    source: ConversionAuditSourceDto,
+    sourcePayload?: unknown,
+  ): string {
+    if (source === "manual") {
+      const author = readManualSourcePayload(sourcePayload)?.createdByName;
+      return author ? `Manual por ${author}` : "Manual";
+    }
     const labels: Record<ConversionAuditSourceDto, string> = {
       external_integration: "Integração externa",
       whatsapp_automation: "Automação do WhatsApp",
       system: "Regra automática",
       manual_test: "Teste manual",
+      manual: "Manual",
       other: "Outra origem",
     };
 
@@ -5488,6 +5643,21 @@ export class MetaReportingService {
       EventValueMissing: "Valor do evento não configurado",
       MetaCapiRejected: "A Meta recusou o evento",
       MetaCapiNetworkError: "Falha de comunicação com a Meta",
+      ManualConversionDispatchInterrupted:
+        "Envio da conversão manual interrompido: confira no Gerenciador de Eventos (não é reenviada sozinha)",
+      // Porte do SaaS #155: entry receipt whose LeadSubmitted the rule sends.
+      lead_submitted_deferred_to_rule:
+        "Lead recebido adiado: será enviado pela regra",
+      // Porte do SaaS #158: manual lead conversion.
+      ManualConversionCanceled: "Conversão manual cancelada antes do envio",
+      ManualConversionLocalOnly:
+        "Conversão manual registrada só no painel (não enviada à Meta)",
+      ManualConversionOutsideMetaWindow:
+        "Conversão manual com mais de 7 dias: registrada só no painel",
+      ManualConversionNoDestination:
+        "Conversão manual sem pixel resolvido: registrada só no painel",
+      ManualConversionConnectionInactive:
+        "Conversão manual de número com a conexão WhatsApp desativada: registrada só no painel",
     };
 
     return errors[errorCode] ?? "Falha no processamento do evento";

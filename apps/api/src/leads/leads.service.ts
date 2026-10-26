@@ -1,9 +1,12 @@
+import { manualConversionSummary } from "./manual-conversion-payload";
 import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import {
   leadLifecycleLabel,
   leadSourceLabel,
@@ -22,11 +25,13 @@ import {
 import { dateRangeInTimezone } from "../external-data/external-event-policy";
 import {
   chunked,
+  deferredLeadNovoPeriodWhere,
   firstContactScopeWhere,
   leadFirstContactBeforeWhere,
   leadFirstContactInRangeWhere,
   loadLeadIdsByPhoneHash,
-  paidLeadSubmittedEventWhere,
+  paidLeadSubmittedWhereFor,
+  resolveRuleOverrideReportMode,
   phoneHashesWithoutLeadId,
   repeatConversationLeadIds,
   withFirstContactAttribution,
@@ -83,6 +88,7 @@ type ConversionLogRecord = {
   eventOccurredAt: Date;
   sentAt?: Date | null;
   createdAt: Date;
+  sourcePayload?: unknown;
 };
 
 type CampaignRecord = {
@@ -145,7 +151,12 @@ export type UpsertWhatsappLeadInput = {
 
 @Injectable()
 export class LeadsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(RUNTIME_ENV)
+    private readonly env: RuntimeEnv = process.env,
+  ) {}
 
   async listLeads(
     workspaceId: string,
@@ -315,6 +326,19 @@ export class LeadsService {
     query: Omit<LeadListQueryDto, "page" | "pageSize" | "limit">,
   ) {
     const conversationPeriodRange = this.conversationPeriodRange(query);
+    // Porte do SaaS #155: report mode (flag on + deferred receipts around the
+    // period). nod: the flag is on by default, so the lookup only runs when
+    // it can change the result (a period or a campaign/ad set/ad drill-down);
+    // a plain list never pays the extra query.
+    const ruleOverride =
+      conversationPeriodRange || query.campaignId || query.adSetId || query.adId
+        ? await resolveRuleOverrideReportMode(
+            this.prisma,
+            workspaceId,
+            conversationPeriodRange,
+            this.env,
+          )
+        : false;
     const eventLeadIds = query.eventName
       ? await this.leadIdsForEvent(workspaceId, query.eventName)
       : null;
@@ -364,7 +388,11 @@ export class LeadsService {
           const value = query[field];
 
           return value
-            ? [firstContactScopeWhere(this.prisma, workspaceId, field, value)]
+            ? [
+                firstContactScopeWhere(this.prisma, workspaceId, field, value, {
+                  ruleOverride,
+                }),
+              ]
             : [];
         },
       ),
@@ -374,16 +402,31 @@ export class LeadsService {
     // "Voltaram no periodo" needs a period start: without it nobody is "before".
     // "Mais de uma conversa" counts conversations inside a period, new or not.
     const baseFilter = returning
-      ? await this.returningLeadFilter(workspaceId, conversationPeriodRange)
+      ? await this.returningLeadFilter(
+          workspaceId,
+          conversationPeriodRange,
+          ruleOverride,
+        )
       : repeat
         ? await this.repeatConversationLeadFilter(
             workspaceId,
             conversationPeriodRange,
+            ruleOverride,
           )
         : null;
+    // Leads novos: first contact in the period, except leads whose entry
+    // LeadSubmitted was deferred to a provider rule, which are new on the day
+    // the rule sent it (tarefa 20, same helper as the reports).
+    // Flag off (or no deferred receipt around the period): no extra query.
     const periodFilter =
       conversationPeriodRange && !returning && !repeat
-        ? leadFirstContactInRangeWhere(conversationPeriodRange)
+        ? ((ruleOverride
+            ? await deferredLeadNovoPeriodWhere(
+                this.prisma,
+                workspaceId,
+                conversationPeriodRange,
+              )
+            : null) ?? leadFirstContactInRangeWhere(conversationPeriodRange))
         : null;
 
     if (
@@ -428,6 +471,7 @@ export class LeadsService {
   private async returningLeadFilter(
     workspaceId: string,
     range: LeadPeriodRange | null,
+    ruleOverride = false,
   ) {
     if (!range?.gte) {
       return null;
@@ -436,7 +480,7 @@ export class LeadsService {
     const events = (await this.prisma.conversionEventLog.findMany({
       where: {
         workspaceId,
-        ...paidLeadSubmittedEventWhere,
+        ...paidLeadSubmittedWhereFor(ruleOverride),
         eventOccurredAt: range,
       },
       select: { leadId: true, phoneHash: true },
@@ -496,6 +540,7 @@ export class LeadsService {
   private async repeatConversationLeadFilter(
     workspaceId: string,
     range: LeadPeriodRange | null,
+    ruleOverride = false,
   ) {
     if (!range) {
       return null;
@@ -504,7 +549,7 @@ export class LeadsService {
     const events = (await this.prisma.conversionEventLog.findMany({
       where: {
         workspaceId,
-        ...paidLeadSubmittedEventWhere,
+        ...paidLeadSubmittedWhereFor(ruleOverride),
         eventOccurredAt: range,
       },
       select: { leadId: true, phoneHash: true },
@@ -782,6 +827,7 @@ export class LeadsService {
             eventOccurredAt: true,
             sentAt: true,
             createdAt: true,
+            sourcePayload: true,
           },
         }) as Promise<ConversionLogRecord[]>,
         this.prisma.webhookLog.findMany({
@@ -893,6 +939,7 @@ export class LeadsService {
         occurredAt: event.eventOccurredAt.toISOString(),
         sentAt: event.sentAt?.toISOString() ?? null,
         createdAt: event.createdAt.toISOString(),
+        manual: manualConversionSummary(event),
       })),
       webhookEvents: webhookLogs.map((event) => ({
         id: event.id,

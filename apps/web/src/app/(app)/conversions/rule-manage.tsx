@@ -31,6 +31,7 @@ import {
   type RuleEditDraft,
 } from "./rule-edit";
 import { RuleEndpoint } from "./rule-endpoint";
+import { LeadSubmittedOverrideNotice } from "./lead-submitted-override";
 import {
   ProductFilterPicker,
   type SingleUrlActions,
@@ -494,6 +495,11 @@ function RuleEditForm({
         <p className="action-note">
           Para trocar a origem ou o evento, crie uma regra nova e exclua esta.
         </p>
+        <LeadSubmittedOverrideNotice
+          enabled={capabilities?.leadSubmittedRuleOverrideEnabled === true}
+          eventName={rule.conversionRule.eventName}
+          mode={rule.mode}
+        />
       </fieldset>
 
       <ScopeStep

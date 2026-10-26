@@ -7,6 +7,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { executionReasonLabel } from "../settings/provider-conversion-labels";
+import {
+  isDeferredToRuleReason,
+  leadSubmittedOverrideCopy,
+  leadsAwaitingRuleLabel,
+} from "./lead-submitted-override";
 import type {
   ConversionScreenActionResult,
   ProviderConversionRuleActionResult,
@@ -163,6 +168,17 @@ export function RuleExecutions({
           <dd>{audit.summary.blocked + audit.summary.failed}</dd>
         </div>
       </dl>
+      {audit.leadsAwaitingRule &&
+      leadsAwaitingRuleLabel(audit.leadsAwaitingRule) ? (
+        <div
+          className="feedback-banner warn"
+          role="status"
+          data-lead-submitted-override="awaiting"
+        >
+          <strong>{leadsAwaitingRuleLabel(audit.leadsAwaitingRule)}</strong>
+          <span>{leadSubmittedOverrideCopy.awaitingHint}</span>
+        </div>
+      ) : null}
       <BlockedReprocessPanel
         summary={audit.blockedReprocess}
         canManage={canManage && Boolean(reprocessAction)}
@@ -177,7 +193,10 @@ export function RuleExecutions({
       ) : (
         <ul className="conversion-executions-list" role="list">
           {audit.items.map((item) => {
-            const status = statusLabels[item.status];
+            // Tarefa 20: deferred entry receipt is not queued.
+            const status = isDeferredToRuleReason(item.reasonCode)
+              ? { label: leadSubmittedOverrideCopy.deferredChip, tone: "neutral" as const }
+              : statusLabels[item.status];
             return (
               <li key={item.executionId}>
                 <div className="conversion-executions-head">

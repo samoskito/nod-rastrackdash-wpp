@@ -52,6 +52,20 @@ function stateChipClass(state: ConversionAuditDeliveryStateDto): string {
   return "event-chip";
 }
 
+/** Reasons the screen names itself (older APIs answer a generic text). */
+const auditReasonLabels: Record<string, string> = {
+  // Porte do SaaS #155: entry receipt; the provider rule sends the LeadSubmitted.
+  lead_submitted_deferred_to_rule:
+    "Lead recebido adiado: será enviado pela regra",
+};
+
+export function auditReasonLabel(
+  reasonCode: string | null | undefined,
+  reason: string,
+): string {
+  return (reasonCode && auditReasonLabels[reasonCode]) || reason;
+}
+
 function missingFieldLabel(field: string): string {
   const labels: Record<string, string> = {
     phone_hash: "Telefone identificável",
@@ -63,6 +77,34 @@ function missingFieldLabel(field: string): string {
   };
 
   return labels[field] ?? field;
+}
+
+/**
+ * Tarefa 21: author and note of a manual conversion, shown on top of the
+ * "Entrada" tab (the note stays in the panel; it is never sent to Meta).
+ */
+export function ManualConversionNote({ payload }: { payload: unknown }) {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    (payload as Record<string, unknown>).processingMode !== "manual_conversion"
+  )
+    return null;
+  const record = payload as Record<string, unknown>;
+  const author =
+    typeof record.createdByName === "string" ? record.createdByName : null;
+  const note = typeof record.note === "string" ? record.note : null;
+  const orderRef = typeof record.orderRef === "string" ? record.orderRef : null;
+  return (
+    <section className="event-audit-manual-note">
+      <span className="micro-label">
+        Registro manual{author ? ` por ${author}` : ""}
+      </span>
+      {orderRef ? <p>Pedido/venda: {orderRef}</p> : null}
+      <p>{note ?? "Sem observação."}</p>
+    </section>
+  );
 }
 
 function JsonSnapshot({
@@ -344,7 +386,9 @@ export function EventAuditDetails({
                     {detail.reason ? (
                       <div className="event-audit-reason">
                         <span className="micro-label">Motivo técnico</span>
-                        <strong>{detail.reason}</strong>
+                        <strong>
+                          {auditReasonLabel(detail.reasonCode, detail.reason)}
+                        </strong>
                         {detail.reasonCode ? (
                           <code>{detail.reasonCode}</code>
                         ) : null}
@@ -398,7 +442,12 @@ export function EventAuditDetails({
                   </section>
                 ) : null}
                 {activeTab === "source" ? (
-                  <JsonSnapshot snapshot={detail.sourceSnapshot} />
+                  <>
+                    <ManualConversionNote
+                      payload={detail.sourceSnapshot.payload}
+                    />
+                    <JsonSnapshot snapshot={detail.sourceSnapshot} />
+                  </>
                 ) : null}
                 {activeTab === "request" ? (
                   <JsonSnapshot snapshot={detail.metaRequest} />

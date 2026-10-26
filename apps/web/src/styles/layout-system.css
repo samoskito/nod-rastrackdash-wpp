@@ -882,52 +882,48 @@ body {
   outline-offset: 2px;
 }
 
-/* Short definition under the label, inside the tile so it never overflows. */
+/*
+ * Short definition under the label, IN the tile flow: when open it pushes the
+ * number down instead of covering it, and wraps inside the tile width, so it
+ * never overlaps a value nor overflows the card edge (longer texts too).
+ */
+.overview-leads-block-item dt {
+  flex-wrap: wrap;
+}
+
 .overview-leads-hint-text {
-  position: absolute;
-  z-index: 5;
-  top: 40px;
-  right: 10px;
-  left: 10px;
+  display: none;
+  flex: 1 0 100%;
+  box-sizing: border-box;
+  max-width: 100%;
+  margin-top: 4px;
   padding: 10px 12px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: var(--graphite-850);
-  box-shadow: var(--shadow);
   color: var(--ink-soft);
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
   text-transform: none;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+  overflow-wrap: anywhere;
 }
 
-.overview-leads-block-item:first-child .overview-leads-hint-text {
-  left: 0;
-}
-
+/* The wrapper only groups button + text for the outside-tap check. */
 .overview-leads-hint-wrap {
-  display: inline-flex;
-  flex: 0 0 auto;
+  display: contents;
 }
 
 /* Tap toggles aria-expanded (iOS never hovers/focuses a tapped button). */
 .overview-leads-hint[aria-expanded="true"] + .overview-leads-hint-text,
 .overview-leads-hint:focus-visible + .overview-leads-hint-text {
-  opacity: 1;
-  transform: none;
+  display: block;
 }
 
 @media (hover: hover) {
   .overview-leads-hint:hover + .overview-leads-hint-text {
-    opacity: 1;
-    transform: none;
+    display: block;
   }
 }
 
@@ -935,12 +931,6 @@ body {
 .daily-bar.returning {
   fill: var(--cyan);
   background: var(--cyan);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .overview-leads-hint-text {
-    transition: none;
-  }
 }
 
 .conversion-funnel-heading {
@@ -6216,6 +6206,19 @@ body {
   display: none;
 }
 
+/* "Substitui envio na entrada": stays inside the Evento cell and wraps. */
+.conversion-rule-cell .tag {
+  max-width: 100%;
+  min-height: 0;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .conversion-scope-all {
   color: var(--mint);
   font-weight: 800;
@@ -7001,7 +7004,10 @@ body {
   width: 100%;
 }
 
-@media (max-width: 1100px) {
+/* The fixed sidebar eats ~280px, so 1480px of window is ~1200px of content:
+   below that the 5-column row is too tight (badge/actions overlap or clip).
+   Switch to the card layout: facts in 3 columns, actions on their own line. */
+@media (max-width: 1480px) {
   .conversion-rule-head {
     display: none;
   }

@@ -7,9 +7,56 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off.
 
 ### Added
+
+- **Fase 6.2a — "Lead recebido" sent by the rule and manual conversion on the
+  lead (API, shared and web; no migration)**. Ported from the SaaS (`4d74d303`
+  #155, `2e328e97` #156, `be599f49` #158 and the #159 hunk of
+  `lead-submitted-rule-override.ts` from `42ccbc7c`).
+  - "Lead recebido pela regra" (#155): an active, sending provider rule with
+    the LeadSubmitted event (phrase, catalog or automation) that covers the
+    entry number makes the CTWA entry write a non-sending receipt
+    (`not_eligible`, `lead_submitted_deferred_to_rule`, proof of origin and
+    conversation in the reports) and the rule sends the LeadSubmitted when it
+    fires, once per lead and pixel (lifetime guard, now also covering the
+    Uazapi BYO/WAHA `auto_lead` entry). Fail-closed towards the entry send.
+    nod: `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED` is **on by default**
+    (production direct; validated in SaaS production) with one parser
+    (`config/lead-submitted-rule-override-flag.ts`) shared by every mirror
+    (rules, lead cohort, reporting, lifetime guard, capabilities); the SaaS
+    seat gate becomes the usable license plus, for bridged numbers, the
+    WhatsApp connection `active`; the deferral is also asked on the WAHA
+    bridge entry, on the Meta Cloud (and other non-Unnichat) production path
+    and on the student replay. Reports count the entry receipt as the
+    conversation and make a deferred lead "novo" on the day the rule sends.
+    Screens: "Substitui envio na entrada" badge, notice on the rule form,
+    "Adiado para a regra" on the deferred entry in Eventos Meta (the
+    Executions/Received events chip is kept for parity with the SaaS), "N
+    leads aguardando a regra" (a manual Lead recebido also stops the wait)
+    and the Overview texts, shown when the API reports the flag on
+    (`GET /conversion-rules/providers/capabilities`). Rules with LeadSubmitted
+    exist only on Uazapi BYO, WAHA, Umbler and Unnichat numbers; Meta Cloud,
+    Gupshup and Data Crazy entries keep sending (the hook on their production
+    path is fail-safe). The leads list only runs the report-mode lookup with a
+    period or a campaign/ad set/ad filter.
+  - Rules list without overlap on medium windows (#156, CSS).
+  - Manual conversion on the lead (#158): owners/admins register any catalog
+    event from the lead detail (`POST /leads/:leadId/manual-conversions`,
+    `/preview`, `/:logId/cancel`); destination resolved like the automations
+    (lead's ad route for Uazapi, WAHA, Meta Cloud and webhook leads; CTWA
+    page/pixel proof for Unnichat); once-per-lead events reuse the rule
+    `event_id` (a QualifiedLead phrase rule plus a manual QualifiedLead is one
+    Meta event); Purchase with order number deduped against Payt (extension
+    point `leads/manual-conversion-sales-platforms.ts` for Braip, Hotmart and
+    Yampi in 6.5–6.7); ±24h confirmation; cancel before sending; stuck
+    dispatch recovery; rate limit 30/hour per user. nod: the SaaS "sem vaga" /
+    "número desconhecido" reasons become `connection_inactive` (bridged
+    number whose WhatsApp connection is not active); the license is enforced
+    by the global guard (423) on every manual-conversion write and the button
+    is disabled while the license is blocked. Replaces nod PR #90 (manual
+    QualifiedLead with another `event_id`), which is not published.
 
 - **Docs for the student AI**: `docs/AI_AGENTS.md` (and `AGENTS.md`) now tell the student Claude/Codex how to handle "update" or "change a variable/flow" requests (follow `docs/setup/update.md`, read the upgrade notes, explain every new or changed variable from `environment.md`). Maintainers must document every change that needs student action in the same commit.
 

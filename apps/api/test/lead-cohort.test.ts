@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  applyDeferredLeadNovoTiming,
+  resolveRuleOverrideReportMode,
   firstContactAttribution,
   firstContactScopeWhere,
   loadLeadIdsByPhoneHash,
@@ -23,12 +25,21 @@ function matches(record: Row, where?: Row): boolean {
       return (value as Row[]).every((item) => matches(record, item));
     if (key === "OR")
       return (value as Row[]).some((item) => matches(record, item));
+    if (key === "NOT")
+      return !(Array.isArray(value) ? value : [value]).some((item) =>
+        matches(record, item as Row),
+      );
 
     const current = record[key];
 
     if (value && typeof value === "object" && !(value instanceof Date)) {
       const condition = value as Row;
       const time = (input: unknown) => new Date(input as Date).getTime();
+
+      if ("endsWith" in condition)
+        return String(current ?? "").endsWith(String(condition.endsWith));
+      if ("startsWith" in condition)
+        return String(current ?? "").startsWith(String(condition.startsWith));
 
       if ("in" in condition)
         return (condition.in as unknown[]).includes(current);
@@ -66,7 +77,11 @@ function fakePrisma(db: { leads: Row[]; events: Row[] }) {
       count: async (args?: { where?: Row }) =>
         db.leads.filter((row) => matches(row, args?.where)).length,
     },
-    conversionEventLog: { findMany: findMany(() => db.events) },
+    conversionEventLog: {
+      findMany: findMany(() => db.events),
+      findFirst: async (args?: { where?: Row }) =>
+        db.events.find((row) => matches(row, args?.where)) ?? null,
+    },
     metaCampaign: {
       findMany: async () => [
         { campaignId: "cmp_a", name: "Campanha A" },
@@ -367,5 +382,222 @@ describe("conversaram mais de uma vez (shared by Leads and reports)", () => {
       "lead_y",
     ]);
     expect(metrics.repeatConversationLeads).toBe(2);
+  });
+});
+
+/**
+ * Tarefa 20: "Conversas por anuncio" counts every entry (deferred receipts
+ * included); "Leads novos" follows the LeadSubmitted actually sent: on entry
+ * by default, on the rule send for a lead whose entry was deferred.
+ */
+describe("leads novos x conversas with the LeadSubmitted rule override", () => {
+  const leadRow = (id: string, phoneHash: string, firstMessageAt: string) => ({
+    id,
+    workspaceId: "workspace_1",
+    name: id,
+    phoneDisplay: null,
+    phoneHash,
+    status: "active",
+    source: "unnichat",
+    labels: [],
+    campaignId: "cmp_a",
+    adSetId: "adset_a",
+    adId: "ad_a",
+    ctwaClid: `clid_${id}`,
+    ctwaSourceUrl: null,
+    ctwaThumbnailUrl: null,
+    firstMessageAt: new Date(firstMessageAt),
+    lastMessageAt: new Date(firstMessageAt),
+    createdAt: new Date(firstMessageAt),
+    updatedAt: new Date(firstMessageAt),
+  });
+
+  /** lead_n: entry sent on 11/10. lead_d: entry deferred on 11/10, rule sent on 13/10. */
+  function overrideDb() {
+    return {
+      leads: [
+        leadRow("lead_n", "phone_n", "2026-10-11T15:00:00.000Z"),
+        leadRow("lead_d", "phone_d", "2026-10-11T16:00:00.000Z"),
+      ] as Row[],
+      events: [
+        leadSubmitted({
+          id: "entry_n",
+          leadId: "lead_n",
+          phoneHash: "phone_n",
+          sourceTrigger: "inbound_webhook:unnichat",
+          campaignId: "cmp_a",
+          adSetId: "adset_a",
+          adId: "ad_a",
+          eventOccurredAt: new Date("2026-10-11T15:00:00.000Z"),
+        }),
+        leadSubmitted({
+          id: "entry_d",
+          leadId: "lead_d",
+          phoneHash: "phone_d",
+          sourceTrigger: "inbound_webhook:unnichat",
+          status: "not_eligible",
+          errorCode: "lead_submitted_deferred_to_rule",
+          campaignId: "cmp_a",
+          adSetId: "adset_a",
+          adId: "ad_a",
+          eventOccurredAt: new Date("2026-10-11T16:00:00.000Z"),
+        }),
+        leadSubmitted({
+          id: "rule_d",
+          leadId: "lead_d",
+          phoneHash: "phone_d",
+          sourceTrigger: "inbound_webhook:unnichat:provider_automation",
+          campaignId: "cmp_a",
+          adSetId: "adset_a",
+          adId: "ad_a",
+          eventOccurredAt: new Date("2026-10-13T12:00:00.000Z"),
+        }),
+      ] as Row[],
+    };
+  }
+  const day = (date: string) => ({
+    gte: new Date(`${date}T03:00:00.000Z`),
+    lte: new Date(
+      new Date(`${date}T03:00:00.000Z`).getTime() + 24 * 3600_000 - 1,
+    ),
+  });
+  const metricEvents = (rows: Row[]) =>
+    rows.map((row) => ({
+      currency: null,
+      valueCents: null,
+      ...row,
+    })) as unknown as ReportingMetricEvent[];
+
+  const flagOn = { LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED: "true" };
+  // nod: the flag is on by default; only an explicit false turns it off.
+  const flagOff = { LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED: "false" };
+
+  it("flag off (explicit false): Leads page is exactly the previous behavior (deferred lead new on the entry day), no extra query", async () => {
+    const prisma = fakePrisma(overrideDb());
+    const findFirst = vi.spyOn(prisma.conversionEventLog, "findFirst");
+    const service = new LeadsService(prisma as never, flagOff);
+    const page = await service.listLeadsPage("workspace_1", {
+      since: "2026-10-11",
+      until: "2026-10-11",
+    });
+    expect(page.items.map((item) => item.id).sort()).toEqual(["lead_d", "lead_n"]);
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it("report mode: on only with the flag AND a deferred receipt around the period", async () => {
+    const db = overrideDb();
+    const range = day("2026-10-13");
+    expect(
+      await resolveRuleOverrideReportMode(fakePrisma(db) as never, "workspace_1", range, flagOff),
+    ).toBe(false);
+    // nod default (variable unset): on.
+    expect(
+      await resolveRuleOverrideReportMode(fakePrisma(db) as never, "workspace_1", range, {}),
+    ).toBe(true);
+    expect(
+      await resolveRuleOverrideReportMode(fakePrisma(db) as never, "workspace_1", range, flagOn),
+    ).toBe(true);
+    db.events = db.events.filter((event) => event.id !== "entry_d");
+    expect(
+      await resolveRuleOverrideReportMode(fakePrisma(db) as never, "workspace_1", range, flagOn),
+    ).toBe(false);
+  });
+
+  it("Leads page: the deferred lead is new on the rule day, not on the entry day", async () => {
+    const service = new LeadsService(fakePrisma(overrideDb()) as never, flagOn);
+    const ids = async (since: string, until: string) =>
+      (await service.listLeadsPage("workspace_1", { since, until })).items
+        .map((item) => item.id)
+        .sort();
+
+    expect(await ids("2026-10-11", "2026-10-11")).toEqual(["lead_n"]);
+    expect(await ids("2026-10-12", "2026-10-12")).toEqual([]);
+    expect(await ids("2026-10-13", "2026-10-13")).toEqual(["lead_d"]);
+    expect(await ids("2026-10-11", "2026-10-13")).toEqual(["lead_d", "lead_n"]);
+  });
+
+  it("reports: conversas count the deferred entry; leads novos count it once, dated by the rule send", async () => {
+    const db = overrideDb();
+    const prisma = fakePrisma(db);
+    const engine = new ReportingMetricsEngine();
+    const leadsOf = async (range: { gte: Date; lte: Date }) =>
+      applyDeferredLeadNovoTiming(
+        prisma as never,
+        "workspace_1",
+        db.leads.filter((lead) =>
+          matches(lead, { firstMessageAt: range }),
+        ) as never[],
+        range,
+        async (wanted) =>
+          db.leads.filter((lead) => wanted.includes(lead.id as string)) as never[],
+      );
+    const metrics = async (range: { gte: Date; lte: Date }) =>
+      engine.calculate({
+        events: metricEvents(
+          db.events.filter((event) => matches(event, { eventOccurredAt: range })),
+        ),
+        insight: { spendCents: 0, metaConversationsStarted: 0 },
+        leads: (await leadsOf(range)) as never,
+        scope: {},
+      });
+
+    // Entry day: both conversations, only the regular lead is new.
+    const entryDay = await metrics(day("2026-10-11"));
+    expect(entryDay.adConversationEvents).toBe(2);
+    expect(entryDay.realConversations).toBe(1);
+    // Rule day: no new conversation (the rule LeadSubmitted is not one), the
+    // deferred lead becomes new.
+    const ruleDay = await metrics(day("2026-10-13"));
+    expect(ruleDay.adConversationEvents).toBe(0);
+    expect(ruleDay.realConversations).toBe(1);
+    // Whole period: two conversations, two leads novos (never three).
+    const period = {
+      gte: day("2026-10-11").gte,
+      lte: day("2026-10-13").lte,
+    };
+    const whole = await metrics(period);
+    expect(whole.adConversationEvents).toBe(2);
+    expect(whole.realConversations).toBe(2);
+    expect(whole.repeatConversationLeads).toBe(0);
+    // Daily chart: the deferred lead lands on the rule day.
+    const daily = engine.dailyRealConversationCounts(
+      { leads: (await leadsOf(period)) as never },
+      (date) => date.toISOString().slice(0, 10),
+    );
+    expect(Object.fromEntries(daily)).toEqual({
+      "2026-10-11": 1,
+      "2026-10-13": 1,
+    });
+  });
+
+  it("deferred lead whose rule never fired: in conversas, never in leads novos", async () => {
+    const db = overrideDb();
+    db.events = db.events.filter((event) => event.id !== "rule_d");
+    const range = day("2026-10-11");
+    const leads = await applyDeferredLeadNovoTiming(
+      fakePrisma(db) as never,
+      "workspace_1",
+      db.leads as never[],
+      range,
+      async () => [],
+    );
+    expect(leads.map((lead: Row) => lead.id)).toEqual(["lead_n"]);
+  });
+
+  it("without deferred receipts nothing changes (flag off / no override rule)", async () => {
+    const db = overrideDb();
+    db.events = db.events.filter((event) => event.leadId === "lead_n");
+    const input = db.leads as never[];
+    await expect(
+      applyDeferredLeadNovoTiming(
+        fakePrisma(db) as never,
+        "workspace_1",
+        input,
+        day("2026-10-11"),
+        async () => {
+          throw new Error("must not load extra leads");
+        },
+      ),
+    ).resolves.toBe(input);
   });
 });

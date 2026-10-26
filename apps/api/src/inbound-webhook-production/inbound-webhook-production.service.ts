@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 // rastrackdash sanitize (rewrite_rules.external-channel-billing-access-stub):
@@ -60,6 +60,8 @@ import {
 import { lockUnnichatMetaPolicy } from "../inbound-webhooks/inbound-webhook-effective-meta-routing";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
 import { LeadsService } from "../leads/leads.service";
+import { LicenseClientService } from "../licensing-client/license-client.service";
+import { resolveLeadSubmittedRuleOverride } from "../conversion-rules/lead-submitted-rule-override";
 import { assertMetaCloudSigningConfigured, inboundParserProductionEligible } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
 
 const terminalStatuses = new Set(["materialized", "duplicate"]);
@@ -124,6 +126,9 @@ export class InboundWebhookProductionService {
     private readonly conversionQueue: ConversionEventsQueueService,
     @Inject(RUNTIME_ENV)
     private readonly env: RuntimeEnv = process.env,
+    @Optional()
+    @Inject(LicenseClientService)
+    private readonly license?: LicenseClientService,
   ) {}
 
   async processItem(
@@ -458,6 +463,7 @@ export class InboundWebhookProductionService {
         this.conversions,
         this.metaEventId(event.provider, connection.id, event.dedupeKey),
         "live_production",
+        { env: this.env, license: this.license ?? null },
       );
     }
 
@@ -556,6 +562,22 @@ export class InboundWebhookProductionService {
       );
     }
 
+    // An active production LeadSubmitted provider rule covering this number
+    // sends the LeadSubmitted instead of the entry (tarefa 20, flag gated).
+    const deferToProviderRule = await resolveLeadSubmittedRuleOverride(
+      client,
+      {
+        workspaceId: event.workspaceId,
+        channel: {
+          id: event.channelId,
+          connectionId: connection.id,
+          provider: event.provider,
+        },
+        // The rule send resolves the lead's ad route (previewRoute).
+        destination: { kind: "ad_route", adId: event.adId },
+      },
+      { env: this.env, license: this.license ?? null },
+    );
     const conversion = await this.conversions.recordExternalConversion(
       {
         workspaceId: event.workspaceId,
@@ -591,6 +613,7 @@ export class InboundWebhookProductionService {
           processingMode: "live_production",
         },
         // Once per lead and Meta destination across numbers and rules.
+        deferToProviderRule,
         // Unnichat records inside the caller's transaction (client below).
         leadLifetimeGuard: {
           channelId: event.channelId,
@@ -790,6 +813,23 @@ export class InboundWebhookProductionService {
       );
     }
 
+    // nod (Meta Cloud and the other non-Unnichat providers): an active
+    // production LeadSubmitted provider rule covering this number sends the
+    // LeadSubmitted instead of the entry; the rule send resolves the lead's ad
+    // route (previewRoute), exactly the route just validated above.
+    const deferToProviderRule = await resolveLeadSubmittedRuleOverride(
+      this.prisma,
+      {
+        workspaceId: event.workspaceId,
+        channel: {
+          id: event.channelId,
+          connectionId: connection.id,
+          provider: event.provider,
+        },
+        destination: { kind: "ad_route", adId: event.adId },
+      },
+      { env: this.env, license: this.license ?? null },
+    );
     const conversion = await this.conversions.recordExternalConversion({
       workspaceId: event.workspaceId,
       externalConnectorId: null,
@@ -819,6 +859,7 @@ export class InboundWebhookProductionService {
         adId: event.adId,
         processingMode: "live_production",
       },
+      deferToProviderRule,
       // Once per lead and Meta destination across numbers and rules: covers
       // the nod's Meta Cloud (meta_cloud) CTWA entry and the other
       // non-Unnichat inbound providers. Not in a caller transaction here, so

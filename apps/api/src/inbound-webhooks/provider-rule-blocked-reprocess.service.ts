@@ -28,6 +28,7 @@ import {
 } from "../conversion-rules/provider-rule-blocked-reprocess";
 import { InboundWebhookMetaRouteReaderService } from "./inbound-webhook-meta-route-reader.service";
 import { UazapiProviderConversionService } from "./uazapi-provider-conversion.service";
+import { leadSubmittedRuleOverrideEnabled } from "../conversion-rules/lead-submitted-rule-override";
 
 /**
  * "Reprocessar bloqueadas" of one rule: retries, through the existing
@@ -140,6 +141,7 @@ export class ProviderRuleBlockedReprocessService {
         {
           workspaceId,
           executions: candidates,
+          includeAutoLead: leadSubmittedRuleOverrideEnabled(this.env),
           previewRoute: (route) =>
             new InboundWebhookMetaRouteReaderService(this.prisma).previewRoute(
               route,

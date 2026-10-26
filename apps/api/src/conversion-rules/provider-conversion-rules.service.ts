@@ -108,6 +108,12 @@ import {
   type ScopedChannel,
   type ScopedProviderRule,
 } from "./provider-rule-scope";
+import {
+  LEAD_SUBMITTED_AWAITING_RULE_DAYS,
+  LEAD_SUBMITTED_AWAITING_RULE_SCAN,
+  LEAD_SUBMITTED_DEFERRED_TO_RULE,
+  leadSubmittedRuleOverrideEnabled,
+} from "./lead-submitted-rule-override";
 
 const ruleNotFoundMessage = "Regra de conversao do provedor nao encontrada";
 const connectionNotFoundMessage = "Conexao nao encontrada";
@@ -385,12 +391,17 @@ export class ProviderConversionRulesService {
       workspaceId,
       rule,
     );
+    const leadsAwaitingRule = await this.leadsAwaitingRuleSummary(
+      workspaceId,
+      rule,
+    );
 
     return {
       providerRuleId,
       eventName: conversionEventNameSchema.parse(rule.conversionRule.eventName),
       summary,
       blockedReprocess,
+      ...(leadsAwaitingRule ? { leadsAwaitingRule } : {}),
       items: executions.map((execution) => {
         const lead = execution.leadId
           ? (leadsById.get(execution.leadId) ?? null)
@@ -440,6 +451,80 @@ export class ProviderConversionRulesService {
   }
 
   /**
+   * Tarefa 20 observability: entries deferred to THIS rule more than
+   * LEAD_SUBMITTED_AWAITING_RULE_DAYS ago whose lead still has no
+   * LeadSubmitted sent by a rule. Read-only (never sends anything); logged
+   * as `lead_submitted_awaiting_rule` for the backoffice. Flag off or another
+   * event: undefined, no query.
+   */
+  private async leadsAwaitingRuleSummary(
+    workspaceId: string,
+    rule: PersistedProviderRule,
+  ): Promise<ProviderConversionRuleExecutionAuditDto["leadsAwaitingRule"]> {
+    if (
+      !leadSubmittedRuleOverrideEnabled(this.env) ||
+      rule.conversionRule.eventName !== "LeadSubmitted"
+    )
+      return undefined;
+    const olderThanDays = LEAD_SUBMITTED_AWAITING_RULE_DAYS;
+    const before = new Date(Date.now() - olderThanDays * 24 * 3600_000);
+    const receipts = await this.prisma.conversionEventLog.findMany({
+      where: {
+        workspaceId,
+        eventName: "LeadSubmitted",
+        errorCode: LEAD_SUBMITTED_DEFERRED_TO_RULE,
+        leadId: { not: null },
+        eventOccurredAt: { lt: before },
+        sourcePayload: {
+          path: ["leadSubmittedDeferredToRuleIds"],
+          array_contains: [rule.id],
+        },
+      },
+      select: { leadId: true },
+      orderBy: { eventOccurredAt: "desc" },
+      take: LEAD_SUBMITTED_AWAITING_RULE_SCAN,
+    });
+    const leadIds = [
+      ...new Set(receipts.flatMap((row) => (row.leadId ? [row.leadId] : []))),
+    ];
+    if (leadIds.length === 0)
+      return { count: 0, olderThanDays, capped: false };
+    const sent = await this.prisma.conversionEventLog.findMany({
+      where: {
+        workspaceId,
+        eventName: "LeadSubmitted",
+        leadId: { in: leadIds },
+        status: { notIn: ["shadow_observed", "imported", "not_eligible", "skipped"] },
+        OR: [
+          { sourceTrigger: { endsWith: ":message_phrase" } },
+          { sourceTrigger: { endsWith: ":structured_catalog" } },
+          { sourceTrigger: { endsWith: ":provider_automation" } },
+          // nod: a Lead recebido registered manually on the lead (#158) also
+          // means the lead is no longer waiting for the rule.
+          { sourceTrigger: "manual_conversion" },
+        ],
+      },
+      select: { leadId: true },
+    });
+    const sentIds = new Set(sent.map((row) => row.leadId));
+    const count = leadIds.filter((id) => !sentIds.has(id)).length;
+    const capped = receipts.length >= LEAD_SUBMITTED_AWAITING_RULE_SCAN;
+    if (count > 0) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "lead_submitted_awaiting_rule",
+          workspaceId,
+          providerRuleId: rule.id,
+          leadsAwaitingRule: count,
+          olderThanDays,
+          capped,
+        }),
+      );
+    }
+    return { count, olderThanDays, capped };
+  }
+
+  /**
    * Counts behind "Reprocessar bloqueadas": executions stopped only because
    * their number was not live yet. `ready` is what a reprocess would retry
    * now (number live, inside the Meta window); the button is enabled only
@@ -472,6 +557,7 @@ export class ProviderConversionRulesService {
     const split = await partitionAlreadyConverted(this.prisma, {
       workspaceId,
       executions: ready,
+      includeAutoLead: leadSubmittedRuleOverrideEnabled(this.env),
       previewRoute: (route) =>
         new InboundWebhookMetaRouteReaderService(this.prisma).previewRoute(
           route,
@@ -1930,7 +2016,12 @@ export class ProviderConversionRulesService {
   /** Scope options and capability matrix read by the Conversions screen. */
   getCapabilities(): ProviderConversionRuleCapabilitiesDto {
     this.requireRulesEnabled();
-    return providerRuleCapabilities();
+    return {
+      ...providerRuleCapabilities(),
+      leadSubmittedRuleOverrideEnabled: leadSubmittedRuleOverrideEnabled(
+        this.env,
+      ),
+    };
   }
 
   /**

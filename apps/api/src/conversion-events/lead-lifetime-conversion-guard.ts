@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { conversionEventDedupeMode } from "@wpptrack/shared";
+import {
+  conversionEventDedupeMode,
+  conversionEventMetaEventIdPrefix,
+} from "@wpptrack/shared";
 import {
   hashPhoneIdentityVariants,
   phoneIdentityKey,
@@ -25,7 +28,11 @@ import {
  * or the other pipeline.
  *
  * Covered conversion logs: sourceTrigger "inbound_webhook:<provider>" (CTWA
- * entry) and "inbound_webhook:<provider>:<trigger>" (provider rules). Logs of
+ * entry), "auto_lead" (Uazapi BYO / WAHA bridge entry; with
+ * LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED (on by default in the nod), and only when sent or about to be,
+ * see coveredConvertingLogWhere) and
+ * "inbound_webhook:<provider>:<trigger>" (provider rules) and
+ * "manual_conversion" (manual lead conversion, tarefa 21). Logs of
  * Kommo, Pipedrive, Guimo, XMax and external events are neither checked nor
  * guarded (they keep their own dedupe).
  */
@@ -35,7 +42,19 @@ export const LEAD_CONVERTED_ON_ANOTHER_NUMBER =
 export const LEAD_CONVERTED_BY_ANOTHER_SOURCE =
   "lead_already_converted_other_source";
 
-export type LeadConversionPipeline = "ctwa_entry" | "provider_rule";
+/**
+ * "manual": conversion registered by an owner/admin on the lead detail
+ * (tarefa 21, sourceTrigger "manual_conversion"). It blocks, and is blocked
+ * by, every other pipeline and number: a manual conversion of a converted
+ * lead is refused (409), and an automation after a manual one is a duplicate
+ * "por outra origem".
+ */
+export type LeadConversionPipeline = "ctwa_entry" | "provider_rule" | "manual";
+
+/** sourceTrigger of the Uazapi BYO / WAHA bridge entry LeadSubmitted. */
+export const UAZAPI_AUTO_LEAD_TRIGGER = "auto_lead";
+/** sourceTrigger of a manual lead conversion (mirrors @wpptrack/shared). */
+export const MANUAL_CONVERSION_TRIGGER = "manual_conversion";
 
 /**
  * Statuses of a log that never reached and never will reach Meta: they do not
@@ -182,7 +201,36 @@ export async function lockLeadConversionIdentity(
   await client.$queryRaw`SELECT pg_advisory_xact_lock(CAST(${first} AS integer), CAST(${second} AS integer))::text`;
 }
 
-function pipelineOf(sourceTrigger: string): LeadConversionPipeline {
+/**
+ * Meta event_id of a once-per-lead (lifetime) event: deterministic per
+ * workspace + lead identity (canonical phone line, so old duplicate Lead
+ * rows of the same line share it) + event, so if two sends ever slipped
+ * past the local dedupe, Meta itself would drop the second on the same
+ * dataset. Shared by the provider rules and the manual conversion, so a
+ * manual QualifiedLead and a later rule one carry the SAME event_id.
+ * Neutral prefix: it only applies to NEW conversions (ids already sent never
+ * change). Rolling-window events (Purchase...) keep their own ids.
+ */
+export function leadLifetimeMetaEventId(
+  workspaceId: string,
+  leadIdentity: string,
+  eventName: string,
+): string {
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "provider-lead-conversion-v1",
+        workspaceId,
+        leadIdentity,
+        eventName,
+      ]),
+    )
+    .digest("hex");
+  return `lead_${conversionEventMetaEventIdPrefix(eventName as never)}_${digest}`;
+}
+
+export function pipelineOf(sourceTrigger: string): LeadConversionPipeline {
+  if (sourceTrigger === MANUAL_CONVERSION_TRIGGER) return "manual";
   return sourceTrigger.split(":").length <= 2 ? "ctwa_entry" : "provider_rule";
 }
 
@@ -219,6 +267,8 @@ export async function findPriorLeadLifetimeConversion(
     channelId: string | null;
     pipeline: LeadConversionPipeline;
     ownDedupeKey: string | null;
+    /** Tarefa 20 (LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED): see AUTO_LEAD_*. */
+    includeAutoLead?: boolean;
   },
 ): Promise<PriorLeadConversion | null> {
   if (!isLeadLifetimeEvent(input.eventName)) return null;
@@ -227,7 +277,7 @@ export async function findPriorLeadLifetimeConversion(
       workspaceId: input.workspaceId,
       leadId: { in: input.identity.leadIds },
       eventName: input.eventName,
-      ...COVERED_CONVERTING_LOG_WHERE,
+      ...coveredConvertingLogWhere(input.includeAutoLead === true),
     },
     select: COVERED_LOG_SELECT,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -236,11 +286,45 @@ export async function findPriorLeadLifetimeConversion(
   return pickPriorLeadLifetimeConversion(logs, input);
 }
 
-/** Covered conversion logs that made the lead "converted" (see header). */
+/**
+ * Covered conversion logs that made the lead "converted" (see header): CTWA
+ * entries and provider rules ("inbound_webhook:...") and manual conversions.
+ * Flat OR of { sourceTrigger, status } conditions.
+ */
+export const COVERED_CONVERTING_LOG_CONDITIONS = [
+  {
+    sourceTrigger: { startsWith: "inbound_webhook:" },
+    status: { notIn: NON_CONVERTING_LOG_STATUSES },
+  },
+  {
+    sourceTrigger: MANUAL_CONVERSION_TRIGGER,
+    status: { notIn: NON_CONVERTING_LOG_STATUSES },
+  },
+];
 export const COVERED_CONVERTING_LOG_WHERE = {
-  sourceTrigger: { startsWith: "inbound_webhook:" },
-  status: { notIn: NON_CONVERTING_LOG_STATUSES },
+  OR: COVERED_CONVERTING_LOG_CONDITIONS,
 };
+
+/**
+ * Uazapi BYO / WAHA bridge entry ("auto_lead", porte do SaaS #155, flag on): counts only
+ * when it was really sent or is about to be (an organic auto_lead stays
+ * pending_meta_context forever and must never block a later ad conversion).
+ */
+export const AUTO_LEAD_SENDING_STATUSES = ["ready_to_send", "queued", "sent"];
+
+export function coveredConvertingLogWhere(includeAutoLead: boolean) {
+  if (!includeAutoLead) return COVERED_CONVERTING_LOG_WHERE;
+  return {
+    OR: [
+      ...COVERED_CONVERTING_LOG_CONDITIONS,
+      {
+        sourceTrigger: UAZAPI_AUTO_LEAD_TRIGGER,
+        status: { in: AUTO_LEAD_SENDING_STATUSES },
+      },
+    ],
+  };
+}
+
 export const COVERED_LOG_SELECT = {
   id: true,
   leadId: true,
@@ -249,6 +333,7 @@ export const COVERED_LOG_SELECT = {
   sourceTrigger: true,
   sourcePayload: true,
   metaConversionDestinationId: true,
+  status: true,
 } as const;
 
 export type CoveredLog = {
@@ -257,6 +342,7 @@ export type CoveredLog = {
   sourceTrigger: string;
   sourcePayload: Prisma.JsonValue | null;
   metaConversionDestinationId: string | null;
+  status?: string | null;
 };
 
 /** Pure decision over already-loaded covered logs of one identity+event. */
@@ -275,13 +361,39 @@ export function pickPriorLeadLifetimeConversion(
   )
     return null;
   for (const log of logs) {
+    if (log.sourceTrigger === UAZAPI_AUTO_LEAD_TRIGGER) {
+      // Bridge entry: its destination is recorded only when it was sent through
+      // a manual route. Known destination -> compared; unknown -> it blocks
+      // only once really sent (same destination, safe side). It is the
+      // entry, so the reason is always "pela entrada".
+      if (log.metaConversionDestinationId) {
+        if (log.metaConversionDestinationId !== input.conversionDestinationId)
+          continue;
+      } else if (log.status !== "sent") {
+        continue;
+      }
+      if (input.pipeline === "ctwa_entry" && channelOf(log.sourcePayload) === input.channelId)
+        continue;
+      return {
+        conversionEventLogId: log.id,
+        reasonCode: LEAD_CONVERTED_BY_ANOTHER_SOURCE,
+      };
+    }
     if (
       log.metaConversionDestinationId &&
       log.metaConversionDestinationId !== input.conversionDestinationId
     )
       continue;
+    const logPipeline = pipelineOf(log.sourceTrigger);
+    // A manual conversion (on either side) is always "another source",
+    // whatever number it names: one manual conversion per lead and pixel.
+    if (logPipeline === "manual" || input.pipeline === "manual")
+      return {
+        conversionEventLogId: log.id,
+        reasonCode: LEAD_CONVERTED_BY_ANOTHER_SOURCE,
+      };
     const otherNumber = channelOf(log.sourcePayload) !== input.channelId;
-    const otherPipeline = pipelineOf(log.sourceTrigger) !== input.pipeline;
+    const otherPipeline = logPipeline !== input.pipeline;
     if (!otherNumber && !otherPipeline) continue;
     return {
       conversionEventLogId: log.id,
@@ -304,6 +416,7 @@ export async function guardLeadLifetimeConversion(
     channelId: string | null;
     pipeline: LeadConversionPipeline;
     ownDedupeKey: string | null;
+    includeAutoLead?: boolean;
   },
 ): Promise<PriorLeadConversion | null> {
   if (!isLeadLifetimeEvent(input.eventName)) return null;

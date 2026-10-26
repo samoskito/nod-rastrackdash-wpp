@@ -16,6 +16,7 @@ import {
   lockUnnichatMetaPolicy,
 } from "../inbound-webhooks/inbound-webhook-effective-meta-routing";
 import { resolveCtwaLeadProof } from "../conversion-rules/ctwa-lead-proof";
+import { leadSubmittedRuleOverrideEnabled } from "../conversion-rules/lead-submitted-rule-override";
 import { CTWA_SEND_SKIPPED_ERROR_CODE } from "../conversion-events/conversion-event-retry";
 import { createHash } from "node:crypto";
 import { resolvePurchaseChannels } from "../conversion-rules/provider-purchase-routing";
@@ -85,9 +86,17 @@ import { ConversionEventsService } from "../conversion-events/conversion-events.
 import {
   findPriorLeadLifetimeConversion,
   isLeadLifetimeEvent,
+  leadLifetimeMetaEventId,
   lockLeadConversionIdentity,
   resolveLeadConversionIdentity,
 } from "../conversion-events/lead-lifetime-conversion-guard";
+import {
+  findManualPurchaseForOrder,
+  findRecentManualSameEvent,
+  LEAD_EVENT_REGISTERED_MANUALLY,
+  manualOrderKey,
+  PURCHASE_REGISTERED_MANUALLY,
+} from "../leads/manual-conversion-purchase";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
 import {
@@ -653,13 +662,33 @@ export class ProviderConversionProductionService
           },
           select: { id: true },
         });
+      // Tarefa 21 (decision 1b): the operator already registered this
+      // Purchase manually for the lead within 24h (same lock key as manual).
+      const manualSameEvent = duplicate
+        ? null
+        : await findRecentManualSameEvent(transaction, {
+            workspaceId: execution.workspaceId,
+            leadIds: (
+              await resolveLeadConversionIdentity(
+                transaction,
+                execution.workspaceId,
+                lead.id,
+              )
+            ).leadIds,
+            eventName: "Purchase",
+            occurredAt: execution.occurredAt,
+            conversionDestinationId: route.conversionDestinationId,
+          });
 
-      if (duplicate) {
+      if (duplicate || manualSameEvent) {
+        const reasonCode = duplicate
+          ? "purchase_within_24h"
+          : LEAD_EVENT_REGISTERED_MANUALLY;
         await transaction.providerConversionRuleExecution.update({
           where: { id: execution.id },
           data: {
             status: "duplicate",
-            reasonCode: "purchase_within_24h",
+            reasonCode,
             leadId: lead.id,
             processedAt: new Date(),
           },
@@ -669,7 +698,7 @@ export class ProviderConversionProductionService
             where: { id: execution.purchaseReview.id },
             data: {
               status: "duplicate",
-              reasonCode: "purchase_within_24h",
+              reasonCode,
               leadWorkspaceId: execution.workspaceId,
               leadId: lead.id,
               decidedAt: new Date(),
@@ -957,9 +986,11 @@ export class ProviderConversionProductionService
         ) AS "lockAcquired"
       `;
 
-      if (purchaseKey) {
+      if (purchaseKey || !isLeadLifetimeEvent(eventName)) {
         // Keep the customer/event lock as well as the merchant/order lock:
         // distinct orders count independently while customer history remains serialized.
+        // Tarefa 21: +-24h events take it too, the same key the manual
+        // conversion takes (purchaseCustomerLockKeys), so both serialize.
         const phoneLock = this.lockKeys(
           execution.workspaceId,
           lead.phoneHash,
@@ -1139,13 +1170,58 @@ export class ProviderConversionProductionService
               channelId: execution.channelId,
               pipeline: "provider_rule",
               ownDedupeKey: dedupeKey,
+              includeAutoLead: leadSubmittedRuleOverrideEnabled(this.env),
             });
-      const duplicate = sameNumberDuplicate ?? otherNumberDuplicate;
+      // Tarefa 21: the same order was already registered manually for this
+      // lead (manual Purchase not canceled). Serialized with the manual
+      // writer by the customer lock above (same workspace+phone+event key).
+      const manualPurchase =
+        purchaseKey && purchaseContext && !sameNumberDuplicate && eventName === "Purchase"
+          ? await findManualPurchaseForOrder(transaction, {
+              workspaceId: execution.workspaceId,
+              leadIds: (
+                await resolveLeadConversionIdentity(
+                  transaction,
+                  execution.workspaceId,
+                  lead.id,
+                )
+              ).leadIds,
+              orderKey: purchaseContext.manualOrderKey,
+            })
+          : null;
+      // Tarefa 21 (decision 1b): the same +-24h event (Purchase,
+      // InitiateCheckout...) registered manually for this lead within 24h for
+      // this destination. Payt/Braip keep only their order-based check above.
+      const manualSameEvent =
+        !purchaseKey && !sameNumberDuplicate && !isLeadLifetimeEvent(eventName)
+          ? await findRecentManualSameEvent(transaction, {
+              workspaceId: execution.workspaceId,
+              leadIds: (
+                await resolveLeadConversionIdentity(
+                  transaction,
+                  execution.workspaceId,
+                  lead.id,
+                )
+              ).leadIds,
+              eventName,
+              occurredAt,
+              conversionDestinationId,
+            })
+          : null;
+      const duplicate =
+        sameNumberDuplicate ??
+        manualPurchase ??
+        manualSameEvent ??
+        otherNumberDuplicate;
 
       if (duplicate) {
         const reasonCode = purchaseKey
-          ? "purchase_duplicate"
-          : otherNumberDuplicate
+          ? manualPurchase
+            ? PURCHASE_REGISTERED_MANUALLY
+            : "purchase_duplicate"
+          : manualSameEvent
+            ? LEAD_EVENT_REGISTERED_MANUALLY
+            : otherNumberDuplicate
             ? otherNumberDuplicate.reasonCode
             : dedupePolicy.mode === "rolling_window"
               ? "purchase_within_24h"
@@ -1258,6 +1334,10 @@ export class ProviderConversionProductionService
                 }
               : {}),
             processingMode: "frozen_provider_conversion",
+            // Tarefa 21: lets a later manual sale of this order see it.
+            ...(purchaseContext && eventName === "Purchase"
+              ? { manualOrderKey: purchaseContext.manualOrderKey }
+              : {}),
           },
         },
         transaction,
@@ -1515,11 +1595,32 @@ export class ProviderConversionProductionService
               channelId: execution.channelId,
               pipeline: "provider_rule",
               ownDedupeKey: `provider-conversion:${execution.id}`,
+              includeAutoLead: leadSubmittedRuleOverrideEnabled(this.env),
             });
-      const duplicate = sameNumberDuplicate ?? otherNumberDuplicate;
+      // Tarefa 21: same +-24h event registered manually (see the frozen path).
+      const manualSameEvent =
+        rollingWindow && !sameNumberDuplicate
+          ? await findRecentManualSameEvent(transaction, {
+              workspaceId: execution.workspaceId,
+              leadIds: (
+                await resolveLeadConversionIdentity(
+                  transaction,
+                  execution.workspaceId,
+                  lead.id,
+                )
+              ).leadIds,
+              eventName,
+              occurredAt: execution.occurredAt,
+              conversionDestinationId,
+            })
+          : null;
+      const duplicate =
+        sameNumberDuplicate ?? manualSameEvent ?? otherNumberDuplicate;
 
       if (duplicate) {
-        const reasonCode = otherNumberDuplicate
+        const reasonCode = manualSameEvent
+          ? LEAD_EVENT_REGISTERED_MANUALLY
+          : otherNumberDuplicate
           ? otherNumberDuplicate.reasonCode
           : rollingWindow
             ? "purchase_within_24h"
@@ -2038,6 +2139,12 @@ export class ProviderConversionProductionService
     ctwaProof: AuthorizedCtwaDestination | undefined;
     /** Set only for a decision frozen with the legacy Payt total_price. */
     correctedValueCents: number | null;
+    /**
+     * manualOrderKey of the sale's order (Purchase dedupe vs the manual
+     * conversion on the lead). Extension point: Braip, Hotmart and Yampi
+     * (fases 6.5 a 6.7) derive it from their own order number here.
+     */
+    manualOrderKey: string;
   } | null> {
     if (decision.occurrence.provider === "payt")
       return this.assertPaytPurchaseContext(execution, decision);
@@ -2061,6 +2168,12 @@ export class ProviderConversionProductionService
     ctwaProof: AuthorizedCtwaDestination | undefined;
     /** Set only for a decision frozen with the legacy Payt total_price. */
     correctedValueCents: number | null;
+    /**
+     * manualOrderKey of the sale's order (Purchase dedupe vs the manual
+     * conversion on the lead). Extension point: Braip, Hotmart and Yampi
+     * (fases 6.5 a 6.7) derive it from their own order number here.
+     */
+    manualOrderKey: string;
   }> {
     this.assertAutomationProductionContext(execution);
     if (
@@ -2198,6 +2311,11 @@ export class ProviderConversionProductionService
       ctwaOriginOnly,
       ctwaProof,
       correctedValueCents: legacyPaytValue ? parsed.value.valueCents : null,
+      // Tarefa 21: same key a manual sale of this order number carries.
+      manualOrderKey: manualOrderKey(
+        execution.workspaceId,
+        parsed.value.orderRef,
+      ),
     };
   }
 
@@ -2545,17 +2663,8 @@ export class ProviderConversionProductionService
     leadIdentity: string,
     eventName: ConversionEventNameDto,
   ): string {
-    const digest = createHash("sha256")
-      .update(
-        JSON.stringify([
-          "provider-lead-conversion-v1",
-          workspaceId,
-          leadIdentity,
-          eventName,
-        ]),
-      )
-      .digest("hex");
-    return `lead_${conversionEventMetaEventIdPrefix(eventName)}_${digest}`;
+    // Moved to the guard module (tarefa 21): the manual conversion reuses it.
+    return leadLifetimeMetaEventId(workspaceId, leadIdentity, eventName);
   }
 
   private lockKeys(

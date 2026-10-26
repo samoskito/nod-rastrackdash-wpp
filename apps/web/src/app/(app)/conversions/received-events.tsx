@@ -11,6 +11,10 @@ import { Check, Eye, EyeOff, RefreshCw, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { ruleEventLabelForOrigin } from "./event-copy";
+import {
+  isDeferredToRuleReason,
+  leadSubmittedOverrideCopy,
+} from "./lead-submitted-override";
 import type { ProviderConversionRuleActionResult } from "./actions";
 import {
   executionReasonLabel,
@@ -381,7 +385,9 @@ export function ReceivedEvents({
       ) : (
         <ul className="conversion-executions-list conversion-received-list" role="list">
           {visible.map((item) => {
-            const status = statusLabels[item.status];
+            const status = isDeferredToRuleReason(item.reasonCode)
+              ? { label: leadSubmittedOverrideCopy.deferredChip, tone: "neutral" as const }
+              : statusLabels[item.status];
             const payload = payloads[item.deliveryId];
             const when = formatDateTime(item.receivedAt);
             const observation =

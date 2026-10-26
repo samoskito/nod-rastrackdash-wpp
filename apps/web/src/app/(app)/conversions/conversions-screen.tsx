@@ -66,6 +66,10 @@ import {
   type RuleManageTab,
 } from "./rule-manage";
 import { RuleLogo } from "./rule-logo";
+import {
+  LeadSubmittedOverrideBadge,
+  replacesEntryLeadSubmitted,
+} from "./lead-submitted-override";
 import { UnifyBanner, UnifyReviewModal } from "./unify-review";
 
 type ScreenAction = (formData: FormData) => Promise<ConversionScreenActionResult>;
@@ -579,6 +583,9 @@ export function ConversionsScreen({
                 <li key={row.key} className="conversion-rule-row" data-origin={row.origin}>
                   <RuleRow
                     row={row}
+                    leadSubmittedOverrideEnabled={
+                      capabilities?.leadSubmittedRuleOverrideEnabled === true
+                    }
                     canManage={canManage}
                     licenseLocked={licenseLocked}
                     numbers={numbers}
@@ -858,6 +865,7 @@ function confirmSuccess(confirm: PendingConfirm): string {
 
 function RuleRow({
   row,
+  leadSubmittedOverrideEnabled = false,
   canManage,
   licenseLocked,
   numbers,
@@ -872,6 +880,8 @@ function RuleRow({
   onConfirm,
 }: {
   row: ConversionRuleRow;
+  /** "Lead recebido pela regra" ligado na API (selo da lista). */
+  leadSubmittedOverrideEnabled?: boolean;
   canManage: boolean;
   licenseLocked: boolean;
   numbers: ConversionNumber[];
@@ -925,6 +935,9 @@ function RuleRow({
             </>
           ) : null}
         </span>
+        {leadSubmittedOverrideEnabled && !licenseLocked && replacesEntryLeadSubmitted(row) ? (
+          <LeadSubmittedOverrideBadge />
+        ) : null}
       </div>
 
       <div className="conversion-rule-cell" data-label="Alcance">

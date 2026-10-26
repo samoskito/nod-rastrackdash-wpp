@@ -9,6 +9,10 @@ import type {
 } from "@wpptrack/shared";
 import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import type { PipedriveConnectionDetailDto } from "../integrations/pipedrive-actions";
+import {
+  isDeferredToRuleReason,
+  leadSubmittedOverrideCopy,
+} from "./lead-submitted-override";
 import { ruleEventLabel, ruleEventLabelForOrigin } from "./event-copy";
 import {
   automationPlatformOf,
@@ -655,8 +659,13 @@ export function buildProviderRuleRows(
       warning: status === "number_removed" ? numberRemovedWarning : null,
       lastExecution: execution
         ? {
-            label: executionLabels[execution.status].label,
-            tone: executionLabels[execution.status].tone,
+            // Porte do SaaS #155: a deferred entry receipt is not "na fila de envio".
+            label: isDeferredToRuleReason(execution.reasonCode)
+              ? leadSubmittedOverrideCopy.deferredChip
+              : executionLabels[execution.status].label,
+            tone: isDeferredToRuleReason(execution.reasonCode)
+              ? "neutral"
+              : executionLabels[execution.status].tone,
             occurredAt: execution.occurredAt,
           }
         : null,

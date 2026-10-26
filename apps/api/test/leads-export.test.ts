@@ -413,6 +413,9 @@ function createPrisma(leads: PrismaLead[]) {
       findMany: vi.fn(async () => [
         { leadId: "lead_00001", eventName: "Purchase" },
       ]),
+      // Report mode lookup ("Lead recebido pela regra", on by default in the
+      // nod): no deferred receipt, so the export behaves as before.
+      findFirst: vi.fn(async () => null),
     },
     metaCampaign: {
       findMany: vi.fn(async () => [

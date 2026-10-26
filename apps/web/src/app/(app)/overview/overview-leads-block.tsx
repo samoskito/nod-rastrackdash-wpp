@@ -29,6 +29,31 @@ export const overviewLeadsHints = {
     "Todas as conversas iniciadas por anúncio no período, como foram informadas à Meta. Uma pessoa pode iniciar várias.",
 } as const;
 
+/**
+ * Tarefa 20 ("Lead recebido pela regra" ligado na API): o Lead recebido de
+ * alguns números é enviado pela regra, não na entrada. "Conversas" continuam
+ * contando toda entrada; "Leads novos" seguem o Lead recebido enviado.
+ * Desligado, os textos são exatamente os de hoje.
+ */
+export const leadSubmittedOverrideLeadsCopy = {
+  newHint:
+    "Leads novos: quando o Lead recebido foi enviado à Meta — na entrada ou pela sua regra. Cada pessoa vinda de anúncio conta uma vez. É a base do custo por lead.",
+  newCaption: "Lead recebido enviado no período",
+  conversationsHint:
+    "Conversas iniciadas: toda conversa que entrou. Conta toda conversa por anúncio do período, mesmo quando o Lead recebido é enviado depois pela regra. Uma pessoa pode iniciar várias.",
+} as const;
+
+export function overviewLeadsCopy(leadSubmittedOverrideEnabled: boolean) {
+  return leadSubmittedOverrideEnabled
+    ? {
+        ...overviewLeadsHints,
+        new: leadSubmittedOverrideLeadsCopy.newHint,
+        conversations: leadSubmittedOverrideLeadsCopy.conversationsHint,
+        newCaption: leadSubmittedOverrideLeadsCopy.newCaption,
+      }
+    : { ...overviewLeadsHints, newCaption: "1º contato no período" };
+}
+
 export function OverviewLeadsBlock({
   available,
   items,

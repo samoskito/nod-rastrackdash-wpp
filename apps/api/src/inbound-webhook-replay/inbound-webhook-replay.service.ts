@@ -49,6 +49,7 @@ import { inboundWebhookParserContext } from "../inbound-webhooks/providers/inbou
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import { InboundWebhookParserRegistry } from "../inbound-webhooks/providers/inbound-webhook-parser.registry";
 import { LeadsService } from "../leads/leads.service";
+import { resolveLeadSubmittedRuleOverride } from "../conversion-rules/lead-submitted-rule-override";
 import { LicenseClientService } from "../licensing-client/license-client.service";
 import { InboundWebhookReplayQueueService } from "./inbound-webhook-replay-queue.service";
 
@@ -1758,6 +1759,22 @@ export class InboundWebhookReplayService {
       throw new ReplayItemFailure(
         "inbound_webhook_replay_authorization_changed",
       );
+    // An active production LeadSubmitted provider rule covering this number
+    // sends the LeadSubmitted instead of the entry (porte do SaaS #155); the
+    // rule send resolves the lead's ad route (previewRoute).
+    const deferToProviderRule = await resolveLeadSubmittedRuleOverride(
+      this.prisma,
+      {
+        workspaceId: event.workspaceId,
+        channel: {
+          id: event.channelId,
+          connectionId: connection.id,
+          provider: event.provider,
+        },
+        destination: event.adId ? { kind: "ad_route", adId: event.adId } : null,
+      },
+      { env: this.env, license: this.licenseClient ?? null },
+    );
     const conversion = await this.conversions.recordExternalConversion({
       workspaceId: event.workspaceId,
       externalConnectorId: null,
@@ -1786,6 +1803,7 @@ export class InboundWebhookReplayService {
         hasCtwa: true,
         adId: event.adId,
       },
+      deferToProviderRule,
       // Once per lead and Meta destination across numbers and rules (same
       // rule as the live entry, including Meta Cloud). Not in a caller
       // transaction: recordExternalConversion opens one for the lock.

@@ -1,5 +1,8 @@
 import type { FunnelStageConfigurationDto } from "@wpptrack/shared";
-import { repeatConversationLeadIds } from "../leads/lead-cohort";
+import {
+  isRuleOriginatedTrigger,
+  repeatConversationLeadIds,
+} from "../leads/lead-cohort";
 
 export type ReportingMetricScope = {
   adId?: string | null;
@@ -37,6 +40,8 @@ export type ReportingMetricEvent = {
   adId: string | null;
   ctwaClid?: string | null;
   eventName: string;
+  /** Origin of the log; a provider-rule LeadSubmitted is not a conversation. */
+  sourceTrigger?: string | null;
   eventOccurredAt: Date;
   status: string;
   valueCents: number | null;
@@ -362,12 +367,18 @@ export class ReportingMetricsEngine {
     return ids;
   }
 
-  /** A paid conversation: LeadSubmitted sent to Meta (not skipped, not organic). */
+  /**
+   * A paid conversation: the ENTRY LeadSubmitted of a CTWA conversation (not
+   * skipped, not organic). Entry receipts deferred to a provider rule
+   * (not_eligible) still count; the LeadSubmitted the rule sends later does
+   * not, so a conversation is never counted twice (tarefa 20).
+   */
   private isPaidConversation(event: ReportingMetricEvent): boolean {
     return (
       event.eventName === "LeadSubmitted" &&
       this.isCountableEvent(event) &&
-      this.isPaidLeadEvent(event)
+      this.isPaidLeadEvent(event) &&
+      !isRuleOriginatedTrigger(event.sourceTrigger)
     );
   }
 

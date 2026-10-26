@@ -110,6 +110,9 @@ function createHarness() {
     },
     conversionEventLog: {
       findMany: vi.fn(async () => db.conversionLogs),
+      // Report mode lookup ("Lead recebido pela regra", on by default in
+      // the nod): no deferred receipt, so every list behaves as before.
+      findFirst: vi.fn(async () => null),
     },
     webhookLog: {
       findMany: vi.fn(async () => db.webhookLogs),
@@ -647,6 +650,7 @@ describe("leads service base (novos x voltaram)", () => {
         eventName: "LeadSubmitted",
         status: { not: "skipped" },
         businessSource: { not: "organic" },
+        NOT: { sourceTrigger: { equals: "manual_conversion" } },
         eventOccurredAt: periodRange,
       },
       select: { leadId: true, phoneHash: true },
@@ -797,6 +801,8 @@ describe("leads service base repeat (conversaram mais de uma vez)", () => {
         eventName: "LeadSubmitted",
         status: { not: "skipped" },
         businessSource: { not: "organic" },
+        // Tarefa 21: a manual LeadSubmitted is never a conversation.
+        NOT: { sourceTrigger: { equals: "manual_conversion" } },
         eventOccurredAt: periodRange,
       },
       select: { leadId: true, phoneHash: true },

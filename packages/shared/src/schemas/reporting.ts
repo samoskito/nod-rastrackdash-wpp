@@ -308,6 +308,7 @@ export const conversionAuditSourceSchema = z.enum([
   "whatsapp_automation",
   "system",
   "manual_test",
+  "manual",
   "other",
 ]);
 

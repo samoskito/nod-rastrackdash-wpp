@@ -1199,7 +1199,35 @@ export const providerConversionRuleCapabilitiesSchema = z.object({
   globalPrecedence: z.literal(providerConversionRuleGlobalPrecedence),
   origins: z.array(providerConversionRuleOriginCapabilitySchema),
   unsupportedWhatsappProviders: z.array(z.string().min(1)),
+  /**
+   * Espelha LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED (ligada por padrão nesta
+   * edição): uma regra "Lead recebido" ativa e enviando substitui o envio do
+   * Lead recebido na entrada da conversa nos números que ela cobre.
+   * Opcional: APIs anteriores não enviam (tratado como desligado).
+   */
+  leadSubmittedRuleOverrideEnabled: z.boolean().optional(),
 });
+
+/** Código do recibo de entrada cujo Lead recebido foi adiado para a regra. */
+export const LEAD_SUBMITTED_DEFERRED_TO_RULE_CODE =
+  "lead_submitted_deferred_to_rule";
+
+/**
+ * A regra substitui o envio do Lead recebido na entrada: evento
+ * LeadSubmitted, ativa e enviando (produção). Mesma condição do selo
+ * "Substitui envio na entrada" da lista de regras.
+ */
+export function providerRuleReplacesEntryLeadSubmitted(rule: {
+  eventName: string;
+  active: boolean;
+  mode: string;
+}): boolean {
+  return (
+    rule.eventName === "LeadSubmitted" &&
+    rule.active &&
+    rule.mode === "production"
+  );
+}
 
 /**
  * Regra antiga (palavra-chave ou etiqueta sem configuracao de provedor),
@@ -1399,6 +1427,19 @@ export const providerConversionRuleExecutionAuditSchema = z.object({
       // false: a regra está pausada, em observação ou unificada; nada é
       // reenviado (ready = 0) até o envio automático da regra ser ligado.
       ruleSendsNow: z.boolean().optional(),
+    })
+    .optional(),
+  /**
+   * Tarefa 20 (LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED): leads cuja entrada
+   * adiou o Lead recebido para esta regra ha mais de `olderThanDays` dias e
+   * que a regra ainda nao enviou ("N leads aguardando a regra"). So leitura:
+   * nada e enviado sozinho. capped: contagem limitada (ha pelo menos isso).
+   */
+  leadsAwaitingRule: z
+    .object({
+      count: z.number().int().nonnegative(),
+      olderThanDays: z.number().int().positive(),
+      capped: z.boolean(),
     })
     .optional(),
 });

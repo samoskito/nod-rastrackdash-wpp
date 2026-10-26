@@ -1,6 +1,6 @@
 # PLANO — Fase 6: paridade com o SaaS (dash-com-ia até #187)
 
-> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0, a 6.1a e a 6.1b estão na branch de integração `integracao/fase-6` (PR #105, #106 e #107); a 6.1c está implementada e aguarda revisão (branch `feat/fase-6.1c-producao-direta`). **Regra fixa "produção direta" (26/10/2026) na §0, valendo para todas as fases seguintes.** A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
+> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0, a 6.1a, a 6.1b e a 6.1c estão na branch de integração `integracao/fase-6` (PR #105, #106, #107 e #108); a 6.2a está implementada e aguarda revisão (branch `feat/fase-6.2a-lead-regra-conversao-manual`). **Regra fixa "produção direta" (26/10/2026) na §0, valendo para todas as fases seguintes.** A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
 >
 > - Plano canônico de execução: `.hermes/plans/ACTIVE-STUDENT-EDITION-IMPROVEMENTS.md`. Este arquivo é o plano da fase. Quando a implementação começar, o ACTIVE recebe a linha "Fase 6" com o protocolo de status, conforme a seção "Protocolo de atualização".
 > - Base do levantamento:
@@ -79,7 +79,7 @@ Tamanho: P até 1 dia, M de 2 a 3 dias, G 4 dias ou mais (execução, testes e r
 |---|---|---|---|---|---|
 | #153 | Uma conversão por lead por pixel, entre números (`lead-lifetime-conversion-guard.ts`) | ADAPTAR | Incluir a ponte WAHA e a entrada CTWA do Meta Cloud no `leadLifetimeGuard`. Mesclar o resumo no Reprocessar conservador do nod | 6.0 | G |
 | #154 | Validação CPF/CNPJ/CEP da cobrança | NÃO SE APLICA | Billing/Asaas: o nod não tem `src/billing` | — | — |
-| #155 | "Lead recebido" pela regra (flag `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, desligada) | ADAPTAR | Base de #158, #167, #175 e #183. O `auto_lead` do nod inclui WAHA e Meta Cloud | 6.2a | G |
+| #155 | "Lead recebido" pela regra (flag `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`: desligada no SaaS, ligada por padrão no nod) | ADAPTAR | Base de #158, #167, #175 e #183. O `auto_lead` do nod inclui WAHA e Meta Cloud | 6.2a | G |
 | #156 | CSS da lista de Conversões | PORTAR | Depende do selo do #155 | 6.2a | P |
 | #157 | Investimento e conversas da Meta respeitam o período | PORTAR | O bug existe no nod: `meta-reporting.service.ts` cai em `campaign.spendCents` | 6.3a | P/M |
 | #158 | Conversão manual no lead (qualquer evento; compra com pedido) | ADAPTAR | Sem vaga: vale licença mais conexão ativa. Destinos para WAHA e Meta Cloud. **Substitui o PR #90 do nod** (ver §2) | 6.2a | G |
@@ -336,7 +336,8 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 
 ### 6.2a — Lead recebido pela regra e conversão manual no lead
 
-- **Itens:** #155 (`4d74d303`, flag desligada), #156 (`2e328e97`), #158 (`be599f49`) e o hunk do #159 em `lead-submitted-rule-override.ts`.
+- **Status (26/10/2026): IMPLEMENTADA**, branch `feat/fase-6.2a-lead-regra-conversao-manual` (a partir de `origin/integracao/fase-6`), aguardando revisão. Sem migration. Flag `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED` **ligada por padrão** (produção direta).
+- **Itens:** #155 (`4d74d303`; no SaaS, flag desligada; no nod, ligada por padrão, ver Env nova), #156 (`2e328e97`), #158 (`be599f49`) e o hunk do #159 em `lead-submitted-rule-override.ts`.
 - **Migration:** nenhuma no SaaS. Se o Samuel quiser a auditoria de status do #90, entra a `20261027…_lead_manual_status_audit` (aditiva), **só com aprovação**.
 - **Arquivos:**
   - `conversion-rules/lead-submitted-rule-override.ts`;
@@ -350,7 +351,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
   - no lugar de "sem vaga identificável", vale licença mais conexão ativa;
   - compra manual de Braip, Hotmart e Yampi só depois da 6.5 a 6.7 (deixar o ponto de extensão);
   - **fechar o PR #90 do nod**.
-- **Env nova:** `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED` (padrão desligado).
+- **Env nova:** `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **ligada por padrão** (produção direta, regra fixa da §0: validada em produção no SaaS). Sem valor = ligada; `false`/`0`/`off`/`no` explícito desliga. Um único leitor (`apps/api/src/config/lead-submitted-rule-override-flag.ts`) para todos os espelhos (regras, lead-cohort, relatórios, guard de conversão única, capacidades).
 - **Testes:**
   - `lead-submitted-rule-override`, `ctwa-lead-proof-deferred-entry`, delta do cross-number-dedupe;
   - `manual-lead-conversion` (API e web), `manual-conversions-controller`;
@@ -573,7 +574,7 @@ Use uma instância de teste com uma licença real de teste, num workspace sem da
    - remover um número exibe "Número removido" e reancora a regra.
 10. **#171/#165/#179:** o motivo de "em observação" aparece em Eventos recebidos; a prontidão dos números carrega rápido numa conta com histórico; "Bloqueado" sempre vem com motivo.
 11. **#155/#158/#176:**
-    - com a flag desligada, nada muda;
+    - sem regra de Lead recebido, ou com `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED=false`, nada muda (a flag vem ligada por padrão);
     - a conversão manual de QualifiedLead num lead que já converteu pela frase **não** gera segundo evento;
     - compra manual com pedido;
     - arrastar no Kanban gera a conversão.

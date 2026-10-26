@@ -113,6 +113,16 @@ export const leadDetailConversionEventSchema = z.object({
   occurredAt: z.string().datetime(),
   sentAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
+  /** Conversao registrada manualmente no lead (tarefa 21). */
+  manual: z
+    .object({
+      createdByName: z.string().min(1).nullable(),
+      note: z.string().min(1).nullable(),
+      orderRef: z.string().min(1).nullable(),
+      canCancel: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const leadDetailWebhookEventSchema = z.object({

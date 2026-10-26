@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { ConversionRecordError } from "../conversion-events/conversion-record.error";
+import {
+  resolveLeadSubmittedRuleOverride,
+  type LeadSubmittedOverrideDeps,
+} from "../conversion-rules/lead-submitted-rule-override";
 import type { LeadsService } from "../leads/leads.service";
 import type { ConversionEventsService } from "../conversion-events/conversion-events.service";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
@@ -92,6 +96,8 @@ export async function materializeCtwaEntry(
   conversions: ConversionEventsService,
   eventId: string,
   mode: "live_production" | "authorized_replay",
+  /** Porte do SaaS #155 gates (env flag + license). Absent: never defer. */
+  overrideDeps: LeadSubmittedOverrideDeps = {},
 ) {
   const route = await resolveCtwaDestination(client, event.channel);
   if (route.kind !== "authorized_ctwa_destination")
@@ -136,6 +142,26 @@ export async function materializeCtwaEntry(
     client,
   );
   if (!lead) throw new CtwaEntryMaterializationError("lead_invalid");
+  // Same transaction as the entry (under lockUnnichatMetaPolicy): an active
+  // production LeadSubmitted provider rule covering this number sends the
+  // LeadSubmitted instead of the entry (tarefa 20, flag gated).
+  const deferToProviderRule = await resolveLeadSubmittedRuleOverride(
+    client,
+    {
+      workspaceId: event.workspaceId,
+      channel: {
+        id: event.channelId,
+        connectionId: event.connectionId,
+        provider: event.provider ?? "unnichat",
+      },
+      // No ad route: the rule send proves the page/pixel by this receipt.
+      destination: {
+        kind: "ctwa_destination",
+        destinationId: route.destinationId,
+      },
+    },
+    overrideDeps,
+  );
   const conversion = await conversions.recordExternalConversion(
     {
       workspaceId: event.workspaceId,
@@ -161,6 +187,7 @@ export async function materializeCtwaEntry(
       // Once per lead and Meta destination across numbers and rules.
       // CTWA destination entries are Unnichat-only and always run inside the
       // caller's transaction (production and replay).
+      deferToProviderRule,
       leadLifetimeGuard: {
         channelId: event.channelId,
         pipeline: "ctwa_entry",

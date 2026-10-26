@@ -74,6 +74,7 @@ conversão, estas variáveis são **obrigatórias**, não opcionais:
 | `INBOUND_WEBHOOK_PRODUCTION_ENABLED` | **Sim em produção** (Dokploy/deploy do aluno) | Fixo | `.env` da API / env do serviço | Não |
 | `INBOUND_CONVERSION_PRODUCTION_ENABLED` | Não — deixe **sem valor** (produção direta, Fase 6.1c): sem valor, o envio das regras acompanha `INBOUND_CONVERSION_RULES_ENABLED`. `false` explícito desliga o envio de todas as regras (interruptor do servidor). Se a sua API tem `false` copiado do `.env.example` antigo, troque para `true` ou apague a variável | Fixo | `.env` da API | Não |
 | `INBOUND_WEBHOOK_REPLAY_ENABLED` | Não — mantenha `false` a menos que precise reprocessar webhooks | Fixo | `.env` da API | Não |
+| `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED` | Não — deixe **sem valor** (padrão **ligado**, Fase 6.2a, produção direta). Ligada: uma regra de conversão "Lead recebido" ativa e enviando (frase, catálogo ou automação) passa a enviar o Lead recebido dos números que ela cobre quando for acionada, e a entrada da conversa só registra a origem (nunca os dois; uma vez por lead e pixel). Sem regra assim, nada muda: o Lead recebido sai na entrada, como antes. `false` (ou `0`, `off`, `no`) explícito desliga: o Lead recebido volta a sair sempre na entrada. Só a API lê; mudar exige reiniciar a API | Fixo | `.env` da API / env do serviço (Dokploy: variáveis do serviço da API) | Não |
 
 Gere a chave de criptografia (Base64 de 32 bytes) com Node — mesmo comando em
 qualquer sistema operacional com Node instalado:

@@ -1,9 +1,21 @@
-import type { LeadDetailDto } from "@wpptrack/shared";
+import {
+  conversionEventBuilderLabel,
+  type CurrencyCode,
+  type CurrentWorkspaceDto,
+  type LeadDetailConversionEventDto,
+  type LeadDetailDto,
+} from "@wpptrack/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { getWorkspaceCurrencySettings } from "../../../../lib/currency-settings";
 import { formatDateTime } from "../../../../lib/date-time";
+import { fetchLicenseStatus, licenseLockReason } from "../../../../lib/license-status";
 import { serverApiFetch } from "../../../../lib/server-api";
 import { CreativePreview } from "./creative-preview";
+import {
+  CancelManualConversionButton,
+  ManualConversionButton,
+} from "./manual-conversion-dialog";
 import { PresentationMask } from "../../../../components/presentation-mask";
 
 type LeadDetailParams = {
@@ -29,6 +41,79 @@ async function getLeadDetail(leadId: string): Promise<LeadDetailResult> {
   }
 }
 
+/**
+ * Manual conversion (tarefa 21): only owners/admins see the button; the API
+ * enforces it again. Read after the lead, never blocking the page.
+ */
+async function getManualConversionAccess(): Promise<{
+  canManage: boolean;
+  currency: CurrencyCode;
+  /** nod: licença bloqueada (a API responde 423 a qualquer escrita). */
+  licenseLocked: boolean;
+}> {
+  try {
+    const workspace =
+      await serverApiFetch<CurrentWorkspaceDto>("/workspaces/current");
+    if (!workspace?.permissions?.canManageIntegrations)
+      return { canManage: false, currency: "BRL", licenseLocked: false };
+    const [settings, license] = await Promise.all([
+      getWorkspaceCurrencySettings(),
+      fetchLicenseStatus().catch(() => null),
+    ]);
+    return {
+      canManage: true,
+      currency: settings?.conversionCurrency ?? "BRL",
+      licenseLocked: Boolean(license && licenseLockReason(license) !== null),
+    };
+  } catch {
+    return { canManage: false, currency: "BRL", licenseLocked: false };
+  }
+}
+
+function ManualConversionMeta({
+  leadId,
+  event,
+  canManage,
+}: {
+  leadId: string;
+  event: LeadDetailConversionEventDto;
+  canManage: boolean;
+}) {
+  if (!event.manual) return null;
+  const action =
+    event.status === "sent" ? (
+      <span className="manual-conversion-sent">
+        Enviado — não pode ser desfeito
+      </span>
+    ) : canManage && event.manual.canCancel ? (
+      <CancelManualConversionButton
+        leadId={leadId}
+        conversionEventLogId={event.id}
+      />
+    ) : null;
+  return (
+    <span className="manual-conversion-meta">
+      <span className="manual-conversion-meta-head">
+        <span className="event-chip manual">Manual</span>
+        <span className="manual-conversion-author">
+          <span>por</span>
+          <span className="manual-conversion-author-name">
+            <PresentationMask placeholder="Usuário oculto">
+              {event.manual.createdByName ?? "usuário"}
+            </PresentationMask>
+          </span>
+        </span>
+      </span>
+      {event.manual.note ? (
+        <span className="manual-conversion-note">{event.manual.note}</span>
+      ) : null}
+      {action ? (
+        <span className="manual-conversion-meta-action">{action}</span>
+      ) : null}
+    </span>
+  );
+}
+
 function dateTime(value: string | null) {
   if (!value) {
     return "-";
@@ -50,30 +135,69 @@ function statusTone(status: string) {
     : "";
 }
 
-function eventStatusLabel(status: string) {
+/**
+ * Dot color of a conversion status, consistent with the manual outcome chip:
+ * sent green; queued/sending blue; only in the panel/canceled gray; expired
+ * or unconfirmed amber.
+ */
+function conversionStatusTone(event: {
+  status: string;
+  errorCode?: string | null;
+}) {
+  if (event.status === "sent") return "";
+  if (["ready_to_send", "queued", "dispatching"].includes(event.status))
+    return " info";
+  if (
+    event.status === "delivery_unknown" ||
+    (event.status === "not_eligible" &&
+      event.errorCode === "MetaEventTimeExpired")
+  )
+    return " warn";
+  if (["not_eligible", "skipped", "imported", "shadow_observed"].includes(event.status))
+    return " neutral";
+  return statusTone(event.status);
+}
+
+/**
+ * Portuguese status of a conversion (never the raw code). Manual conversions
+ * get their own wording for "só no painel", "expirou" and "cancelado".
+ */
+function eventStatusLabel(
+  status: string,
+  event?: { errorCode?: string | null; manual?: unknown },
+) {
+  if (event?.manual) {
+    if (status === "not_eligible")
+      return event.errorCode === "MetaEventTimeExpired"
+        ? "Expirou antes do envio"
+        : "Só no painel";
+    if (status === "skipped") return "Cancelado";
+  }
   const labels: Record<string, string> = {
     sent: "Enviado",
     processed: "Processado",
     pending: "Pendente",
-    queued: "Na fila",
+    ready_to_send: "Na fila de envio",
+    queued: "Na fila de envio",
+    dispatching: "Enviando à Meta",
+    delivery_unknown: "Envio não confirmado",
+    pending_meta_context: "Bloqueado: sem contexto do anúncio",
+    pending_value: "Bloqueado: sem valor",
+    not_configured: "Bloqueado: destino Meta não configurado",
     failed: "Falhou",
     error: "Falhou",
     imported: "Importado",
     shadow_observed: "Observado em sombra",
     not_eligible: "Não elegível para CAPI",
+    skipped: "Descartado",
   };
 
   return labels[status] ?? status;
 }
 
+/** Portuguese label of the conversion catalog (falls back to the raw name). */
 function eventNameLabel(eventName: string) {
-  const labels: Record<string, string> = {
-    LeadSubmitted: "Conversa iniciada",
-    QualifiedLead: "Lead qualificado",
-    Purchase: "Compra atribuída",
-  };
-
-  return labels[eventName] ?? eventName;
+  return conversionEventBuilderLabel(eventName);
 }
 
 function triggerLabel(trigger: string) {
@@ -81,6 +205,8 @@ function triggerLabel(trigger: string) {
     conversation_started: "Início de conversa",
     keyword: "Palavra-chave",
     whatsapp_label: "Etiqueta do WhatsApp",
+    manual_conversion: "Registro manual",
+    auto_lead: "Entrada do WhatsApp",
   };
 
   return labels[trigger] ?? trigger;
@@ -206,6 +332,7 @@ export default async function LeadDetailPage({
   }
 
   const { lead } = detail;
+  const manualAccess = await getManualConversionAccess();
 
   return (
     <section className="page-stack page-wide lead-detail-page">
@@ -313,9 +440,18 @@ export default async function LeadDetailPage({
       </section>
 
       <section className="lead-detail-section">
-        <header className="lead-detail-section-header">
-          <span className="eyebrow">Conversões</span>
-          <h2>Eventos do Pixel/CAPI</h2>
+        <header className="lead-detail-section-header manual-conversion-header">
+          <div>
+            <span className="eyebrow">Conversões</span>
+            <h2>Eventos do Pixel/CAPI</h2>
+          </div>
+          {manualAccess.canManage ? (
+            <ManualConversionButton
+              leadId={lead.id}
+              defaultCurrency={manualAccess.currency}
+              licenseLocked={manualAccess.licenseLocked}
+            />
+          ) : null}
         </header>
         {detail.conversionEvents.length > 0 ? (
           <>
@@ -341,15 +477,22 @@ export default async function LeadDetailPage({
                       </td>
                       <td>
                         <span
-                          className={`event-chip${statusTone(event.status)}`}
+                          className={`event-chip${conversionStatusTone(event)}`}
                         >
-                          {eventStatusLabel(event.status)}
+                          {eventStatusLabel(event.status, event)}
                         </span>
                         {event.errorMessage ? (
                           <span>{event.errorMessage}</span>
                         ) : null}
                       </td>
-                      <td>{triggerLabel(event.sourceTrigger)}</td>
+                      <td>
+                        {triggerLabel(event.sourceTrigger)}
+                        <ManualConversionMeta
+                          leadId={lead.id}
+                          event={event}
+                          canManage={manualAccess.canManage}
+                        />
+                      </td>
                       <td>
                         <PresentationMask placeholder="Pixel oculto">
                           {event.pixelId ?? "-"}
@@ -372,14 +515,21 @@ export default async function LeadDetailPage({
                         {eventTechnicalName(event.eventName, event.id)}
                       </span>
                     </div>
-                    <span className={`event-chip${statusTone(event.status)}`}>
-                      {eventStatusLabel(event.status)}
+                    <span className={`event-chip${conversionStatusTone(event)}`}>
+                      {eventStatusLabel(event.status, event)}
                     </span>
                   </header>
                   <dl>
                     <div>
                       <dt>Gatilho</dt>
-                      <dd>{triggerLabel(event.sourceTrigger)}</dd>
+                      <dd>
+                        {triggerLabel(event.sourceTrigger)}
+                        <ManualConversionMeta
+                          leadId={lead.id}
+                          event={event}
+                          canManage={manualAccess.canManage}
+                        />
+                      </dd>
                     </div>
                     <div>
                       <dt>Ocorrido em</dt>

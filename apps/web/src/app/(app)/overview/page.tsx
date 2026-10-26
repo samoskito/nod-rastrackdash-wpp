@@ -36,9 +36,10 @@ import { serverApiFetch } from "../../../lib/server-api";
 import { OverviewFilters } from "./overview-filters";
 import {
   OverviewLeadsBlock,
-  overviewLeadsHints,
+  overviewLeadsCopy,
   type OverviewLeadsBlockItem,
 } from "./overview-leads-block";
+import { getLeadSubmittedOverrideEnabled } from "../../../lib/lead-submitted-override";
 import { overviewLeadsHref } from "./overview-leads-links";
 
 type OverviewSearchParams = Record<string, string | string[] | undefined>;
@@ -419,12 +420,18 @@ export default async function OverviewPage({
         ),
       ) || undefined,
   };
-  const [{ report, state: reportState }, metaAssets, adAccountCurrencies] =
-    await Promise.all([
-      getOverviewReport(filters),
-      getMetaAssets(),
-      getAdAccountCurrencies(),
-    ]);
+  const [
+    { report, state: reportState },
+    metaAssets,
+    adAccountCurrencies,
+    leadSubmittedOverrideEnabled,
+  ] = await Promise.all([
+    getOverviewReport(filters),
+    getMetaAssets(),
+    getAdAccountCurrencies(),
+    getLeadSubmittedOverrideEnabled(),
+  ]);
+  const leadsCopy = overviewLeadsCopy(leadSubmittedOverrideEnabled);
   const reportingAccounts = (metaAssets?.reportingAccounts ?? []).filter(
     (account) => account.active,
   );
@@ -495,8 +502,8 @@ export default async function OverviewPage({
       caption:
         costPerLeadLabel !== null
           ? `Custo por lead novo ${costPerLeadLabel}`
-          : "1º contato no período",
-      hint: overviewLeadsHints.new,
+          : leadsCopy.newCaption,
+      hint: leadsCopy.new,
       href: newLeadsHref,
       hrefLabel: "Ver os leads novos na lista de leads",
     },
@@ -505,7 +512,7 @@ export default async function OverviewPage({
       label: "Voltaram por anúncio",
       value: optionalCount(campaign.returningLeads),
       caption: "Já eram leads antes do período",
-      hint: overviewLeadsHints.returning,
+      hint: leadsCopy.returning,
       href: overviewLeadsHref(filters, leadsPeriod, "returning"),
       hrefLabel: "Ver quem voltou por anúncio na lista de leads",
     },
@@ -514,7 +521,7 @@ export default async function OverviewPage({
       label: "Conversaram mais de uma vez",
       value: optionalCount(campaign.repeatConversationLeads),
       caption: "2 ou mais conversas no período",
-      hint: overviewLeadsHints.repeat,
+      hint: leadsCopy.repeat,
       href: overviewLeadsHref(filters, leadsPeriod, "repeat"),
       hrefLabel: "Ver quem conversou mais de uma vez na lista de leads",
     },
@@ -523,7 +530,7 @@ export default async function OverviewPage({
       label: "Conversas por anúncio",
       value: optionalCount(campaign.adConversationEvents),
       caption: "Inclui conversas repetidas",
-      hint: overviewLeadsHints.conversations,
+      hint: leadsCopy.conversations,
     },
   ];
   const funnelSummary = dataAvailable
@@ -601,13 +608,13 @@ export default async function OverviewPage({
         />
         <Metric
           label="Leads novos"
-          title={overviewLeadsHints.new}
+          title={leadsCopy.new}
           value={dataAvailable ? String(campaign.realConversations) : "-"}
           href={dataAvailable ? newLeadsHref : null}
           hrefLabel="Ver os leads novos na lista de leads"
           delta={
             dataAvailable
-              ? "1º contato no período"
+              ? leadsCopy.newCaption
               : "Aguardando resposta da API"
           }
           unavailable={!dataAvailable}

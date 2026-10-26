@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { providerConversionDecisionSchema } from "@wpptrack/shared";
 import {
-  COVERED_CONVERTING_LOG_WHERE,
+  coveredConvertingLogWhere,
   COVERED_LOG_SELECT,
   isLeadLifetimeEvent,
   pickPriorLeadLifetimeConversion,
@@ -160,6 +160,8 @@ export async function partitionAlreadyConverted(
     workspaceId: string;
     executions: ReprocessableExecution[];
     previewRoute: PreviewRoute;
+    /** Porte do SaaS #155 (flag on): Uazapi/WAHA bridge entries sent count as the entry. */
+    includeAutoLead?: boolean;
   },
 ): Promise<{
   ready: ReprocessableExecution[];
@@ -235,7 +237,7 @@ export async function partitionAlreadyConverted(
           workspaceId: input.workspaceId,
           leadId: { in: allLeadIds },
           eventName: { in: eventNames },
-          ...COVERED_CONVERTING_LOG_WHERE,
+          ...coveredConvertingLogWhere(input.includeAutoLead === true),
         },
         select: COVERED_LOG_SELECT,
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],

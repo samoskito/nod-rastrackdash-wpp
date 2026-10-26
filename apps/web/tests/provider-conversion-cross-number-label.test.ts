@@ -13,8 +13,15 @@ describe("cross-number dedupe reason label", () => {
     expect(
       purchaseReviewReasonLabel("lead_already_converted_other_number"),
     ).toBe("Lead já convertido por outro número: nada novo enviado à Meta");
+    // Tarefa 21: "another source" may also be a manual conversion.
     expect(executionReasonLabel("lead_already_converted_other_source")).toBe(
-      "Lead já convertido pela entrada do anúncio: nada novo enviado à Meta",
+      "Lead já convertido pela entrada do anúncio ou manualmente: nada novo enviado à Meta",
+    );
+    expect(executionReasonLabel("purchase_registered_manually")).toBe(
+      "Compra já registrada manualmente",
+    );
+    expect(executionReasonLabel("lead_event_registered_manually")).toBe(
+      "Já registrado manualmente nas últimas 24h",
     );
   });
 });

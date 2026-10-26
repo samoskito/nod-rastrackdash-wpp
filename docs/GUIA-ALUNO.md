@@ -247,6 +247,42 @@ WhatsApp que já existe no workspace. **Sem `ctwa_clid` nada é enviado.**
 Com a licença bloqueada, os dois CRMs ficam só leitura (gravações respondem 423)
 e nada é processado ou enviado em segundo plano.
 
+### 10.5 "Lead recebido" pela regra e conversão manual no lead
+
+- **Lead recebido pela regra (ligado por padrão).** Sem nenhuma regra de
+  "Lead recebido", nada muda: o Lead recebido (LeadSubmitted na Meta) é enviado
+  na entrada da conversa do anúncio. Se você criar uma regra de conversão com o
+  evento **Lead recebido** (frase da equipe, catálogo ou automação) e ela
+  estiver ativa e enviando, os números que ela cobre passam a enviar o Lead
+  recebido **quando a regra for acionada**; a entrada da conversa fica só como
+  origem e conta como conversa nos relatórios. Nunca saem os dois: é uma vez
+  por lead e pixel. A lista de regras mostra o selo **"Substitui envio na
+  entrada"**; em **Eventos Meta** a entrada aparece como **"Adiado para a
+  regra"**; e as Execuções da regra mostram "N leads aguardando a regra" quando
+  a regra demora mais de 3 dias. Vale nos números em que pode existir regra de
+  Lead recebido: Uazapi BYO e WAHA (conectadas pela URL do servidor + token, um
+  número por conexão; frase da equipe ou catálogo), Umbler (frase, catálogo ou
+  automação) e Unnichat (automação). Nos números do Meta Cloud, Gupshup e Data
+  Crazy o Lead recebido continua saindo na entrada. Se a conexão WhatsApp do
+  número estiver desativada, a entrada não é adiada; com a licença bloqueada
+  nada é enviado à Meta até a licença voltar. Para desligar, defina
+  `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED=false` nas variáveis da API e
+  reinicie a API (detalhe em [`setup/environment.md`](setup/environment.md)).
+- **Conversão manual no lead.** Donos e administradores do workspace veem, no
+  detalhe do lead (Leads → abrir o lead → seção Conversões), o botão
+  **"Registrar conversão manual"**: escolha o evento (qualquer um do catálogo),
+  a data (até 90 dias; a Meta só aceita até 7 dias, o resto fica só no
+  painel), o valor e, na Compra, o número do pedido. O destino Meta é o mesmo
+  das automações do lead (anúncio do lead ou entrada CTWA); você não escolhe o
+  pixel. Antes de gravar, a tela mostra se vai para a Meta e, quando não vai,
+  por quê. Proteções: o mesmo evento "uma vez por lead" (Lead recebido, Lead
+  qualificado...) já enviado por uma regra é recusado; usa o mesmo `event_id`
+  da regra, então a Meta nunca conta dois; o mesmo pedido não entra duas vezes
+  (inclusive contra a Payt); o mesmo evento nas últimas 24h pede confirmação.
+  Dá para cancelar enquanto nada chegou à Meta. Com a licença bloqueada o botão
+  fica desabilitado (a API responde 423). A compra manual da Braip, Hotmart e
+  Yampi entra quando essas plataformas forem portadas.
+
 ## 11. Marca (whitelabel) — opcional
 
 Defina `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR` para personalizar sua agência (veja [`../docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)). O rodapé residual **`RastrackDash · powered by PalmUP`** é fixo e não pode ser removido nem escondido, com ou sem essas variáveis.
