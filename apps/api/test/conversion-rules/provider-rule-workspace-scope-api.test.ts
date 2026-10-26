@@ -304,6 +304,10 @@ function createWorld(options: { unnichat?: boolean } = {}) {
       findMany: vi.fn(async ({ where }: Row) =>
         providerRules.map(hydrateRule).filter((item) => matches(item, where)),
       ),
+      count: vi.fn(
+        async ({ where }: Row) =>
+          providerRules.filter((item) => matches(item, where)).length,
+      ),
     },
     providerConversionRuleChannel: {
       createMany: vi.fn(async ({ data }: Row) => {
@@ -338,6 +342,11 @@ function createWorld(options: { unnichat?: boolean } = {}) {
         const row = endpoints.find((item) => item.id === where.id)!;
         Object.assign(row, data);
         return row;
+      }),
+      updateMany: vi.fn(async ({ where, data }: Row) => {
+        const rows = endpoints.filter((item) => matches(item, where));
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
       }),
     },
     providerRuleCreateClaim: {
@@ -2024,5 +2033,122 @@ describe("Fase 5.3: product filter, URL própria and 'Desativar URL antiga'", ()
         "user_1",
       ),
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+// Fase 6.1a: porte do SaaS (0f6e010d, #161).
+describe("provider rules API: excluir regras unificadas e em lote", () => {
+  async function unifiedWorld() {
+    const world = createWorld({ unnichat: true });
+    const create = (number: "un_5159" | "un_5520" | "un_third") =>
+      world.service.createRule(
+        workspaceId,
+        providerConversionRuleCreateInputSchema.parse({
+          name: "Lead Qualificado",
+          triggerType: "provider_automation",
+          eventName: "QualifiedLead",
+          connectionId: `connection_${number}`,
+          channelIds: [`channel_${number}`],
+        }),
+        "user_1",
+      );
+    const target = await create("un_5159");
+    const member = await create("un_5520");
+    const orphan = await create("un_third");
+    world.connections.find((c) => c.id === "connection_un_third")!.removedAt =
+      new Date(now.getTime() - 86_400_000);
+    const { groups } = await world.service.listUnifyCandidates(workspaceId);
+    await world.service.unifyRules(
+      workspaceId,
+      { ruleIds: groups[0]!.ruleIds },
+      "user_1",
+    );
+    return { world, target: target.rule, member: member.rule, orphan: orphan.rule };
+  }
+
+  it("deletes a unified member and a unified rule whose number was removed (used to answer 404)", async () => {
+    const { world, member, orphan } = await unifiedWorld();
+
+    await world.service.removeRule(workspaceId, member.id, "user_1");
+    await world.service.removeRule(workspaceId, orphan.id, "user_1");
+
+    for (const id of [member.id, orphan.id]) {
+      const row = world.providerRules.find((rule) => rule.id === id)!;
+      expect(row.removedAt).toBeInstanceOf(Date);
+      expect(
+        world.endpoints.find((endpoint) => endpoint.providerRuleId === id)!
+          .removedAt,
+      ).toBeInstanceOf(Date);
+    }
+    expect(
+      world.audits.filter((a) => a.action === "provider_conversion_rule.removed"),
+    ).toHaveLength(2);
+    expect(
+      (await world.service.listRules(workspaceId)).map((rule) => rule.id),
+    ).not.toContain(orphan.id);
+  });
+
+  it("bulk: removes members and orphans, reports a missing rule and removes the target last", async () => {
+    const { world, target, member, orphan } = await unifiedWorld();
+
+    const result = await world.service.removeRules(
+      workspaceId,
+      { ruleIds: [target.id, member.id, "missing_rule", orphan.id] },
+      "user_1",
+    );
+    // Members of the same batch go first, so the target has none left.
+    expect(result.results.map((item) => [item.ruleId, item.status])).toEqual([
+      [target.id, "removed"],
+      [member.id, "removed"],
+      ["missing_rule", "not_found"],
+      [orphan.id, "removed"],
+    ]);
+    expect(result.removedCount).toBe(3);
+  });
+
+  it("bulk: a target that still has unified rules needs its own confirmation", async () => {
+    const { world, target, member } = await unifiedWorld();
+
+    const refused = await world.service.removeRules(
+      workspaceId,
+      { ruleIds: [target.id] },
+      "user_1",
+    );
+    expect(refused.results[0]!.status).toBe("needs_target_confirmation");
+    expect(
+      world.providerRules.find((rule) => rule.id === target.id)!.removedAt,
+    ).toBeNull();
+
+    const confirmed = await world.service.removeRules(
+      workspaceId,
+      { ruleIds: [target.id], confirmTargetRuleIds: [target.id] },
+      "user_1",
+    );
+    expect(confirmed.results[0]!.status).toBe("removed");
+    expect(
+      world.providerRules.find((rule) => rule.id === member.id)!.removedAt,
+    ).toBeNull();
+  });
+
+  it("bulk: one failing deletion does not stop the others", async () => {
+    const { world, member, orphan } = await unifiedWorld();
+    const original = world.prisma.providerConversionRuleConfig.update;
+    world.prisma.providerConversionRuleConfig.update = vi.fn(
+      async (args: Row) => {
+        if (args.where.id === member.id) throw new Error("db down");
+        return original(args);
+      },
+    );
+
+    const result = await world.service.removeRules(
+      workspaceId,
+      { ruleIds: [member.id, orphan.id] },
+      "user_1",
+    );
+    expect(result.results.map((item) => item.status)).toEqual([
+      "failed",
+      "removed",
+    ]);
+    expect(result.removedCount).toBe(1);
   });
 });

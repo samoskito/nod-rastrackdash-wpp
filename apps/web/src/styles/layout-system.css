@@ -7639,6 +7639,83 @@ body {
   accent-color: var(--mint);
 }
 
+/* Excluir regras em lote: caixa por linha, barra de ações e confirmação. */
+.conversion-rule-main.has-select {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.conversion-rule-select {
+  width: 18px;
+  height: 18px;
+  margin: 11px 0 0;
+  accent-color: var(--mint);
+  cursor: pointer;
+}
+
+.conversion-bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.conversion-bulk-toolbar:empty {
+  display: none;
+}
+
+.conversion-bulk-count {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.conversions-hide-unified {
+  align-self: end;
+}
+
+.conversion-bulk-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(52vh, 440px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.conversion-bulk-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.conversion-bulk-item small {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.conversion-bulk-delete {
+  justify-items: stretch;
+}
+
+.conversion-bulk-list {
+  width: 100%;
+}
+
+.conversion-bulk-item .conversion-bulk-warning {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(245, 185, 66, 0.55);
+  border-radius: 8px;
+  background: rgba(245, 185, 66, 0.12);
+  color: #f5c76a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 @media (max-width: 640px) {
   .single-url-products .conversion-field-row {
     grid-template-columns: minmax(0, 1fr);

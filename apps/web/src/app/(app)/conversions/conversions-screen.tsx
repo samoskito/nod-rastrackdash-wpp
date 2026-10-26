@@ -19,6 +19,7 @@ import {
   Plus,
   Send,
   Settings2,
+  Trash2,
   Undo2,
 } from "lucide-react";
 import Link from "next/link";
@@ -53,6 +54,7 @@ import {
   UnattributedSalesList,
   type SingleUrlActions,
 } from "../integrations/single-url/single-url-panels";
+import { BulkDeleteModal, cleanupCandidateIds } from "./bulk-delete";
 import { LegacyRules, type LegacyRuleActions } from "./legacy-rules";
 import { NewRuleFlow } from "./new-rule-flow";
 import { PendingNumbersWarning } from "./pending-numbers";
@@ -90,6 +92,8 @@ export type ConversionsScreenProps = {
   createAction: ScreenAction;
   confirmCreateAction: ScreenAction;
   unifyAction: ScreenAction;
+  /** "Excluir selecionadas": absent, the list has no checkboxes. */
+  bulkRemoveAction?: ScreenAction;
   updateRuleAction: RuleAction;
   loadExecutionsAction: RuleAction;
   /** "Ativar envio neste número" de uma regra para todos os números. */
@@ -167,6 +171,7 @@ export function ConversionsScreen({
   createAction,
   confirmCreateAction,
   unifyAction,
+  bulkRemoveAction,
   updateRuleAction,
   loadExecutionsAction,
   activateNumberAction,
@@ -230,6 +235,24 @@ export function ConversionsScreen({
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const visibleRows = useMemo(() => filterRuleRows(rows, filters), [rows, filters]);
+
+  // Bulk selection: only provider rules, only for people who can manage.
+  const bulkEnabled = Boolean(canManage && bulkRemoveAction);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const selectedRows = useMemo(
+    () =>
+      rows.filter((row) => row.kind === "provider" && selectedIds.has(row.id)),
+    [rows, selectedIds],
+  );
+  const cleanupIds = useMemo(() => cleanupCandidateIds(visibleRows), [visibleRows]);
+
+  function toggleSelected(id: string, checked: boolean) {
+    const next = new Set(selectedIds);
+    if (checked) next.add(id);
+    else next.delete(id);
+    setSelectedIds(next);
+  }
   const filterCount = activeFilterCount(filters);
   const origins = useMemo(
     () => [...new Set(rows.map((row) => row.origin))],
@@ -437,6 +460,16 @@ export function ConversionsScreen({
             <option value="unified">Unificadas</option>
           </select>
         </label>
+        <label className="conversion-check conversions-hide-unified">
+          <input
+            type="checkbox"
+            checked={filters.hideUnified}
+            onChange={(event) =>
+              setFilters({ ...filters, hideUnified: event.target.checked })
+            }
+          />
+          <span>Ocultar regras unificadas</span>
+        </label>
         {filterCount > 0 ? (
           <button
             className="button ghost"
@@ -491,6 +524,49 @@ export function ConversionsScreen({
           </div>
         ) : visibleRows.length > 0 ? (
           <>
+            {bulkEnabled ? (
+              <div
+                className="conversion-bulk-toolbar"
+                role="toolbar"
+                aria-label="Seleção de regras"
+              >
+                {cleanupIds.length > 0 ? (
+                  <button
+                    className="button ghost compact-button"
+                    type="button"
+                    onClick={() =>
+                      setSelectedIds(new Set([...selectedIds, ...cleanupIds]))
+                    }
+                  >
+                    Selecionar unificadas e de número removido ({cleanupIds.length})
+                  </button>
+                ) : null}
+                {selectedRows.length > 0 ? (
+                  <>
+                    <span className="conversion-bulk-count" aria-live="polite">
+                      {selectedRows.length}{" "}
+                      {selectedRows.length === 1 ? "selecionada" : "selecionadas"}
+                    </span>
+                    <button
+                      className="button ghost compact-button"
+                      type="button"
+                      onClick={() => setSelectedIds(new Set())}
+                    >
+                      Limpar seleção
+                    </button>
+                    <button
+                      className="button danger compact-button"
+                      type="button"
+                      onClick={() => setBulkOpen(true)}
+                      aria-haspopup="dialog"
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      Excluir selecionadas ({selectedRows.length})
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             <div className="conversion-rule-head" aria-hidden="true">
               <span>Regra</span>
               <span>Evento</span>
@@ -507,6 +583,9 @@ export function ConversionsScreen({
                     licenseLocked={licenseLocked}
                     numbers={numbers}
                     activateNumberAction={activateNumberAction}
+                    selectable={bulkEnabled && row.kind === "provider"}
+                    selected={selectedIds.has(row.id)}
+                    onSelect={(checked) => toggleSelected(row.id, checked)}
                     onChanged={() => router.refresh()}
                     manageTabs={
                       manageActions && rulesById.has(row.id)
@@ -608,6 +687,23 @@ export function ConversionsScreen({
           />
         ) : null}
       </Modal>
+
+      {bulkOpen && bulkRemoveAction ? (
+        <BulkDeleteModal
+          open
+          rows={selectedRows}
+          action={bulkRemoveAction}
+          onClose={() => setBulkOpen(false)}
+          onDone={(removedIds, message, allRemoved) => {
+            setSelectedIds(
+              new Set([...selectedIds].filter((id) => !removedIds.includes(id))),
+            );
+            setNotice({ tone: allRemoved ? "success" : "warn", message });
+            if (allRemoved) setBulkOpen(false);
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       <UnifyReviewModal
         key={unifyGroup?.key ?? "none"}
@@ -764,6 +860,9 @@ function RuleRow({
   licenseLocked,
   numbers,
   activateNumberAction,
+  selectable = false,
+  selected = false,
+  onSelect,
   onChanged,
   manageTabs,
   onExecutions,
@@ -775,6 +874,10 @@ function RuleRow({
   licenseLocked: boolean;
   numbers: ConversionNumber[];
   activateNumberAction?: ScreenAction;
+  /** Bulk delete: show the checkbox of this row. */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (checked: boolean) => void;
   onChanged: () => void;
   /** Tabs of "Gerenciar" (empty: the rule cannot be managed here). */
   manageTabs: RuleManageTab[];
@@ -784,7 +887,16 @@ function RuleRow({
 }) {
   return (
     <article className="conversion-rule" aria-label={row.name}>
-      <div className="conversion-rule-main">
+      <div className={`conversion-rule-main${selectable ? " has-select" : ""}`}>
+        {selectable ? (
+          <input
+            type="checkbox"
+            className="conversion-rule-select"
+            checked={selected}
+            onChange={(event) => onSelect?.(event.target.checked)}
+            aria-label={`Selecionar ${row.name}`}
+          />
+        ) : null}
         <RuleLogo logo={row.logo} origin={row.origin} />
         <div className="conversion-rule-identity">
           <span className="conversion-rule-origin">

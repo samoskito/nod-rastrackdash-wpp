@@ -1089,6 +1089,45 @@ export const providerConversionRuleUnifyInputSchema = z.object({
   acknowledgeDifferences: z.boolean().optional(),
 });
 
+/**
+ * Exclusão em lote de regras (lista de Conversões; Fase 6.1a, porte do #161).
+ * Uma regra que é o destino de outras unificadas só sai se estiver em
+ * confirmTargetRuleIds.
+ */
+export const providerConversionRuleBulkRemoveInputSchema = z.object({
+  ruleIds: z
+    .array(idSchema)
+    .min(1)
+    .max(100)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Cada regra deve ser informada uma única vez",
+    }),
+  confirmTargetRuleIds: z.array(idSchema).max(100).optional(),
+});
+
+export const providerConversionRuleBulkRemoveResultSchema = z.object({
+  results: z.array(
+    z.object({
+      ruleId: idSchema,
+      status: z.enum([
+        "removed",
+        "not_found",
+        "needs_target_confirmation",
+        "failed",
+      ]),
+      message: z.string().max(300).nullable(),
+    }),
+  ),
+  removedCount: z.number().int().min(0),
+});
+
+export type ProviderConversionRuleBulkRemoveInputDto = z.infer<
+  typeof providerConversionRuleBulkRemoveInputSchema
+>;
+export type ProviderConversionRuleBulkRemoveResultDto = z.infer<
+  typeof providerConversionRuleBulkRemoveResultSchema
+>;
+
 export const providerConversionRuleUnifyResultSchema = z.object({
   // created: nova regra global; reused_existing: regra global identica ja
   // existia; replayed: estas regras ja tinham sido unificadas (idempotente).

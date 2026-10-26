@@ -28,6 +28,7 @@ import {
   loadProviderConversionExecutionAuditAction,
   removeProviderConversionRuleAction,
   rotateProviderConversionRuleEndpointAction,
+  removeConversionRulesAction,
   unifyConversionRulesAction,
   updateLegacyRuleAction,
   updateProviderConversionRuleAction,
@@ -678,5 +679,64 @@ describe("conversions actions: manage, legacy and history", () => {
       executionAudit: expect.anything(),
     });
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("conversions actions: excluir selecionadas", () => {
+  function bulkForm(ids: string[], targets: string[] = []) {
+    const formData = new FormData();
+    ids.forEach((id) => formData.append("ruleId", id));
+    targets.forEach((id) => formData.append("confirmTargetId", id));
+    return formData;
+  }
+
+  it("sends every id and the confirmed targets, and reports the per-rule result", async () => {
+    serverApiFetch.mockResolvedValueOnce({
+      removedCount: 1,
+      results: [
+        { ruleId: "rule_a", status: "removed", message: null },
+        { ruleId: "rule_b", status: "needs_target_confirmation", message: "Confirme." },
+      ],
+    });
+
+    const result = await removeConversionRulesAction(
+      bulkForm(["rule_a", "rule_b"], ["rule_x"]),
+    );
+
+    expect(serverApiFetch).toHaveBeenCalledWith(
+      "/conversion-rules/providers/bulk-delete",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ruleIds: ["rule_a", "rule_b"],
+          confirmTargetRuleIds: ["rule_x"],
+        }),
+      },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("1 de 2 excluídas. Veja abaixo o que ficou.");
+    expect(result.bulkRemove?.results[1]?.status).toBe("needs_target_confirmation");
+  });
+
+  it("is ok when everything was removed and refuses an empty selection", async () => {
+    serverApiFetch.mockResolvedValueOnce({
+      removedCount: 2,
+      results: [
+        { ruleId: "rule_a", status: "removed", message: null },
+        { ruleId: "rule_b", status: "removed", message: null },
+      ],
+    });
+    expect(await removeConversionRulesAction(bulkForm(["rule_a", "rule_b"]))).toMatchObject({
+      ok: true,
+      message: "2 regras excluídas. O histórico continua salvo.",
+    });
+    expect(await removeConversionRulesAction(bulkForm([]))).toMatchObject({ ok: false });
+    expect(serverApiFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when the outcome is unknown instead of pretending it worked", async () => {
+    serverApiFetch.mockRejectedValueOnce(apiError(500, "boom"));
+    const result = await removeConversionRulesAction(bulkForm(["rule_a"]));
+    expect(result).toMatchObject({ ok: false, outcomeUnknown: true });
   });
 });

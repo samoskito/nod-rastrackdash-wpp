@@ -81,6 +81,7 @@ async function createApp(
     adaptLegacyMessageRule: vi.fn(async () => ({ id: "provider_rule_1" })),
     updateRule: vi.fn(async () => ({ id: "provider_rule_1" })),
     removeRule: vi.fn(async () => undefined),
+    removeRules: vi.fn(async () => ({ results: [], removedCount: 0 })),
     listRuleExecutions: vi.fn(async () => ({ items: [] })),
   };
   const licenseClientService = {
@@ -304,6 +305,35 @@ describe("conversion rules controller: Conversões (Fase 3)", () => {
     await app.close();
   });
 
+  it("deletes several provider rules at once for managers and refuses members (porte do #161)", async () => {
+    const owner = await createApp("admin");
+    await request(owner.server)
+      .post("/conversion-rules/providers/bulk-delete")
+      .set("Authorization", "Bearer refresh-token")
+      .send({ ruleIds: ["rule_1", "rule_2"], confirmTargetRuleIds: ["rule_2"] })
+      .expect(200);
+    expect(owner.providerConversionRulesService.removeRules).toHaveBeenCalledWith(
+      "workspace_1",
+      { ruleIds: ["rule_1", "rule_2"], confirmTargetRuleIds: ["rule_2"] },
+      "user_1",
+    );
+    await request(owner.server)
+      .post("/conversion-rules/providers/bulk-delete")
+      .set("Authorization", "Bearer refresh-token")
+      .send({ ruleIds: [] })
+      .expect(400);
+    await owner.app.close();
+
+    const member = await createApp("member");
+    await request(member.server)
+      .post("/conversion-rules/providers/bulk-delete")
+      .set("Authorization", "Bearer refresh-token")
+      .send({ ruleIds: ["rule_1"] })
+      .expect(403);
+    expect(member.providerConversionRulesService.removeRules).not.toHaveBeenCalled();
+    await member.app.close();
+  });
+
   it("lists unify candidates and unifies for integration managers only", async () => {
     const owner = await createApp("admin");
     await request(owner.server)
@@ -416,6 +446,11 @@ describe("conversion rules controller: Conversões (Fase 3)", () => {
           }),
       () =>
         request(server).patch("/conversion-rules/legacy_1").send({ active: false }),
+      // Fase 6.1a (#161): "Excluir selecionadas" is a write too.
+      () =>
+        request(server)
+          .post("/conversion-rules/providers/bulk-delete")
+          .send({ ruleIds: ["rule_a"] }),
     ];
     for (const write of writes) {
       await write()
@@ -425,6 +460,7 @@ describe("conversion rules controller: Conversões (Fase 3)", () => {
     }
     expect(providerConversionRulesService.createRule).not.toHaveBeenCalled();
     expect(providerConversionRulesService.unifyRules).not.toHaveBeenCalled();
+    expect(providerConversionRulesService.removeRules).not.toHaveBeenCalled();
     expect(providerConversionRulesService.updateRule).not.toHaveBeenCalled();
     expect(conversionRulesService.updateRule).not.toHaveBeenCalled();
 

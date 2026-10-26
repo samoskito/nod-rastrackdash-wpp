@@ -11,6 +11,7 @@ import {
   reprocessProviderConversionAutomationCallbacksAction,
   rotateProviderConversionRuleEndpointAction,
   testProviderCatalogMessageAction,
+  removeConversionRulesAction,
   unifyConversionRulesAction,
   updateLegacyRuleAction,
   updateProviderConversionRuleAction,
@@ -106,6 +107,7 @@ export default async function ConversionsPage({
         createAction={createConversionRuleAction}
         confirmCreateAction={confirmConversionRuleCreateAction}
         unifyAction={unifyConversionRulesAction}
+        bulkRemoveAction={removeConversionRulesAction}
         providerRules={data.providerRules}
         legacyRules={data.legacyRules}
         legacyRulesState={data.legacyRulesState}

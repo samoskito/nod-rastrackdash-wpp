@@ -36,6 +36,7 @@ import type {
   ProviderConversionRuleExecutionAuditQueryDto,
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
+  ProviderConversionRuleBulkRemoveResultDto,
   ProviderConversionRuleIdempotentCreateResultDto,
   ProviderConversionRuleNumberActivationResultDto,
   ProviderConversionRulePendingNumberDto,
@@ -1735,10 +1736,14 @@ export class ProviderConversionRulesService {
     this.requireRulesEnabled();
 
     await this.prisma.$transaction(async (transaction) => {
+      // Porte do #161: rules whose number/connection was removed are still
+      // listed ("Número removido"), so they must still be deletable (they
+      // used to answer 404 here).
       const current = await this.requireRule(
         transaction,
         workspaceId,
         providerRuleId,
+        { includeRemovedConnection: true },
       );
       const removedAt = new Date();
 
@@ -1771,6 +1776,89 @@ export class ProviderConversionRulesService {
         },
       });
     });
+  }
+
+  /**
+   * Porte do #161 (0f6e010d): bulk delete from the Conversions list. Each
+   * rule is removed (and audited) on its own, so a failure never blocks the
+   * others; the result reports every rule. A rule that other unified rules
+   * point to (the "all numbers" target) is only removed when explicitly
+   * confirmed, and only after the rules that point to it in the same batch.
+   */
+  async removeRules(
+    workspaceId: string,
+    input: { ruleIds: string[]; confirmTargetRuleIds?: string[] },
+    actorUserId: string,
+  ): Promise<ProviderConversionRuleBulkRemoveResultDto> {
+    this.requireRulesEnabled();
+    const confirmed = new Set(input.confirmTargetRuleIds ?? []);
+    const pointing = await this.prisma.providerConversionRuleConfig.findMany({
+      where: {
+        workspaceId,
+        removedAt: null,
+        unifiedIntoProviderRuleId: { in: input.ruleIds },
+      },
+      select: { unifiedIntoProviderRuleId: true },
+    });
+    const targetIds = new Set(
+      pointing.map((rule) => rule.unifiedIntoProviderRuleId!),
+    );
+    const ordered = [
+      ...input.ruleIds.filter((id) => !targetIds.has(id)),
+      ...input.ruleIds.filter((id) => targetIds.has(id)),
+    ];
+    const byId = new Map<
+      string,
+      ProviderConversionRuleBulkRemoveResultDto["results"][number]
+    >();
+
+    for (const ruleId of ordered) {
+      try {
+        if (targetIds.has(ruleId)) {
+          const remaining =
+            await this.prisma.providerConversionRuleConfig.count({
+              where: {
+                workspaceId,
+                removedAt: null,
+                unifiedIntoProviderRuleId: ruleId,
+              },
+            });
+          if (remaining > 0 && !confirmed.has(ruleId)) {
+            byId.set(ruleId, {
+              ruleId,
+              status: "needs_target_confirmation",
+              message:
+                "Esta regra recebe os eventos das URLs antigas de outras regras unificadas. Confirme a exclusão dela separadamente.",
+            });
+            continue;
+          }
+        }
+        await this.removeRule(workspaceId, ruleId, actorUserId);
+        byId.set(ruleId, { ruleId, status: "removed", message: null });
+      } catch (error) {
+        byId.set(
+          ruleId,
+          error instanceof NotFoundException
+            ? {
+                ruleId,
+                status: "not_found",
+                message:
+                  "A regra não foi encontrada (talvez já tenha sido excluída).",
+              }
+            : {
+                ruleId,
+                status: "failed",
+                message: "Não foi possível excluir esta regra.",
+              },
+        );
+      }
+    }
+
+    const results = input.ruleIds.map((id) => byId.get(id)!);
+    return {
+      results,
+      removedCount: results.filter((item) => item.status === "removed").length,
+    };
   }
 
   /** Scope options and capability matrix read by the Conversions screen. */
@@ -4173,6 +4261,7 @@ export class ProviderConversionRulesService {
     client: Pick<Prisma.TransactionClient, "providerConversionRuleConfig">,
     workspaceId: string,
     providerRuleId: string,
+    options: { includeRemovedConnection?: boolean } = {},
   ): Promise<PersistedProviderRule> {
     const rule = await client.providerConversionRuleConfig.findFirst({
       where: {
@@ -4180,11 +4269,16 @@ export class ProviderConversionRulesService {
         workspaceId,
         removedAt: null,
         // Bound rules disappear with their connection; unbound rules belong
-        // to the workspace.
-        OR: [
-          { connectionId: null },
-          { connection: { is: { removedAt: null } } },
-        ],
+        // to the workspace. Deleting is the exception (#161): the list still
+        // shows "Número removido" rules and they must be deletable.
+        ...(options.includeRemovedConnection
+          ? {}
+          : {
+              OR: [
+                { connectionId: null },
+                { connection: { is: { removedAt: null } } },
+              ],
+            }),
       },
       include: providerRuleInclude,
     });

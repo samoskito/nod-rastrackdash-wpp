@@ -9,6 +9,8 @@ import {
   providerConversionRuleAdaptInputSchema,
   providerConversionRuleBlockedReprocessResultSchema,
   providerConversionRuleExecutionAuditSchema,
+  providerConversionRuleBulkRemoveInputSchema,
+  providerConversionRuleBulkRemoveResultSchema,
   providerConversionRuleIdempotentCreateInputSchema,
   providerConversionRuleIdempotentCreateResultSchema,
   providerConversionRuleNumberActivationResultSchema,
@@ -25,6 +27,7 @@ import {
   type ProviderConversionAutomationReprocessBatchResultDto,
   type ProviderConversionRuleBlockedReprocessResultDto,
   type ProviderConversionRuleExecutionAuditDto,
+  type ProviderConversionRuleBulkRemoveResultDto,
   type ProviderConversionRulePendingNumberDto,
   type ProviderConversionRulePendingNumberReasonDto,
   type StructuredCatalogTestMessageResultDto,
@@ -70,6 +73,8 @@ export type ConversionScreenActionResult = {
   };
   /** "Reprocessar bloqueadas": contagens da rodada. */
   reprocess?: ProviderConversionRuleBlockedReprocessResultDto;
+  /** "Excluir selecionadas": what happened to each rule. */
+  bulkRemove?: ProviderConversionRuleBulkRemoveResultDto;
   unify?: {
     outcome: "created" | "reused_existing" | "replayed";
     ruleId: string;
@@ -495,6 +500,63 @@ export async function unifyConversionRulesAction(
   }
 }
 
+const bulkRemoveUnknownMessage =
+  "Não deu para confirmar a exclusão. Atualize a página para ver quais regras saíram.";
+
+/**
+ * "Excluir selecionadas": removes several rules; the API answers per rule so
+ * a partial success is reported, never hidden. A rule other unified rules
+ * point to only goes when its id is also sent as "confirmTargetId".
+ */
+export async function removeConversionRulesAction(
+  formData: FormData,
+): Promise<ConversionScreenActionResult> {
+  const ruleIds = formData
+    .getAll("ruleId")
+    .filter((id): id is string => typeof id === "string" && id.trim() !== "");
+  const confirmTargetRuleIds = formData
+    .getAll("confirmTargetId")
+    .filter((id): id is string => typeof id === "string" && id.trim() !== "");
+  const input = providerConversionRuleBulkRemoveInputSchema.safeParse({
+    ruleIds,
+    ...(confirmTargetRuleIds.length > 0 ? { confirmTargetRuleIds } : {}),
+  });
+
+  if (!input.success) {
+    return { ok: false, message: "Escolha as regras que quer excluir." };
+  }
+
+  try {
+    const response = await serverApiFetch<unknown>(
+      "/conversion-rules/providers/bulk-delete",
+      { method: "POST", body: JSON.stringify(input.data) },
+    );
+    const result =
+      providerConversionRuleBulkRemoveResultSchema.safeParse(response);
+
+    if (!result.success) {
+      return { ok: false, outcomeUnknown: true, message: bulkRemoveUnknownMessage };
+    }
+
+    revalidateRules();
+    const { removedCount, results } = result.data;
+    return {
+      ok: removedCount === results.length,
+      bulkRemove: result.data,
+      message:
+        removedCount === results.length
+          ? `${removedCount} ${removedCount === 1 ? "regra excluída" : "regras excluídas"}. O histórico continua salvo.`
+          : `${removedCount} de ${results.length} excluídas. Veja abaixo o que ficou.`,
+    };
+  } catch (error) {
+    return failure(
+      error,
+      "Não foi possível excluir as regras selecionadas.",
+      bulkRemoveUnknownMessage,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // "Todos os números": ativar um número e reprocessar bloqueadas
 // ---------------------------------------------------------------------------
@@ -881,6 +943,14 @@ export async function removeProviderConversionRuleAction(
       message: "Regra excluída. O histórico dela continua salvo.",
     };
   } catch (error) {
+    // Porte do #161: a rule already removed (another tab, a bulk delete).
+    if (apiStatus(error) === 404) {
+      return {
+        ok: false,
+        message:
+          "Esta regra não foi encontrada (talvez já tenha sido excluída). Atualize a página para conferir.",
+      };
+    }
     return failure(
       error,
       "Não foi possível excluir a regra.",

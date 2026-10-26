@@ -152,6 +152,16 @@ export type ConversionRuleRow = {
    * (ausente/vazio: todos os números cobertos enviam).
    */
   pendingNumbers?: ProviderConversionRulePendingNumberDto[];
+  /** "Unificar": the rule this one was folded into (provider rules). */
+  unifiedIntoRuleId?: string | null;
+  /** Other rules were unified into this one ("vale para todos os números"). */
+  isUnifyTarget?: boolean;
+  /** The number/connection the rule belonged to was removed. */
+  numberRemoved?: boolean;
+  /** Last event that came in through this rule's own (old) URL. */
+  oldUrlLastDeliveryAt?: string | null;
+  /** Provider that sends the events (to tell where to change the URL). */
+  providerName?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -458,6 +468,9 @@ export function buildProviderRuleRows(
     rules.map((rule) => [rule.id, providerRuleOrigin(rule, connectionsById)]),
   );
   const rulesById = new Map(rules.map((rule) => [rule.id, rule]));
+  const unifyTargetIds = new Set(
+    rules.flatMap((rule) => (rule.unifiedIntoRuleId ? [rule.unifiedIntoRuleId] : [])),
+  );
 
   return rules.map((rule) => {
     const origin = origins.get(rule.id)!;
@@ -652,6 +665,13 @@ export function buildProviderRuleRows(
         scope === "all_numbers" && rule.conversionRule.active
           ? (rule.pendingNumbers ?? [])
           : [],
+      unifiedIntoRuleId: rule.unifiedIntoRuleId ?? null,
+      isUnifyTarget: unifyTargetIds.has(rule.id),
+      numberRemoved: providerRuleNumberRemoved(rule, numbersById),
+      oldUrlLastDeliveryAt: rule.endpoint?.lastDeliveryAt ?? null,
+      providerName: definition.logoProvider
+        ? providerLogo(definition.logoProvider).name
+        : null,
     };
   });
 }
@@ -873,6 +893,8 @@ export type RuleFilters = {
   numberId: string;
   eventName: string;
   status: RuleStatusFilter;
+  /** "Ocultar regras unificadas" (pausadas e já cobertas por outra regra). */
+  hideUnified: boolean;
 };
 
 export const emptyRuleFilters: RuleFilters = {
@@ -880,6 +902,7 @@ export const emptyRuleFilters: RuleFilters = {
   numberId: "all",
   eventName: "all",
   status: "all",
+  hideUnified: false,
 };
 
 export function filterRuleRows(
@@ -888,6 +911,7 @@ export function filterRuleRows(
 ): ConversionRuleRow[] {
   return rows.filter(
     (row) =>
+      !(filters.hideUnified && row.status === "unified") &&
       (filters.origin === "all" || row.origin === filters.origin) &&
       (filters.eventName === "all" || row.eventName === filters.eventName) &&
       (filters.numberId === "all" ||

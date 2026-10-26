@@ -208,6 +208,13 @@ export function RuleManage({
           <strong>Excluir “{name}”?</strong>
         </p>
         <p>{deleteConfirmText(origin)}</p>
+        {rule.unifiedIntoRuleId && !rule.numberRemoved ? (
+          <p className="action-note warn">
+            Esta regra foi unificada: a URL antiga dela encaminha os eventos
+            para a regra que vale para todos os números. Ao excluir, essa URL
+            deixa de funcionar.
+          </p>
+        ) : null}
         {deleteError ? (
           <p className="action-note warn" role="alert">
             {deleteError}

@@ -23,6 +23,7 @@ import {
   providerConversionRuleCreateInputSchema,
   providerConversionRuleExecutionAuditQuerySchema,
   providerConversionRuleIdempotentCreateInputSchema,
+  providerConversionRuleBulkRemoveInputSchema,
   providerConversionRuleUnifyInputSchema,
   providerConversionRuleUpdateInputSchema,
   providerRuleCreateRequestKeySchema,
@@ -188,6 +189,31 @@ export class ConversionRulesController {
     }
 
     return this.providerConversionRulesService.unifyRules(
+      context.workspaceId,
+      parsed.data,
+      context.userId,
+    );
+  }
+
+  /**
+   * Porte do #161: excluir várias regras da lista; resultado por regra
+   * (sucesso parcial). Escrita: com a licença bloqueada, o guard global
+   * responde 423 antes de chegar aqui.
+   */
+  @Post("providers/bulk-delete")
+  @HttpCode(200)
+  async removeProviderRules(
+    @AuthToken() refreshToken: string,
+    @Body() body: unknown,
+  ) {
+    const context = await this.requireIntegrationManager(refreshToken);
+    const parsed = providerConversionRuleBulkRemoveInputSchema.safeParse(body);
+
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+
+    return this.providerConversionRulesService.removeRules(
       context.workspaceId,
       parsed.data,
       context.userId,
