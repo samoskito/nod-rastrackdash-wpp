@@ -826,7 +826,7 @@ describe("provider rule workspace scope: Umbler message evaluation", () => {
       occurrence: {
         businessDedupePolicy: {
           mode: "lifetime",
-          scopeKey: "QualifiedLead:workspace_1:lead_1",
+          scopeKey: "QualifiedLead:workspace_1:connection_umbler:channel_umbler:lead_1",
         },
       },
     });

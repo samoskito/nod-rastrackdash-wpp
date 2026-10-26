@@ -85,7 +85,6 @@ import { ConversionEventsService } from "../conversion-events/conversion-events.
 import {
   findPriorLeadLifetimeConversion,
   isLeadLifetimeEvent,
-  LEAD_CONVERTED_ON_ANOTHER_NUMBER,
   lockLeadConversionIdentity,
   resolveLeadConversionIdentity,
 } from "../conversion-events/lead-lifetime-conversion-guard";
@@ -614,6 +613,14 @@ export class ProviderConversionProductionService
           where: {
             id: { not: execution.id },
             workspaceId: execution.workspaceId,
+            // #84: the dedupe is local to the number (and connection) that
+            // observed the fact; once-per-lead events across numbers are the
+            // lead-lifetime guard's job (#153).
+            channelId: execution.channelId,
+            leadId: lead.id,
+            sourceDelivery: {
+              connectionId: execution.sourceDelivery.connectionId,
+            },
             contactIdentityHash: lead.phoneHash,
             status: "materialized",
             occurredAt: {
@@ -1002,12 +1009,33 @@ export class ProviderConversionProductionService
         {
           id: { not: execution.id },
           workspaceId: execution.workspaceId,
+          // #84: per number (and connection), like the decision scope key.
+          channelId: execution.channelId,
+          leadId: lead.id,
+          sourceDelivery: {
+            connectionId: execution.sourceDelivery.connectionId,
+          },
           status: "materialized",
           OR: [
             {
               providerDecision: {
                 is: {
                   businessDedupeScopeKey: dedupePolicy.scopeKey,
+                },
+              },
+            },
+            // nod upgrade bridge: decisions frozen before #84 carry the old
+            // workspace-wide key (event:workspace:lead). The filters above
+            // already restrict it to this number and lead, so a repeat on
+            // the same number across the update is still a duplicate.
+            {
+              providerDecision: {
+                is: {
+                  businessDedupeScopeKey: [
+                    eventName,
+                    execution.workspaceId,
+                    lead.id,
+                  ].join(":"),
                 },
               },
             },
@@ -1046,19 +1074,13 @@ export class ProviderConversionProductionService
             },
           })
         : null;
-      // nod: the business scope key and duplicateWhere are workspace-wide
-      // (the SaaS made them per number in #84, never ported here), so this
-      // execution check already sees the same lead on ANOTHER number for
-      // every pixel. The once-per-lead guard below only adds what it cannot
-      // see: the CTWA entry (other pipeline) and older Lead rows of the same
-      // phone line (55 / 9th digit).
-      const ruleDuplicate = purchaseKey
+      const sameNumberDuplicate = purchaseKey
         ? purchaseClaim
-          ? { id: purchaseClaim.winnerExecutionId, channelId: null }
+          ? { id: purchaseClaim.winnerExecutionId }
           : null
         : await transaction.providerConversionRuleExecution.findFirst({
             where: duplicateWhere,
-            select: { id: true, channelId: true },
+            select: { id: true },
           });
       // Fase 5.3: an Unnichat automation event may reach two rules (old
       // per-rule URL + per-event URL routed to another rule). Its Meta
@@ -1091,7 +1113,7 @@ export class ProviderConversionProductionService
       // Once-per-lead events only: the same lead identity already converted
       // for this Meta destination by another number or by the CTWA entry.
       const otherNumberDuplicate =
-        ruleDuplicate || !lifetimeIdentity
+        sameNumberDuplicate || !lifetimeIdentity
           ? null
           : await findPriorLeadLifetimeConversion(transaction, {
               workspaceId: execution.workspaceId,
@@ -1102,7 +1124,7 @@ export class ProviderConversionProductionService
               pipeline: "provider_rule",
               ownDedupeKey: dedupeKey,
             });
-      const duplicate = ruleDuplicate ?? otherNumberDuplicate;
+      const duplicate = sameNumberDuplicate ?? otherNumberDuplicate;
 
       if (duplicate) {
         const reasonCode = purchaseKey
@@ -1111,10 +1133,7 @@ export class ProviderConversionProductionService
             ? otherNumberDuplicate.reasonCode
             : dedupePolicy.mode === "rolling_window"
               ? "purchase_within_24h"
-              : ruleDuplicate?.channelId &&
-                  ruleDuplicate.channelId !== execution.channelId
-                ? LEAD_CONVERTED_ON_ANOTHER_NUMBER
-                : "qualified_lead_already_materialized";
+              : "qualified_lead_already_materialized";
         await transaction.providerConversionRuleExecution.update({
           where: { id: execution.id },
           data: {
@@ -1430,6 +1449,14 @@ export class ProviderConversionProductionService
           where: {
             id: { not: execution.id },
             workspaceId: execution.workspaceId,
+            // #84: the dedupe is local to the number (and connection) that
+            // observed the fact; once-per-lead events across numbers are the
+            // lead-lifetime guard's job (#153).
+            channelId: execution.channelId,
+            leadId: lead.id,
+            sourceDelivery: {
+              connectionId: execution.sourceDelivery.connectionId,
+            },
             contactIdentityHash: lead.phoneHash,
             status: "materialized",
             ...(rollingWindow

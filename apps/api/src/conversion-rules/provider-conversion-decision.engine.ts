@@ -425,6 +425,16 @@ export class ProviderConversionDecisionEngine {
     const scopeKey = [
       input.rule.eventName,
       input.occurrence.workspaceId,
+      input.occurrence.connectionId,
+      // This frozen key stays per number (#84, ported in the nod's Fase 6.0;
+      // it is persisted on every decision audit and is the historical
+      // per-number check). For once-per-lead events (QualifiedLead,
+      // LeadSubmitted) the rule "once per lead and Meta destination, whichever
+      // number or CTWA entry saw it" is enforced at materialization under a
+      // workspace-wide lead identity lock:
+      // conversion-events/lead-lifetime-conversion-guard.ts. Purchases and
+      // +-24h events stay per number by owner decision.
+      input.occurrence.channelId ?? "unresolved-channel",
       input.leadResolution.lead.id,
     ].join(":");
 

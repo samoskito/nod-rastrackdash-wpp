@@ -87,7 +87,7 @@ Status: IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO
 Arquivos: lead-lifetime-conversion-guard.ts (novo), conversion-events.service, provider-conversion-production.service, inbound-webhook-production.service, inbound-webhook-replay.service, ctwa-entry-materialization, provider-rule-blocked-reprocess(+service), provider-conversion-rules.service, conversion-event-retry, meta-capi.adapter, diagnostics.service, meta-reporting.service, reporting.controller, sao-paulo-timestamp.ts (novo), payt-automation-v1.parser, inbound-conversion-automation-ingestion.service, integration-endpoints.service; web conversions/events/settings; shared conversion-rules e reporting
 Testes: typecheck api/web/shared OK; API 2695 ok / 48 skipped (main: 2633 ok); web 1298 ok / 3 falhas iguais ao main; shared 187 ok / 18 falhas iguais ao main; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe no main
 Migrations: nenhuma
-Limitações: escopo por número do SaaS (#84) não portado (regra de provedor segue por workspace); auto_lead fora do guard até a 6.2a; recusas da Meta gravadas antes desta versão não têm o código 190/102; sem validação em instalação real
+Limitações: escopo por número do SaaS (#84, parte de dedupe) portado na mesma 6.0 por decisão do Samuel; auto_lead fora do guard até a 6.2a (ok, fases vão juntas na branch de integração); recusas da Meta gravadas antes desta versão não têm o código 190/102; sem validação em instalação real
 ```
 
 ### Checkpoint MySQL — pausado em 2026-09-04

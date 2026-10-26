@@ -36,12 +36,15 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
     conservative exclusions run first and are unchanged.
   - Executions show "Lead já convertido por outro número" / "pela entrada do
     anúncio".
-  - nod difference: the provider-rule execution check was already
-    workspace-wide here (the SaaS per-number scope, #84, was never ported),
-    so a phrase rule still never sends the same once-per-lead event twice
-    for a lead even to a second pixel, and purchases keep the existing 24h
-    window across numbers. The `auto_lead` entry (Uazapi/WAHA connections)
-    keeps its own per-lead dedupe; it joins this rule with #155 (6.2a).
+  - Also ported from the SaaS: the per-number business dedupe of provider
+    rules (`7d683975`, #84, only its dedupe part). The frozen decision key
+    and the execution check now include the connection and the number, so
+    the same lead on another number to a second pixel gets its own event, and
+    purchases / +-24h events on different numbers are independent (the
+    once-per-lead guard covers lead events across numbers). nod upgrade
+    bridge: decisions frozen before this version keep blocking a repeat on
+    the same number. The `auto_lead` entry (Uazapi/WAHA connections) keeps
+    its own per-lead dedupe; it joins this rule with #155 (6.2a).
 - **Fase 6.0 — "Reenviar bloqueados" also resends Meta login failures
   (190/102) (API, shared and web)**, ported from the SaaS (`4d2fbf83`, #181,
   plus the stalled `ready_to_send` part of `7ac17df7`):

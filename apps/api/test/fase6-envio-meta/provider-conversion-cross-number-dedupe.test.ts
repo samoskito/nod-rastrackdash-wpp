@@ -103,23 +103,23 @@ function createStore(
             const record = executions.get(where.id);
             return record ? { ...record } : null;
           }
-          // Historical execution check (duplicateWhere). nod: the business
-          // scope key and the filter are workspace-wide (no channelId /
-          // leadId / connection in the where), unlike the SaaS per-number
-          // check (#84, never ported). Filters only apply when present.
-          const scopeKey =
-            where.OR?.[0]?.providerDecision?.is?.businessDedupeScopeKey;
+          // Historical per-number check (duplicateWhere, #84). nod: the OR
+          // also carries the pre-#84 workspace-wide key (upgrade bridge).
+          const scopeKeys: string[] = (where.OR ?? [])
+            .map((clause: any) => clause.providerDecision?.is?.businessDedupeScopeKey)
+            .filter(Boolean);
           const match = [...executions.values()].find(
             (record) =>
               record.id !== where.id.not &&
               record.status === "materialized" &&
-              (where.channelId === undefined ||
-                record.channelId === where.channelId) &&
-              (where.leadId === undefined || record.leadId === where.leadId) &&
-              record.providerDecision?.businessDedupeScopeKey === scopeKey &&
+              record.channelId === where.channelId &&
+              record.leadId === where.leadId &&
+              record.sourceDelivery?.connectionId ===
+                where.sourceDelivery?.connectionId &&
+              scopeKeys.includes(record.providerDecision?.businessDedupeScopeKey) &&
               inWindow(record, where.occurredAt),
           );
-          return match ? { id: match.id, channelId: match.channelId } : null;
+          return match ? { id: match.id } : null;
         }),
         update: vi.fn(async ({ where, data }: any) => apply(where.id, data)),
       },
@@ -537,38 +537,45 @@ describe("once-per-lead conversions across numbers (provider rules)", () => {
     expect(sentLogs(store, "QualifiedLead")).toHaveLength(1);
   });
 
-  // nod adaptation: the provider-rule execution check is workspace-wide in
-  // the nod (the SaaS per-number scope of #84 was never ported), so a phrase
-  // rule never sends the same once-per-lead event twice for one lead, even to
-  // a second pixel. The guard itself is per pixel (see "still records the
-  // entry for another Meta destination (per pixel)" below).
-  it("nod: a phrase on another number is not sent again even to a second pixel (workspace-wide rule check)", async () => {
+  it("sends once per pixel: the same lead routed to two Meta destinations gets two", async () => {
     const store = createStore({
       destinationByAd: { ad_1: "destination_pixel_a", ad_2: "destination_pixel_b" },
     });
     store.receivePhrase({ id: "pixel_a", channelId: "channel_n1", lead: leadA });
     await store.process("pixel_a");
     store.receivePhrase({ id: "pixel_b", channelId: "channel_n2", lead: { ...leadA, adId: "ad_2" } });
-    await expect(store.process("pixel_b")).resolves.toEqual({ status: "duplicate" });
-    expect(store.executions.get("pixel_b")!.reasonCode).toBe(
-      LEAD_CONVERTED_ON_ANOTHER_NUMBER,
-    );
+    await expect(store.process("pixel_b")).resolves.toEqual({ status: "materialized" });
     expect(sentLogs(store, "QualifiedLead").map((log) => log.metaConversionDestinationId)).toEqual([
       "destination_pixel_a",
+      "destination_pixel_b",
     ]);
   });
 
-  it("nod: purchases and other 24h events keep the existing workspace-wide 24h window (unchanged)", async () => {
+  it("does NOT dedupe purchases or other 24h events across numbers", async () => {
     const store = createStore();
     store.receivePhrase({ id: "buy_n1", channelId: "channel_n1", lead: leadA, eventName: "Purchase" });
     store.receivePhrase({ id: "buy_n2", channelId: "channel_n2", lead: leadA, eventName: "Purchase" });
     store.receivePhrase({ id: "cart_n1", channelId: "channel_n1", lead: leadA, eventName: "AddToCart" });
     store.receivePhrase({ id: "cart_n2", channelId: "channel_n2", lead: leadA, eventName: "AddToCart" });
-    for (const id of ["buy_n1", "buy_n2", "cart_n1", "cart_n2"]) await store.process(id);
-    expect(sentLogs(store, "Purchase")).toHaveLength(1);
-    expect(sentLogs(store, "AddToCart")).toHaveLength(1);
-    // The guard never touches 24h events: the duplicate keeps its 24h reason.
-    expect(store.executions.get("buy_n2")!.reasonCode).toBe("purchase_within_24h");
+    await Promise.all(["buy_n1", "buy_n2", "cart_n1", "cart_n2"].map(store.process));
+    expect(sentLogs(store, "Purchase")).toHaveLength(2);
+    expect(sentLogs(store, "AddToCart")).toHaveLength(2);
+  });
+
+  it("nod upgrade bridge: a decision frozen before #84 (workspace-wide key) still blocks a repeat on the same number", async () => {
+    for (const eventName of ["QualifiedLead", "Purchase"] as const) {
+      const store = createStore();
+      store.receivePhrase({ id: "old", channelId: "channel_n1", lead: leadA, eventName });
+      const old = store.executions.get("old")!;
+      // Materialized by the previous version: old key, no log in this store.
+      Object.assign(old, { status: "materialized" });
+      old.providerDecision.businessDedupeScopeKey = [eventName, workspaceId, leadA.id].join(":");
+      store.receivePhrase({ id: "again", channelId: "channel_n1", lead: leadA, eventName, occurredAt: recent(10) });
+      await expect(store.process("again")).resolves.toEqual({ status: "duplicate" });
+      // Another number with the same old key is NOT the same number.
+      store.receivePhrase({ id: "other", channelId: "channel_n2", lead: leadA, eventName, occurredAt: recent(5) });
+      await expect(store.process("other")).resolves.toEqual({ status: "materialized" });
+    }
   });
 
   it("keeps a Payt purchase and a phrase purchase on another number independent (both orders)", async () => {
