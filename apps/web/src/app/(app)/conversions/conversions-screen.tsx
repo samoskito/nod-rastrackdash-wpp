@@ -237,7 +237,8 @@ export function ConversionsScreen({
   const visibleRows = useMemo(() => filterRuleRows(rows, filters), [rows, filters]);
 
   // Bulk selection: only provider rules, only for people who can manage.
-  const bulkEnabled = Boolean(canManage && bulkRemoveAction);
+  // nod: with the license locked the list stays read-only (no selection).
+  const bulkEnabled = Boolean(canManage && bulkRemoveAction && !licenseLocked);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const selectedRows = useMemo(
@@ -1081,6 +1082,7 @@ function RuleStateButtons({
       <button
         className="button ghost compact-button"
         type="button"
+        disabled={disabled}
         aria-label={`Pausar ${row.name}, cujo número foi removido`}
         onClick={() =>
           onConfirm({

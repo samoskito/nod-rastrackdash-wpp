@@ -1546,3 +1546,87 @@ describe("Envio ativo: número órfão ou duplicado não trava a regra (#66/#85/
     );
   });
 });
+
+describe("Envio ativo: número Uazapi/WAHA excluído em Integrações (revisão da 6.1a)", () => {
+  it("regra com números de várias conexões ativa sem tocar na ponte WAHA cuja conexão WhatsApp foi excluída, e mantém o número na regra", async () => {
+    const world = globalWorld([
+      { key: "waha", provider: "waha" },
+      { key: "qr", provider: "uazapi" },
+    ]);
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_waha",
+      channelIds: ["channel_waha", "channel_qr"],
+      mode: "observation",
+    });
+    // "Excluir" a conexão WAHA em Integrações só suspende a WhatsappInstance.
+    world.state.instances.find((item) => item.id === "instance_waha")!.status =
+      "suspended";
+
+    const updated = (await world.service.updateRule(
+      "workspace_1",
+      rule.id,
+      { mode: "production" } as never,
+      "user_1",
+    )) as GRow;
+
+    expect(updated.mode).toBe("production");
+    expect(world.connection("qr").status).toBe("production");
+    expect(world.connection("waha").status).toBe("observation");
+    expect(world.channel("waha").status).toBe("discovered");
+    // Reconectar a mesma conexão WhatsApp traz o número de volta.
+    expect(world.state.ruleChannels.map((scope) => scope.channelId)).toEqual(
+      expect.arrayContaining(["channel_waha", "channel_qr"]),
+    );
+  });
+
+  it("regra ligada só à ponte WAHA excluída recusa com mensagem clara", async () => {
+    const world = globalWorld([{ key: "waha", provider: "waha" }]);
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_waha",
+      channelIds: ["channel_waha"],
+      mode: "observation",
+    });
+    world.state.instances.find((item) => item.id === "instance_waha")!.status =
+      "suspended";
+
+    await expect(
+      world.service.updateRule(
+        "workspace_1",
+        rule.id,
+        { mode: "production" } as never,
+        "user_1",
+      ),
+    ).rejects.toThrow(/Nenhum número válido na conexão da regra/);
+    expect(world.connection("waha").status).toBe("observation");
+  });
+
+  it("“Pausar” funciona numa regra cujo número (conexão) foi removido", async () => {
+    const world = globalWorld([{ key: "umbler", provider: "umbler" }]);
+    const rule = await createGlobal(world, {
+      scope: "specific_numbers",
+      connectionId: "connection_umbler",
+      channelIds: ["channel_umbler"],
+      mode: "observation",
+    });
+    world.connection("umbler").removedAt = new Date(gNow);
+
+    const paused = (await world.service.updateRule(
+      "workspace_1",
+      rule.id,
+      { active: false } as never,
+      "user_1",
+    )) as GRow;
+    expect(paused.conversionRule.active).toBe(false);
+    // Any other edit still treats the rule as gone.
+    await expect(
+      world.service.updateRule(
+        "workspace_1",
+        rule.id,
+        { mode: "production" } as never,
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});

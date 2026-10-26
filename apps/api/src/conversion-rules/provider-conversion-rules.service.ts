@@ -1290,6 +1290,16 @@ export class ProviderConversionRulesService {
       });
     }
 
+    // Fase 6.1a (#159): "Número removido" offers Pausar. A rule whose
+    // connection was removed is otherwise invisible to requireRule, so a
+    // pause-only patch (active: false and nothing else) may reach it.
+    const pauseOnly =
+      input.active === false &&
+      Object.entries(input).every(
+        ([key, value]) => key === "active" || value === undefined,
+      );
+    const lookup = { includeRemovedConnection: pauseOnly };
+
     let cascadeGlobal = false as boolean;
     const updated = await this.prisma.$transaction(async (transaction) => {
       cascadeGlobal = false;
@@ -1297,6 +1307,7 @@ export class ProviderConversionRulesService {
         transaction,
         workspaceId,
         providerRuleId,
+        lookup,
       );
 
       this.assertUpdateMatchesRule(current, input);
@@ -1611,7 +1622,9 @@ export class ProviderConversionRulesService {
         (input.mode !== undefined ||
           input.active === true ||
           input.channelIds !== undefined ||
-          scopeChanged)
+          scopeChanged ||
+          // "Ampliar para todas as conexões" on a rule already sending.
+          crossChanged)
       ) {
         await this.activateScopedProduction(transaction, {
           workspaceId,
@@ -1632,6 +1645,7 @@ export class ProviderConversionRulesService {
         transaction,
         workspaceId,
         providerRuleId,
+        lookup,
       );
       await this.createAudit(transaction, {
         workspaceId,
@@ -2727,11 +2741,12 @@ export class ProviderConversionRulesService {
         id: true,
         connectionId: true,
         connection: { select: { removedAt: true } },
+        whatsappInstance: { select: { status: true } },
       },
     });
     // nod (porte do #66): a rule without a bound connection groups its
-    // numbers by connection. A number whose connection was removed (a WAHA or
-    // Uazapi bridge removed in Integrations, any removed inbound connection)
+    // numbers by connection. A number whose connection was removed (any
+    // removed inbound connection, including a Uazapi/WAHA bridge connection)
     // used to send the whole activation to a 404 on that connection; its scope
     // row is an orphan and is dropped here, the live numbers keep going.
     const orphanIds = [
@@ -2759,6 +2774,8 @@ export class ProviderConversionRulesService {
     const byConnection = new Map<string, string[]>();
     for (const channel of channels) {
       if (channel.connection.removedAt !== null) continue;
+      // nod: a Uazapi/WAHA number deleted in Integrations is never activated.
+      if (channel.whatsappInstance?.status === "suspended") continue;
       byConnection.set(channel.connectionId, [
         ...(byConnection.get(channel.connectionId) ?? []),
         channel.id,
@@ -3684,8 +3701,22 @@ export class ProviderConversionRulesService {
         id: { in: requested },
         connection: { is: { workspaceId, removedAt: null } },
       },
-      select: { id: true, connectedPhone: true, status: true },
+      select: {
+        id: true,
+        connectedPhone: true,
+        status: true,
+        whatsappInstance: { select: { status: true } },
+      },
     });
+    // nod: a Uazapi/WAHA number deleted in Integrations keeps its bridge
+    // connection (only the WhatsappInstance is suspended). It is skipped here
+    // (never activated) but its scope row is kept: reconnecting the same
+    // WhatsApp connection brings it back.
+    const suspendedIds = new Set(
+      live
+        .filter((channel) => channel.whatsappInstance?.status === "suspended")
+        .map((channel) => channel.id),
+    );
 
     const liveIds = new Set(live.map((channel) => channel.id));
     const orphanIds = requested.filter((channelId) => !liveIds.has(channelId));
@@ -3733,7 +3764,9 @@ export class ProviderConversionRulesService {
     const resolvedIds = [
       ...new Set(
         requested
-          .filter((channelId) => liveIds.has(channelId))
+          .filter(
+            (channelId) => liveIds.has(channelId) && !suspendedIds.has(channelId),
+          )
           .map((channelId) => replacements.get(channelId) ?? channelId),
       ),
     ];

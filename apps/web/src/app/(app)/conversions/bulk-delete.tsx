@@ -243,7 +243,11 @@ export function BulkDeleteModal({
                           }}
                         />
                         <span>
-                          Quero excluir também “{item.row.name}”
+                          Quero excluir também “
+                          <PresentationMask placeholder="Regra oculta">
+                            {item.row.name}
+                          </PresentationMask>
+                          ”
                         </span>
                       </label>
                     </div>
