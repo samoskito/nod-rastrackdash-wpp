@@ -952,3 +952,47 @@ describe("Payt value without installment interest (decisions frozen before the f
     expect(s.claims.size).toBe(0);
   });
 });
+
+// Fase 6.1b — porte parcial do 75f6f4b3 do SaaS: janela de 7 dias da Meta
+// também nos eventos COM anúncio das automações (Payt, Unnichat, Umbler).
+describe("Payt sale with an ad replayed after Meta's 7-day window", () => {
+  const AD = "120210000000000999";
+
+  it("keeps it as not_eligible (MetaEventTimeExpired) instead of failing at Meta", async () => {
+    const s = await paytNoAdScenario({ leadAdId: AD, entryAdHint: true });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "payt_delivery_1",
+    });
+    vi.spyOn(s.service as any, "previewPurchaseRoute").mockResolvedValue({
+      status: "resolved",
+      reason: "resolved",
+      reportingAccountId: "account0_1",
+      adAccountId: "act_synthetic",
+      businessConnectionId: "bm",
+      conversionDestinationId: "dest",
+    });
+    const jobsBefore = s.h.jobs.length;
+    // The operator reprocesses a sale that happened 8 days ago.
+    const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000);
+    execution.occurredAt = eightDaysAgo;
+    execution.providerDecision.occurredAt = eightDaysAgo;
+    execution.providerDecision.decisionJson.occurrence.occurredAt =
+      eightDaysAgo.toISOString();
+    await expect(
+      s.service.processExecution({
+        workspaceId: "w",
+        providerConversionExecutionId: execution.id,
+      }),
+    ).resolves.toEqual({ status: "materialized" });
+    const purchase = s.h.logs.find((log) => log.eventName === "Purchase");
+    expect(purchase).toMatchObject({
+      adId: AD,
+      status: "not_eligible",
+      errorCode: "MetaEventTimeExpired",
+    });
+    // Nothing queued to Meta for it.
+    expect(s.h.jobs.length).toBe(jobsBefore);
+  });
+});

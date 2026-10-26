@@ -172,6 +172,13 @@ type ConversionEventPrismaClient = Pick<
 export type RecordExternalConversionInput = {
   /** CTWA lead with ctwa_clid and no known ad: the authorized page/pixel. */
   ctwaDestination?: AuthorizedCtwaDestination;
+  /**
+   * Apply Meta's seven-day event_time window to ad-attributed events too
+   * (CTWA destinations always apply it). Used by provider automations, whose
+   * callbacks may be replayed manually long after the original sale (porte
+   * do 75f6f4b3 do SaaS).
+   */
+  enforceMetaEventWindow?: boolean;
   workspaceId: string;
   externalConnectorId?: string | null;
   sourceEventId: string;
@@ -3342,6 +3349,19 @@ export class ConversionEventsService {
         errorCode: "MetaEventTimeExpired",
         errorMessage:
           "Local CTWA lead retained; original event time is outside Meta's seven day window",
+      };
+    // Ad-attributed provider events: only the age is checked here (a small
+    // provider clock skew into the future must not drop a live sale).
+    if (
+      input.enforceMetaEventWindow &&
+      (!Number.isFinite(input.eventOccurredAt.getTime()) ||
+        Date.now() - input.eventOccurredAt.getTime() > 7 * 86400000)
+    )
+      return {
+        status: "not_eligible",
+        errorCode: "MetaEventTimeExpired",
+        errorMessage:
+          "Conversion retained locally; original event time is outside Meta's seven day window",
       };
     const resolved = this.resolveInitialStatus({
       eventName: input.eventName,

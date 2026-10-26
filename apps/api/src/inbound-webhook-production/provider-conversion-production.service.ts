@@ -1193,6 +1193,12 @@ export class ProviderConversionProductionService
           externalConnectorId: null,
           sourceEventId,
           sourceTrigger: `inbound_webhook:${occurrence.provider}:${decision.rule.triggerType}`,
+          // Automation callbacks (Payt, Unnichat, Umbler) can be replayed by
+          // the operator long after the sale: past Meta's 7-day window the
+          // event is kept as not_eligible instead of failing at Meta.
+          ...(decision.rule.triggerType === "provider_automation"
+            ? { enforceMetaEventWindow: true }
+            : {}),
           eventName,
           // A sale keeps one Meta identity per seller+order+event.
           eventId: purchaseKey
@@ -1287,8 +1293,10 @@ export class ProviderConversionProductionService
               state: queueRequired
                 ? "queued"
                 : // A CTWA page/pixel conversion that did not queue was refused
-                  // by its own checks (e.g. outside Meta's 7-day window).
-                  ctwaDestination && conversion.deliveryStatus !== "sent"
+                  // by its own checks (e.g. outside Meta's 7-day window); an
+                  // automation event past that window is not_eligible too.
+                  (ctwaDestination && conversion.deliveryStatus !== "sent") ||
+                    conversion.deliveryStatus === "not_eligible"
                   ? "blocked_configuration"
                   : "sent",
               retryable: false,
@@ -1547,6 +1555,7 @@ export class ProviderConversionProductionService
           externalConnectorId: null,
           sourceEventId: parsed.externalExecutionKey,
           sourceTrigger: "inbound_webhook:umbler:provider_automation",
+          enforceMetaEventWindow: true,
           eventName: parsed.eventName,
           eventId: lifetimeIdentity
             ? this.leadLifetimeMetaEventId(
