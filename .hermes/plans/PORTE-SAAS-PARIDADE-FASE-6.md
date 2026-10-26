@@ -1,6 +1,6 @@
 # PLANO — Fase 6: paridade com o SaaS (dash-com-ia até #187)
 
-> **Status: GATE 1 — AGUARDANDO APROVAÇÃO DO SAMUEL.** Nenhum código foi escrito.
+> **Status: GATE 1 APROVADO (26/10/2026).** A 6.0 está na branch de integração `integracao/fase-6` (PR #105); a 6.1a está em implementação. A auditoria de 26/10 e as decisões do Samuel do mesmo dia estão na seção "Decisões do Samuel (26/10/2026, depois da auditoria)", no fim, e já entraram nas fases abaixo.
 >
 > - Plano canônico de execução: `.hermes/plans/ACTIVE-STUDENT-EDITION-IMPROVEMENTS.md`. Este arquivo é o plano da fase. Quando a implementação começar, o ACTIVE recebe a linha "Fase 6" com o protocolo de status, conforme a seção "Protocolo de atualização".
 > - Base do levantamento:
@@ -38,6 +38,9 @@
 | 6.6 | `20261027150000_hotmart_provider` + `20261027150100_hotmart_parser_release` | `20261025120000/120100` (#182) |
 | 6.7 | `20261027160000_yampi_provider` + `20261027160100_yampi_parser_release` | `20261026120000/120100` (#186) |
 | 6.8 | `20261027170000_roichat_provider` + `20261027170100_roichat_parser_releases` | `20261025150000/150100` (#183), **sem** `ALTER TYPE "WhatsappSeatProvider"` |
+| 6.8b | `20261027180000_*` (reservado; nomes definidos quando o GoHighLevel estiver terminado no SaaS) | branch `feat/gohighlevel-automation` do dash-com-ia (em revisão) |
+
+- A 6.1c (alerta de desconexão por instância e reenvio de itens de replay que falharam) não tem migration prevista. Se precisar de uma, ela entra entre a da 6.1a e a da 6.4 (`20261027125000_*`).
 
 - **Notas de versão.** Cada PR atualiza `docs/releases/unreleased.json` (consolidado; sem versão inventada) e o `CHANGELOG.md` `[Unreleased]`, no mesmo PR do código. Toda subfase com migration pede backup do PostgreSQL antes do redeploy, conforme o Passo "Antes de começar" de `docs/setup/update.md`. Não há tag nem Release sem autorização.
 - **Testes:** `pnpm typecheck` em api, web e shared, mais os testes do PR do SaaS adaptados aos caminhos do nod (`apps/api/test/<área>/…`, Vitest). As suítes de licença, onboarding e rodapé rodam sempre:
@@ -123,9 +126,19 @@ Conferido lendo o código do nod, não só os nomes de arquivo.
 | Micro-batching da CAPI (70625e41) | Não portado | PORTAR com flag desligada | 6.4 | M |
 | #143: ordenação na API pelas etapas do funil | Parcial (só na web) | ADAPTAR, opcional | 6.3b | P/M |
 | b65753b7: reenfileirar falhas transitórias de produção | Parcial | ADAPTAR, opcional (sem `external_channel_billing_*`) | 6.1b | P/M |
-| #128–#133 GoHighLevel | Não portado (o teste do hub do nod exige GHL fora) | ADAPTAR, **opcional**: no SaaS é só observação e não envia nada à Meta | fora (decisão) | M |
-| #120, #134–#142, #144, #148, #151, cc5412f0, 7ca3a69f/56f19a94/ed5fe229, correções Unnichat (b22b651e…), correções Payt CTWA (6f9c2297…), 0cffd7b8, 4b5e674a, #104 | **JÁ NO NOD** (fases 3 a 5, nod #63–#69) | — | — | — |
-| #145–#147 (broker OAuth Meta), client-swap (#134/#135), 8094dbd7, todo billing/Pix/Asaas/assinatura, #107–#113 e #127/#149/#150 (licença e claim) | NÃO SE APLICA (lado SaaS, billing ou licença) | — | — | — |
+| #128–#133 GoHighLevel | Não portado (o teste do hub do nod exige GHL fora) | ADAPTAR. **Decisão de 26/10: VAI**, depois de terminado no SaaS (hoje só observa; o branch `feat/gohighlevel-automation` do dash-com-ia está em revisão) | 6.8b | M/G |
+| #66 (`37572ad9`), #85 (`ff28d8a1`), #86 (`71e69a95`): a ativação da regra não trava com número órfão (conexão removida) nem com número duplicado/redescoberto | Não portado (achado na auditoria de 26/10) | ADAPTAR: cobrir a ponte WAHA/Uazapi removida; o `retireBridge` do SaaS não existe no nod | 6.1a | P |
+| 75f6f4b3 (parcial): janela de 7 dias da Meta também para eventos com anúncio nas automações (Payt, Unnichat, Umbler) | Parcial (a aprovação do operador no "Reprocessar selecionados" já veio) | PORTAR a parte da janela de 7 dias | 6.1b | P |
+| #61 (`c95961f0`): ordem canônica do funil e filtros de evento configurados no workspace | Não portado | PORTAR | 6.3a | P/M |
+| #69 (`45f18c2b`): cards de KPI da Visão Geral configuráveis por funil | Não portado | PORTAR | 6.3a | M |
+| #83 (`58d5e51b`, parcial): preservar os períodos já sincronizados da Meta | Parcial | PORTAR só a parte de relatórios (a parte de client-swap não se aplica) | 6.3a | P |
+| #62 (`d2a5f76e`): barra de filtros dos Relatórios agrupada em período / escopo / ações | Não portado | PORTAR | 6.3b (primeiro item) | P |
+| #63 (`6be4bdcd` / `86aaac21`): alerta de desconexão do WhatsApp por instância, só depois de 2 leituras seguidas | No nod o alerta por instância **nunca roda** | ADAPTAR (Uazapi e WAHA). **Decisão de 26/10: VAI** | 6.1c (proposta) | P/M |
+| #91 (`f7c61c07`): reenviar os itens de replay que falharam, com o payload retido | Não portado | ADAPTAR como recurso novo no backoffice do aluno. **Decisão de 26/10: VAI** | 6.1c (proposta) | M |
+| 7570fe14 (parcial, Kommo): revalidar `/integrations` depois das ações do CRM | Parcial | PORTAR só a parte do Kommo (e Pipedrive); Guimo não se aplica | 6.5 | P |
+| Guimo (CRM de um cliente só: `guimo-conversion-panel`, migrations `guimo_*`) | Não portado | **NÃO SE APLICA** (decisão de 26/10: é de um cliente só) | — | — |
+| #120, #134–#142, #144, #148, #151, cc5412f0, 7ca3a69f/56f19a94/ed5fe229, correções Unnichat (b22b651e…), correções Payt CTWA (6f9c2297…), 0cffd7b8, 4b5e674a, #104 | **JÁ NO NOD** (fases 3 a 5, nod #63–#69). #134/#135 são o Kommo (front e back) | — | — | — |
+| #145–#147 (broker OAuth Meta), client-swap (#102, `52d255dc`, e a parte de client-swap do #83), 8094dbd7, todo billing/Pix/Asaas/assinatura, #107–#113 e #127/#149/#150 (licença e claim) | NÃO SE APLICA (lado SaaS, billing ou licença) | — | — | — |
 
 ## 2. Sobreposição com os PRs abertos do nod (#90, #91, #92)
 
@@ -144,14 +157,16 @@ Se o import do #92 já rodou numa instalação local com as chaves do #90, essa 
 Grafo resumido (A → B: B precisa de A):
 
 ```text
-6.0 (#153, #181+7ac17df7, #173) → 6.1a (#159, #160, #161) → 6.1b (#171, #165→#179/#180, #103/#105, d4d70274)
+6.0 (#153, #181+7ac17df7, #173) → 6.1a (#66/#85/#86, #159, #160, #161) → 6.1b (#171, #165→#179/#180, #103/#105, d4d70274, 75f6f4b3 parcial) → 6.1c (#63, #91 do SaaS)
 6.0 → 6.2a (#155, #156, #158) → 6.2b (#176)
-6.2a → 6.3a (#157→#174, #167→#175, e4139c4c) → 6.3b (filtros e auto-aplicar)
+6.2a → 6.3a (#61, #69, #83 parcial, #157→#174, #167→#175, e4139c4c) → 6.3b (#62 primeiro; filtros e auto-aplicar)
 6.4 (Meta Graph) é independente; depois da 6.3a, porque os dois mexem em meta-reporting.service
-6.0 (#173) + 6.2a (#158 hunk de compra) → 6.5 (base de plataformas, Braip, certificação, #164, #166, #169, #170, #184) → 6.6 Hotmart → 6.7 Yampi
-6.0 + 6.1a + 6.2a + 6.5 (#170 schema/recibos) → 6.8 ROI Chat
+6.0 (#173) + 6.2a (#158 hunk de compra) → 6.5 (base de plataformas, Braip, certificação, #164, #166, #169, #170, #184, 7570fe14 parcial) → 6.6 Hotmart → 6.7 Yampi
+6.0 + 6.1a + 6.2a + 6.5 (#170 schema/recibos) → 6.8 ROI Chat → 6.8b GoHighLevel (depois de terminado no SaaS)
 tudo → 6.9 absorver #91 e #92 do nod
 ```
+
+Atenção ao número: o "#91" da 6.1c é o PR #91 do **SaaS** (`f7c61c07`, reenviar itens de replay); o "#91" da 6.9 é o PR #91 do **nod** (formulários Meta).
 
 Mapeamento para o pedido original:
 - Fase A = 6.0 + 6.1a + 6.1b;
@@ -213,7 +228,9 @@ O resto foi incluído pela mudança de escopo.
 
 ### 6.1a — Regra única por provedor (migration)
 
-- **Itens:** #159 (`42ccbc7c`), #160 (`5141e217`), #161 (`0f6e010d`).
+- **Itens:**
+  - antes do #159, os achados da auditoria: #66 (`37572ad9`, commit `3f59e2f7`), #85 (`ff28d8a1`) e #86 (`71e69a95`). A ativação da regra ("Envio ativo") não trava com número órfão (conexão removida, inclusive a ponte WAHA/Uazapi) nem com número redescoberto com outra identidade na mesma conexão;
+  - #159 (`42ccbc7c`), #160 (`5141e217`), #161 (`0f6e010d`).
 - **Migration:** `20261027120000_provider_rule_cross_connection_scope`: `ALTER TABLE "ProviderConversionRuleConfig" ADD COLUMN IF NOT EXISTS "crossConnectionScope" BOOLEAN;`. Nullable e instantânea. Nenhuma regra existente muda; elas ganham a nota "Ampliar para todas as conexões".
 - **Arquivos:**
   - `schema.prisma`;
@@ -257,6 +274,7 @@ O resto foi incluído pela mudança de escopo.
   - #179 (`a7ccdab3`) e #180 (`c44dc9fb`);
   - #103 e #105 adaptados;
   - d4d70274;
+  - 75f6f4b3 (parcial, achado da auditoria): a janela de 7 dias da Meta (`event_time`) também para eventos com anúncio nas automações (Payt, Unnichat, Umbler), com `not_eligible` / `MetaEventTimeExpired`;
   - b65753b7 (opcional).
 - **Arquivos:**
   - `provider-conversion-observation-detail.ts` (novo);
@@ -283,6 +301,22 @@ O resto foi incluído pela mudança de escopo.
   - "Migration: não se aplica";
   - variável opcional (finalidade e padrão).
 - **Estimativa:** ~5 dias.
+
+### 6.1c — Operação do aluno: alerta de desconexão por instância e reenvio de itens de replay (proposta; sem migration prevista)
+
+Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois itens VÃO). Fica logo depois da 6.1b porque os dois mexem em prontidão e operação dos números, e não depende das fases de relatório nem das plataformas.
+
+- **Itens:**
+  - alerta de desconexão do WhatsApp **por instância** (SaaS #63: `6be4bdcd`, `86aaac21`, sobre a base do #26 `832cb677`). No nod esse alerta nunca roda. No SaaS ele só dispara depois de **2 leituras seguidas** de "desconectado" (pending/qr/error/hibernado/offline são ambíguos e não contam nem quebram a sequência; uma leitura "conectado" zera a sequência; falha no `getStatus` nunca alerta);
+  - reenviar os itens de replay que falharam, com o payload retido (SaaS #91, `f7c61c07`), como **recurso novo no backoffice do aluno**.
+- **Adaptações:**
+  - o alerta vale para Uazapi e WAHA (`WhatsappInstance`), por workspace, com o destino de alerta que o aluno já configura em `ops-alerts`; sem WhatsApp da licença PalmUP;
+  - o alerta respeita a licença: com a licença bloqueada, nada é enviado (como a ativação automática);
+  - o reenvio é uma ação do backoffice do aluno (`platform_owner`/`platform_operator`), por lote de replay, só para itens com payload ainda retido (`INBOUND_WEBHOOK_RAW_RETENTION_DAYS`); é escrita, então responde 423 com a licença bloqueada.
+- **Testes:** os do SaaS (`ops-alerts` com a sequência de 2 leituras, `inbound-webhook-replay` do #91) adaptados, mais: WAHA desconectada duas vezes alerta uma vez; uma leitura ambígua não alerta; reenvio com licença bloqueada responde 423; item sem payload retido não é reenviado.
+- **Riscos:** onboarding (o alerta precisa de destino configurado; sem destino, não faz nada e não quebra o `/onboarding/status`); rodapé intacto (tela do backoffice).
+- **Notas:** "Migration: não se aplica" (se precisar, `20261027125000_*`); nenhuma variável obrigatória nova.
+- **Estimativa:** ~3 a 4 dias.
 
 ### 6.2a — Lead recebido pela regra e conversão manual no lead
 
@@ -333,6 +367,7 @@ O resto foi incluído pela mudança de escopo.
 ### 6.3a — Relatórios: números corretos (sem migration)
 
 - **Itens:**
+  - achados da auditoria: #61 (`c95961f0`, ordem canônica do funil e filtros de evento do workspace), #69 (`45f18c2b`, cards de KPI da Visão Geral por funil) e #83 (`58d5e51b`, parcial: preservar os períodos já sincronizados da Meta; a parte de client-swap não se aplica);
   - #157 (`d4420843`);
   - #174 (`f4aa9878`);
   - #167 (`ea8203a7`);
@@ -353,6 +388,7 @@ O resto foi incluído pela mudança de escopo.
 ### 6.3b — Filtros da Visão Geral e Relatórios, aplicados automaticamente (sem migration)
 
 - **Itens:**
+  - **primeiro:** #62 (`d2a5f76e`, achado da auditoria): a barra de filtros dos Relatórios agrupada em período / escopo / ações, base dos filtros abaixo;
   - #106, #110, #114–#119;
   - #121–#124;
   - #125/#126 adaptados;
@@ -409,7 +445,8 @@ O resto foi incluído pela mudança de escopo.
   - `sales-platform-sale.ts`, que passa a usar o `sao-paulo-timestamp.ts` da 6.0;
   - b4d71afc (tela de leitores);
   - #166, #169, #170, #164, #184;
-  - o hunk de compra do #158 para Braip.
+  - o hunk de compra do #158 para Braip;
+  - 7570fe14 (parcial, achado da auditoria): revalidar `/integrations` depois das ações do Kommo (e do Pipedrive); a parte do Guimo não se aplica.
 - **Migrations:**
   - `20261027140000_braip_provider` (enum, aditiva);
   - `20261027140100_braip_parser_release` (release **não certificada**).
@@ -470,6 +507,14 @@ O resto foi incluído pela mudança de escopo.
 - **Notas:** backup obrigatório; guia de configuração do webhook do ROI Chat.
 - **Estimativa:** ~6 a 8 dias.
 
+### 6.8b — GoHighLevel (reservada; depois de terminado no SaaS)
+
+- **Decisão de 26/10:** o GoHighLevel VAI, mas só depois de **terminado no SaaS**. Hoje ele só observa e não envia nada à Meta; o branch `feat/gohighlevel-automation` do dash-com-ia está em revisão.
+- **Itens:** #128–#133 do SaaS mais o que o `feat/gohighlevel-automation` trouxer quando for mesclado no `main` do dash-com-ia (hashes a definir).
+- **Migration:** timestamp reservado `20261027180000_*` (nomes definidos no porte).
+- **Adaptações previstas:** card no hub sem gate de integração privada; o teste `integrations-hub-registry` do nod, que hoje exige o GHL fora, muda junto; envio pela regra (#155/#159) e guard do #153.
+- **Gate:** só começa com o GHL mesclado e validado no SaaS. **PENDENTE:** escopo e estimativa depois do merge no SaaS.
+
 ### 6.9 — Absorver os PRs do nod (#91 e #92), fora do porte
 
 - Plano próprio depois da 6.8: rebase sem o #90, migration renomeada e chaves de dedupe do #158/#153.
@@ -477,8 +522,8 @@ O resto foi incluído pela mudança de escopo.
 
 ### Totais
 
-- **6.0 a 6.8:** ~60 a 70 dias de execução com revisão, um escritor por vez. A 6.4 e a 6.3b podem correr em worktree separado da 6.5 a 6.8, porque têm poucos arquivos em comum. Com isso, o calendário fica em ~45 a 55 dias.
-- **Mínimo para a Fase A original** (6.0 + 6.1a + 6.1b): ~17 dias.
+- **6.0 a 6.8** (com a 6.1c proposta, ~3 a 4 dias, e sem a 6.8b, ainda sem estimativa): ~63 a 74 dias de execução com revisão, um escritor por vez. A 6.4 e a 6.3b podem correr em worktree separado da 6.5 a 6.8, porque têm poucos arquivos em comum. Com isso, o calendário fica em ~45 a 55 dias.
+- **Mínimo para a Fase A original** (6.0 + 6.1a + 6.1b): ~17 dias (a 6.1a ganhou #66/#85/#86, ~1 dia).
 
 ## 4. Gate 2 por subfase (preencher ao iniciar)
 
@@ -553,3 +598,23 @@ Use uma instância de teste com uma licença real de teste, num workspace sem da
 5. **Importação #92:** só foi rodada em teste, não em aluno real. Não há dados a corrigir.
 6. **Certificação:** um leitor validado com venda real no SaaS vai **certificado por migration** para o nod. O aluno não precisa liberar nada; a regra continua começando em observação e é ativada pelo aluno. Leitor ainda não validado no SaaS (hoje, o ROI Chat) só é portado depois de validado.
 7. **Escopo:** levar **tudo** que afeta o uso dos alunos, sem entregar pela metade. O prazo não é o problema.
+
+## Decisões do Samuel (26/10/2026, depois da auditoria)
+
+A auditoria de 26/10 releu o histórico do SaaS anterior ao #152 e achou itens que afetam o aluno e não estavam no inventário. Eles entraram nas fases assim:
+
+| Item do SaaS | Fase | Observação |
+|---|---|---|
+| #66 (`37572ad9`), #85 (`ff28d8a1`), #86 (`71e69a95`) | 6.1a (antes do #159) | A ativação da regra não trava com número órfão ou duplicado. Cobre a ponte WAHA/Uazapi |
+| 75f6f4b3 (parcial) | 6.1b | Janela de 7 dias da Meta também nos eventos com anúncio das automações |
+| #63 (alerta de desconexão por instância, 2 leituras) | 6.1c (proposta) | **VAI.** No nod o alerta por instância nunca roda |
+| #91 do SaaS (reenviar itens de replay que falharam) | 6.1c (proposta) | **VAI**, como recurso novo no backoffice do aluno |
+| #61, #69, #83 (parcial) | 6.3a | #83: só a parte de relatórios |
+| #62 | 6.3b (primeiro item) | Base da barra de filtros |
+| 7570fe14 (parcial, Kommo) | 6.5 | Sem a parte do Guimo |
+| Guimo | — | **NÃO VAI**: é de um cliente só |
+| GoHighLevel | 6.8b (reservada) | **VAI** depois de terminado no SaaS (`feat/gohighlevel-automation` em revisão) |
+
+- Correção do inventário: "client-swap" é o SaaS #102 (`52d255dc`, mais a parte de client-swap do #83), e não "#134/#135"; #134/#135 são o Kommo (front e back), que já está no nod.
+- Ordem atualizada: 6.0 → 6.1a → 6.1b → 6.1c → 6.2a → 6.2b → 6.3a → 6.3b → 6.4 → 6.5 → 6.6 → 6.7 → 6.8 → 6.8b → 6.9.
+- **PENDENTE:** confirmar com o Samuel a fase proposta para o alerta de desconexão e o reenvio de replay (6.1c, logo depois da 6.1b).

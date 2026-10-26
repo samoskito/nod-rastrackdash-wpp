@@ -63,11 +63,11 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
 | Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A MERGEADA — SMOKE REAL PAUSADO** | PR #43 merge `a48e93d`; API deployada; listagem autenticada OK no workspace `cmtbvwoop0000qa2swt9x8amu`; create/test MySQL real pausado até MySQL público fictício no Dokploy; PostgreSQL ainda não suportado |
 | Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; GupShup/Umbler existem como inbound webhook no código, mas a UX/aluno e a paridade com o app de referência ainda precisam de fechamento |
-| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
+| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 NA BRANCH DE INTEGRAÇÃO (PR #105); 6.1a IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
 
 ### Fase 6 — status das subfases
 
-Plano da fase: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md` (Gate 1 aprovado pelo Samuel em 26/10/2026). Ordem: 6.0 → 6.1a → 6.1b → 6.2a → 6.2b → 6.3a → 6.3b → 6.4 → 6.5 → 6.6 → 6.7 → 6.8 → 6.9.
+Plano da fase: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md` (Gate 1 aprovado pelo Samuel em 26/10/2026). Ordem (atualizada em 26/10, depois da auditoria): 6.0 → 6.1a → 6.1b → 6.1c (proposta) → 6.2a → 6.2b → 6.3a → 6.3b → 6.4 → 6.5 → 6.6 → 6.7 → 6.8 → 6.8b (GoHighLevel, reservada) → 6.9. Base das subfases: branch `integracao/fase-6`.
 
 #### 6.0 — Envio para a Meta: correções críticas
 
@@ -88,6 +88,20 @@ Arquivos: lead-lifetime-conversion-guard.ts (novo), conversion-events.service, p
 Testes: typecheck api/web/shared OK; API 2695 ok / 48 skipped (main: 2633 ok); web 1298 ok / 3 falhas iguais ao main; shared 187 ok / 18 falhas iguais ao main; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe no main
 Migrations: nenhuma
 Limitações: escopo por número do SaaS (#84, parte de dedupe) portado na mesma 6.0 por decisão do Samuel; auto_lead fora do guard até a 6.2a (ok, fases vão juntas na branch de integração); recusas da Meta gravadas antes desta versão não têm o código 190/102; sem validação em instalação real
+```
+
+#### 6.1a — Regra única por provedor
+
+```text
+Status: IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO
+Branch: feat/fase-6.1a-regra-unica-provedor (a partir de origin/integracao/fase-6)
+Executor: Claude Code
+Modelo/reasoning: Claude Opus 5.5
+Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.1a
+Escopo: #66/#85/#86 (ativação não trava com número órfão/duplicado, com a ponte WAHA), #159 (regra única por evento Unnichat/Umbler, todas as conexões, número removido), #160 (seção da URL antiga), #161 (exclusão em lote); atualização do plano com a auditoria de 26/10
+Migrations: 20261027120000_provider_rule_cross_connection_scope (aditiva, ADD COLUMN nullable)
+Testes: lista da §6.1a + licensing-client + brand-footer/app-layout/navigation
+Limitações: entregas recebidas antes de uma reancoragem ficam na âncora antiga e não são reenviadas (igual ao SaaS); sem validação em instalação real
 ```
 
 ### Checkpoint MySQL — pausado em 2026-09-04

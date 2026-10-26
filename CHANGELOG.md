@@ -7,7 +7,53 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). No migration, no new environment variable.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One additive migration (Fase 6.1a): back up PostgreSQL before the redeploy.** No new environment variable.
+
+### Added
+
+- **Fase 6.1a — One rule per event for every Unnichat/Umbler number, across
+  connections (API, shared and web)**, ported from the SaaS (`42ccbc7c`,
+  #159), adapted to the student edition:
+  - New additive migration `20261027120000_provider_rule_cross_connection_scope`
+    (in the SaaS: `20261021120000`): `ADD COLUMN IF NOT EXISTS
+    "crossConnectionScope" BOOLEAN` on `ProviderConversionRuleConfig`,
+    nullable. Existing rules do not change: an old "Todos os números"
+    automation keeps covering its own connection until the operator uses
+    "Ampliar para todas as conexões".
+  - "Todos os números do Unnichat / da Umbler (todas as conexões)": the rule
+    covers every number of the provider on any connection (Unnichat creates
+    one connection per number); its connection is only the anchor of its
+    deliveries and URL, and each occurrence is gated by the connection of its
+    own number. New rules are created this way, without choosing a connection.
+  - The callback origin (the URL that was called, or the per-event URL's
+    proven number) is stored with the delivery (`callbackOrigin`) and reused by
+    replays; it lives alongside the nod's Fase 5.3 `routedChannelId`.
+  - Per-event URL: when a rule "todas as conexões" competes with another rule
+    of the same tier on a number, the callback is held as
+    `multiple_rules_for_event` ("Duas regras para o mesmo evento — unifique");
+    older duplicates keep the oldest rule, as before. A rule whose connection
+    was removed never wins the routing.
+  - "Unificar" accepts Umbler/Unnichat automations (per provider + event): it
+    reuses the rule "todas as conexões" or promotes the oldest live one; the
+    others are paused and linked, and their old URL keeps delivering to the
+    target. Different values or modes require `acknowledgeDifferences` (409
+    `provider_rule_unify_differences`).
+  - "Número removido" (`numberRemoved` in the DTO; in the nod also when the
+    Uazapi/WAHA number was deleted in Integrations, i.e. its WhatsApp
+    connection is suspended) with a highlighted warning and "Pausar"; removing
+    the anchor connection moves a rule "todas as conexões" to another live
+    connection of the provider (`provider_conversion_rule.reanchored`, audited,
+    same transaction).
+- **Fase 6.1a — Bulk delete of rules (API, shared and web)**, ported from the
+  SaaS (`0f6e010d`, #161): `POST /conversion-rules/providers/bulk-delete`
+  (integration managers; a write, so `423` with a locked license) removes each
+  rule in its own transaction and reports every rule (`removed`,
+  `not_found`, `needs_target_confirmation`, `failed`). The rule other unified
+  rules point to only goes when confirmed, after them. Conversions list:
+  selection, "Selecionar unificadas e de número removido", "Excluir
+  selecionadas", the last event through each old URL (warning when it still
+  received in the last 7 days) and "Ocultar regras unificadas". Deleting a
+  rule whose number was removed no longer answers 404.
 
 ### Fixed
 
@@ -70,6 +116,27 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
   arrival + 5 min is capped at the arrival (`firstReceivedAt` on
   re-evaluations, now on live ingestion). The dedupe identity does not use
   the time; no backfill. The Brink Park part does not apply.
+- **Turning "Envio ativo" on no longer gets stuck on an orphan or duplicate
+  number (API)**, ported from the SaaS (`3f59e2f7` of #66 / `37572ad9`,
+  `ff28d8a1` #85, `71e69a95` #86): numbers no longer on the rule's live
+  connection are dropped from the rule (audited
+  `provider_conversion_rule.channel_scope_pruned`) instead of a 404 "Recurso de
+  webhook não encontrado"; an already active channel is not re-activated (no
+  second Meta route check); a rediscovered `discovered` number is remapped to
+  its active sibling on the same connection (`channel_scope_remapped`). nod
+  adaptations: rules over numbers of several connections also skip removed
+  connections, and a Uazapi/WAHA number deleted in Integrations (suspended
+  WhatsApp connection) is never activated but stays on the rule; without any
+  valid number the answer is a clear 409. The SaaS `retireBridge` does not
+  exist in the nod.
+- **Old URL section without rotation; accented event labels (web)**, ported
+  from the SaaS (`5141e217`, #160): with the single/per-event URL active, the
+  rule's own address only shows inside "URL antiga (desta conexão)", with its
+  last receipt, guided copy and no "Gerar novo endereço". Kommo and Pipedrive
+  now show the accented event labels.
+- "Pausar" works on a rule whose number was removed, and "Ampliar para todas as
+  conexões" on a rule already sending activates the covered numbers (review of
+  the port).
 
 ## [1.2.0] - 2026-10-24
 
