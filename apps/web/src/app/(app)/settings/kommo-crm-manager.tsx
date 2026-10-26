@@ -77,6 +77,8 @@ export type KommoCrmManagerProps = {
   connections: KommoConnectionDetailDto[];
   loadState: KommoConnectionsLoadState;
   allChannels: InboundWebhookChannelDto[];
+  /** GET /channels of some connection failed: allChannels is incomplete. */
+  channelsUnavailable?: boolean;
   canManage: boolean;
   licenseLocked: boolean;
   actions?: KommoCrmManagerActions;
@@ -93,6 +95,7 @@ export function KommoCrmManager({
   connections,
   loadState,
   allChannels,
+  channelsUnavailable = false,
   canManage,
   licenseLocked,
   actions = defaultActions,
@@ -113,6 +116,7 @@ export function KommoCrmManager({
           connections={connections}
           loadState={loadState}
           allChannels={allChannels}
+          channelsUnavailable={channelsUnavailable}
           canManage={canManage}
           licenseLocked={licenseLocked}
           {...actions}

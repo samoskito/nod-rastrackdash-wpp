@@ -87,6 +87,8 @@ export type KommoConversionPanelProps = {
   connections: KommoConnectionDetailDto[];
   loadState: KommoConnectionsLoadState;
   allChannels: InboundWebhookChannelDto[];
+  /** GET /channels of some connection failed: allChannels is incomplete. */
+  channelsUnavailable?: boolean;
   /** Workspace owner (or platform support) with integration permission. */
   canManage: boolean;
   /** Client-side hint only: the server stays the authority (HTTP 423). */
@@ -314,6 +316,7 @@ export function KommoConversionPanel({
   connections,
   loadState,
   allChannels,
+  channelsUnavailable = false,
   canManage,
   licenseLocked = false,
   createConnectionAction,
@@ -724,6 +727,7 @@ export function KommoConversionPanel({
               connection={connection}
               routeOptions={routeOptions}
               allChannels={allChannels}
+              channelsUnavailable={channelsUnavailable}
               canManage={canMutate}
               authLost={authFailureDetected}
               licenseLocked={locked}
@@ -805,7 +809,10 @@ function RouteSelector({
   selected,
   onToggle,
   disabled,
+  unavailable = false,
 }: {
+  /** GET /channels failed (porte do #165): options are unknown, not empty. */
+  unavailable?: boolean;
   name: string;
   options: RouteOption[];
   selected?: string[];
@@ -823,7 +830,11 @@ function RouteSelector({
   return (
     <fieldset className="provider-conversion-channels">
       <legend className="field-label">Canais autorizados</legend>
-      {options.length === 0 && missingSelectedIds.length === 0 ? (
+      {unavailable ? (
+        <small className="action-note warn">
+          Não foi possível carregar os números de WhatsApp agora. Recarregue a página em instantes antes de alterar os canais.
+        </small>
+      ) : options.length === 0 && missingSelectedIds.length === 0 ? (
         <small className="action-note">
           Nenhum número de WhatsApp foi encontrado neste workspace ainda.
         </small>
@@ -889,6 +900,7 @@ function KommoConnectionCard({
   connection,
   routeOptions,
   allChannels,
+  channelsUnavailable = false,
   canManage,
   authLost,
   licenseLocked,
@@ -915,6 +927,8 @@ function KommoConnectionCard({
   connection: KommoConnectionDetailDto;
   routeOptions: RouteOption[];
   allChannels: InboundWebhookChannelDto[];
+  /** GET /channels of some connection failed: allChannels is incomplete. */
+  channelsUnavailable?: boolean;
   canManage: boolean;
   authLost: boolean;
   licenseLocked: boolean;
@@ -1415,7 +1429,13 @@ function KommoConnectionCard({
   }
 
   async function saveChannelBindings() {
-    if (pending || operationUnsettledRef.current || stateUnresolved || !canManageRef.current) {
+    if (
+      pending ||
+      operationUnsettledRef.current ||
+      stateUnresolved ||
+      channelsUnavailable ||
+      !canManageRef.current
+    ) {
       return;
     }
     const parsed = kommoConnectionChannelBindingsInputSchema.safeParse({
@@ -1770,6 +1790,7 @@ function KommoConnectionCard({
                 )
               }
               disabled={pending === channelsKey || stateUnresolved || operationUnsettled}
+              unavailable={channelsUnavailable}
             />
             <div className="provider-conversion-builder-footer">
               {stateUnresolved ? (
@@ -1781,7 +1802,12 @@ function KommoConnectionCard({
               <button
                 className="button primary"
                 type="button"
-                disabled={pending === channelsKey || stateUnresolved || operationUnsettled}
+                disabled={
+                  pending === channelsKey ||
+                  stateUnresolved ||
+                  operationUnsettled ||
+                  channelsUnavailable
+                }
                 onClick={() => void saveChannelBindings()}
               >
                 <Check size={15} aria-hidden="true" />

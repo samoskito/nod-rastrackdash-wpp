@@ -381,6 +381,10 @@ async function getInboundWebhookData(): Promise<
                 },
           channels:
             channelsResult.status === "fulfilled" ? channelsResult.value : [],
+          channelsState:
+            channelsResult.status === "fulfilled"
+              ? ("real" as const)
+              : ("error" as const),
           detailState:
             overviewResult.status === "fulfilled" &&
             channelsResult.status === "fulfilled"
@@ -1120,6 +1124,11 @@ export default async function IntegrationsPage({
   const allInboundChannels = inboundConnections.flatMap(
     ({ channels }) => channels,
   );
+  // Kommo/Pipedrive channel bindings (porte do #165): a failed numbers read is
+  // "unknown", never "no number" (and must not let saving drop bindings).
+  const inboundChannelsUnavailable =
+    (inboundWebhookResult.state === "error" && inboundWebhookData === null) ||
+    inboundConnections.some(({ channelsState }) => channelsState === "error");
   const inboundConnectionsFor = (provider: string) =>
     inboundConnections.filter(
       ({ overview }) => overview.connection.provider === provider,
@@ -1831,6 +1840,7 @@ export default async function IntegrationsPage({
             connections={kommoSettings.connections}
             loadState={kommoSettings.state}
             allChannels={allInboundChannels}
+            channelsUnavailable={inboundChannelsUnavailable}
             canManage={canManageKommo}
             licenseLocked={licenseLocked}
           />
@@ -1849,6 +1859,7 @@ export default async function IntegrationsPage({
             connections={pipedriveSettings.connections}
             loadState={pipedriveSettings.state}
             allChannels={allInboundChannels}
+            channelsUnavailable={inboundChannelsUnavailable}
             canManage={canManageKommo}
             licenseLocked={licenseLocked}
           />

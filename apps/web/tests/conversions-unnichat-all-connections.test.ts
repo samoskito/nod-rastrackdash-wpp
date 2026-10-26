@@ -457,3 +457,39 @@ describe("Número removido", () => {
     });
   });
 });
+
+// Fase 6.1b — porte do #165 do SaaS (478f0f9a).
+describe("numbers that could not be loaded (GET /channels failed)", () => {
+  function renderUnavailable(connectionLocked: boolean) {
+    render(
+      createElement(ScopeStep, {
+        draft: {
+          ...emptyRuleDraft("automation_umbler"),
+          scope: "specific_numbers",
+          connectionId: "conn_umbler",
+        },
+        numbers: [],
+        connections: [
+          { id: "conn_umbler", provider: "umbler", displayName: "Umbler", status: "production" },
+        ],
+        capabilities: null,
+        onChange: vi.fn(),
+        disabled: false,
+        connectionLocked,
+        numbersUnavailable: true,
+      } as never),
+    );
+  }
+
+  it("says the numbers could not be loaded instead of “no number”", () => {
+    renderUnavailable(false);
+    expect(screen.getByText(/Não deu para carregar os números de alguma conexão/)).toBeTruthy();
+    expect(screen.queryByText("Nenhum número conectado funciona com esta origem.")).toBeNull();
+  });
+
+  it("never tells an edited rule that its number was removed", () => {
+    renderUnavailable(true);
+    expect(screen.getByText(/Não deu para carregar os números de alguma conexão/)).toBeTruthy();
+    expect(screen.queryByText(/O número da conexão desta regra foi removido/)).toBeNull();
+  });
+});

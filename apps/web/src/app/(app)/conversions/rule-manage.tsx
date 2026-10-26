@@ -112,7 +112,10 @@ export function RuleManage({
   integrationEndpoints = [],
   paytProducts = [],
   singleUrlActions,
+  numbersUnavailable = false,
 }: {
+  /** GET /channels de alguma conexão falhou: números incompletos. */
+  numbersUnavailable?: boolean;
   /** Fase 5.3: URLs únicas/por evento do workspace (sem a chave). */
   integrationEndpoints?: IntegrationEndpointDto[];
   /** Fase 5.3: produtos vistos nas vendas da Payt (filtro de produto). */
@@ -325,6 +328,7 @@ export function RuleManage({
             updateAction={actions.update}
             onSaved={onSaved}
             paytProducts={paytProducts}
+            numbersUnavailable={numbersUnavailable}
           />
         ) : null}
         {tab === "endpoint" ? (
@@ -398,7 +402,9 @@ function RuleEditForm({
   updateAction,
   onSaved,
   paytProducts = [],
+  numbersUnavailable = false,
 }: {
+  numbersUnavailable?: boolean;
   paytProducts?: IntegrationDetectedProductDto[];
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
@@ -501,6 +507,7 @@ function RuleEditForm({
         connectionLocked
         initialCrossConnection={rule.crossConnectionScope === true}
         legend="Números"
+        numbersUnavailable={numbersUnavailable}
       />
 
       {editCaps.productFilter ? (

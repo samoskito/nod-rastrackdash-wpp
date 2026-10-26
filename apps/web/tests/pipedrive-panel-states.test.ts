@@ -265,3 +265,18 @@ describe("Pipedrive received events (bounded, read-only diagnostics)", () => {
     expect(screen.getByRole("list", { name: "Eventos recebidos" }).children).toHaveLength(40);
   });
 });
+
+// Fase 6.1b — porte do #165 do SaaS (478f0f9a).
+describe("Pipedrive: números que não puderam ser carregados", () => {
+  it("never shows a failed numbers read as “no number” nor lets saving drop channels", () => {
+    const { actions } = renderPanel({ allChannels: [], channelsUnavailable: true });
+    expect(
+      screen.getAllByText(/Não foi possível carregar os números de WhatsApp agora/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/Nenhum número de WhatsApp foi encontrado/)).toBeNull();
+    const save = screen.getByRole("button", { name: "Salvar canais" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(actions.setChannelBindingsAction).not.toHaveBeenCalled();
+  });
+});

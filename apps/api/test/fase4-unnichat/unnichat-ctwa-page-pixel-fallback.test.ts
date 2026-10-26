@@ -190,11 +190,28 @@ describe("A. CTWA entry with an unknown ad falls back to the unique page/pixel p
       resolvedConversionDestinationId: "dest",
     });
     // Readiness counts it as a routed CTWA, not as unresolved.
+    // (Fase 6.1b, porte do #165: agregado SQL por canal deste único evento
+    // aberto e preservado.)
+    const resolved = h.event.classification === "eligible_route_resolved";
     const readiness = h.routes.channelReadiness(
       h.channel,
-      [{ ...h.event, deliveryId: "d", replayItem: null, productionItem: null }],
+      {
+        total: 1,
+        routed: resolved ? 1 : 0,
+        unresolved:
+          h.event.classification === "eligible_route_unresolved" ? 1 : 0,
+        alreadyMaterialized: 0,
+        adUnavailableOpen:
+          h.event.classificationReason === "route_ad_missing" ? 1 : 0,
+        retainedOpen: 1,
+        retainedRoutedUntouched: resolved ? 1 : 0,
+        inProgressOpen: 0,
+        sendFailedOpen: 0,
+        notEligibleOpen: 0,
+        nextPayloadExpiresAt: new Date(Date.now() + 86_400_000 * 3),
+      },
       new Date(),
-      new Set(["d"]),
+      0,
       0,
       await h.routes.effectiveEntryReadiness(h.channel),
     );

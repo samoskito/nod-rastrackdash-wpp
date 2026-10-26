@@ -90,6 +90,8 @@ export type PipedriveCrmManagerProps = {
   connections: PipedriveConnectionDetailDto[];
   loadState: PipedriveConnectionsLoadState;
   allChannels: InboundWebhookChannelDto[];
+  /** GET /channels of some connection failed: allChannels is incomplete. */
+  channelsUnavailable?: boolean;
   canManage: boolean;
   licenseLocked: boolean;
   actions?: PipedriveCrmManagerActions;
@@ -106,6 +108,7 @@ export function PipedriveCrmManager({
   connections,
   loadState,
   allChannels,
+  channelsUnavailable = false,
   canManage,
   licenseLocked,
   actions = defaultActions,
@@ -126,6 +129,7 @@ export function PipedriveCrmManager({
           connections={connections}
           loadState={loadState}
           allChannels={allChannels}
+          channelsUnavailable={channelsUnavailable}
           canManage={canManage}
           licenseLocked={licenseLocked}
           {...actions}

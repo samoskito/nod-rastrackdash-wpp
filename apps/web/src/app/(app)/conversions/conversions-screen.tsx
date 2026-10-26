@@ -679,6 +679,7 @@ export function ConversionsScreen({
             paytProducts={singleUrl?.paytProducts}
             integrationEndpoints={singleUrl?.endpoints}
             singleUrlActions={singleUrl?.actions}
+            numbersUnavailable={numbersPartial}
             onBusyChange={setFlowBusy}
             onFinished={() => {
               setCloseBlocked(false);
@@ -786,6 +787,7 @@ export function ConversionsScreen({
             integrationEndpoints={singleUrl?.endpoints}
             paytProducts={singleUrl?.paytProducts}
             singleUrlActions={singleUrl?.actions}
+            numbersUnavailable={numbersPartial}
             initialTab={manage.tab}
             freshUrl={freshUrl}
             onFreshUrl={(webhookUrl) => setFreshEndpoint({ ruleId: manage.row.id, webhookUrl })}

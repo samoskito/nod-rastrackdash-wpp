@@ -4,6 +4,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -27,6 +28,7 @@ import {
   ctwaAdUnknown,
   resolveCtwaDestination,
 } from "./authorized-ctwa-destination";
+import { isBridgedWhatsappProvider } from "./bridged-whatsapp-providers";
 import {
   effectiveUnnichatMetaRouting,
   lockUnnichatMetaPolicy,
@@ -57,6 +59,26 @@ const validRouteStatus = "valid";
 const removedRouteStatus = "inactive";
 const removedRouteReason = "route_removed";
 const payloadExpiryWarningMs = 48 * 60 * 60 * 1_000;
+/** Reasons that, alone, justify a "blocked" state and tell what to fix. */
+const actionableReadinessBlockers: ReadonlySet<InboundWebhookChannelReadinessBlockerDto> =
+  new Set([
+    "connection_paused",
+    "channel_paused",
+    "route_not_configured",
+    "route_not_valid",
+    "ctwa_unresolved",
+    "ctwa_ad_unavailable",
+    "payload_unavailable",
+    "ctwa_send_failed",
+  ]);
+/** Notes that explain the channel but never downgrade a sendable one. */
+const informativeReadinessBlockers: ReadonlySet<InboundWebhookChannelReadinessBlockerDto> =
+  new Set(["ctwa_in_progress", "ctwa_not_eligible"]);
+// GET /channels above this duration is logged as a warning.
+const slowChannelListingMs = 2_000;
+// Bounded fallback when the readiness aggregate fails.
+const readinessFallbackWindowDays = 90;
+const readinessFallbackMaxEvents = 5_000;
 
 const channelInclude = channelActivationInclude;
 
@@ -75,31 +97,57 @@ type EntryReadinessPolicy = EffectiveMetaRouting & {
   };
 };
 
-const channelReadinessEventSelect = {
-  channelId: true,
-  deliveryId: true,
-  classification: true,
-  classificationReason: true,
-  replayItem: {
-    select: {
-      status: true,
-    },
-  },
-  productionItem: {
-    select: {
-      status: true,
-    },
-  },
-  delivery: {
-    select: {
-      payloadExpiresAt: true,
-    },
-  },
-} satisfies Prisma.InboundWebhookEventSelect;
+/**
+ * Per-channel CTWA readiness counters, aggregated in SQL (one row per channel)
+ * instead of loading every CTWA event of the connection into memory (porte do
+ * #165 do SaaS). Each field mirrors exactly what the former in-memory filters
+ * counted:
+ * - done: replay or production item already materialized/duplicate;
+ * - open: not done;
+ * - available: the delivery still holds an encrypted, unexpired payload.
+ *
+ * `retainedRoutedUntouched` is the number of CTWA a new replay could still
+ * send right now: route resolved, never attempted (no replay nor production
+ * item) and original payload still preserved. When it is 0 while CTWA remain
+ * open, the open ones are explained by exactly one of: unresolved route, ad
+ * unavailable, payload no longer preserved, an attempt in progress
+ * (`inProgressOpen`), an attempt that failed/was skipped (`sendFailedOpen`)
+ * or a non-eligible triage classification (`notEligibleOpen`) (porte do #179).
+ */
+export type ChannelReadinessSummary = {
+  total: number;
+  routed: number;
+  unresolved: number;
+  alreadyMaterialized: number;
+  adUnavailableOpen: number;
+  retainedOpen: number;
+  retainedRoutedUntouched: number;
+  /** Open CTWA with a replay/production item still queued or processing. */
+  inProgressOpen: number;
+  /** Open CTWA whose replay/production attempt failed or was skipped. */
+  sendFailedOpen: number;
+  /** Open, never attempted CTWA classified as not eligible (ignored_*, ...). */
+  notEligibleOpen: number;
+  nextPayloadExpiresAt: Date | null;
+};
 
-type ChannelReadinessEvent = Prisma.InboundWebhookEventGetPayload<{
-  select: typeof channelReadinessEventSelect;
-}>;
+type ChannelReadinessSummaryRow = ChannelReadinessSummary & {
+  channelId: string;
+};
+
+const emptyReadinessSummary: ChannelReadinessSummary = {
+  total: 0,
+  routed: 0,
+  unresolved: 0,
+  alreadyMaterialized: 0,
+  adUnavailableOpen: 0,
+  retainedOpen: 0,
+  retainedRoutedUntouched: 0,
+  inProgressOpen: 0,
+  sendFailedOpen: 0,
+  notEligibleOpen: 0,
+  nextPayloadExpiresAt: null,
+};
 
 type NormalizedRouteInput = {
   routeKey: string;
@@ -149,6 +197,8 @@ export type InboundWebhookRouteReevaluationResult = {
 
 @Injectable()
 export class InboundWebhookChannelRoutesService {
+  private readonly logger = new Logger(InboundWebhookChannelRoutesService.name);
+
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
@@ -162,23 +212,59 @@ export class InboundWebhookChannelRoutesService {
   ): Promise<InboundWebhookChannelDto[]> {
     await this.requireConnection(this.prisma, workspaceId, connectionId);
 
-    const channels = await this.prisma.inboundWebhookChannel.findMany({
-      where: {
+    const startedAt = Date.now();
+    let channelCount: number | null = null;
+    let readinessMs: number | null = null;
+    try {
+      const channels = await this.prisma.inboundWebhookChannel.findMany({
+        where: {
+          workspaceId,
+          connectionId,
+        },
+        include: channelInclude,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      });
+      channelCount = channels.length;
+      const readinessStartedAt = Date.now();
+      const readinessByChannel = await this.loadChannelReadiness(
         workspaceId,
         connectionId,
-      },
-      include: channelInclude,
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
-    const readinessByChannel = await this.loadChannelReadiness(
-      workspaceId,
-      connectionId,
-      channels,
-    );
-
-    return channels.map((channel) =>
-      this.toChannelDto(channel, readinessByChannel.get(channel.id)),
-    );
+        channels,
+      );
+      readinessMs = Date.now() - readinessStartedAt;
+      const result = channels.map((channel) =>
+        this.toChannelDto(channel, readinessByChannel.get(channel.id)),
+      );
+      const durationMs = Date.now() - startedAt;
+      const line = JSON.stringify({
+        event: "inbound_webhook.channels_listed",
+        connectionId,
+        channelCount,
+        readinessMs,
+        durationMs,
+      });
+      if (durationMs >= slowChannelListingMs) this.logger.warn(line);
+      else this.logger.log(line);
+      return result;
+    } catch (error) {
+      // Structured, PII-free: identifiers and timings only, never payloads,
+      // phones or raw driver messages (which may echo query parameters).
+      this.logger.error(
+        JSON.stringify({
+          event: "inbound_webhook.channels_list_failed",
+          connectionId,
+          channelCount,
+          readinessMs,
+          durationMs: Date.now() - startedAt,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode:
+            typeof error === "object" && error !== null && "code" in error
+              ? String((error as { code: unknown }).code)
+              : null,
+        }),
+      );
+      throw error;
+    }
   }
 
   /**
@@ -1385,70 +1471,40 @@ export class InboundWebhookChannelRoutesService {
   ): Promise<Map<string, InboundWebhookChannelReadinessDto>> {
     const channelIds = channels.map((channel) => channel.id);
     const now = new Date();
-    const events =
-      channelIds.length === 0
-        ? []
-        : await this.prisma.inboundWebhookEvent.findMany({
-            where: {
-              workspaceId,
-              connectionId,
-              channelId: {
-                in: channelIds,
-              },
-              hasCtwa: true,
-            },
-            select: channelReadinessEventSelect,
-            orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
-          });
-    const availableDeliveries =
-      events.length === 0
-        ? []
-        : await this.prisma.inboundWebhookDelivery.findMany({
-            where: {
-              workspaceId,
-              connectionId,
-              id: {
-                in: [...new Set(events.map((event) => event.deliveryId))],
-              },
-              payloadExpiresAt: {
-                gt: now,
-              },
-              encryptedPayload: {
-                not: null,
-              },
-              payloadIv: {
-                not: null,
-              },
-              payloadTag: {
-                not: null,
-              },
-              encryptionKeyVersion: {
-                not: null,
-              },
-            },
-            select: {
-              id: true,
-            },
-          });
-    const availableDeliveryIds = new Set(
-      availableDeliveries.map((delivery) => delivery.id),
-    );
-    const eventsByChannel = new Map<string, ChannelReadinessEvent[]>();
-
-    for (const event of events) {
-      const current = eventsByChannel.get(event.channelId) ?? [];
-      current.push(event);
-      eventsByChannel.set(event.channelId, current);
-    }
+    // Porte do #103 do SaaS, com a ponte WAHA: a ponte Uazapi/WAHA não passa
+    // pelo pipeline genérico de observação (o CTWA vira lead direto pelo
+    // webhook da instância), então InboundWebhookEvent fica vazio. Os leads
+    // CTWA da instância contam como já materializados.
+    const bridgeProvider = channels[0]?.connection.provider;
+    const isBridgedConnection = isBridgedWhatsappProvider(bridgeProvider);
+    const materializedCtwaByInstance = isBridgedConnection
+      ? await this.bridgedCtwaLeadCounts(
+          workspaceId,
+          bridgeProvider,
+          channels.flatMap((channel) =>
+            channel.whatsappInstanceId ? [channel.whatsappInstanceId] : [],
+          ),
+        )
+      : new Map<string, number>();
+    const summaryByChannel =
+      channelIds.length === 0 || isBridgedConnection
+        ? new Map<string, ChannelReadinessSummary>()
+        : await this.loadChannelReadinessSummariesGuarded(
+            workspaceId,
+            connectionId,
+            channelIds,
+            now,
+          );
 
     return new Map(
       await Promise.all(
         channels.map(async (channel) => {
           const readiness = this.channelReadiness(
             channel,
-            eventsByChannel.get(channel.id) ?? [],
+            summaryByChannel.get(channel.id) ?? emptyReadinessSummary,
             now,
-            availableDeliveryIds,
+            materializedCtwaByInstance.get(channel.whatsappInstanceId ?? "") ??
+              0,
             (
               await Promise.all(
                 channel.routes.map((route) =>
@@ -1473,6 +1529,307 @@ export class InboundWebhookChannelRoutesService {
           ] as const;
         }),
       ),
+    );
+  }
+
+  /** CTWA leads of each bridged instance (Uazapi/WAHA), by instance id. */
+  private async bridgedCtwaLeadCounts(
+    workspaceId: string,
+    provider: string,
+    whatsappInstanceIds: string[],
+  ): Promise<Map<string, number>> {
+    if (whatsappInstanceIds.length === 0) return new Map();
+    const rows = await this.prisma.lead.groupBy({
+      by: ["whatsappInstanceId"],
+      where: {
+        workspaceId,
+        whatsappInstanceId: { in: whatsappInstanceIds },
+        source: provider,
+        ctwaClid: { not: null },
+      },
+      _count: { _all: true },
+    });
+    return new Map(
+      rows.flatMap((row) =>
+        row.whatsappInstanceId === null
+          ? []
+          : [[row.whatsappInstanceId, row._count._all] as const],
+      ),
+    );
+  }
+
+  /**
+   * The aggregate never takes the whole listing down: on a SQL error it logs
+   * `channels_readiness_sql_failed` (ids and error code only) and falls back
+   * to a bounded Prisma read. The fallback only sees the last
+   * {@link readinessFallbackWindowDays} days (at most
+   * {@link readinessFallbackMaxEvents} CTWA events), so its counters describe
+   * that recent window, not the whole history.
+   */
+  private async loadChannelReadinessSummariesGuarded(
+    workspaceId: string,
+    connectionId: string,
+    channelIds: string[],
+    now: Date,
+  ): Promise<Map<string, ChannelReadinessSummary>> {
+    try {
+      return await this.loadChannelReadinessSummaries(
+        workspaceId,
+        connectionId,
+        channelIds,
+        now,
+      );
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: "inbound_webhook.channels_readiness_sql_failed",
+          connectionId,
+          channelCount: channelIds.length,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode:
+            typeof error === "object" && error !== null && "code" in error
+              ? String((error as { code: unknown }).code)
+              : null,
+        }),
+      );
+      return this.loadRecentChannelReadinessSummaries(
+        workspaceId,
+        connectionId,
+        channelIds,
+        now,
+      );
+    }
+  }
+
+  /** Bounded fallback (recent window, capped rows) of the SQL aggregate. */
+  private async loadRecentChannelReadinessSummaries(
+    workspaceId: string,
+    connectionId: string,
+    channelIds: string[],
+    now: Date,
+  ): Promise<Map<string, ChannelReadinessSummary>> {
+    const since = new Date(
+      now.getTime() - readinessFallbackWindowDays * 24 * 60 * 60 * 1_000,
+    );
+    const events = await this.prisma.inboundWebhookEvent.findMany({
+      where: {
+        workspaceId,
+        connectionId,
+        channelId: { in: channelIds },
+        hasCtwa: true,
+        occurredAt: { gte: since },
+      },
+      select: {
+        channelId: true,
+        deliveryId: true,
+        classification: true,
+        classificationReason: true,
+        replayItem: { select: { status: true } },
+        productionItem: { select: { status: true } },
+        delivery: { select: { payloadExpiresAt: true } },
+      },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: readinessFallbackMaxEvents,
+    });
+    const available =
+      events.length === 0
+        ? []
+        : await this.prisma.inboundWebhookDelivery.findMany({
+            where: {
+              workspaceId,
+              connectionId,
+              id: { in: [...new Set(events.map((item) => item.deliveryId))] },
+              payloadExpiresAt: { gt: now },
+              encryptedPayload: { not: null },
+              payloadIv: { not: null },
+              payloadTag: { not: null },
+              encryptionKeyVersion: { not: null },
+            },
+            select: { id: true },
+          });
+    const availableIds = new Set(available.map((item) => item.id));
+    const finished = (status?: string | null) =>
+      status === "materialized" || status === "duplicate";
+    const inFlight = (status?: string | null) =>
+      status === "queued" || status === "processing";
+    const result = new Map<string, ChannelReadinessSummary>();
+    for (const item of events) {
+      const summary = result.get(item.channelId) ?? {
+        ...emptyReadinessSummary,
+      };
+      const done =
+        finished(item.replayItem?.status) ||
+        finished(item.productionItem?.status);
+      const retained = availableIds.has(item.deliveryId);
+      const untouched =
+        item.replayItem === null && item.productionItem === null;
+      summary.total += 1;
+      if (item.classification === "eligible_route_resolved") summary.routed += 1;
+      if (item.classification === "eligible_route_unresolved")
+        summary.unresolved += 1;
+      if (done) summary.alreadyMaterialized += 1;
+      if (!done && item.classificationReason === "route_ad_missing")
+        summary.adUnavailableOpen += 1;
+      if (!done && retained) {
+        summary.retainedOpen += 1;
+        const expiresAt = item.delivery.payloadExpiresAt;
+        if (
+          !summary.nextPayloadExpiresAt ||
+          expiresAt < summary.nextPayloadExpiresAt
+        ) {
+          summary.nextPayloadExpiresAt = expiresAt;
+        }
+      }
+      if (
+        item.classification === "eligible_route_resolved" &&
+        untouched &&
+        retained
+      ) {
+        summary.retainedRoutedUntouched += 1;
+      }
+      if (!done) {
+        if (
+          inFlight(item.replayItem?.status) ||
+          inFlight(item.productionItem?.status)
+        ) {
+          summary.inProgressOpen += 1;
+        } else if (!untouched) {
+          summary.sendFailedOpen += 1;
+        } else if (
+          item.classification !== "eligible_route_resolved" &&
+          item.classification !== "eligible_route_unresolved"
+        ) {
+          summary.notEligibleOpen += 1;
+        }
+      }
+      result.set(item.channelId, summary);
+    }
+    return result;
+  }
+
+  /**
+   * One aggregate query per listing (porte do #165 do SaaS): Postgres counts
+   * the connection's CTWA events per channel and returns one row per channel,
+   * so neither the events nor their delivery ids ever reach Node. The previous
+   * implementation loaded every CTWA event (plus replay/production/delivery
+   * relations) and then sent all their delivery ids back in a second
+   * `IN (...)` query, which grows without bound with the age and traffic of
+   * the connection. Covers every connection that writes InboundWebhookEvent
+   * (Umbler, Unnichat, Gupshup, Data Crazy, Meta Cloud); the Uazapi/WAHA
+   * bridge is counted from its CTWA leads instead.
+   *
+   * Semantics are unchanged (no time window): every counter matches the former
+   * in-memory filters. The event scan is driven by the existing
+   * `InboundWebhookEvent(channelId, occurredAt)` index; replay/production items
+   * are joined through their unique `eventId` and deliveries through the
+   * primary key, with the payload-availability predicate in the join.
+   *
+   * Identifiers match schema.prisma/migrations (no @@map/@map on these
+   * models). Enum columns are compared as text. "now" is sent as an ISO
+   * string and converted to UTC `timestamp` (the columns are TIMESTAMP(3)
+   * holding UTC, as Prisma writes them), independent of the session time
+   * zone. COUNT(...) is cast to int and still normalized with Number().
+   */
+  private async loadChannelReadinessSummaries(
+    workspaceId: string,
+    connectionId: string,
+    channelIds: string[],
+    now: Date,
+  ): Promise<Map<string, ChannelReadinessSummary>> {
+    const rows = await this.prisma.$queryRaw<ChannelReadinessSummaryRow[]>`
+      SELECT
+        s."channelId" AS "channelId",
+        COUNT(*)::int AS "total",
+        COUNT(*) FILTER (
+          WHERE s."classification" = 'eligible_route_resolved'
+        )::int AS "routed",
+        COUNT(*) FILTER (
+          WHERE s."classification" = 'eligible_route_unresolved'
+        )::int AS "unresolved",
+        COUNT(*) FILTER (WHERE s."done")::int AS "alreadyMaterialized",
+        COUNT(*) FILTER (
+          WHERE NOT s."done" AND s."classificationReason" = 'route_ad_missing'
+        )::int AS "adUnavailableOpen",
+        COUNT(*) FILTER (
+          WHERE NOT s."done" AND s."availableExpiresAt" IS NOT NULL
+        )::int AS "retainedOpen",
+        COUNT(*) FILTER (
+          WHERE s."classification" = 'eligible_route_resolved'
+            AND s."untouched"
+            AND s."availableExpiresAt" IS NOT NULL
+        )::int AS "retainedRoutedUntouched",
+        COUNT(*) FILTER (
+          WHERE NOT s."done" AND s."inFlight"
+        )::int AS "inProgressOpen",
+        COUNT(*) FILTER (
+          WHERE NOT s."done" AND NOT s."inFlight" AND NOT s."untouched"
+        )::int AS "sendFailedOpen",
+        COUNT(*) FILTER (
+          WHERE NOT s."done"
+            AND s."untouched"
+            AND s."classification" NOT IN (
+              'eligible_route_resolved',
+              'eligible_route_unresolved'
+            )
+        )::int AS "notEligibleOpen",
+        MIN(s."availableExpiresAt") FILTER (
+          WHERE NOT s."done"
+        ) AS "nextPayloadExpiresAt"
+      FROM (
+        SELECT
+          e."channelId",
+          e."classification"::text AS "classification",
+          e."classificationReason",
+          (
+            COALESCE(r."status"::text IN ('materialized', 'duplicate'), false)
+            OR COALESCE(p."status"::text IN ('materialized', 'duplicate'), false)
+          ) AS "done",
+          (r."id" IS NULL AND p."id" IS NULL) AS "untouched",
+          (
+            COALESCE(r."status"::text IN ('queued', 'processing'), false)
+            OR COALESCE(p."status"::text IN ('queued', 'processing'), false)
+          ) AS "inFlight",
+          d."payloadExpiresAt" AS "availableExpiresAt"
+        FROM "InboundWebhookEvent" e
+        LEFT JOIN "InboundWebhookReplayItem" r ON r."eventId" = e."id"
+        LEFT JOIN "InboundWebhookProductionItem" p ON p."eventId" = e."id"
+        LEFT JOIN "InboundWebhookDelivery" d
+          ON d."id" = e."deliveryId"
+          AND d."workspaceId" = ${workspaceId}
+          AND d."connectionId" = ${connectionId}
+          AND d."payloadExpiresAt" > (CAST(${now.toISOString()} AS timestamptz) AT TIME ZONE 'UTC')
+          AND d."encryptedPayload" IS NOT NULL
+          AND d."payloadIv" IS NOT NULL
+          AND d."payloadTag" IS NOT NULL
+          AND d."encryptionKeyVersion" IS NOT NULL
+        WHERE e."workspaceId" = ${workspaceId}
+          AND e."connectionId" = ${connectionId}
+          AND e."channelId" IN (${Prisma.join(channelIds)})
+          AND e."hasCtwa" = true
+      ) s
+      GROUP BY s."channelId"
+    `;
+
+    return new Map(
+      rows.map((row) => [
+        row.channelId,
+        {
+          total: Number(row.total),
+          routed: Number(row.routed),
+          unresolved: Number(row.unresolved),
+          alreadyMaterialized: Number(row.alreadyMaterialized),
+          adUnavailableOpen: Number(row.adUnavailableOpen),
+          retainedOpen: Number(row.retainedOpen),
+          retainedRoutedUntouched: Number(row.retainedRoutedUntouched),
+          inProgressOpen: Number(row.inProgressOpen ?? 0),
+          sendFailedOpen: Number(row.sendFailedOpen ?? 0),
+          notEligibleOpen: Number(row.notEligibleOpen ?? 0),
+          nextPayloadExpiresAt:
+            row.nextPayloadExpiresAt === null
+              ? null
+              : new Date(row.nextPayloadExpiresAt),
+        },
+      ]),
     );
   }
 
@@ -1513,49 +1870,25 @@ export class InboundWebhookChannelRoutesService {
 
   private channelReadiness(
     channel: PersistedChannel,
-    events: ChannelReadinessEvent[],
+    summary: ChannelReadinessSummary,
     now: Date,
-    availableDeliveryIds: ReadonlySet<string>,
+    materializedBridgeCtwa = 0,
     validRouteCount = 0,
     policy?: EntryReadinessPolicy,
   ): InboundWebhookChannelReadinessDto {
     const routeCount = channel.routes.length;
-    const routedEvents = events.filter(
-      (event) => event.classification === "eligible_route_resolved",
-    );
-    const unresolvedEvents = events.filter(
-      (event) => event.classification === "eligible_route_unresolved",
-    );
-    const alreadyMaterializedEvents = events.filter(
-      (event) =>
-        ["materialized", "duplicate"].includes(
-          event.replayItem?.status ?? "",
-        ) ||
-        ["materialized", "duplicate"].includes(
-          event.productionItem?.status ?? "",
-        ),
-    );
-    const openEvents = events.filter(
-      (event) =>
-        !["materialized", "duplicate"].includes(
-          event.replayItem?.status ?? "",
-        ) &&
-        !["materialized", "duplicate"].includes(
-          event.productionItem?.status ?? "",
-        ),
-    );
-    const retainedEvents = openEvents.filter((event) =>
-      availableDeliveryIds.has(event.deliveryId),
-    );
-    const retainedRoutedEvents = routedEvents.filter(
-      (event) =>
-        event.replayItem === null &&
-        event.productionItem === null &&
-        availableDeliveryIds.has(event.deliveryId),
-    );
-    const nextPayloadExpiresAt = retainedEvents
-      .map((event) => event.delivery.payloadExpiresAt)
-      .sort((left, right) => left.getTime() - right.getTime())[0];
+    const openCount = summary.total - summary.alreadyMaterialized;
+    const retainedCount = summary.retainedOpen;
+    const retainedRoutedCount = summary.retainedRoutedUntouched;
+    const unresolvedCount = summary.unresolved;
+    const adUnavailableCount = summary.adUnavailableOpen;
+    const nextPayloadExpiresAt = summary.nextPayloadExpiresAt ?? undefined;
+    // Uazapi/WAHA bridge (porte do #103): CTWA leads created straight from the
+    // instance webhook count as already materialized.
+    const alreadyMaterializedCtwa =
+      summary.alreadyMaterialized + materializedBridgeCtwa;
+    const totalCtwa = summary.total + materializedBridgeCtwa;
+    const routedCtwa = summary.routed + materializedBridgeCtwa;
     const blockers: InboundWebhookChannelReadinessBlockerDto[] = [];
 
     if (channel.connection.status === "paused") {
@@ -1572,20 +1905,16 @@ export class InboundWebhookChannelRoutesService {
     ) {
       blockers.push("route_not_valid");
     }
-    if (events.length === 0) {
+    if (totalCtwa === 0) {
       blockers.push("ctwa_not_observed");
     }
-    if (
-      openEvents.some(
-        (event) => event.classificationReason === "route_ad_missing",
-      )
-    ) {
+    if (adUnavailableCount > 0) {
       blockers.push("ctwa_ad_unavailable");
     }
-    if (unresolvedEvents.length > 0) {
+    if (unresolvedCount > 0) {
       blockers.push("ctwa_unresolved");
     }
-    if (openEvents.length > retainedEvents.length) {
+    if (openCount > retainedCount) {
       blockers.push("payload_unavailable");
     }
     if (
@@ -1594,19 +1923,39 @@ export class InboundWebhookChannelRoutesService {
     ) {
       blockers.push("payload_expiring_soon");
     }
+    // Porte do #179: "Bloqueado" sempre com motivo.
+    if (summary.sendFailedOpen > 0) {
+      blockers.push("ctwa_send_failed");
+    }
+    if (summary.inProgressOpen > 0) {
+      blockers.push("ctwa_in_progress");
+    }
+    if (summary.notEligibleOpen > 0) {
+      blockers.push("ctwa_not_eligible");
+    }
 
     const hardBlocked =
       channel.connection.status === "paused" ||
       channel.status === "paused" ||
       (policy ? !policy.eligible : routeCount === 0 || validRouteCount === 0);
+    // With nothing left that a new replay could send, the channel is only
+    // "blocked" when an actionable reason explains it. CTWA still being
+    // processed or ignored by triage are not a block: they leave it partial.
+    const actionableBlocked = blockers.some((blocker) =>
+      actionableReadinessBlockers.has(blocker),
+    );
+    // Informative notes never downgrade a channel that can be sent.
+    const degradingBlockers = blockers.filter(
+      (blocker) => !informativeReadinessBlockers.has(blocker),
+    );
     const state =
-      events.length === 0
+      totalCtwa === 0
         ? "waiting"
-        : alreadyMaterializedEvents.length === events.length
+        : alreadyMaterializedCtwa === totalCtwa
           ? "complete"
-          : hardBlocked || retainedRoutedEvents.length === 0
+          : hardBlocked || (retainedRoutedCount === 0 && actionableBlocked)
             ? "blocked"
-            : blockers.length > 0
+            : retainedRoutedCount === 0 || degradingBlockers.length > 0
               ? "partial"
               : "ready";
 
@@ -1622,18 +1971,21 @@ export class InboundWebhookChannelRoutesService {
             ...(policy.ctwaDestinationReadiness
               ? { ctwaDestinationReadiness: policy.ctwaDestinationReadiness }
               : {}),
-            adUnavailableCtwa: openEvents.filter(
-              (event) => event.classificationReason === "route_ad_missing",
-            ).length,
           }
         : {}),
-      totalCtwa: events.length,
-      routedCtwa: routedEvents.length,
-      unresolvedCtwa: unresolvedEvents.length,
-      retainedCtwa: retainedEvents.length,
-      retainedRoutedCtwa: retainedRoutedEvents.length,
-      payloadUnavailableCtwa: openEvents.length - retainedEvents.length,
-      alreadyMaterializedCtwa: alreadyMaterializedEvents.length,
+      // Porte do #165: sempre presente (o motivo ctwa_ad_unavailable vale
+      // para qualquer provedor, não só Unnichat).
+      adUnavailableCtwa: adUnavailableCount,
+      totalCtwa,
+      routedCtwa,
+      unresolvedCtwa: unresolvedCount,
+      retainedCtwa: retainedCount,
+      retainedRoutedCtwa: retainedRoutedCount,
+      inProgressCtwa: summary.inProgressOpen,
+      sendFailedCtwa: summary.sendFailedOpen,
+      notEligibleCtwa: summary.notEligibleOpen,
+      payloadUnavailableCtwa: openCount - retainedCount,
+      alreadyMaterializedCtwa,
       nextPayloadExpiresAt: nextPayloadExpiresAt?.toISOString() ?? null,
     };
   }
@@ -1657,7 +2009,8 @@ export class InboundWebhookChannelRoutesService {
       lastSeenAt: channel.lastSeenAt.toISOString(),
       routes: channel.routes.map((route) => this.toRouteDto(route)),
       readiness:
-        readiness ?? this.channelReadiness(channel, [], new Date(), new Set()),
+        readiness ??
+        this.channelReadiness(channel, emptyReadinessSummary, new Date()),
       createdAt: channel.createdAt.toISOString(),
       updatedAt: channel.updatedAt.toISOString(),
     };

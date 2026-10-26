@@ -109,6 +109,12 @@ export const inboundWebhookChannelReadinessBlockers = [
   "ctwa_ad_unavailable",
   "payload_unavailable",
   "payload_expiring_soon",
+  /** CTWA already queued/processing in a replay or production run. */
+  "ctwa_in_progress",
+  /** CTWA whose replay/production attempt failed or was skipped. */
+  "ctwa_send_failed",
+  /** CTWA ignored by triage (not eligible): nothing is sent to Meta. */
+  "ctwa_not_eligible",
 ] as const;
 
 export const inboundWebhookProviderSchema = z.enum(inboundWebhookProviders);
@@ -787,6 +793,9 @@ export const inboundWebhookChannelReadinessSchema = z.object({
   unresolvedCtwa: z.number().int().nonnegative(),
   retainedCtwa: z.number().int().nonnegative(),
   retainedRoutedCtwa: z.number().int().nonnegative(),
+  inProgressCtwa: z.number().int().nonnegative().optional(),
+  sendFailedCtwa: z.number().int().nonnegative().optional(),
+  notEligibleCtwa: z.number().int().nonnegative().optional(),
   payloadUnavailableCtwa: z.number().int().nonnegative(),
   alreadyMaterializedCtwa: z.number().int().nonnegative(),
   nextPayloadExpiresAt: dateTimeSchema.nullable(),

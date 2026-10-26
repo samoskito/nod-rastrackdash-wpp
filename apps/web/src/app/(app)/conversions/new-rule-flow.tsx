@@ -117,7 +117,13 @@ export type NewRuleFlowProps = {
   integrationEndpoints?: IntegrationEndpointDto[];
   /** Presente quando a URL única está ativa no workspace. */
   singleUrlActions?: SingleUrlActions;
+  /** GET /channels de alguma conexão falhou: a lista de números está incompleta. */
+  numbersUnavailable?: boolean;
 };
+
+/** Porte do #165: números que não puderam ser lidos não viram "sem número". */
+export const numbersUnavailableNote =
+  "Não deu para carregar os números de alguma conexão agora. Recarregue a página em instantes antes de escolher números.";
 
 /** Plataforma da URL única/por evento de uma origem de automação. */
 export function singleUrlProviderFor(
@@ -159,6 +165,7 @@ export function NewRuleFlow({
   paytProducts = [],
   integrationEndpoints = [],
   singleUrlActions,
+  numbersUnavailable = false,
 }: NewRuleFlowProps) {
   const startOrigin =
     initialOrigin && offeredOrigins.includes(initialOrigin) ? initialOrigin : null;
@@ -505,6 +512,7 @@ export function NewRuleFlow({
           comingSoonNumbers={comingSoonNumbers}
           onChange={patch}
           disabled={locked || licenseLocked}
+          numbersUnavailable={numbersUnavailable}
         />
       ) : null}
 
@@ -813,6 +821,7 @@ export function ScopeStep({
   connectionLocked = false,
   initialCrossConnection = true,
   legend = "Em quais números esta regra vale?",
+  numbersUnavailable = false,
 }: {
   draft: RuleDraft;
   numbers: ConversionNumber[];
@@ -826,6 +835,11 @@ export function ScopeStep({
   /** Editing: whether the saved rule already spans every connection. */
   initialCrossConnection?: boolean;
   legend?: string;
+  /**
+   * The numbers of some connection could not be read (GET /channels failed):
+   * an empty list must not read as "no number" or "number removed".
+   */
+  numbersUnavailable?: boolean;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
   // Umbler/Unnichat (Fase 6.1a, porte do #159): "Todos os números" pode
@@ -986,12 +1000,20 @@ export function ScopeStep({
         </p>
       ) : null}
 
+      {draft.scope === "specific_numbers" &&
+      numbersUnavailable &&
+      available.length > 0 ? (
+        <p className="action-note warn">{numbersUnavailableNote}</p>
+      ) : null}
+
       {draft.scope === "specific_numbers" ? (
         available.length === 0 ? (
           <p className="action-note warn">
-            {automation && connectionLocked
-              ? "O número da conexão desta regra foi removido. Use “Todos os números” ou crie uma regra nova."
-              : "Nenhum número conectado funciona com esta origem."}
+            {numbersUnavailable
+              ? numbersUnavailableNote
+              : automation && connectionLocked
+                ? "O número da conexão desta regra foi removido. Use “Todos os números” ou crie uma regra nova."
+                : "Nenhum número conectado funciona com esta origem."}
           </p>
         ) : (
           <div className="conversion-number-picker">

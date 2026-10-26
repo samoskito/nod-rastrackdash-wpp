@@ -478,20 +478,27 @@ it("production preserves post-activation timestamp guards", async () => {
 it("readiness reports virtual inheritance separately from 0/0 persisted routes and missing ad remains a blocker", async () => {
   const h = harness();
   const policy = await effectiveUnnichatMetaRouting(h.prisma, h.channel);
-  const event: any = {
-    classification: "eligible_route_unresolved",
-    classificationReason: "route_ad_missing",
-    replayItem: null,
-    productionItem: null,
-    deliveryId: "delivery",
-    delivery: { payloadExpiresAt: new Date(Date.now() + 86400000 * 3) },
+  // Fase 6.1b (porte do #165): agregado SQL de um CTWA aberto, preservado e
+  // sem rota, sem evidência do anúncio.
+  const summary = {
+    total: 1,
+    routed: 0,
+    unresolved: 1,
+    alreadyMaterialized: 0,
+    adUnavailableOpen: 1,
+    retainedOpen: 1,
+    retainedRoutedUntouched: 0,
+    inProgressOpen: 0,
+    sendFailedOpen: 0,
+    notEligibleOpen: 0,
+    nextPayloadExpiresAt: new Date(Date.now() + 86400000 * 3),
   };
   expect(
     (h.service as any).channelReadiness(
       h.channel,
-      [event],
+      summary,
       new Date(),
-      new Set(["delivery"]),
+      0,
       0,
       policy,
     ),

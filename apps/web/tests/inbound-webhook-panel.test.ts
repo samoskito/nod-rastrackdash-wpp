@@ -739,3 +739,86 @@ function metaReportingAccount({
     syncError: null,
   };
 }
+
+// Fase 6.1b — porte do #165 (478f0f9a) e do #179 (a7ccdab3) do SaaS.
+describe("inbound webhook panel: leitura dos números e “Bloqueado” com motivo", () => {
+  it("never shows a failed channel listing as a connection without numbers", () => {
+    const failed = renderPanel({
+      connections: [
+        {
+          ...connectionView,
+          channels: [],
+          channelsState: "error",
+          detailState: "error",
+        },
+      ],
+    });
+    expect(failed).toContain("Não foi possível carregar os números desta conexão");
+    expect(failed).not.toContain("Nenhum canal cadastrado ainda.");
+
+    const empty = renderPanel({
+      connections: [{ ...connectionView, channels: [], channelsState: "real" }],
+    });
+    expect(empty).toContain("Nenhum canal cadastrado ainda.");
+    expect(empty).not.toContain("Não foi possível carregar os números desta conexão");
+  });
+
+  it("never shows a blocked channel without its reason", () => {
+    const channel = connectionView.channels[0]!;
+    const html = renderPanel({
+      connections: [
+        {
+          ...connectionView,
+          channels: [
+            {
+              ...channel,
+              readiness: {
+                ...channel.readiness,
+                state: "blocked",
+                blockers: ["ctwa_send_failed"],
+                unresolvedCtwa: 0,
+                retainedRoutedCtwa: 0,
+                sendFailedCtwa: 3,
+                nextPayloadExpiresAt: null,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(html).toContain("Bloqueado");
+    expect(html).toContain(
+      "3 CTWA falharam ou foram ignorados no envio e não entram em um novo envio automático.",
+    );
+  });
+
+  it("explains a channel with CTWA still processing as partial, not blocked", () => {
+    const channel = connectionView.channels[0]!;
+    const html = renderPanel({
+      connections: [
+        {
+          ...connectionView,
+          channels: [
+            {
+              ...channel,
+              readiness: {
+                ...channel.readiness,
+                state: "partial",
+                blockers: ["ctwa_in_progress"],
+                unresolvedCtwa: 0,
+                retainedRoutedCtwa: 0,
+                inProgressCtwa: 2,
+                nextPayloadExpiresAt: null,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(html).toContain("Prontidão parcial");
+    expect(html).not.toContain("Bloqueado");
+    expect(html).toContain("2 CTWA estão sendo processados agora.");
+  });
+});

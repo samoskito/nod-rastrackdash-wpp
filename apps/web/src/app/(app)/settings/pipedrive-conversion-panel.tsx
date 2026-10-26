@@ -101,6 +101,8 @@ export type PipedriveConversionPanelProps = {
   connections: PipedriveConnectionDetailDto[];
   loadState: PipedriveConnectionsLoadState;
   allChannels: InboundWebhookChannelDto[];
+  /** GET /channels of some connection failed: allChannels is incomplete. */
+  channelsUnavailable?: boolean;
   canManage: boolean;
   /** Client-side hint only: the server stays the authority (HTTP 423). */
   licenseLocked?: boolean;
@@ -523,6 +525,7 @@ export function PipedriveConversionPanel({
   connections,
   loadState,
   allChannels,
+  channelsUnavailable = false,
   canManage,
   licenseLocked = false,
   createConnectionAction,
@@ -905,6 +908,7 @@ export function PipedriveConversionPanel({
             name="allowedChannelRouteIds"
             options={routeOptions}
             disabled={formDisabled}
+            unavailable={channelsUnavailable}
           />
 
           <p className="action-note">
@@ -940,6 +944,7 @@ export function PipedriveConversionPanel({
               connection={connection}
               routeOptions={routeOptions}
               allChannels={allChannels}
+              channelsUnavailable={channelsUnavailable}
               canManage={canManage}
               licenseLocked={locked}
               pending={pending}
@@ -980,7 +985,10 @@ function RouteSelector({
   selected,
   onToggle,
   disabled,
+  unavailable = false,
 }: {
+  /** GET /channels failed (porte do #165): options are unknown, not empty. */
+  unavailable?: boolean;
   name: string;
   options: RouteOption[];
   selected?: string[];
@@ -999,7 +1007,11 @@ function RouteSelector({
   return (
     <fieldset className="provider-conversion-channels">
       <legend className="field-label">Canais autorizados</legend>
-      {options.length === 0 && missingSelectedIds.length === 0 ? (
+      {unavailable ? (
+        <small className="action-note warn">
+          Não foi possível carregar os números de WhatsApp agora. Recarregue a página em instantes antes de alterar os canais.
+        </small>
+      ) : options.length === 0 && missingSelectedIds.length === 0 ? (
         <small className="action-note">
           Nenhum número de WhatsApp foi encontrado neste workspace ainda.
         </small>
@@ -1068,6 +1080,7 @@ function PipedriveConnectionCard({
   connection,
   routeOptions,
   allChannels,
+  channelsUnavailable = false,
   canManage,
   licenseLocked,
   pending,
@@ -1098,6 +1111,8 @@ function PipedriveConnectionCard({
   connection: PipedriveConnectionDetailDto;
   routeOptions: RouteOption[];
   allChannels: InboundWebhookChannelDto[];
+  /** GET /channels of some connection failed: allChannels is incomplete. */
+  channelsUnavailable?: boolean;
   canManage: boolean;
   licenseLocked: boolean;
   pending: string | null;
@@ -1548,7 +1563,7 @@ function PipedriveConnectionCard({
   }
 
   async function saveChannelBindings() {
-    if (stateUnresolved) return;
+    if (stateUnresolved || channelsUnavailable) return;
     const formData = baseFormData();
     formData.set("payload", JSON.stringify({ allowedChannelRouteIds: editedRouteIds }));
     await runConnectionMutation(channelsKey, setChannelBindingsAction, formData, () =>
@@ -1869,6 +1884,7 @@ function PipedriveConnectionCard({
                 )
               }
               disabled={pending === channelsKey || stateUnresolved || locked}
+              unavailable={channelsUnavailable}
             />
             <div className="provider-conversion-builder-footer">
               {stateUnresolved ? (
@@ -1880,7 +1896,12 @@ function PipedriveConnectionCard({
               <button
                 className="button primary"
                 type="button"
-                disabled={pending === channelsKey || stateUnresolved || locked}
+                disabled={
+                  pending === channelsKey ||
+                  stateUnresolved ||
+                  locked ||
+                  channelsUnavailable
+                }
                 onClick={() => void saveChannelBindings()}
               >
                 <Check size={15} aria-hidden="true" />
