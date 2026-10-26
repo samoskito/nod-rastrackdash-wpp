@@ -625,7 +625,11 @@ export class InboundConversionAutomationIngestionService {
     }
 
     const payload = this.decryptAutomationPayload(delivery);
-    const parsed = this.parseAutomation(endpoint, payload);
+    const parsed = this.parseAutomation(
+      endpoint,
+      payload,
+      delivery.firstReceivedAt,
+    );
     if (!parsed.ok) {
       throw new ConflictException(
         "O payload não corresponde ao contrato de automação atual",
@@ -1245,7 +1249,11 @@ export class InboundConversionAutomationIngestionService {
     }
 
     const payload = this.decryptAutomationPayload(delivery);
-    const parsed = this.parseAutomation(endpoint, payload);
+    const parsed = this.parseAutomation(
+      endpoint,
+      payload,
+      delivery.firstReceivedAt,
+    );
     if (!parsed.ok) {
       return {
         deliveryId,
@@ -1375,7 +1383,11 @@ export class InboundConversionAutomationIngestionService {
       };
     }
     const payload = this.decryptAutomationPayload(delivery);
-    const parsed = this.parseAutomation(endpoint, payload);
+    const parsed = this.parseAutomation(
+      endpoint,
+      payload,
+      delivery.firstReceivedAt,
+    );
     if (!parsed.ok) {
       return {
         deliveryId,
@@ -1697,6 +1709,8 @@ export class InboundConversionAutomationIngestionService {
   private parseAutomation(
     endpoint: PublicConversionEndpoint,
     payload: unknown,
+    // Arrival of the stored postback (re-evaluation); live ingestion = now.
+    receivedAt?: Date,
   ): AutomationParseResult {
     const rule = endpoint.providerRule;
     if (
@@ -1719,8 +1733,8 @@ export class InboundConversionAutomationIngestionService {
       // Purchase rules keep the validated Purchase-only contract.
       const parsed =
         rule.conversionRule.eventName === "Purchase"
-          ? parsePaytAutomationV1(payload)
-          : parsePaytSaleEventV1(payload);
+          ? parsePaytAutomationV1(payload, { receivedAt })
+          : parsePaytSaleEventV1(payload, { receivedAt });
       if (!parsed.ok) {
         return parsed.errorCode === "payt_sale_v1_status_not_supported"
           ? { ok: false, errorCode: notThisRule }

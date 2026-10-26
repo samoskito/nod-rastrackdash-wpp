@@ -1,6 +1,7 @@
 import { normalizeCurrencyCode, type CurrencyCode } from "@wpptrack/shared";
 import { normalizePhoneIdentity } from "../../../common/phone/phone-identity";
 import { boundedString } from "../inbound-webhook-delivery-identity";
+import { saoPauloTimestamp } from "../sao-paulo-timestamp";
 
 export const PAYT_AUTOMATION_V1_PARSER_VERSION = "automation-v1";
 
@@ -111,16 +112,42 @@ function unwrapSafe(payload: unknown): Record<string, unknown> | null {
   }
 }
 
-function parseTimestamp(value: unknown): Date | null {
+/**
+ * Payt dates ("2026-10-23 21:39:30.000000", "2026-10-23 14:17:05") carry no
+ * zone and are Brasilia wall-clock time (real payloads: a waiting_payment
+ * created 14:17:05 expires 16:17:01; a lost_cart started 21:33 arrived at
+ * 21:33 -03:00). They used to be read as UTC, 3h early. A value with an
+ * explicit zone (`Z`, `-03:00`) is kept as is.
+ */
+export function paytTimestamp(value: unknown): Date | null {
+  const shared = saoPauloTimestamp(value);
+  if (shared) return shared;
   const timestamp = boundedString(value, 80);
   if (!timestamp) return null;
-  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/u.test(
-    timestamp,
-  )
-    ? `${timestamp.replace(" ", "T")}Z`
-    : timestamp;
-  const milliseconds = Date.parse(normalized);
+  // Any other format keeps the historical parse (never seen in a real payload).
+  const milliseconds = Date.parse(timestamp);
   return Number.isFinite(milliseconds) ? new Date(milliseconds) : null;
+}
+
+/** Provider clock skew tolerated before an event time counts as "future". */
+export const PAYT_FUTURE_SKEW_MS = 5 * 60_000;
+
+export type PaytParseOptions = {
+  /** When the postback arrived (defaults to now): caps a future event time. */
+  receivedAt?: Date;
+};
+
+/**
+ * An event never happens after it was received: a time beyond the arrival
+ * (plus a small skew) is a wrong clock or zone, so the arrival is used and
+ * Meta never gets a future event_time.
+ */
+function capAtReceived(occurredAt: Date, receivedAt: Date | undefined): Date {
+  const reference = receivedAt?.getTime() ?? Date.now();
+  if (!Number.isFinite(reference)) return occurredAt;
+  return occurredAt.getTime() > reference + PAYT_FUTURE_SKEW_MS
+    ? new Date(reference)
+    : occurredAt;
 }
 
 function lower(value: unknown, max: number): string | null {
@@ -295,6 +322,7 @@ export function paytSaleEventNameOf(payload: unknown): PaytSaleEventName | null 
  */
 export function parsePaytSaleEventV1(
   payload: unknown,
+  options: PaytParseOptions = {},
 ): PaytSaleEventV1ParseResult {
   try {
     const order = unwrap(payload);
@@ -343,7 +371,7 @@ export function parsePaytSaleEventV1(
       (eventName === "Purchase" || productPrice === null
         ? null
         : productPrice * productQuantity);
-    const occurredAt = parseTimestamp(
+    const parsedOccurredAt = paytTimestamp(
       eventName === "Purchase"
         ? (transaction?.paid_at ??
             transaction?.updated_at ??
@@ -354,6 +382,9 @@ export function parsePaytSaleEventV1(
             order.updated_at ??
             order.started_at),
     );
+    const occurredAt = parsedOccurredAt
+      ? capAtReceived(parsedOccurredAt, options.receivedAt)
+      : null;
     if (
       phoneCandidates.length === 0 ||
       !occurredAt ||
@@ -413,12 +444,13 @@ export function parsePaytSaleEventV1(
  */
 export function parsePaytAutomationV1(
   payload: unknown,
+  options: PaytParseOptions = {},
 ): PaytAutomationV1ParseResult {
   // Non-purchase postbacks stay "not a purchase" whatever else they lack.
   if (unwrapSafe(payload) && paytSaleEventNameOf(payload) !== "Purchase") {
     return { ok: false, errorCode: "payt_automation_v1_not_purchase" };
   }
-  const parsed = parsePaytSaleEventV1(payload);
+  const parsed = parsePaytSaleEventV1(payload, options);
   if (!parsed.ok) {
     return parsed.errorCode === "payt_sale_v1_status_not_supported"
       ? { ok: false, errorCode: "payt_automation_v1_not_purchase" }

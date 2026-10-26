@@ -169,7 +169,7 @@ export class IntegrationEndpointsService {
       input.providerAttempt,
     );
     const receivedAt = new Date();
-    const parsed = this.parse(endpoint, payload);
+    const parsed = this.parse(endpoint, payload, receivedAt);
     const ingressKey = parsed.ok
       ? this.ingressKey(endpoint.id, parsed.externalKey)
       : this.fallbackIngressKey(endpoint.id, rawBody, receivedAt);
@@ -256,7 +256,7 @@ export class IntegrationEndpointsService {
     const rawBody = this.decryptEventPayload(event);
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
     const endpoint = event.integrationEndpoint;
-    const parsed = this.parse(endpoint, payload);
+    const parsed = this.parse(endpoint, payload, event.firstReceivedAt);
     if (!parsed.ok) {
       throw new ConflictException(
         "O payload guardado não corresponde a um evento suportado",
@@ -787,10 +787,12 @@ export class IntegrationEndpointsService {
   private parse(
     endpoint: EndpointRecord,
     payload: unknown,
+    // Arrival of the postback: caps a Payt event time in the future.
+    receivedAt?: Date,
   ): ParsedIntegrationEvent {
     switch (endpoint.provider) {
       case "payt": {
-        const sale = parsePaytSaleEventV1(payload);
+        const sale = parsePaytSaleEventV1(payload, { receivedAt });
         if (!sale.ok) {
           return sale.errorCode === "payt_sale_v1_status_not_supported"
             ? {
