@@ -63,7 +63,7 @@ O arquivo histórico `docs/superpowers/plans/2026-08-19-rastrackdash-student-edi
 | Fase 2 | backoffice real multi-cliente, responsáveis, suporte escopado, anti-IDOR, ativação automática de licença e SMTP opcional | público | **CONCLUÍDA — HOMOLOGADA EM INSTALAÇÃO INDIVIDUAL (2026-08-27)** | base `374cc48`; hardening `525886a`/`5d743d5`/`51781b1`; publicado até `454725c`; homologação confirmada pelo Samuel: deploy no commit, licença autoativada no boot, workspace sem SMTP, link manual one-time, bootstrap password removida |
 | Fase 3 | conectores externos MySQL/PostgreSQL com egress/SSRF seguro | público | **FASE 3A MERGEADA — SMOKE REAL PAUSADO** | PR #43 merge `a48e93d`; API deployada; listagem autenticada OK no workspace `cmtbvwoop0000qa2swt9x8amu`; create/test MySQL real pausado até MySQL público fictício no Dokploy; PostgreSQL ainda não suportado |
 | Fase 4 | UAZAPI por conexão/workspace, webhook e gatilhos | público | **IMPLEMENTADA E PARCIALMENTE HOMOLOGADA** | PRs #28–#41; UAZAPI e WAHA validados em produção; GupShup/Umbler existem como inbound webhook no código, mas a UX/aluno e a paridade com o app de referência ainda precisam de fechamento |
-| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 IMPLEMENTANDO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
+| Fase 6 | paridade com o SaaS (dash-com-ia até #187), subfases 6.0 → 6.9, um PR por subfase | público | **6.0 IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO** (Gate 1 aprovado em 26/10/2026) | plano: `.hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md`; status da subfase em "Fase 6 — status das subfases" abaixo |
 
 ### Fase 6 — status das subfases
 
@@ -80,6 +80,14 @@ Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.0
 Escopo: #153 (uma conversão por lead por pixel, entre números, com WAHA e Meta Cloud), #181 (+ parte do ready_to_send parado do 7ac17df7), #173 (Payt em hora de Brasília); nada além
 Migrations: nenhuma
 Testes: lista da §6.0 + licensing-client + brand-footer/app-layout/navigation
+```
+
+```text
+Status: IMPLEMENTAÇÃO CONCLUÍDA — AGUARDANDO REVISÃO
+Arquivos: lead-lifetime-conversion-guard.ts (novo), conversion-events.service, provider-conversion-production.service, inbound-webhook-production.service, inbound-webhook-replay.service, ctwa-entry-materialization, provider-rule-blocked-reprocess(+service), provider-conversion-rules.service, conversion-event-retry, meta-capi.adapter, diagnostics.service, meta-reporting.service, reporting.controller, sao-paulo-timestamp.ts (novo), payt-automation-v1.parser, inbound-conversion-automation-ingestion.service, integration-endpoints.service; web conversions/events/settings; shared conversion-rules e reporting
+Testes: typecheck api/web/shared OK; API 2695 ok / 48 skipped (main: 2633 ok); web 1298 ok / 3 falhas iguais ao main; shared 187 ok / 18 falhas iguais ao main; licensing-client 72 ok; brand-footer e navigation ok; app-layout com 1 falha que já existe no main
+Migrations: nenhuma
+Limitações: escopo por número do SaaS (#84) não portado (regra de provedor segue por workspace); auto_lead fora do guard até a 6.2a; recusas da Meta gravadas antes desta versão não têm o código 190/102; sem validação em instalação real
 ```
 
 ### Checkpoint MySQL — pausado em 2026-09-04
