@@ -34,6 +34,10 @@ import type {
   InboundWebhookOneTimeSecret,
 } from "./inbound-webhook-actions";
 import { InboundWebhookRouteEditor } from "./inbound-webhook-route-editor";
+import {
+  WhatsappInstanceActivitySummary,
+  type WhatsappInstanceActivities,
+} from "./whatsapp-instance-activity";
 import { InboundWebhookRoutingMode } from "./inbound-webhook-routing-mode";
 import { InboundRecoveryPanel } from "./inbound-recovery-panel";
 import { MetaCloudWabaSubscriptionPanel } from "./meta-cloud-waba-subscription";
@@ -83,6 +87,11 @@ export type InboundWebhookPanelProps = {
   provider?: InboundWebhookProviderDto;
   /** False hides the create form (e.g. connections bridged from Uazapi). */
   allowCreate?: boolean;
+  /**
+   * Fase 6.3b (porte do SaaS #126): atividade de cada conexão WhatsApp
+   * (Uazapi BYO ou WAHA) por id, mostrada nas pontes das regras de frase.
+   */
+  instanceActivities?: WhatsappInstanceActivities;
   /** Whether the create form starts open (default: when nothing exists). */
   defaultCreateOpen?: boolean;
   /** Replaces the scoped heading's helper text. */
@@ -170,6 +179,7 @@ export function InboundWebhookPanel({
   defaultCreateOpen,
   scopeDescription,
   licenseLocked = false,
+  instanceActivities = {},
 }: InboundWebhookPanelProps) {
   const router = useRouter();
   const connections = scopedProvider
@@ -485,6 +495,23 @@ export function InboundWebhookPanel({
           connections.map(({ overview, channels, detailState, channelsState }) => {
             const connection = overview.connection;
             const connectionPending = pendingAction?.includes(connection.id);
+            // Fase 6.3b (SaaS #126): a ponte da Uazapi/WAHA só leva as regras
+            // de frase; o lead de anúncio entra direto pela conexão WhatsApp,
+            // então os contadores de entrada desta conexão não são medidos.
+            const isBridged =
+              connection.provider === "uazapi" ||
+              connection.provider === "waha";
+            const bridgedInstanceIds = isBridged
+              ? [
+                  ...new Set(
+                    channels.flatMap((channel) =>
+                      channel.whatsappInstanceId
+                        ? [channel.whatsappInstanceId]
+                        : [],
+                    ),
+                  ),
+                ]
+              : [];
 
             return (
               <details className="inbound-connection" key={connection.id}>
@@ -546,23 +573,45 @@ export function InboundWebhookPanel({
                     />
                     <ObservationCounter
                       label="CTWA pendente"
-                      value={overview.counters.eligibleUnresolved}
+                      value={
+                        isBridged ? null : overview.counters.eligibleUnresolved
+                      }
                       tone="warn"
                     />
                     <ObservationCounter
                       label="Sem CTWA"
-                      value={overview.counters.ignoredNoCtwa}
+                      value={isBridged ? null : overview.counters.ignoredNoCtwa}
                     />
                     <ObservationCounter
                       label="Duplicados"
-                      value={overview.counters.duplicate}
+                      value={isBridged ? null : overview.counters.duplicate}
                     />
                     <ObservationCounter
                       label="Inválidos"
-                      value={overview.counters.invalid}
+                      value={isBridged ? null : overview.counters.invalid}
                       tone="error"
                     />
                   </div>
+                  {isBridged ? (
+                    <p className="muted inbound-counter-note">
+                      O lead de anúncio entra pela conexão WhatsApp; pendentes,
+                      sem CTWA, duplicados e inválidos não são medidos nesta
+                      conexão.
+                    </p>
+                  ) : null}
+                  {bridgedInstanceIds.map((whatsappInstanceId) => (
+                    <section
+                      className="inbound-instance-activity"
+                      aria-label="Atividade do número WhatsApp"
+                      key={whatsappInstanceId}
+                    >
+                      <span className="micro-label">Atividade do número</span>
+                      <WhatsappInstanceActivitySummary
+                        view={instanceActivities[whatsappInstanceId]}
+                        whatsappInstanceId={whatsappInstanceId}
+                      />
+                    </section>
+                  ))}
 
                   {connection.provider === "meta_cloud" ? <p>Com a conexão enviando, cada novo CTWA de um canal ativo e com rota válida vai para a Meta. CTWA roteado não significa enviado. O histórico anterior não é reenviado automaticamente.</p> : null}
                   {connection.provider === "meta_cloud" ? (
@@ -1050,8 +1099,18 @@ function ObservationCounter({
 }: {
   label: string;
   tone?: "" | "success" | "warn" | "error";
-  value: number;
+  /** `null` = the provider does not measure this counter. */
+  value: number | null;
 }) {
+  if (value === null) {
+    return (
+      <div className="inbound-counter unmeasured" data-measured="false">
+        <span>{label}</span>
+        <strong>Não medido</strong>
+      </div>
+    );
+  }
+
   return (
     <div className={`inbound-counter${tone ? ` ${tone}` : ""}`}>
       <span>{label}</span>

@@ -62,6 +62,21 @@ export const whatsappConnectionsSchema = z.array(
     .strict(),
 );
 
+/**
+ * Fase 6.3b (porte do SaaS #125, sem schemas/billing): atividade de uma
+ * conexão Uazapi BYO ou WAHA, lida dos leads de anúncio (CTWA) ligados a ela
+ * e do último webhook recebido. Só leitura.
+ */
+export const whatsappInstanceActivitySchema = z
+  .object({
+    leads24h: z.number().int().nonnegative(),
+    leads7d: z.number().int().nonnegative(),
+    leadsTotal: z.number().int().nonnegative(),
+    lastLeadAt: z.string().datetime().nullable(),
+    lastWebhookAt: z.string().datetime().nullable(),
+  })
+  .strict();
+
 const httpUrlSchema = z
   .string()
   .trim()
@@ -760,6 +775,9 @@ export type WhatsappConnectionDto = z.infer<
   typeof whatsappConnectionsSchema
 >[number];
 export type WhatsappConnectionsDto = z.infer<typeof whatsappConnectionsSchema>;
+export type WhatsappInstanceActivityDto = z.infer<
+  typeof whatsappInstanceActivitySchema
+>;
 export type WhatsappConnectionCreateInputDto = z.infer<
   typeof whatsappConnectionCreateInputSchema
 >;

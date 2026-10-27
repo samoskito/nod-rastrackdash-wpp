@@ -8,6 +8,10 @@ import {
 import { CalendarDays, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  FilterCombobox,
+  type FilterComboboxCopy,
+} from "../../../components/filter-combobox";
 import { usePresentationMode } from "../../../components/presentation-mode-toggle";
 import {
   crmFiltersHref,
@@ -18,6 +22,18 @@ import {
 /** Native date inputs emit intermediate years while typing. */
 const dateCommitDelayMs = 800;
 const datePattern = /^(20\d{2})-\d{2}-\d{2}$/u;
+
+/** Fase 6.3b (SaaS #116 + CRM do SaaS): a mesma busca de campanha da Visão Geral. */
+const campaignCopy: FilterComboboxCopy = {
+  all: "Todas as campanhas",
+  searchPlaceholder: "Buscar campanha",
+  searchLabel: "Buscar campanha por nome ou ID",
+  count: (matches, total) => `${matches} de ${total} campanhas`,
+  found: (matches) =>
+    matches === 1 ? "1 campanha encontrada" : `${matches} campanhas encontradas`,
+  noResults: (query) => `Nenhuma campanha com "${query}"`,
+  clearSearch: "Limpar busca",
+};
 
 /** An active WhatsApp connection (nod: one number per connection). */
 export type CrmWhatsappInstanceOption = {
@@ -39,8 +55,7 @@ function instanceLabel(instance: CrmWhatsappInstanceOption): string {
 /**
  * CRM filters (design §3): period by lead arrival (default last 30 days),
  * WhatsApp number and campaign, all in the URL. Same controls as the Visão
- * Geral. nod: campaigns use a native select too (the searchable campaign
- * filter of the Visão Geral arrives with Fase 6.3b).
+ * Geral (native selects, FilterCombobox for campaigns, Fase 6.3b).
  */
 export function CrmFilters({
   filters,
@@ -176,29 +191,28 @@ export function CrmFilters({
           ))}
         </select>
       </label>
-      <label className="filter-field crm-campaign-filter">
-        <span>Campanha</span>
-        <select
-          name="campaignId"
-          value={filters.campaignId}
-          disabled={campaignOptions === null && !filters.campaignId}
-          title={campaignOptions === null ? "Campanhas indisponíveis" : undefined}
-          onChange={(event) =>
-            go({ ...filters, campaignId: event.currentTarget.value })
-          }
-        >
-          <option value="">
-            {campaignOptions === null
-              ? "Campanhas indisponíveis"
-              : "Todas as campanhas"}
-          </option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {presentationMode ? "Campanha oculta" : option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <FilterCombobox
+        className="crm-campaign-filter"
+        mode="single"
+        name="campaignId"
+        label="Campanha"
+        value={filters.campaignId ? [filters.campaignId] : []}
+        options={options}
+        copy={campaignCopy}
+        disabledLabel={
+          campaignOptions === null && !filters.campaignId
+            ? "Campanhas indisponíveis"
+            : undefined
+        }
+        presentationPlaceholder={
+          presentationMode
+            ? filters.campaignId
+              ? "Campanha oculta"
+              : campaignCopy.all
+            : undefined
+        }
+        onCommit={(next) => go({ ...filters, campaignId: next[0] ?? "" })}
+      />
       <div className="crm-filter-status" aria-live="polite">
         {isPending ? (
           <span className="overview-filter-status-label">

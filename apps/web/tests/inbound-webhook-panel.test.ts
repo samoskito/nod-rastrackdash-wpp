@@ -16,6 +16,7 @@ import {
   type InboundWebhookConnectionView,
 } from "../src/app/(app)/integrations/inbound-webhook-panel";
 import { inboundWebhookReportingAccountOptions } from "../src/app/(app)/integrations/inbound-webhook-route-editor";
+import type { WhatsappInstanceActivities } from "../src/app/(app)/integrations/whatsapp-instance-activity";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -562,10 +563,12 @@ function renderPanel({
   canManage = true,
   connections = [connectionView],
   capabilities: panelCapabilities = capabilities,
+  instanceActivities,
 }: {
   canManage?: boolean;
   connections?: InboundWebhookConnectionView[];
   capabilities?: InboundWebhookCapabilitiesDto;
+  instanceActivities?: WhatsappInstanceActivities;
 } = {}) {
   const action = vi.fn(async (_formData: FormData) => ({
     ok: true as const,
@@ -588,9 +591,61 @@ function renderPanel({
       createChannelAction: action,
       setChannelStatusAction: action,
       saveRoutesAction: action,
+      instanceActivities,
     }),
   );
 }
+
+// Fase 6.3b (porte do SaaS #126): a ponte Uazapi/WAHA só leva as regras de
+// frase; o lead de anúncio entra pela conexão WhatsApp.
+describe("bridged WhatsApp connections (6.3b)", () => {
+  const bridged = (provider: "uazapi" | "waha") => ({
+    ...connectionView,
+    overview: {
+      ...connectionView.overview,
+      connection: { ...connectionView.overview.connection, provider },
+    },
+    channels: connectionView.channels.map((channel) => ({
+      ...channel,
+      whatsappInstanceId: "wpp_1",
+    })),
+  });
+
+  it.each(["uazapi", "waha"] as const)(
+    "%s: marks the entry counters as not measured and shows the number activity",
+    (provider) => {
+      const html = renderPanel({
+        connections: [bridged(provider)],
+        instanceActivities: {
+          wpp_1: {
+            state: "real",
+            checkedAt: "2026-07-17T20:00:00.000Z",
+            activity: {
+              leads24h: 1,
+              leads7d: 4,
+              leadsTotal: 9,
+              lastLeadAt: "2026-07-17T19:00:00.000Z",
+              lastWebhookAt: "2026-07-17T19:30:00.000Z",
+            },
+          },
+        },
+      });
+
+      expect(html).toContain("<strong>Não medido</strong>");
+      expect(html).toContain("não são medidos nesta");
+      expect(html).toContain('aria-label="Atividade do número WhatsApp"');
+      expect(html).toContain("<dt>CTWA total</dt><dd>9</dd>");
+      expect(html).toContain('href="/leads?whatsappInstanceId=wpp_1"');
+    },
+  );
+
+  it("keeps the measured counters for other providers", () => {
+    const html = renderPanel();
+
+    expect(html).not.toContain("Não medido");
+    expect(html).not.toContain("Atividade do número");
+  });
+});
 
 it("offers student historical CTWA recovery on the Meta connection", () => {
   const html = renderPanel({ connections: [{

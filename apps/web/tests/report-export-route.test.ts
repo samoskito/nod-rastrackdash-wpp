@@ -45,4 +45,21 @@ describe("report export route", () => {
     );
     expect(body).toContain("Black Friday WhatsApp");
   });
+
+  it("6.3b: forwards the WhatsApp number so the CSV follows the screen", async () => {
+    global.fetch = vi.fn(
+      async () => new Response("Campanha;", { status: 200 }),
+    ) as typeof fetch;
+
+    await GET(
+      new Request(
+        "http://localhost/reports/export?since=2026-07-01&until=2026-07-02&whatsappInstanceId=wpp_1",
+      ),
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/reports/campaigns/export.csv?since=2026-07-01&until=2026-07-02&whatsappInstanceId=wpp_1",
+      expect.anything(),
+    );
+  });
 });

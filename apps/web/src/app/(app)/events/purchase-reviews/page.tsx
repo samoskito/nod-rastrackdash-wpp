@@ -1,14 +1,18 @@
 import type {
   CurrentWorkspaceDto,
   ProviderConversionRuleDto,
+  PurchaseReviewDto,
   PurchaseReviewListDto,
   PurchaseReviewStatusDto,
   PurchaseReviewViewDto,
 } from "@wpptrack/shared";
-import { Filter, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { serverApiFetch } from "../../../../lib/server-api";
 import { PurchaseReviewPanel } from "./purchase-review-panel";
+import {
+  PurchaseReviewFilters,
+  type PurchaseReviewRuleOption,
+} from "./purchase-review-filters";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -39,6 +43,33 @@ function dateOnlyInSaoPaulo(date: Date): string {
   }).formatToParts(date);
   const values = new Map(parts.map((part) => [part.type, part.value]));
   return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
+}
+
+/**
+ * Regras de compra do workspace. A regra filtrada nunca some do select, senao
+ * o filtro parece limpo enquanto a lista continua filtrada; o nome vem da API
+ * (regras ou revisoes da pagina) e, sem ele, um rotulo neutro, nunca inventado.
+ */
+function ruleFilterOptions(
+  rules: ProviderConversionRuleDto[],
+  reviews: PurchaseReviewDto[],
+  selectedRuleId: string | undefined,
+): PurchaseReviewRuleOption[] {
+  const options = rules
+    .filter((rule) => rule.conversionRule.eventName === "Purchase")
+    .map((rule) => ({ id: rule.id, label: rule.conversionRule.name }));
+
+  if (selectedRuleId && !options.some((rule) => rule.id === selectedRuleId)) {
+    const label =
+      rules.find((rule) => rule.id === selectedRuleId)?.conversionRule.name ??
+      reviews.find((review) => review.providerRuleId === selectedRuleId)
+        ?.ruleName ??
+      "Regra indisponível";
+
+    options.push({ id: selectedRuleId, label });
+  }
+
+  return options;
 }
 
 export default async function PurchaseReviewsPage({
@@ -117,84 +148,22 @@ export default async function PurchaseReviewsPage({
       </nav>
 
       <section className="surface-panel purchase-review-command-panel">
-        <form
-          action="/events/purchase-reviews"
-          className="purchase-review-filter-form"
-        >
-          <div className="purchase-review-filter-title">
-            <ShoppingCart aria-hidden="true" size={18} />
-            <span>
-              <strong>Fila operacional</strong>
-              <small>{pagination.totalItems} compra(s) no período</small>
-            </span>
-          </div>
-          <label className="filter-field">
-            <span>Início</span>
-            <input
-              className="input-field"
-              defaultValue={since}
-              name="since"
-              type="date"
-            />
-          </label>
-          <label className="filter-field">
-            <span>Fim</span>
-            <input
-              className="input-field"
-              defaultValue={until}
-              name="until"
-              type="date"
-            />
-          </label>
-          <label className="filter-field">
-            <span>Visualização</span>
-            <select className="filter-control" defaultValue={view} name="view">
-              <option value="actionable">Pendências</option>
-              <option value="history">Histórico concluído</option>
-              <option value="all">Todas</option>
-            </select>
-          </label>
-          <label className="filter-field">
-            <span>Estado</span>
-            <select
-              className="filter-control"
-              defaultValue={status ?? ""}
-              name="status"
-            >
-              <option value="">Todos</option>
-              <option value="review_required">Revisão necessária</option>
-              <option value="awaiting_data">Aguardando dados</option>
-              <option value="recognized">Reconhecidas</option>
-              <option value="approved">Na fila</option>
-              <option value="sent">Enviadas</option>
-              <option value="failed">Falhas</option>
-              <option value="duplicate">Duplicadas</option>
-              <option value="rejected">Rejeitadas</option>
-              <option value="corrected_after_send">Corrigidas no painel</option>
-            </select>
-          </label>
-          <label className="filter-field">
-            <span>Regra</span>
-            <select
-              className="filter-control"
-              defaultValue={providerRuleId ?? ""}
-              name="providerRuleId"
-            >
-              <option value="">Todas as regras</option>
-              {rules
-                .filter((rule) => rule.conversionRule.eventName === "Purchase")
-                .map((rule) => (
-                  <option key={rule.id} value={rule.id}>
-                    {rule.conversionRule.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <button className="button" type="submit">
-            <Filter aria-hidden="true" size={15} />
-            Aplicar
-          </button>
-        </form>
+        <PurchaseReviewFilters
+          applied={{
+            since,
+            until,
+            view,
+            status: status ?? "",
+            providerRuleId: providerRuleId ?? "",
+          }}
+          page={page}
+          ruleOptions={ruleFilterOptions(
+            rules,
+            data?.reviews ?? [],
+            providerRuleId,
+          )}
+          totalItems={pagination.totalItems}
+        />
       </section>
 
       {data ? (

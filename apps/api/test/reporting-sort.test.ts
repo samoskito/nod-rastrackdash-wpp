@@ -740,11 +740,13 @@ function callEndpoint(
   endpoint: "campaigns" | "adsets" | "ads",
   query: { sort?: unknown; dir?: unknown; page?: string; pageSize?: string },
 ) {
+  // Filter params between "until" and the pagination. Fase 6.3b added
+  // whatsappInstanceId to every level and campaignIds to the campaigns one.
   const args = [
     "refresh-token",
     "2026-09-01",
     "2026-09-07",
-    ...Array(11).fill(undefined),
+    ...Array(endpoint === "campaigns" ? 13 : 12).fill(undefined),
   ];
 
   if (endpoint === "campaigns") {

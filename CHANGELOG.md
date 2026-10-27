@@ -7,9 +7,61 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit.
 
 ### Added
+
+- **Fase 6.3b — Filters of Visão Geral and Relatórios, applied automatically
+  (API, shared and web; no migration, no new variable)**. Ported from the
+  SaaS (`d2a5f76e` #62, `fae01607` #106, `9fccf687` #110, `588cec7c` #114,
+  `54cc7739` #115, `aa04fed9` #116, `c1204447` #117, `bcc9adda` #118,
+  `d389892f` #119, `98bf9fc5` #121, `4f42dd03` #122, `8b99506f` #123,
+  `9db08583` #124, `75125d69` #125 and `256ff325` #126 adapted, `bb76b30e`,
+  `e5ef9006`, `d8cefd91` #175), plus the later SaaS pieces of the same files
+  (`2f79c3c7` searchable ad account filter with the currency badge,
+  `996e7c12` several ad accounts on the campaign options, `be599f49` "Manual"
+  source on Eventos Meta, `82448211` WhatsApp number on the Leads export
+  route, the number filter on the deferred-lead lookup of `4d74d303`).
+  - Relatórios toolbar grouped in Período / Escopo / Ações (#62); every filter
+    of Relatórios, Leads, Eventos Meta and Revisão de compras applies by
+    itself, without the "Aplicar" button (#121–#124; dates and texts wait for
+    the typing to stop; Enter and no-JS GET keep working).
+  - Visão Geral: WhatsApp number filter (#106/#110; removed connections leave
+    the list but an old link still works), searchable campaign filter with
+    up to 10 campaigns (#114–#118; `GET /reports/campaign-options`,
+    `campaignIds`), honest Meta metrics for the cut (account, shared or
+    exclusive campaign, not synced) and the scope notes. Relatórios: the same
+    number filter (#119).
+  - #175: with the number filter, conversations include the entries deferred
+    to the Lead-recebido rule (`metricEventLeadIds`); nod: the variable unset
+    is the override mode, so the "normal mode" tests use an explicit "false".
+  - #125/#126 adapted: `GET /integrations/whatsapp-connections/:id/activity`
+    in the nod connections module (Uazapi BYO and WAHA, one number per
+    connection; no `schemas/billing`: `whatsappInstanceActivitySchema` lives in
+    the integrations schema), shown on each connection card and on the
+    Uazapi/WAHA bridges of the phrase rules (their entry counters show "Não
+    medido"); Leads filter by number (`whatsappInstanceId`, list and export).
+  - One platform look for every `<select>` in the app (bb76b30e,
+    `docs/design/dropdowns.md`); stacked per-currency totals and an uncut ad
+    account popover in Relatórios, currency in the rule example message
+    (e5ef9006). The CRM board campaign filter (6.2b) uses the same searchable
+    FilterCombobox.
+  - nod adaptations: the number options come from
+    `/integrations/whatsapp-connections` (`lib/whatsapp-number-options.ts`);
+    the ad account filter is the SaaS FilterCombobox version; UI texts in
+    Portuguese with accents. Skipped: #143 (API sort by any funnel step; the
+    web never sends that key, in the SaaS either).
+  - nod fixes found in the review (not in the SaaS yet): with several
+    campaigns the Overview summary is scoped to them (`summaryMetricScope`
+    reads `campaignIds`, so leads/sales follow the same campaigns as the
+    spend); the Relatórios CSV follows the WhatsApp number
+    (`campaigns/export.csv` and the web export route take
+    `whatsappInstanceId`); a drill-down campaign outside the current BM/accounts
+    (404 from the campaign check) renders an empty table instead of "API
+    indisponível". Ported with the number filter: the returning-lead lookup
+    and the Overview → Leads shortcuts carry the number and the campaign.
+  - Reads only (plus the existing writes): with a locked license the filters,
+    the activity and the export keep working; writes still answer 423.
 
 - **Fase 6.3a — Reports: correct numbers (API, shared and web; no
   migration, no new variable)**. Ported from the SaaS (`c95961f0` #61,

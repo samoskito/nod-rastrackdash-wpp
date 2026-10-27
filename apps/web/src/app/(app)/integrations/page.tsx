@@ -121,6 +121,10 @@ import {
   resolveMetaStatus,
 } from "./meta-connection-state";
 import { MetaReportingAccountsForm } from "./meta-reporting-accounts-form";
+import {
+  whatsappInstanceActivityView,
+  type WhatsappInstanceActivities,
+} from "./whatsapp-instance-activity";
 import { WorkspaceCurrencyProvider } from "../../../components/workspace-currency";
 import { getWorkspaceCurrencySettings } from "../../../lib/currency-settings";
 
@@ -431,6 +435,48 @@ async function getWhatsappConnections(): Promise<
   } catch {
     return { data: [], state: "error" };
   }
+}
+
+/** Fase 6.3b (SaaS #125/#126): conexões com atividade por número. */
+const activityProviders = new Set(["uazapi_byo", "waha"]);
+
+function providerStatusTimeoutMs(): number {
+  const configuredTimeout = Number(
+    process.env.WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS ?? 2000,
+  );
+
+  return Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : 2000;
+}
+
+/**
+ * Fase 6.3b (porte do SaaS #126): uma leitura em paralelo por conexão Uazapi
+ * BYO ou WAHA (um número cada). Falha vira "indisponível", nunca zero.
+ */
+async function getWhatsappConnectionActivities(
+  connectionIds: Iterable<string>,
+): Promise<WhatsappInstanceActivities> {
+  const timeoutMs = providerStatusTimeoutMs();
+  const entries = await Promise.all(
+    [...new Set(connectionIds)].map(async (connectionId) => {
+      try {
+        const payload = await serverApiFetch<unknown>(
+          `/integrations/whatsapp-connections/${encodeURIComponent(connectionId)}/activity`,
+          { signal: AbortSignal.timeout(timeoutMs) },
+        );
+
+        return [
+          connectionId,
+          whatsappInstanceActivityView(payload, new Date()),
+        ] as const;
+      } catch {
+        return [connectionId, { state: "unavailable" }] as const;
+      }
+    }),
+  );
+
+  return Object.fromEntries(entries);
 }
 
 async function getAccountUser(): Promise<AccountUserSummary | null> {
@@ -1040,6 +1086,22 @@ export default async function IntegrationsPage({
     licenseStatus && licenseLockReason(licenseStatus) !== null,
   );
   const inboundWebhookData = inboundWebhookResult.data;
+  // Fase 6.3b: atividade das conexões Uazapi BYO e WAHA (as listadas e as
+  // pontes das regras de frase, que apontam para a mesma conexão).
+  const whatsappConnectionActivities = await getWhatsappConnectionActivities([
+    ...whatsappConnectionsResult.data
+      .filter((connection) => activityProviders.has(connection.provider))
+      .map((connection) => connection.id),
+    ...(inboundWebhookData?.connections ?? []).flatMap(
+      ({ overview, channels }) =>
+        overview.connection.provider === "uazapi" ||
+        overview.connection.provider === "waha"
+          ? channels.flatMap((channel) =>
+              channel.whatsappInstanceId ? [channel.whatsappInstanceId] : [],
+            )
+          : [],
+    ),
+  ]);
   const pipeline = pipelineResult.data;
   const isPlatformOperator = Boolean(workspace?.platformRole);
   const workspacePermissionsUnavailable = workspaceResult.state === "error";
@@ -1278,6 +1340,7 @@ export default async function IntegrationsPage({
         deleteAction={deleteWhatsappConnectionAction}
         configureWebhookAction={configureWahaWebhookAction}
         licenseLocked={licenseLocked}
+        activities={whatsappConnectionActivities}
       />
     );
   }
@@ -1317,6 +1380,7 @@ export default async function IntegrationsPage({
         setChannelStatusAction={setInboundWebhookChannelStatusAction}
         saveRoutesAction={saveInboundWebhookChannelRoutesAction}
         licenseLocked={licenseLocked}
+        instanceActivities={whatsappConnectionActivities}
       />
     );
   }

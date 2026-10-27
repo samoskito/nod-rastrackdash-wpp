@@ -227,6 +227,23 @@ export const metaSyncCoverageSchema = z.object({
   staleSince: z.string().min(1).nullable(),
 });
 
+export const campaignOptionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  status: z.enum(["active", "paused", "unknown"]),
+  businessId: z.string().min(1),
+  adAccountId: z.string().min(1),
+  leadsByInstance: z.record(z.string().min(1), nonnegativeIntSchema),
+});
+
+export const campaignOptionsResponseSchema = z.object({
+  campaigns: z.array(campaignOptionSchema),
+});
+
+export const reportCampaignIdsSchema = z
+  .array(z.string().trim().min(1).max(120))
+  .max(10);
+
 export const reportOverviewSchema = z.object({
   workspaceId: z.string().min(1),
   rangeLabel: z.string().min(1),
@@ -248,6 +265,34 @@ export const reportOverviewSchema = z.object({
    */
   dailyComparisonLeadEventDeferred: z.boolean().optional(),
   pagination: reportPaginationSchema.optional(),
+  filters: z
+    .object({
+      whatsappInstanceId: z.string().min(1).nullable().optional(),
+      whatsappInstanceName: z.string().min(1).nullable().optional(),
+      campaignId: z.string().min(1).nullable().optional(),
+      campaignName: z.string().min(1).nullable().optional(),
+      campaignIds: reportCampaignIdsSchema.optional(),
+      campaignNames: z.array(z.string().min(1)).max(10).optional(),
+    })
+    .optional(),
+  campaignInstanceLeads: z
+    .array(
+      z.object({
+        instanceId: z.string().min(1),
+        instanceName: z.string().min(1),
+        leads: nonnegativeIntSchema,
+      }),
+    )
+    .optional(),
+  metaMetricsScope: z
+    .enum([
+      "ad_account",
+      "instance_unavailable",
+      "campaign",
+      "campaign_shared",
+      "campaign_unsynced",
+    ])
+    .optional(),
 });
 
 const reportMetricShape = campaignReportRowSchema.omit({
@@ -486,6 +531,7 @@ export const reportFiltersSchema = z.object({
   adAccountId: z.string().min(1).optional(),
   /** Várias contas de anúncio (query `adAccountIds=a,b` ou repetida). */
   adAccountIds: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
+  campaignIds: reportCampaignIdsSchema.optional(),
   delivery: z.enum(["all", "had_delivery"]).default("all"),
   selectedEntityIds: z
     .array(z.string().trim().min(1).max(200))
@@ -506,6 +552,10 @@ export type ReportDailyComparisonPointDto = z.infer<
   typeof reportDailyComparisonPointSchema
 >;
 export type MetaSyncCoverageDto = z.infer<typeof metaSyncCoverageSchema>;
+export type CampaignOptionDto = z.infer<typeof campaignOptionSchema>;
+export type CampaignOptionsResponseDto = z.infer<
+  typeof campaignOptionsResponseSchema
+>;
 export type ReportOverviewDto = z.infer<typeof reportOverviewSchema>;
 export type AdSetReportRowDto = z.infer<typeof adSetReportRowSchema>;
 export type AdSetReportOverviewDto = z.infer<typeof adSetReportOverviewSchema>;

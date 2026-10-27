@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { normalizeSearchText } from "../lib/search-text";
 
 export type SearchableSelectOption = {
   value: string;
@@ -20,14 +21,6 @@ type SearchableSelectProps = {
   sensitive?: boolean;
   presentationPlaceholder?: string;
 };
-
-function normalizeSearchText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR")
-    .trim();
-}
 
 export function filterSearchableOptions(
   options: SearchableSelectOption[],

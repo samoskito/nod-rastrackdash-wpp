@@ -1,22 +1,19 @@
+import { conversionEventDisplayLabel } from "@wpptrack/shared";
 import type {
   ConversionAuditDeliveryStateDto,
   ConversionAuditEventOptionDto,
   ConversionAuditOverviewDto,
   ConversionAuditSourceDto,
 } from "@wpptrack/shared";
-import { conversionEventDisplayLabel } from "@wpptrack/shared";
 import {
   AlertTriangle,
   Archive,
   Ban,
-  CalendarRange,
   CheckCircle2,
   Clock3,
-  Filter,
   History,
   MoonStar,
   ShieldAlert,
-  SlidersHorizontal,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +23,7 @@ import { getCurrentWorkspace } from "../../../lib/current-workspace";
 import { formatDateTime } from "../../../lib/date-time";
 import { serverApiFetch } from "../../../lib/server-api";
 import { EventAuditDetails } from "./event-audit-details";
+import { EventFilters } from "./event-filters";
 import { RetryBlockedEvents } from "./retry-blocked-events";
 
 type EventsSearchParams = Record<string, string | string[] | undefined>;
@@ -399,8 +397,6 @@ export default async function EventsPage({
   };
   const hasAttention = summary.blocked + summary.failed > 0;
   const eventOptions = eventFilterOptions(report, eventName);
-  const activeFilterCount = [eventName, status, source].filter(Boolean).length;
-  const clearFiltersHref = `/events?since=${since}&until=${until}&pageSize=${pageSize}`;
   const primaryMetrics = [
     {
       detail: "Recebidos pela Meta",
@@ -494,115 +490,19 @@ export default async function EventsPage({
         className="surface-panel audit-command-panel"
         aria-label="Controles da auditoria Meta"
       >
-        <form
-          action="/events"
-          aria-label="Filtros da auditoria Meta"
-          className="audit-filter-form"
-        >
-          <input type="hidden" name="pageSize" value={pageSize} />
-          <div className="audit-period-context">
-            <CalendarRange aria-hidden="true" size={18} strokeWidth={2.1} />
-            <span>
-              <strong>Período da auditoria</strong>
-              <small>{report?.rangeLabel ?? `${since} a ${until}`}</small>
-            </span>
-          </div>
-          <label className="filter-field">
-            <span>Início</span>
-            <input type="date" name="since" defaultValue={since} />
-          </label>
-          <label className="filter-field">
-            <span>Fim</span>
-            <input type="date" name="until" defaultValue={until} />
-          </label>
-          <button className="button" type="submit">
-            <Filter aria-hidden="true" size={16} strokeWidth={2.1} />
-            Aplicar
-          </button>
-
-          <details
-            className="audit-advanced-filters"
-            open={activeFilterCount > 0}
-          >
-            <summary>
-              <span>
-                <SlidersHorizontal aria-hidden="true" size={15} />
-                Filtros
-              </span>
-              {activeFilterCount > 0 ? (
-                <span className="tag">{activeFilterCount} ativo(s)</span>
-              ) : (
-                <span className="muted">Opcional</span>
-              )}
-            </summary>
-            <div className="audit-filter-grid">
-              <label className="filter-field">
-                <span>Evento</span>
-                <select
-                  className="filter-control"
-                  name="eventName"
-                  defaultValue={eventName ?? ""}
-                >
-                  <option value="">Todos os eventos</option>
-                  {eventOptions.map((option) => (
-                    <option key={option.eventName} value={option.eventName}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="filter-field">
-                <span>Estado da entrega</span>
-                <select
-                  className="filter-control"
-                  name="status"
-                  defaultValue={status ?? ""}
-                >
-                  <option value="">Todos os estados</option>
-                  <option value="sent">Enviados</option>
-                  <option value="queued">Aguardando envio</option>
-                  <option value="blocked">Bloqueados</option>
-                  <option value="failed">Falhas</option>
-                  <option value="not_eligible">Não elegíveis</option>
-                  <option value="shadow">Observados em sombra</option>
-                  <option value="historical">Históricos</option>
-                  <option value="discarded">Descartados</option>
-                </select>
-              </label>
-              <label className="filter-field">
-                <span>Origem</span>
-                <select
-                  className="filter-control"
-                  name="source"
-                  defaultValue={source ?? ""}
-                >
-                  <option value="">Todas as origens</option>
-                  <option value="external_integration">
-                    Integração externa
-                  </option>
-                  <option value="whatsapp_automation">
-                    Automação do WhatsApp
-                  </option>
-                  <option value="system">Regra automática</option>
-                  <option value="manual_test">Teste manual</option>
-                  <option value="other">Outra origem</option>
-                </select>
-              </label>
-            </div>
-            <footer className="audit-filter-footer">
-              <span>
-                {activeFilterCount > 0
-                  ? "A lista está usando filtros personalizados."
-                  : "Todos os tipos, estados e origens estão incluídos."}
-              </span>
-              {activeFilterCount > 0 ? (
-                <Link className="button ghost" href={clearFiltersHref}>
-                  Limpar filtros
-                </Link>
-              ) : null}
-            </footer>
-          </details>
-        </form>
+        <EventFilters
+          applied={{
+            since,
+            until,
+            pageSize: String(pageSize),
+            eventName: eventName ?? "",
+            status: status ?? "",
+            source: source ?? "",
+          }}
+          eventOptions={eventOptions}
+          page={page}
+          rangeLabel={report?.rangeLabel ?? `${since} a ${until}`}
+        />
       </section>
 
       <section

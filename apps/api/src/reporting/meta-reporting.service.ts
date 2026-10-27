@@ -13,6 +13,7 @@ import type {
   AdReportRowDto,
   AdSetReportOverviewDto,
   AdSetReportRowDto,
+  CampaignOptionsResponseDto,
   CampaignReportRowDto,
   ConversionAuditDeliveryStateDto,
   ConversionAuditEventDetailDto,
@@ -157,6 +158,7 @@ type ReportFilterInput = {
   /** Several ad accounts (Visão Geral / Relatórios filter). */
   adAccountIds?: string[];
   campaignId?: string;
+  campaignIds?: string[];
   adSetId?: string;
   adId?: string;
   nameScope?: ReportNameScope;
@@ -165,6 +167,7 @@ type ReportFilterInput = {
   delivery?: ReportDeliveryFilter;
   selectedEntityIds?: string[];
   whatsappClassification?: WhatsappClassificationFilter;
+  whatsappInstanceId?: string;
   page?: number;
   pageSize?: number;
   sort?: ReportSortDto;
@@ -456,6 +459,28 @@ type LeadEvidenceMaps = {
   campaigns: Set<string>;
   adSets: Set<string>;
   ads: Set<string>;
+};
+
+type WhatsappInstanceRecord = {
+  id: string;
+  name: string;
+};
+
+type CampaignInstanceLeadGroup = {
+  campaignId: string | null;
+  whatsappInstanceId: string | null;
+  _count: { _all: number };
+};
+
+type CampaignInstanceLead = {
+  instanceId: string;
+  instanceName: string;
+  leads: number;
+};
+
+type CampaignInstanceLeadsResult = {
+  leads: CampaignInstanceLead[];
+  instanceIdsWithLeads: Set<string | null>;
 };
 
 type CampaignMetricOverride = {
@@ -1927,6 +1952,11 @@ export class MetaReportingService {
     } & ReportFilterInput,
   ): Promise<ReportOverviewDto> {
     const startedAt = Date.now();
+    const whatsappInstance = await this.resolveWhatsappInstance(input);
+    const selectedCampaigns = await this.resolveCampaigns(input);
+    const selectedCampaignIds = selectedCampaigns.map(
+      (campaign) => campaign.campaignId,
+    );
     const hierarchyScope = await this.metaHierarchyScope(input);
     const campaignWhere = this.metaSnapshotWhereFromHierarchy(
       hierarchyScope.where,
@@ -1978,29 +2008,30 @@ export class MetaReportingService {
     const summaryScope = this.summaryMetricScope(input, campaignIds);
     const needsWorkspaceMetrics = input.includeSummary || input.includeDaily;
     const [
-      rawConversionLogs,
       leads,
-      rawWorkspaceConversionLogs,
       workspaceLeads,
       dailyInsights,
+      campaignInstanceLeadsResult,
       returningEvents,
       workspaceReturningEvents,
     ] = await Promise.all([
-      this.getMetricConversionEvents(input, { campaignIds }),
       this.getLeads(input, { campaignIds }),
-      needsWorkspaceMetrics
-        ? this.getMetricConversionEvents(input, summaryScope)
-        : Promise.resolve([]),
       needsWorkspaceMetrics
         ? this.getLeads(input, summaryScope)
         : Promise.resolve([]),
       // A period always reads the stored daily rows: they are the only Meta
       // numbers bound to dates (entity columns hold the last sync window).
-      input.since && input.until && campaignIds.length
+      input.since &&
+      input.until &&
+      (selectedCampaignIds.length || campaignIds.length)
         ? (this.prisma.metaCampaignDailyInsight.findMany({
             where: {
               workspaceId: input.workspaceId,
-              campaignId: { in: campaignIds },
+              campaignId: {
+                in: selectedCampaignIds.length
+                  ? selectedCampaignIds
+                  : campaignIds,
+              },
               localDate: { gte: input.since, lte: input.until },
             },
             select: {
@@ -2011,9 +2042,35 @@ export class MetaReportingService {
             },
           }) as Promise<MetaCampaignDailyInsightRecord[]>)
         : Promise.resolve([] as MetaCampaignDailyInsightRecord[]),
+      selectedCampaigns.length > 0
+        ? this.getCampaignInstanceLeads({
+            workspaceId: input.workspaceId,
+            campaignIds: selectedCampaignIds,
+            since: input.since,
+            until: input.until,
+          })
+        : Promise.resolve({
+            leads: [],
+            instanceIdsWithLeads: new Set<string | null>(),
+          } satisfies CampaignInstanceLeadsResult),
       this.getReturningLeadEvents(input, { campaignIds }),
       needsWorkspaceMetrics
         ? this.getReturningLeadEvents(input, summaryScope)
+        : Promise.resolve([]),
+    ]);
+    const campaignInstanceLeads = campaignInstanceLeadsResult.leads;
+    const [rawConversionLogs, rawWorkspaceConversionLogs] = await Promise.all([
+      this.getMetricConversionEvents(
+        input,
+        { campaignIds },
+        this.metricEventLeadIds(leads),
+      ),
+      needsWorkspaceMetrics
+        ? this.getMetricConversionEvents(
+            input,
+            summaryScope,
+            this.metricEventLeadIds(workspaceLeads),
+          )
         : Promise.resolve([]),
     ]);
     // Revenue attributed to an ad is converted to its account currency.
@@ -2106,9 +2163,13 @@ export class MetaReportingService {
       : periodRequested
         ? this.periodMetricsWithZeros(
             filteredCampaigns.map((campaign) => campaign.campaignId),
-            new Map([...dailyMetricByCampaign, ...childMetricByCampaign]),
+            selectedCampaigns.length > 1
+              ? new Map([...childMetricByCampaign, ...dailyMetricByCampaign])
+              : new Map([...dailyMetricByCampaign, ...childMetricByCampaign]),
           )
-        : childMetricByCampaign;
+        : selectedCampaigns.length > 1
+          ? new Map([...childMetricByCampaign, ...dailyMetricByCampaign])
+          : childMetricByCampaign;
     const paginated = this.paginateReportRows(
       filteredCampaigns,
       input,
@@ -2294,6 +2355,18 @@ export class MetaReportingService {
       input.workspaceId,
       input.since,
     );
+    const metaMetricsScope =
+      selectedCampaigns.length > 0
+        ? this.campaignMetaMetricsScope({
+            whatsappInstanceId: whatsappInstance?.id,
+            instanceIdsWithLeads:
+              campaignInstanceLeadsResult.instanceIdsWithLeads,
+            hasInsightRows: dailyInsights.length > 0,
+          })
+        : whatsappInstance
+          ? ("ad_account" as const)
+          : undefined;
+
     this.logReportRead("campaigns", startedAt, {
       returned: rows.length,
       total: filteredCampaigns.length,
@@ -2333,6 +2406,110 @@ export class MetaReportingService {
       ...(input.includeDaily ? { dailyComparisonAvailable } : {}),
       ...(dailyComparison ? { dailyComparisonLeadEventDeferred } : {}),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
+      ...(whatsappInstance || selectedCampaigns.length > 0
+        ? {
+            filters: {
+              ...(whatsappInstance
+                ? {
+                    whatsappInstanceId: whatsappInstance.id,
+                    whatsappInstanceName: whatsappInstance.name,
+                  }
+                : {}),
+              ...(selectedCampaigns.length === 1
+                ? {
+                    campaignId: selectedCampaigns[0]!.campaignId,
+                    campaignName: selectedCampaigns[0]!.name,
+                  }
+                : {}),
+              ...(selectedCampaigns.length > 0
+                ? {
+                    campaignIds: selectedCampaignIds,
+                    campaignNames: selectedCampaigns.map(
+                      (campaign) => campaign.name,
+                    ),
+                  }
+                : {}),
+            },
+            ...(selectedCampaigns.length > 0 ? { campaignInstanceLeads } : {}),
+            ...(metaMetricsScope ? { metaMetricsScope } : {}),
+          }
+        : {}),
+    };
+  }
+
+  async getCampaignOptions(input: {
+    workspaceId: string;
+    since?: string;
+    until?: string;
+    businessId?: string;
+    adAccountId?: string;
+    adAccountIds?: string[];
+  }): Promise<CampaignOptionsResponseDto> {
+    const campaignWhere = this.metaSnapshotWhereFromHierarchy(
+      await this.metaHierarchyWhere(input),
+      input,
+    );
+    const [campaigns, deliveredIds] = await Promise.all([
+      this.prisma.metaCampaign.findMany({
+        where: campaignWhere,
+        orderBy: { name: "asc" },
+      }) as Promise<MetaCampaignRecord[]>,
+      this.deliveredEntityIds("campaign", {
+        ...input,
+        delivery: "had_delivery",
+      }),
+    ]);
+    const campaignIds = campaigns.map((campaign) => campaign.campaignId);
+    let leadGroups: CampaignInstanceLeadGroup[] = [];
+
+    if (campaignIds.length) {
+      const groups = await this.prisma.lead.groupBy({
+        by: ["campaignId", "whatsappInstanceId"],
+        where: {
+          workspaceId: input.workspaceId,
+          campaignId: { in: campaignIds },
+          ...this.leadPeriodWhere(input),
+        },
+        _count: { _all: true },
+      });
+      leadGroups = groups as CampaignInstanceLeadGroup[];
+    }
+    const leadsByCampaign = new Map<string, Record<string, number>>();
+
+    for (const group of leadGroups) {
+      if (!group.campaignId || !group.whatsappInstanceId) {
+        continue;
+      }
+
+      const leadsByInstance = leadsByCampaign.get(group.campaignId) ?? {};
+      leadsByInstance[group.whatsappInstanceId] = group._count._all;
+      leadsByCampaign.set(group.campaignId, leadsByInstance);
+    }
+
+    return {
+      campaigns: campaigns
+        .filter(
+          (campaign) =>
+            deliveredIds?.has(campaign.campaignId) ||
+            Boolean(leadsByCampaign.get(campaign.campaignId)),
+        )
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .slice(0, 500)
+        .flatMap((campaign) =>
+          campaign.businessId && campaign.adAccountId
+            ? [
+                {
+                  id: campaign.campaignId,
+                  name: campaign.name,
+                  status: this.toCampaignOptionStatus(campaign.status),
+                  businessId: campaign.businessId,
+                  adAccountId: campaign.adAccountId,
+                  leadsByInstance:
+                    leadsByCampaign.get(campaign.campaignId) ?? {},
+                },
+              ]
+            : [],
+        ),
     };
   }
 
@@ -3236,27 +3413,25 @@ export class MetaReportingService {
       deliveredIds,
     );
     const adSetIds = filteredAdSets.map((adSet) => adSet.adSetId);
-    const [rawConversionLogs, leads, dailyInsights, returningEvents] =
-      await Promise.all([
-        this.getMetricConversionEvents(input, { adSetIds }),
-        this.getLeads(input, { adSetIds }),
-        input.since && input.until && adSetIds.length
-          ? (this.prisma.metaAdSetDailyInsight.findMany({
-              where: {
-                workspaceId: input.workspaceId,
-                adSetId: { in: adSetIds },
-                localDate: { gte: input.since, lte: input.until },
-              },
-              select: {
-                adSetId: true,
-                localDate: true,
-                spendCents: true,
-                metaConversationsStarted: true,
-              },
-            }) as Promise<MetaAdSetDailyInsightRecord[]>)
-          : Promise.resolve([] as MetaAdSetDailyInsightRecord[]),
-        this.getReturningLeadEvents(input, { adSetIds }),
-      ]);
+    const [leads, dailyInsights, returningEvents] = await Promise.all([
+      this.getLeads(input, { adSetIds }),
+      input.since && input.until && adSetIds.length
+        ? (this.prisma.metaAdSetDailyInsight.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              adSetId: { in: adSetIds },
+              localDate: { gte: input.since, lte: input.until },
+            },
+            select: {
+              adSetId: true,
+              localDate: true,
+              spendCents: true,
+              metaConversationsStarted: true,
+            },
+          }) as Promise<MetaAdSetDailyInsightRecord[]>)
+        : Promise.resolve([] as MetaAdSetDailyInsightRecord[]),
+      this.getReturningLeadEvents(input, { adSetIds }),
+    ]);
     // Revenue attributed to an ad set is converted to its account currency.
     const adSetCurrencyContext = this.reportCurrencyContext({
       accountCurrencies: hierarchyScope.accountCurrencies,
@@ -3265,7 +3440,13 @@ export class MetaReportingService {
     });
     const [conversionLogs] = await this.convertReportEvents(
       adSetCurrencyContext,
-      [rawConversionLogs],
+      [
+        await this.getMetricConversionEvents(
+          input,
+          { adSetIds },
+          this.metricEventLeadIds(leads),
+        ),
+      ],
     );
     const adSetCurrency = (adSet: MetaAdSetRecord) =>
       adSetCurrencyContext.attributionCurrency({
@@ -3431,27 +3612,25 @@ export class MetaReportingService {
       deliveredIds,
     );
     const adIds = filteredAds.map((ad) => ad.adId);
-    const [rawConversionLogs, leads, dailyInsights, returningEvents] =
-      await Promise.all([
-        this.getMetricConversionEvents(input, { adIds }),
-        this.getLeads(input, { adIds }),
-        input.since && input.until && adIds.length
-          ? (this.prisma.metaAdDailyInsight.findMany({
-              where: {
-                workspaceId: input.workspaceId,
-                adId: { in: adIds },
-                localDate: { gte: input.since, lte: input.until },
-              },
-              select: {
-                adId: true,
-                localDate: true,
-                spendCents: true,
-                metaConversationsStarted: true,
-              },
-            }) as Promise<MetaAdDailyInsightRecord[]>)
-          : Promise.resolve([] as MetaAdDailyInsightRecord[]),
-        this.getReturningLeadEvents(input, { adIds }),
-      ]);
+    const [leads, dailyInsights, returningEvents] = await Promise.all([
+      this.getLeads(input, { adIds }),
+      input.since && input.until && adIds.length
+        ? (this.prisma.metaAdDailyInsight.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              adId: { in: adIds },
+              localDate: { gte: input.since, lte: input.until },
+            },
+            select: {
+              adId: true,
+              localDate: true,
+              spendCents: true,
+              metaConversationsStarted: true,
+            },
+          }) as Promise<MetaAdDailyInsightRecord[]>)
+        : Promise.resolve([] as MetaAdDailyInsightRecord[]),
+      this.getReturningLeadEvents(input, { adIds }),
+    ]);
     // Revenue attributed to an ad is converted to its account currency.
     const adCurrencyContext = this.reportCurrencyContext({
       accountCurrencies: hierarchyScope.accountCurrencies,
@@ -3461,7 +3640,13 @@ export class MetaReportingService {
     });
     const [conversionLogs] = await this.convertReportEvents(
       adCurrencyContext,
-      [rawConversionLogs],
+      [
+        await this.getMetricConversionEvents(
+          input,
+          { adIds },
+          this.metricEventLeadIds(leads),
+        ),
+      ],
     );
     const adCurrency = (ad: MetaAdRecord) =>
       adCurrencyContext.attributionCurrency({
@@ -4463,8 +4648,10 @@ export class MetaReportingService {
       workspaceId: string;
       since?: string;
       until?: string;
+      whatsappInstanceId?: string;
     },
     scope: ReportMetricScopeFilter = {},
+    leadIds?: string[],
   ): Promise<ConversionEventRecord[]> {
     if (this.isEmptyMetricScope(scope)) {
       return Promise.resolve([]);
@@ -4479,6 +4666,7 @@ export class MetaReportingService {
         status: { not: "skipped" },
         ...this.metricScopeWhere(scope),
         ...this.eventPeriodWhere(input),
+        ...(input.whatsappInstanceId ? { leadId: { in: leadIds ?? [] } } : {}),
       },
       select: {
         id: true,
@@ -4542,6 +4730,7 @@ export class MetaReportingService {
       workspaceId: string;
       since?: string;
       until?: string;
+      whatsappInstanceId?: string;
     },
     scope: ReportMetricScopeFilter = {},
   ): Promise<LeadRecord[]> {
@@ -4560,6 +4749,9 @@ export class MetaReportingService {
     const leads = (await this.prisma.lead.findMany({
       where: {
         workspaceId: input.workspaceId,
+        ...(input.whatsappInstanceId
+          ? { whatsappInstanceId: input.whatsappInstanceId }
+          : {}),
         ...(scoped
           ? {
               AND: [
@@ -4600,6 +4792,9 @@ export class MetaReportingService {
               where: {
                 workspaceId: input.workspaceId,
                 id: { in: ids },
+                ...(input.whatsappInstanceId
+                  ? { whatsappInstanceId: input.whatsappInstanceId }
+                  : {}),
               },
               select: {
                 id: true,
@@ -4621,10 +4816,60 @@ export class MetaReportingService {
       periodLeads,
       { ruleOverride },
     );
-
-    return scoped
+    const result = scoped
       ? resolved.filter((lead) => this.matchesMetricScopeFilter(lead, scope))
       : resolved;
+
+    // With a WhatsApp number filter the period's events are read by lead id
+    // (getMetricConversionEvents). Deferred leads whose first contact is in the
+    // period but whose rule has not sent the Lead in it left "leads novos"
+    // above; their entry receipts are still conversations (same definition as
+    // without the filter), so their ids are kept for the events only.
+    if (ruleOverride && input.whatsappInstanceId && periodLeads !== leads) {
+      const keptIds = new Set(periodLeads.map((lead) => lead.id));
+      const deferredOut = leads.filter((lead) => !keptIds.has(lead.id));
+
+      if (deferredOut.length > 0) {
+        const deferredResolved = await withFirstContactAttribution(
+          this.prisma,
+          input.workspaceId,
+          deferredOut,
+          { ruleOverride },
+        );
+        const eventOnlyIds = (
+          scoped
+            ? deferredResolved.filter((lead) =>
+                this.matchesMetricScopeFilter(lead, scope),
+              )
+            : deferredResolved
+        ).map((lead) => lead.id);
+
+        if (eventOnlyIds.length > 0) {
+          this.eventOnlyLeadIds.set(result, eventOnlyIds);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Leads (by array returned from getLeads) whose period events still count
+   * although they are not leads novos: deferred entries (override mode only).
+   */
+  private readonly eventOnlyLeadIds = new WeakMap<LeadRecord[], string[]>();
+
+  /**
+   * Lead ids whose events are read under a WhatsApp number filter: the leads
+   * novos plus, in the rule override mode, the deferred leads that entered in
+   * the period (their entry receipts are conversations). Override off: just
+   * the leads novos, exactly as before.
+   */
+  private metricEventLeadIds(leads: LeadRecord[]): string[] {
+    const ids = leads.map((lead) => lead.id);
+    const extra = this.eventOnlyLeadIds.get(leads);
+
+    return extra ? [...new Set([...ids, ...extra])] : ids;
   }
 
   private async leadIdsWithLeadSubmittedInScope(
@@ -4681,6 +4926,7 @@ export class MetaReportingService {
       workspaceId: string;
       since?: string;
       until?: string;
+      whatsappInstanceId?: string;
     },
     scope: ReportMetricScopeFilter = {},
   ): Promise<ConversionEventRecord[]> {
@@ -4745,6 +4991,9 @@ export class MetaReportingService {
       const rows = (await this.prisma.lead.findMany({
         where: {
           workspaceId: input.workspaceId,
+          ...(input.whatsappInstanceId
+            ? { whatsappInstanceId: input.whatsappInstanceId }
+            : {}),
           AND: [
             {
               OR: [
@@ -4773,6 +5022,216 @@ export class MetaReportingService {
 
       return leadId && returningIds.has(leadId) ? [{ ...event, leadId }] : [];
     });
+  }
+
+  private async resolveWhatsappInstance(input: {
+    workspaceId: string;
+    whatsappInstanceId?: string;
+  }): Promise<WhatsappInstanceRecord | null> {
+    if (!input.whatsappInstanceId) {
+      return null;
+    }
+
+    const instance = (await this.prisma.whatsappInstance.findFirst({
+      where: {
+        id: input.whatsappInstanceId,
+        workspaceId: input.workspaceId,
+      },
+      select: { id: true, name: true },
+    })) as WhatsappInstanceRecord | null;
+
+    if (!instance) {
+      throw new NotFoundException("Número WhatsApp não encontrado");
+    }
+
+    return instance;
+  }
+
+  private requestedCampaignIds(input: {
+    campaignId?: string;
+    campaignIds?: string[];
+  }): string[] {
+    return [
+      ...new Set(
+        [input.campaignId, ...(input.campaignIds ?? [])].filter(
+          (campaignId): campaignId is string => Boolean(campaignId),
+        ),
+      ),
+    ];
+  }
+
+  private async resolveCampaigns(input: {
+    workspaceId: string;
+    campaignId?: string;
+    campaignIds?: string[];
+    businessId?: string;
+    adAccountId?: string;
+    adAccountIds?: string[];
+  }): Promise<MetaCampaignRecord[]> {
+    const campaignIds = this.requestedCampaignIds(input);
+
+    if (!campaignIds.length) {
+      return [];
+    }
+
+    if (campaignIds.length > 10) {
+      throw new BadRequestException(
+        "No máximo 10 campanhas podem ser selecionadas",
+      );
+    }
+
+    const requestedAccountIds = [
+      ...new Set(
+        [input.adAccountId, ...(input.adAccountIds ?? [])].filter(
+          (id): id is string => Boolean(id),
+        ),
+      ),
+    ];
+    const activeAccounts = await this.prisma.metaReportingAccount.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        active: true,
+        ...(input.businessId ? { businessId: input.businessId } : {}),
+        // Mesmo recorte de contas do metaHierarchyScope (adAccountId + adAccountIds).
+        ...(requestedAccountIds.length
+          ? { adAccountId: { in: requestedAccountIds } }
+          : {}),
+      },
+      select: { adAccountId: true },
+    });
+    const campaigns = (await this.prisma.metaCampaign.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        campaignId: { in: campaignIds },
+        ...(input.businessId ? { businessId: input.businessId } : {}),
+        adAccountId: {
+          in: activeAccounts.map((account) => account.adAccountId),
+        },
+      },
+      select: {
+        campaignId: true,
+        name: true,
+        status: true,
+        effectiveStatus: true,
+        objective: true,
+        dailyBudgetCents: true,
+        lifetimeBudgetCents: true,
+        businessId: true,
+        adAccountId: true,
+        whatsappClassification: true,
+        spendCents: true,
+        metaConversationsStarted: true,
+      },
+    })) as MetaCampaignRecord[];
+
+    if (campaigns.length !== campaignIds.length) {
+      throw new NotFoundException("Campanha não encontrada");
+    }
+
+    const byCampaignId = new Map(
+      campaigns.map((campaign) => [campaign.campaignId, campaign]),
+    );
+
+    return campaignIds.map((campaignId) => byCampaignId.get(campaignId)!);
+  }
+
+  private async getCampaignInstanceLeads(input: {
+    workspaceId: string;
+    campaignIds: string[];
+    since?: string;
+    until?: string;
+  }): Promise<CampaignInstanceLeadsResult> {
+    const rawGroups = await this.prisma.lead.groupBy({
+      by: ["whatsappInstanceId"],
+      where: {
+        workspaceId: input.workspaceId,
+        campaignId: { in: input.campaignIds },
+        ...this.leadPeriodWhere(input),
+      },
+      _count: { _all: true },
+    });
+    const groups = rawGroups as CampaignInstanceLeadGroup[];
+    const instanceIds = groups.flatMap((group) =>
+      group.whatsappInstanceId ? [group.whatsappInstanceId] : [],
+    );
+
+    if (!instanceIds.length) {
+      return {
+        leads: [],
+        instanceIdsWithLeads: new Set(
+          groups.map((group) => group.whatsappInstanceId),
+        ),
+      };
+    }
+
+    const instances = await this.prisma.whatsappInstance.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        status: "active",
+        id: { in: instanceIds },
+      },
+      select: { id: true, name: true },
+    });
+    const instancesById = new Map(
+      instances.map((instance) => [instance.id, instance.name]),
+    );
+
+    return {
+      instanceIdsWithLeads: new Set(
+        groups.map((group) => group.whatsappInstanceId),
+      ),
+      leads: groups.flatMap((group) => {
+        const instanceName = group.whatsappInstanceId
+          ? instancesById.get(group.whatsappInstanceId)
+          : undefined;
+
+        return group.whatsappInstanceId && instanceName
+          ? [
+              {
+                instanceId: group.whatsappInstanceId,
+                instanceName,
+                leads: group._count._all,
+              },
+            ]
+          : [];
+      }),
+    };
+  }
+
+  private campaignMetaMetricsScope(input: {
+    whatsappInstanceId?: string;
+    instanceIdsWithLeads: Set<string | null>;
+    hasInsightRows: boolean;
+  }): "campaign" | "campaign_shared" | "campaign_unsynced" {
+    if (!input.hasInsightRows) {
+      return "campaign_unsynced";
+    }
+
+    if (!input.whatsappInstanceId) {
+      return "campaign";
+    }
+
+    const leadsOnOtherInstances = [...input.instanceIdsWithLeads].some(
+      (instanceId) => instanceId !== input.whatsappInstanceId,
+    );
+
+    return leadsOnOtherInstances ? "campaign_shared" : "campaign";
+  }
+
+  private toCampaignOptionStatus(
+    status: string | null,
+  ): "active" | "paused" | "unknown" {
+    const normalized = (status ?? "").toUpperCase();
+
+    if (normalized === "ACTIVE") {
+      return "active";
+    }
+
+    if (normalized === "PAUSED") {
+      return "paused";
+    }
+
+    return "unknown";
   }
 
   private metricScopeWhere(scope: ReportMetricScopeFilter) {
@@ -5096,7 +5555,16 @@ export class MetaReportingService {
     input: ReportFilterInput,
     campaignIds: string[],
   ): ReportMetricScopeFilter {
-    return input.businessId || input.adAccountId || input.adAccountIds?.length
+    // nod (achado da revisão da 6.3b; o SaaS também não tinha): várias
+    // campanhas (campaignIds) também recortam o resumo, senão os leads do
+    // resumo seriam do workspace inteiro e o investimento só das campanhas.
+    return input.businessId ||
+      input.adAccountId ||
+      input.adAccountIds?.length ||
+      input.campaignId ||
+      input.campaignIds?.length ||
+      input.adSetId ||
+      input.adId
       ? { campaignIds }
       : {};
   }
@@ -6013,8 +6481,10 @@ export class MetaReportingService {
       where.businessId = input.businessId;
     }
 
-    if (input.campaignId) {
-      where.campaignId = input.campaignId;
+    const campaignIds = this.requestedCampaignIds(input);
+
+    if (campaignIds.length > 0) {
+      where.campaignId = { in: campaignIds };
     }
 
     if (singleAccount) {

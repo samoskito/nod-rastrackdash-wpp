@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AdAccountFilter } from "../src/components/ad-account-filter";
+import {
+  AdAccountFilter,
+  adAccountFilterOptions,
+} from "../src/components/ad-account-filter";
 import {
   parseAdAccountIdsParam,
   setAdAccountParams,
 } from "../src/lib/ad-account-params";
+
+// Fase 6.3b: o filtro de contas usa a mesma caixa pesquisável (FilterCombobox)
+// do SaaS (2f79c3c7, #116/#118). "Pronto" (ou fechar) aplica sozinho, sem
+// botão "Aplicar".
 
 afterEach(cleanup);
 
@@ -16,19 +23,23 @@ const accounts = [
   { adAccountId: "act_3", adAccountName: "Conta Euro", currency: "EUR" },
 ];
 
-function Harness({ applied = [] as string[] }: { applied?: string[] }) {
+function Harness({
+  applied = [] as string[],
+  onCommit,
+}: {
+  applied?: string[];
+  onCommit: (next: string[]) => void;
+}) {
   const [value, setValue] = useState<string[]>(applied);
 
-  return createElement(
-    "form",
-    { "aria-label": "filtros" },
-    createElement(AdAccountFilter, {
-      accounts,
-      appliedValue: applied,
-      onChange: setValue,
-      value,
-    }),
-  );
+  return createElement(AdAccountFilter, {
+    accounts,
+    value,
+    onCommit: (next: string[]) => {
+      setValue(next);
+      onCommit(next);
+    },
+  });
 }
 
 function hiddenField(container: HTMLElement) {
@@ -37,58 +48,54 @@ function hiddenField(container: HTMLElement) {
   )!;
 }
 
+function option(container: HTMLElement, label: string) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>('[role="option"]'),
+  ).find((node) => node.querySelector("strong")?.textContent?.startsWith(label))!;
+}
+
 describe("AdAccountFilter", () => {
   it("começa em 'Todas as contas' e mostra a moeda de cada conta", () => {
-    const { container } = render(createElement(Harness));
+    const { container } = render(
+      createElement(Harness, { onCommit: vi.fn() }),
+    );
 
-    expect(screen.getByText("Todas as contas")).toBeTruthy();
+    expect(container.textContent).toContain("Todas as contas");
     expect(hiddenField(container).name).toBe("adAccountId");
     expect(hiddenField(container).value).toBe("");
-    expect(screen.getByText("USD")).toBeTruthy();
-    expect(screen.getByText("EUR")).toBeTruthy();
+    expect(adAccountFilterOptions(accounts).map((item) => item.badge)).toEqual(
+      ["USD", "EUR", "BRL"],
+    );
   });
 
-  it("uma conta vira adAccountId e duas ou mais viram adAccountIds", () => {
-    const { container } = render(createElement(Harness));
+  it("uma conta vira adAccountId e duas ou mais viram adAccountIds, ao concluir", () => {
+    const onCommit = vi.fn();
+    const { container } = render(createElement(Harness, { onCommit }));
 
-    fireEvent.click(screen.getByLabelText(/Conta Real/));
-    expect(hiddenField(container).name).toBe("adAccountId");
-    expect(hiddenField(container).value).toBe("act_1");
+    fireEvent.click(container.querySelector(".filter-combobox-trigger")!);
+    fireEvent.click(option(container, "Conta Real"));
+    fireEvent.click(option(container, "Conta Dolar"));
+    fireEvent.click(container.querySelector(".filter-combobox-done")!);
 
-    fireEvent.click(screen.getByLabelText(/Conta Dolar/));
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith(["act_1", "act_2"]);
     expect(hiddenField(container).name).toBe("adAccountIds");
     expect(hiddenField(container).value).toBe("act_1,act_2");
-    expect(screen.getByText("2 contas")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("Limpar"));
-    expect(hiddenField(container).value).toBe("");
-  });
-
-  it("'Pronto' aplica o formulário sozinho quando a seleção mudou", () => {
-    const { container } = render(createElement(Harness));
-    const form = container.querySelector("form")!;
-    const submit = vi.fn();
-
-    form.requestSubmit = submit;
-    container.querySelector("details")!.open = true;
-    fireEvent.click(screen.getByLabelText(/Conta Euro/));
-    fireEvent.click(screen.getByText("Pronto"));
-
-    expect(submit).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("2 contas");
   });
 
   it("'Pronto' sem mudar a seleção não reaplica", () => {
+    const onCommit = vi.fn();
     const { container } = render(
-      createElement(Harness, { applied: ["act_1"] }),
+      createElement(Harness, { applied: ["act_1"], onCommit }),
     );
-    const form = container.querySelector("form")!;
-    const submit = vi.fn();
 
-    form.requestSubmit = submit;
-    container.querySelector("details")!.open = true;
-    fireEvent.click(screen.getByText("Pronto"));
+    expect(hiddenField(container).name).toBe("adAccountId");
+    expect(hiddenField(container).value).toBe("act_1");
+    fireEvent.click(container.querySelector(".filter-combobox-trigger")!);
+    fireEvent.click(container.querySelector(".filter-combobox-done")!);
 
-    expect(submit).not.toHaveBeenCalled();
+    expect(onCommit).not.toHaveBeenCalled();
   });
 });
 

@@ -25,6 +25,10 @@ import type {
   WhatsappReceiverSecret,
 } from "./whatsapp-provider-actions";
 import { whatsappDisconnectAlertText } from "./whatsapp-disconnect-alert";
+import {
+  WhatsappInstanceActivitySummary,
+  type WhatsappInstanceActivities,
+} from "./whatsapp-instance-activity";
 
 type WhatsappProviderAction = (
   formData: FormData,
@@ -100,6 +104,7 @@ export function WhatsappProviderPanel({
   configureWebhookAction,
   licenseLocked = false,
   allowCreate = true,
+  activities = {},
 }: {
   connections: WhatsappConnectionDto[];
   /**
@@ -123,6 +128,11 @@ export function WhatsappProviderPanel({
   licenseLocked?: boolean;
   /** False for "Em breve" providers: existing connections stay manageable. */
   allowCreate?: boolean;
+  /**
+   * Fase 6.3b (porte do SaaS #126): atividade de cada conexão Uazapi BYO ou
+   * WAHA (leads de anúncio e último webhook), lida pela página. Só leitura.
+   */
+  activities?: WhatsappInstanceActivities;
 }) {
   const titleId = useId();
   const router = useRouter();
@@ -675,6 +685,19 @@ export function WhatsappProviderPanel({
                 >
                   {whatsappDisconnectAlertText(connection)}
                 </p>
+              ) : null}
+              {connection.provider === "uazapi_byo" ||
+              connection.provider === "waha" ? (
+                <section
+                  className="inbound-instance-activity"
+                  aria-label="Atividade do número WhatsApp"
+                >
+                  <span className="micro-label">Atividade do número</span>
+                  <WhatsappInstanceActivitySummary
+                    view={activities[connection.id]}
+                    whatsappInstanceId={connection.id}
+                  />
+                </section>
               ) : null}
               {canManage ? (
                 <div className="inbound-connection-actions">

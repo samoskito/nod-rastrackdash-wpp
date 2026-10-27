@@ -8,6 +8,11 @@ import { initialBackofficeActionState } from "../src/components/backoffice-actio
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -204,6 +209,121 @@ describe("events route", () => {
     expect(html).toContain('name="source"');
     expect(html).not.toContain("phone_hash");
     expect(html).not.toContain("access_token");
+  });
+
+  it("auto-applies filters without a visible Aplicar button", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(auditResponse([auditEvent({})])), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({
+        since: "2026-07-06",
+        until: "2026-07-12",
+        status: "failed",
+        page: "3",
+        pageSize: "50",
+      }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).not.toContain("Aplicar");
+    expect(html).toContain(
+      '<button class="sr-only" type="submit" tabindex="-1">Atualizar auditoria</button>',
+    );
+    expect(html).toContain('role="status" aria-live="polite"');
+    expect(html).toContain('class="audit-filter-form" action="/events">');
+    expect(html).toContain('name="pageSize" value="50"');
+    expect(html).toContain('name="since" value="2026-07-06"');
+    expect(html).toContain('name="until" value="2026-07-12"');
+    expect(html).toContain(
+      '<option value="failed" selected="">Falhas</option>',
+    );
+    expect(html).toContain('<details class="audit-advanced-filters" open="">');
+    expect(html).toContain(
+      '<a class="button ghost" data-event-filters-clear="true" href="/events?since=2026-07-06&amp;until=2026-07-12&amp;pageSize=50">Limpar filtros</a>',
+    );
+  });
+
+  it("keeps the advanced filters folded and Limpar hidden without filters", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(auditResponse([auditEvent({})])), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({
+        since: "2026-07-06",
+        until: "2026-07-12",
+      }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('<details class="audit-advanced-filters">');
+    expect(html).not.toContain("data-event-filters-clear");
+    expect(html).not.toContain("Limpar filtros");
+    expect(html).not.toContain("Aplicar");
+  });
+
+  it("fills the default seven-day period when the URL has none", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-12T15:00:00.000Z"));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(auditResponse([])), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    try {
+      const element = await EventsPage({ searchParams: Promise.resolve({}) });
+      const html = renderToStaticMarkup(createElement("div", null, element));
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "http://localhost:3333/reports/conversions/audit?since=2026-07-06&until=2026-07-12&page=1&pageSize=25",
+        expect.objectContaining({ credentials: "include" }),
+      );
+      expect(html).toContain('name="since" value="2026-07-06"');
+      expect(html).toContain('name="until" value="2026-07-12"');
+      expect(html).toContain('name="pageSize" value="25"');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps filters and page size on pagination links", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...auditResponse([auditEvent({})]),
+          pagination: { page: 2, pageSize: 50, totalItems: 120, totalPages: 3 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({
+        since: "2026-07-06",
+        until: "2026-07-12",
+        source: "system",
+        page: "2",
+        pageSize: "50",
+      }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain(
+      'href="/events?since=2026-07-06&amp;until=2026-07-12&amp;page=1&amp;pageSize=50&amp;source=system"',
+    );
+    expect(html).toContain(
+      'href="/events?since=2026-07-06&amp;until=2026-07-12&amp;page=3&amp;pageSize=50&amp;source=system"',
+    );
   });
 
   it("shows safe failure copy without raw provider details", async () => {

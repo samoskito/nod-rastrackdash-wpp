@@ -14,6 +14,8 @@ const exportQueryParams = [
   "campaignId",
   "adSetId",
   "adId",
+  // Fase 6.3b (SaaS #126): the file follows the list's WhatsApp number.
+  "whatsappInstanceId",
   "attribution",
   "since",
   "until",

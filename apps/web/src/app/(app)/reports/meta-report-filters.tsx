@@ -1,40 +1,56 @@
 "use client";
 
 import type { CurrencyCode, MetaAssetsDto } from "@wpptrack/shared";
-import { Filter, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { AdAccountFilter } from "../../../components/ad-account-filter";
 import { usePresentationMode } from "../../../components/presentation-mode-toggle";
-import { splitAdAccountIds } from "../../../lib/ad-account-params";
+import {
+  joinAdAccountIds,
+  splitAdAccountIds,
+} from "../../../lib/ad-account-params";
+import type { WhatsappNumberOption } from "../../../lib/whatsapp-number-options";
+import { instanceLabel } from "../overview/overview-labels";
+import {
+  ReportHiddenFields,
+  comparisonRangeStatus,
+  reportFiltersHref,
+  useReportFilters,
+  type ReportFilterKey,
+} from "./report-filter-state";
 
 type MetaReportFiltersProps = {
-  /** Moeda efetiva por conta (correção manual, Meta, BRL). */
-  accountCurrencies?: Record<string, CurrencyCode>;
-  /** Contas de anúncio juntas por "," (uma ou várias). */
-  adAccountId?: string;
-  adId?: string;
-  adSetId?: string;
+  /** Effective currency per ad account (badge in the account filter). */
+  accountCurrencies?: Readonly<Record<string, CurrencyCode>>;
   assets: MetaAssetsDto | null;
-  businessId?: string;
-  campaignId?: string;
-  compareSince?: string;
-  compareUntil?: string;
-  delivery?: "all" | "had_delivery";
-  // Set only while the Insights tab is active; the objective travels with it.
-  insightObjective?: string;
-  metrics?: "overview" | "traffic" | "funnel" | "revenue";
-  nameContains?: string;
-  nameScope?: string;
-  pageSize?: number;
-  since?: string;
-  selectedIds?: string;
-  sort?: { key: string; direction: string };
-  status?: string;
-  until?: string;
-  view?: "campaigns" | "adsets" | "ads";
-  whatsappClassification?: string;
+  /** Números ativos do workspace (as conexões WhatsApp do nod). */
+  whatsappInstances: WhatsappNumberOption[];
 };
+
+/** Fields this form renders itself; the rest travel as hidden inputs. */
+const renderedFilterKeys: readonly ReportFilterKey[] = [
+  "businessId",
+  "adAccountId",
+  "whatsappInstanceId",
+  "nameContains",
+  "nameScope",
+  "status",
+  "delivery",
+  "whatsappClassification",
+  "compareSince",
+  "compareUntil",
+  "pageSize",
+];
+
+/** Presentation mode masks these selects, so their values go hidden. */
+const maskedFilterKeys: readonly ReportFilterKey[] = [
+  "businessId",
+  "adAccountId",
+  "whatsappInstanceId",
+];
+
+const defaultPageSize = "10";
 
 const nameScopeOptions = [
   ["campaign", "Campanha contém"],
@@ -75,6 +91,16 @@ function accountsForBusiness(
     : reportingAccounts;
 }
 
+/** Selected accounts still offered by the current BM (joined by ","). */
+function validAdAccountIds(
+  accounts: ReportingAccount[],
+  adAccountId?: string,
+): string[] {
+  return splitAdAccountIds(adAccountId).filter((id) =>
+    accounts.some((account) => account.adAccountId === id),
+  );
+}
+
 function businessesFromReportingAccounts(
   reportingAccounts: ReportingAccount[],
 ): ReportingBusiness[] {
@@ -91,28 +117,20 @@ function businessesFromReportingAccounts(
 
 export function MetaReportFilters({
   accountCurrencies,
-  adAccountId,
-  adId,
-  adSetId,
   assets,
-  businessId,
-  campaignId,
-  compareSince,
-  compareUntil,
-  delivery = "all",
-  insightObjective,
-  metrics = "overview",
-  nameContains,
-  nameScope = "campaign",
-  pageSize = 10,
-  since,
-  selectedIds,
-  sort,
-  status = "all",
-  until,
-  view = "campaigns",
-  whatsappClassification = "whatsapp",
+  whatsappInstances,
 }: MetaReportFiltersProps) {
+  const {
+    applied,
+    edit,
+    fields,
+    flush,
+    isPending,
+    statusMessage,
+    submit,
+    update,
+  } = useReportFilters();
+  const compareErrorId = useId();
   const reportingAccounts = useMemo(
     () => (assets?.reportingAccounts ?? []).filter((account) => account.active),
     [assets?.reportingAccounts],
@@ -122,121 +140,81 @@ export function MetaReportFilters({
     () => businessesFromReportingAccounts(reportingAccounts),
     [reportingAccounts],
   );
-  const [selectedBusinessId, setSelectedBusinessId] = useState(
-    businessId ?? "",
-  );
   const accounts = useMemo(
-    () => accountsForBusiness(reportingAccounts, selectedBusinessId),
-    [reportingAccounts, selectedBusinessId],
+    () => accountsForBusiness(reportingAccounts, fields.businessId),
+    [reportingAccounts, fields.businessId],
   );
-  const appliedAdAccountIds = useMemo(
-    () => splitAdAccountIds(adAccountId),
-    [adAccountId],
+  const selectedAdAccountIds = validAdAccountIds(accounts, fields.adAccountId);
+  const selectedInstanceWasRemoved = Boolean(
+    fields.whatsappInstanceId &&
+    !whatsappInstances.some(
+      (instance) => instance.id === fields.whatsappInstanceId,
+    ),
   );
-  const [selectedAdAccountIds, setSelectedAdAccountIds] =
-    useState<string[]>(appliedAdAccountIds);
+  const compareOrderInvalid =
+    comparisonRangeStatus(fields.compareSince, fields.compareUntil) === "order";
 
-  useEffect(() => {
-    setSelectedBusinessId(businessId ?? "");
-    setSelectedAdAccountIds(appliedAdAccountIds);
-  }, [appliedAdAccountIds, businessId]);
+  // Limpar keeps the period, the view and the hierarchy drill-down.
+  const clearHref = reportFiltersHref({
+    ...applied,
+    compareSince: "",
+    compareUntil: "",
+    businessId: "",
+    adAccountId: "",
+    nameContains: "",
+    nameScope: "",
+    status: "",
+    delivery: "",
+    selectedIds: "",
+    whatsappClassification: "",
+  });
 
-  function handleBusinessChange(nextBusinessId: string) {
-    setSelectedBusinessId(nextBusinessId);
-    setSelectedAdAccountIds([]);
-  }
-
-  const clearParams = new URLSearchParams();
-
-  if (since) {
-    clearParams.set("since", since);
-  }
-
-  if (until) {
-    clearParams.set("until", until);
-  }
-
-  clearParams.set("view", view);
-  clearParams.set("pageSize", String(pageSize));
-
-  if (metrics !== "overview") {
-    clearParams.set("metrics", metrics);
-  }
-
-  if (campaignId) {
-    clearParams.set("campaignId", campaignId);
-  }
-
-  if (adSetId) {
-    clearParams.set("adSetId", adSetId);
-  }
-
-  if (adId) {
-    clearParams.set("adId", adId);
-  }
-
-  // Ordering is a table preference, not a filter, so clearing keeps it.
-  if (sort) {
-    clearParams.set("sort", sort.key);
-    clearParams.set("dir", sort.direction);
-  }
-
-  // The Insights tab and its objective are views, not filters, so clearing
-  // keeps them too.
-  if (insightObjective) {
-    clearParams.set("mode", "insights");
-    clearParams.set("objective", insightObjective);
-  }
-
+  const nameScope = applied.nameScope || "campaign";
+  const status = applied.status || "all";
+  const delivery = applied.delivery || "all";
+  const whatsappClassification = applied.whatsappClassification || "whatsapp";
+  const pageSize = applied.pageSize || defaultPageSize;
   const advancedFilterCount = [
     nameScope !== "campaign",
     status !== "all",
     delivery !== "all",
     whatsappClassification !== "whatsapp",
-    Boolean(compareSince && compareUntil),
-    pageSize !== 10,
+    Boolean(applied.whatsappInstanceId),
+    Boolean(applied.compareSince && applied.compareUntil),
+    pageSize !== defaultPageSize,
   ].filter(Boolean).length;
   const hasFilters = Boolean(
-    selectedBusinessId ||
-    selectedAdAccountIds.length > 0 ||
-    nameContains ||
+    applied.businessId ||
+    applied.adAccountId ||
+    applied.nameContains ||
     status !== "all" ||
     delivery !== "all" ||
     whatsappClassification !== "whatsapp" ||
-    compareSince ||
-    compareUntil ||
-    pageSize !== 10,
+    applied.whatsappInstanceId ||
+    applied.compareSince ||
+    applied.compareUntil ||
+    pageSize !== defaultPageSize,
   );
+  // Uncontrolled after mount: applying a filter must not fold the panel the
+  // user is working in.
+  const [advancedOpen, setAdvancedOpen] = useState(advancedFilterCount > 0);
 
   return (
     <form
       className="report-filter-form"
       aria-label="Filtros Meta de relatórios"
       action="/reports"
+      onSubmit={submit}
     >
-      <input type="hidden" name="since" value={since ?? ""} />
-      <input type="hidden" name="until" value={until ?? ""} />
-      <input type="hidden" name="view" value={view} />
-      <input type="hidden" name="metrics" value={metrics} />
-      <input type="hidden" name="campaignId" value={campaignId ?? ""} />
-      <input type="hidden" name="adSetId" value={adSetId ?? ""} />
-      <input type="hidden" name="adId" value={adId ?? ""} />
-      <input type="hidden" name="selectedIds" value={selectedIds ?? ""} />
-      {sort ? (
-        <>
-          <input type="hidden" name="sort" value={sort.key} />
-          <input type="hidden" name="dir" value={sort.direction} />
-        </>
-      ) : null}
-      {insightObjective ? (
-        <>
-          <input type="hidden" name="mode" value="insights" />
-          <input type="hidden" name="objective" value={insightObjective} />
-        </>
-      ) : null}
-      {presentationMode ? (
-        <input type="hidden" name="businessId" value={selectedBusinessId} />
-      ) : null}
+      <ReportHiddenFields
+        rendered={
+          presentationMode
+            ? renderedFilterKeys.filter(
+                (key) => !maskedFilterKeys.includes(key),
+              )
+            : renderedFilterKeys
+        }
+      />
       <div className="report-filter-primary">
         {presentationMode ? (
           <span className="filter-control presentation-filter-placeholder">
@@ -246,9 +224,12 @@ export function MetaReportFilters({
           <select
             className="filter-control"
             name="businessId"
-            value={selectedBusinessId}
+            value={fields.businessId}
             onChange={(event) =>
-              handleBusinessChange(event.currentTarget.value)
+              update({
+                businessId: event.currentTarget.value,
+                adAccountId: "",
+              })
             }
             aria-label="Filtrar por Business Manager"
           >
@@ -261,32 +242,70 @@ export function MetaReportFilters({
           </select>
         )}
         <AdAccountFilter
-          accounts={accounts}
-          appliedValue={appliedAdAccountIds}
           className="report-ad-account-filter"
+          label="Contas de anúncio"
+          accounts={accounts}
           currencies={accountCurrencies}
-          label="Filtrar por conta de anúncio"
-          onChange={setSelectedAdAccountIds}
-          presentationMode={presentationMode}
           value={selectedAdAccountIds}
-          variant="control"
+          presentationMode={presentationMode}
+          onCommit={(next) => update({ adAccountId: joinAdAccountIds(next) })}
         />
+        {presentationMode ? (
+          <span className="filter-control presentation-filter-placeholder">
+            Número oculto
+          </span>
+        ) : (
+          <select
+            className="filter-control"
+            name="whatsappInstanceId"
+            value={fields.whatsappInstanceId}
+            onChange={(event) =>
+              update({ whatsappInstanceId: event.currentTarget.value })
+            }
+            aria-label="Número WhatsApp"
+          >
+            <option value="">Todos os números</option>
+            {selectedInstanceWasRemoved ? (
+              <option value={fields.whatsappInstanceId}>Número removido</option>
+            ) : null}
+            {whatsappInstances.map((instance) => (
+              <option key={instance.id} value={instance.id}>
+                {instanceLabel(instance)}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           className="filter-control"
           name="nameContains"
-          defaultValue={nameContains ?? ""}
+          value={fields.nameContains}
+          onChange={(event) =>
+            edit({ nameContains: event.currentTarget.value })
+          }
+          onBlur={flush}
           placeholder="Buscar por nome"
           aria-label="Texto contido no nome"
           data-presentation-sensitive-field="true"
         />
-        <button className="button" type="submit">
-          <Filter aria-hidden="true" size={15} />
-          Aplicar filtros
-        </button>
+        <div
+          className="overview-filter-status report-filter-status"
+          data-pending={isPending ? "true" : undefined}
+        >
+          {isPending ? (
+            <span className="overview-filter-status-label" aria-hidden="true">
+              <span className="overview-filter-spinner" />
+              Atualizando...
+            </span>
+          ) : null}
+          <span className="sr-only" role="status" aria-live="polite">
+            {isPending ? "Atualizando..." : statusMessage}
+          </span>
+        </div>
 
         <details
           className="report-advanced-filters"
-          open={advancedFilterCount > 0}
+          open={advancedOpen}
+          onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
         >
           <summary aria-label="Filtros avançados">
             <span>
@@ -303,7 +322,10 @@ export function MetaReportFilters({
               <select
                 className="filter-control"
                 name="nameScope"
-                defaultValue={nameScope}
+                value={fields.nameScope || "campaign"}
+                onChange={(event) =>
+                  update({ nameScope: event.currentTarget.value })
+                }
                 aria-label="Tipo de filtro por nome"
               >
                 {nameScopeOptions.map(([value, label]) => (
@@ -318,7 +340,10 @@ export function MetaReportFilters({
               <select
                 className="filter-control"
                 name="status"
-                defaultValue={status}
+                value={fields.status || "all"}
+                onChange={(event) =>
+                  update({ status: event.currentTarget.value })
+                }
                 aria-label="Filtrar por status"
               >
                 {statusOptions.map(([value, label]) => (
@@ -333,7 +358,10 @@ export function MetaReportFilters({
               <select
                 className="filter-control"
                 name="delivery"
-                defaultValue={delivery}
+                value={fields.delivery || "all"}
+                onChange={(event) =>
+                  update({ delivery: event.currentTarget.value })
+                }
                 aria-label="Filtrar por veiculação no período"
               >
                 {deliveryOptions.map(([value, label]) => (
@@ -348,7 +376,10 @@ export function MetaReportFilters({
               <select
                 className="filter-control"
                 name="whatsappClassification"
-                defaultValue={whatsappClassification}
+                value={fields.whatsappClassification || "whatsapp"}
+                onChange={(event) =>
+                  update({ whatsappClassification: event.currentTarget.value })
+                }
                 aria-label="Filtrar por classificação WhatsApp"
               >
                 {classificationOptions.map(([value, label]) => (
@@ -364,24 +395,44 @@ export function MetaReportFilters({
                 className="filter-control"
                 type="date"
                 name="compareSince"
-                defaultValue={compareSince ?? ""}
+                value={fields.compareSince}
+                onChange={(event) =>
+                  edit({ compareSince: event.currentTarget.value })
+                }
+                onBlur={flush}
               />
             </label>
-            <label className="filter-field">
+            <label className="filter-field overview-date-end">
               <span>Comparar até</span>
               <input
                 className="filter-control"
                 type="date"
                 name="compareUntil"
-                defaultValue={compareUntil ?? ""}
+                value={fields.compareUntil}
+                aria-invalid={compareOrderInvalid ? "true" : undefined}
+                aria-describedby={
+                  compareOrderInvalid ? compareErrorId : undefined
+                }
+                onChange={(event) =>
+                  edit({ compareUntil: event.currentTarget.value })
+                }
+                onBlur={flush}
               />
+              {compareOrderInvalid ? (
+                <span className="overview-filter-error" id={compareErrorId}>
+                  Fim antes do início
+                </span>
+              ) : null}
             </label>
             <label className="filter-field">
               <span>Itens por página</span>
               <select
                 className="filter-control"
                 name="pageSize"
-                defaultValue={String(pageSize)}
+                value={fields.pageSize || defaultPageSize}
+                onChange={(event) =>
+                  update({ pageSize: event.currentTarget.value })
+                }
               >
                 <option value="10">10 itens</option>
                 <option value="25">25 itens</option>
@@ -397,13 +448,17 @@ export function MetaReportFilters({
                 : "Sem filtros adicionais aplicados."}
             </span>
             {hasFilters ? (
-              <Link className="button ghost" href={`/reports?${clearParams}`}>
+              <Link className="button ghost" href={clearHref}>
                 Limpar filtros
               </Link>
             ) : null}
           </div>
         </details>
       </div>
+      {/* Implicit Enter-submit and the no-JS GET still need a submitter. */}
+      <button className="sr-only" type="submit" tabIndex={-1}>
+        Atualizar filtros
+      </button>
     </form>
   );
 }

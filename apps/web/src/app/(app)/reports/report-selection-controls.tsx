@@ -170,6 +170,7 @@ export function ReportSelectionToolbar({
         <Filter aria-hidden="true" size={14} />
         Filtrar por seleção
       </button>
+      <span className="report-selection-divider" aria-hidden="true" />
       <button
         aria-label="Limpar seleção"
         className="report-selection-clear"

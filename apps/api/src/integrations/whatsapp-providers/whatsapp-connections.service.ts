@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
@@ -20,6 +22,7 @@ import {
   type WhatsappConnectionWebhookConfigureResultDto,
   type WhatsappConnectionWebhookTokenRotateResultDto,
   type WhatsappConnectionUpdateInputDto,
+  type WhatsappInstanceActivityDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import type { IntegrationEnv } from "../integration.types";
@@ -72,6 +75,19 @@ type AdapterWhatsappConnectionCreateInput = Exclude<
 type WhatsappConnectionCredentials =
   | AdapterWhatsappConnectionCreateInput["credentials"]
   | WhatsappConnectionCredentialsUpdateDto["credentials"];
+
+/**
+ * Fase 6.3b (porte do SaaS #125): conexões com atividade por número. A Uazapi
+ * BYO e a WAHA gravam o lead e o webhook com a conexão (direto ou pela ponte
+ * das regras de frase), com estas origens.
+ */
+const ACTIVITY_LEAD_SOURCE: Partial<Record<WhatsappProviderId, string>> = {
+  uazapi_byo: "uazapi",
+  waha: "waha",
+};
+
+const ACTIVITY_QUERY_ERROR =
+  "Não foi possível consultar a atividade desta conexão WhatsApp";
 
 const PROVIDERS: readonly WhatsappProviderId[] = [
   "uazapi_byo",
@@ -126,6 +142,106 @@ export class WhatsappConnectionsService {
         ? { disconnectAlert: alerts.get(connection.id) }
         : {}),
     }));
+  }
+
+  /**
+   * Fase 6.3b (porte do SaaS #125, adaptado): atividade de uma conexão Uazapi
+   * BYO ou WAHA do workspace. Lead.whatsappInstanceId é a conexão atual do
+   * lead (não o histórico das mensagens): a atividade segue a conexão gravada
+   * em cada lead de anúncio (CTWA). Só leitura: vale com a licença bloqueada
+   * e para conexões removidas (o histórico continua).
+   */
+  async getActivity(
+    workspaceId: string,
+    id: string,
+    now = new Date(),
+  ): Promise<WhatsappInstanceActivityDto> {
+    let connection: WhatsappConnectionRecord;
+    try {
+      connection = await this.findForWorkspace(workspaceId, id);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(ACTIVITY_QUERY_ERROR);
+    }
+
+    const source =
+      ACTIVITY_LEAD_SOURCE[connection.provider as WhatsappProviderId];
+
+    if (!source) {
+      throw new ForbiddenException(
+        "Atividade disponível apenas para conexões Uazapi e WAHA",
+      );
+    }
+
+    const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const leadScope = {
+      workspaceId,
+      whatsappInstanceId: connection.id,
+      source,
+      ctwaClid: { not: null },
+    };
+    const window = (since: Date) => ({
+      OR: [
+        { firstMessageAt: { gte: since, lte: now } },
+        { firstMessageAt: null, createdAt: { gte: since, lte: now } },
+      ],
+    });
+
+    try {
+      const [
+        leads24h,
+        leads7d,
+        leadsTotal,
+        lastFirstMessageLead,
+        lastCreatedLead,
+        lastWebhook,
+      ] = await Promise.all([
+        this.prisma.lead.count({ where: { ...leadScope, ...window(since24h) } }),
+        this.prisma.lead.count({ where: { ...leadScope, ...window(since7d) } }),
+        this.prisma.lead.count({ where: leadScope }),
+        this.prisma.lead.findFirst({
+          where: { ...leadScope, firstMessageAt: { not: null } },
+          orderBy: { firstMessageAt: "desc" },
+          select: { firstMessageAt: true },
+        }),
+        this.prisma.lead.findFirst({
+          where: { ...leadScope, firstMessageAt: null },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        }),
+        this.prisma.webhookLog.findFirst({
+          where: {
+            workspaceId,
+            whatsappInstanceId: connection.id,
+            source: source as "uazapi" | "waha",
+          },
+          orderBy: { receivedAt: "desc" },
+          select: { receivedAt: true },
+        }),
+      ]);
+      const lastLeadAt = [
+        lastFirstMessageLead?.firstMessageAt ?? null,
+        lastCreatedLead?.createdAt ?? null,
+      ].reduce<Date | null>(
+        (latest, candidate) =>
+          !candidate || (latest && latest >= candidate) ? latest : candidate,
+        null,
+      );
+
+      return {
+        leads24h,
+        leads7d,
+        leadsTotal,
+        lastLeadAt: lastLeadAt?.toISOString() ?? null,
+        lastWebhookAt: lastWebhook?.receivedAt.toISOString() ?? null,
+      };
+    } catch {
+      throw new InternalServerErrorException(ACTIVITY_QUERY_ERROR);
+    }
   }
 
   async createConnection(

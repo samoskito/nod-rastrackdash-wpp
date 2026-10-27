@@ -431,6 +431,7 @@ e o que ainda não, está em
 | `OPS_ALERT_WEBHOOK_URL` | Só se `DISCONNECT_ALERTS_ENABLED=true` | Webhook do seu Slack/Discord/etc. | `.env` local / env do serviço | **Sim** (trate a URL como sensível — permite postar no seu canal) |
 | `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` | Não (opcional) — só para a mensagem dos Alertas WhatsApp sair por WhatsApp. Sem elas o aviso de desconexão aparece só em Integrações | URL do servidor e token de uma instância Uazapi sua que envia o aviso | `.env` da API / env do serviço | `OPS_ALERT_UAZAPI_TOKEN` **sim** |
 | `OPS_ALERT_SCAN_INTERVAL_MS` | Não (padrão 15 minutos; mínimo 60000) | Decisão sua | `.env` da API | Não |
+| `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS` | Não (padrão 2000) | Decisão sua: tempo máximo, em milissegundos, de cada leitura de status ou de atividade das conexões em Integrações | env do serviço da **WEB** | Não |
 
 **Alerta de desconexão por conexão (Fase 6.1c):** a API confere cada conexão
 Uazapi BYO e WAHA ativa pela API de status do próprio provedor (a mesma URL do
@@ -440,6 +441,13 @@ passageiros (subindo, hibernada, offline) e erros de leitura nunca alertam, e
 uma leitura conectada tira o aviso. A mensagem por WhatsApp sai uma vez (com o
 intervalo de repetição de Configurações > Alertas WhatsApp) quando os alertas
 estão ligados no workspace, há telefone cadastrado e a licença está utilizável.
+
+**Atividade do número (Fase 6.3b):** cada conexão Uazapi BYO e WAHA mostra em
+Integrações os leads de anúncio (CTWA) de 24 horas, 7 dias e total, o último
+lead e o último webhook, com o atalho para os leads desse número. É só
+leitura, não tem variável nova e continua aberta com a licença bloqueada. Se a
+leitura passar de `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, a tela mostra
+"Atividade indisponível" (nunca zeros inventados).
 
 O receiver de cada conexão é gerado na UI (botão **Gerar receiver**) na
 forma `{API_PUBLIC_URL}/webhooks/whatsapp/{ID_DA_CONEXAO}?token=...`. Sem

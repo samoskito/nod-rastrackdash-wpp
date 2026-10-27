@@ -325,6 +325,12 @@ export class LeadsService {
     workspaceId: string,
     query: Omit<LeadListQueryDto, "page" | "pageSize" | "limit">,
   ) {
+    const whatsappInstanceId = query.whatsappInstanceId
+      ? await this.requireWorkspaceInstance(
+          workspaceId,
+          query.whatsappInstanceId,
+        )
+      : undefined;
     const conversationPeriodRange = this.conversationPeriodRange(query);
     // Porte do SaaS #155: report mode (flag on + deferred receipts around the
     // period). nod: the flag is on by default, so the lookup only runs when
@@ -441,6 +447,7 @@ export class LeadsService {
 
       return {
         workspaceId,
+        ...(whatsappInstanceId ? { whatsappInstanceId } : {}),
         ...(eventLeadIds ? { id: { in: eventLeadIds } } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.label ? { labels: { has: query.label } } : {}),
@@ -564,6 +571,29 @@ export class LeadsService {
     const repeatIds = repeatConversationLeadIds(events, leadIdsByPhoneHash);
 
     return repeatIds.length ? [{ id: { in: repeatIds } }] : null;
+  }
+
+  /**
+   * The WhatsApp number filter only accepts a connection of this workspace
+   * (any status: removed connections keep their historical leads).
+   */
+  private async requireWorkspaceInstance(
+    workspaceId: string,
+    whatsappInstanceId: string,
+  ): Promise<string> {
+    const instance = await this.prisma.whatsappInstance.findFirst({
+      where: {
+        id: whatsappInstanceId,
+        workspaceId,
+      },
+      select: { id: true },
+    });
+
+    if (!instance) {
+      throw new NotFoundException("Número WhatsApp não encontrado");
+    }
+
+    return instance.id;
   }
 
   /**

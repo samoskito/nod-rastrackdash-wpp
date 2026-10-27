@@ -1562,7 +1562,8 @@ body {
 
 .report-control-center {
   padding: 0;
-  overflow: hidden;
+  /* visible: the ad account popover opens over the panel edge, uncut. */
+  overflow: visible;
 }
 
 .report-results-heading {
@@ -1591,35 +1592,69 @@ body {
   gap: 3px;
 }
 
-.report-context-tags,
 .report-command-actions {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
 }
 
-.report-command-body {
+/*
+ * Single control toolbar split into three labelled groups: periodo, escopo and
+ * acoes. Grid areas keep the acoes cluster right-aligned on desktop while the
+ * responsive stack still reads periodo -> escopo -> acoes.
+ */
+.report-toolbar {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "period actions"
+    "scope scope";
+}
+
+.report-toolbar-group {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+}
+
+.report-group-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.report-toolbar-period {
+  grid-area: period;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
 
-.report-period-form {
+.report-toolbar-actions {
+  grid-area: actions;
+  justify-content: flex-end;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+
+.report-toolbar-scope {
   display: grid;
   min-width: 0;
-  grid-template-columns:
-    auto
-    repeat(2, minmax(132px, 170px))
-    auto;
-  align-items: end;
-  gap: 8px;
+  grid-area: scope;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.report-period-form {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .report-period-context {
@@ -1628,6 +1663,19 @@ body {
   align-items: center;
   gap: 9px;
   padding-right: 3px;
+}
+
+/* Inicio/Fim read as one segment instead of two loose fields. */
+.report-period-range {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(126px, 168px));
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .report-period-context svg {
@@ -1703,14 +1751,6 @@ body {
   font-size: 12px;
 }
 
-.report-command-meta {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
 .report-command-actions .button,
 .report-command-actions form,
 .report-command-actions form > div {
@@ -1724,24 +1764,35 @@ body {
   white-space: nowrap;
 }
 
-.report-analysis-controls {
+/* The Meta sync window is a hint on the action, not a floating "Meta:" tag. */
+.report-sync-action {
   display: grid;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  justify-items: end;
+  gap: 4px;
+}
+
+.report-sync-hint {
+  color: var(--ink-muted);
+  cursor: help;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .report-analysis-switcher {
   display: flex;
   min-width: 0;
-  min-height: 56px;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-right: 1px solid var(--border);
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
 }
 
-.report-analysis-switcher > .tag {
+.report-scope-count {
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -1759,8 +1810,17 @@ body {
 }
 
 .report-selection-toolbar {
-  padding-left: 8px;
+  padding-left: 10px;
   border-left: 1px solid var(--border);
+}
+
+/* Keeps the destructive clear control away from "Filtrar por seleção". */
+.report-selection-divider {
+  width: 1px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-inline: 2px;
+  background: var(--border);
 }
 
 .report-selection-count {
@@ -1823,14 +1883,14 @@ body {
   line-height: 1.15;
 }
 
-.report-analysis-controls .report-view-tabs {
+.report-toolbar-scope .report-view-tabs {
   display: inline-flex;
   width: auto;
   padding: 2px;
   border-radius: 7px;
 }
 
-.report-analysis-controls .report-view-tabs a {
+.report-toolbar-scope .report-view-tabs a {
   justify-content: center;
   min-height: 32px;
   padding: 5px 10px;
@@ -1851,9 +1911,9 @@ body {
     minmax(150px, 1fr)
     auto
     auto;
-  align-items: start;
+  align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px 14px;
 }
 
 .report-filter-primary .filter-control,
@@ -2272,33 +2332,27 @@ body {
 }
 
 @media (max-width: 1280px) {
-  .report-command-body {
+  .report-toolbar {
     grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
+    grid-template-areas:
+      "period"
+      "scope"
+      "actions";
   }
 
-  .report-command-meta {
-    justify-content: space-between;
-  }
-
-  .report-analysis-controls {
-    grid-template-columns: minmax(0, 1fr);
+  .report-toolbar-actions {
+    justify-content: flex-start;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+    border-left: 0;
   }
 
   .report-analysis-switcher {
-    min-height: 0;
-    justify-content: space-between;
     padding-block: 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
   }
 }
 
 @media (max-width: 1080px) {
-  .report-command-meta {
-    align-items: flex-start;
-  }
-
   .report-filter-primary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2333,41 +2387,51 @@ body {
     flex-direction: column;
   }
 
-  .report-command-body,
+  .report-toolbar-period,
+  .report-toolbar-actions,
+  .report-analysis-switcher,
   .report-filter-primary {
     padding-inline: 16px;
   }
 
-  .report-context-tags,
-  .report-command-actions {
-    justify-content: flex-start;
-  }
-
-  .report-command-meta {
+  .report-toolbar-period,
+  .report-toolbar-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .report-command-actions {
+    justify-content: flex-start;
+  }
+
   .report-period-form {
+    align-items: stretch;
+    flex-direction: column;
     width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .report-period-context {
-    grid-column: 1 / -1;
     min-width: 0;
   }
 
+  .report-period-range {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .report-period-form .button {
-    grid-column: 1 / -1;
     width: 100%;
   }
 
   .report-command-actions,
   .report-command-actions form,
   .report-command-actions form > div,
-  .report-command-actions .button {
+  .report-command-actions .button,
+  .report-sync-action {
     width: 100%;
+  }
+
+  .report-sync-action {
+    justify-items: center;
   }
 
   .report-analysis-switcher {
@@ -2386,7 +2450,7 @@ body {
     border-left: 0;
   }
 
-  .report-analysis-controls .report-view-tabs {
+  .report-toolbar-scope .report-view-tabs {
     display: grid;
     width: 100%;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2599,19 +2663,11 @@ body {
 }
 
 @media (max-width: 460px) {
-  .report-period-form {
+  .report-period-range {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .report-period-context {
-    grid-column: auto;
-  }
-
-  .report-period-form .button {
-    grid-column: auto;
-  }
-
-  .report-analysis-controls .report-view-tabs a,
+  .report-toolbar-scope .report-view-tabs a,
   .report-metric-tabs a {
     padding-inline: 7px;
     font-size: 11px;
@@ -4128,6 +4184,67 @@ body {
 
 .whatsapp-instance-panel .metric-grid.compact {
   margin-top: 14px;
+}
+
+.inbound-counter.unmeasured strong {
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.inbound-counter-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.inbound-instance-activity {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.whatsapp-instance-activity {
+  display: grid;
+  min-width: 180px;
+  justify-items: start;
+  gap: 8px;
+}
+
+.whatsapp-instance-activity p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.whatsapp-instance-activity-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.whatsapp-instance-activity-counts div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.whatsapp-instance-activity-counts dt {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.whatsapp-instance-activity-counts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.whatsapp-instance-activity small {
+  color: var(--ink-muted);
 }
 
 .integration-flow-content {
@@ -5875,6 +5992,10 @@ body {
 
   .app-modal-body {
     padding: 16px;
+  }
+
+.whatsapp-instance-activity-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

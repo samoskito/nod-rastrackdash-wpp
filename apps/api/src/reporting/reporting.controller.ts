@@ -16,6 +16,7 @@ import {
   conversionAuditSourceSchema,
   metaBudgetUpdateInputSchema,
   metaEntityStatusUpdateInputSchema,
+  reportCampaignIdsSchema,
   metaWhatsappOverrideInputSchema,
   reportSortSchema,
   type ConversionAuditDeliveryStateDto,
@@ -56,6 +57,7 @@ type ReportFilters = {
   adAccountId?: string;
   adAccountIds?: string[];
   campaignId?: string;
+  campaignIds?: string[];
   adSetId?: string;
   adId?: string;
   nameScope?: ReportNameScope;
@@ -64,6 +66,7 @@ type ReportFilters = {
   delivery?: ReportDeliveryFilter;
   selectedEntityIds?: string[];
   whatsappClassification?: WhatsappClassificationFilter;
+  whatsappInstanceId?: string;
 };
 
 @Controller("reports")
@@ -91,6 +94,7 @@ export class ReportingController {
     @Query("businessId") businessId?: string | string[],
     @Query("adAccountId") adAccountId?: string | string[],
     @Query("campaignId") campaignId?: string | string[],
+    @Query("campaignIds") campaignIds?: string | string[],
     @Query("adSetId") adSetId?: string | string[],
     @Query("adId") adId?: string | string[],
     @Query("nameScope") nameScope?: string | string[],
@@ -99,6 +103,7 @@ export class ReportingController {
     @Query("delivery") delivery?: string | string[],
     @Query("selectedIds") selectedIds?: string | string[],
     @Query("whatsappClassification") whatsappClassification?: string | string[],
+    @Query("whatsappInstanceId") whatsappInstanceId?: string | string[],
     @Query("includeSummary") includeSummary?: string | string[],
     @Query("includeDaily") includeDaily?: string | string[],
     @Query("page") page?: string | string[],
@@ -120,6 +125,7 @@ export class ReportingController {
       adAccountId,
       adAccountIds,
       campaignId,
+      campaignIds,
       adSetId,
       adId,
       nameScope,
@@ -128,6 +134,7 @@ export class ReportingController {
       delivery,
       selectedIds,
       whatsappClassification,
+      whatsappInstanceId,
     });
     const pagination = this.parseReportPagination(page, pageSize);
     const reportSort = this.parseReportSort(sort, dir);
@@ -142,6 +149,38 @@ export class ReportingController {
       ...(includeDailyComparison ? { includeDaily: true } : {}),
       ...pagination,
       ...reportSort,
+    });
+  }
+
+  @Get("campaign-options")
+  async getCampaignOptions(
+    @AuthToken() refreshToken: string,
+    @Query("since") since?: string,
+    @Query("until") until?: string,
+    @Query("businessId") businessId?: string | string[],
+    @Query("adAccountId") adAccountId?: string | string[],
+    @Query("adAccountIds") adAccountIds?: string | string[],
+  ) {
+    const workspace = await this.getCurrentWorkspace(refreshToken);
+
+    if (!workspace.permissions.canExportReports) {
+      throw new ForbiddenException("Sem permissão para exportar relatórios");
+    }
+
+    const period = this.parseReportPeriod(since, until);
+    const filters = this.parseReportFilters({
+      businessId,
+      adAccountId,
+      adAccountIds,
+    });
+
+    return this.metaReportingService.getCampaignOptions({
+      workspaceId: workspace.id,
+      since: period.since,
+      until: period.until,
+      ...(filters.businessId ? { businessId: filters.businessId } : {}),
+      ...(filters.adAccountId ? { adAccountId: filters.adAccountId } : {}),
+      ...(filters.adAccountIds ? { adAccountIds: filters.adAccountIds } : {}),
     });
   }
 
@@ -163,6 +202,8 @@ export class ReportingController {
     @Query("selectedIds") selectedIds?: string | string[],
     @Query("whatsappClassification") whatsappClassification?: string | string[],
     @Query("adAccountIds") adAccountIds?: string | string[],
+    // Fase 6.3b (nod): the CSV follows the WhatsApp number of the screen.
+    @Query("whatsappInstanceId") whatsappInstanceId?: string | string[],
   ) {
     const workspaceId = await this.getCurrentWorkspaceId(refreshToken);
     const period = this.parseReportPeriod(since, until);
@@ -179,6 +220,7 @@ export class ReportingController {
       delivery,
       selectedIds,
       whatsappClassification,
+      whatsappInstanceId,
     });
     const csv = await this.metaReportingService.getCampaignReportCsv({
       workspaceId,
@@ -211,6 +253,7 @@ export class ReportingController {
     @Query("delivery") delivery?: string | string[],
     @Query("selectedIds") selectedIds?: string | string[],
     @Query("whatsappClassification") whatsappClassification?: string | string[],
+    @Query("whatsappInstanceId") whatsappInstanceId?: string | string[],
     @Query("page") page?: string | string[],
     @Query("pageSize") pageSize?: string | string[],
     @Query("sort") sort?: unknown,
@@ -232,6 +275,7 @@ export class ReportingController {
       delivery,
       selectedIds,
       whatsappClassification,
+      whatsappInstanceId,
     });
     const pagination = this.parseReportPagination(page, pageSize);
     const reportSort = this.parseReportSort(sort, dir);
@@ -261,6 +305,7 @@ export class ReportingController {
     @Query("delivery") delivery?: string | string[],
     @Query("selectedIds") selectedIds?: string | string[],
     @Query("whatsappClassification") whatsappClassification?: string | string[],
+    @Query("whatsappInstanceId") whatsappInstanceId?: string | string[],
     @Query("page") page?: string | string[],
     @Query("pageSize") pageSize?: string | string[],
     @Query("sort") sort?: unknown,
@@ -282,6 +327,7 @@ export class ReportingController {
       delivery,
       selectedIds,
       whatsappClassification,
+      whatsappInstanceId,
     });
     const pagination = this.parseReportPagination(page, pageSize);
     const reportSort = this.parseReportSort(sort, dir);
@@ -765,6 +811,7 @@ export class ReportingController {
     adAccountId?: string | string[];
     adAccountIds?: string | string[];
     campaignId?: string | string[];
+    campaignIds?: string | string[];
     adSetId?: string | string[];
     adId?: string | string[];
     nameScope?: string | string[];
@@ -773,12 +820,14 @@ export class ReportingController {
     delivery?: string | string[];
     selectedIds?: string | string[];
     whatsappClassification?: string | string[];
+    whatsappInstanceId?: string | string[];
   }): ReportFilters {
     const filters: ReportFilters = {};
     const businessId = this.trimOptional(input.businessId);
     const adAccountId = this.trimOptional(input.adAccountId);
     const adAccountIds = this.parseAdAccountIds(input.adAccountIds);
     const campaignId = this.trimOptional(input.campaignId);
+    const campaignIds = this.parseCampaignIds(input.campaignIds, campaignId);
     const adSetId = this.trimOptional(input.adSetId);
     const adId = this.trimOptional(input.adId);
     const nameContains = this.trimOptional(input.nameContains);
@@ -788,6 +837,9 @@ export class ReportingController {
     const selectedEntityIds = this.parseSelectedEntityIds(input.selectedIds);
     const whatsappClassification = this.parseWhatsappClassificationFilter(
       input.whatsappClassification,
+    );
+    const whatsappInstanceId = this.parseWhatsappInstanceId(
+      input.whatsappInstanceId,
     );
 
     if (businessId) {
@@ -802,8 +854,14 @@ export class ReportingController {
       filters.adAccountIds = adAccountIds;
     }
 
-    if (campaignId) {
+    // campaignId is retained for legacy callers. When campaignIds is present,
+    // both sources are merged and deduplicated before the 10-campaign limit.
+    if (input.campaignIds === undefined && campaignId) {
       filters.campaignId = campaignId;
+    }
+
+    if (input.campaignIds !== undefined && campaignIds.length > 0) {
+      filters.campaignIds = campaignIds;
     }
 
     if (adSetId) {
@@ -835,6 +893,10 @@ export class ReportingController {
       filters.whatsappClassification = whatsappClassification;
     }
 
+    if (whatsappInstanceId) {
+      filters.whatsappInstanceId = whatsappInstanceId;
+    }
+
     return filters;
   }
 
@@ -859,6 +921,35 @@ export class ReportingController {
     return ids;
   }
 
+  private parseCampaignIds(
+    value: string | string[] | undefined,
+    legacyCampaignId?: string,
+  ): string[] {
+    if (Array.isArray(value)) {
+      throw new BadRequestException("Filtro campaignIds inválido");
+    }
+
+    const ids = [
+      ...(legacyCampaignId ? [legacyCampaignId] : []),
+      ...(value === undefined
+        ? []
+        : value
+            .split(",")
+            .map((campaignId) => campaignId.trim())
+            .filter(Boolean)),
+    ];
+    const uniqueIds = [...new Set(ids)];
+    const parsed = reportCampaignIdsSchema.safeParse(uniqueIds);
+
+    if (!parsed.success) {
+      throw new BadRequestException(
+        "No máximo 10 campanhas podem ser selecionadas",
+      );
+    }
+
+    return parsed.data;
+  }
+
   private trimOptional(value?: string | string[]): string | undefined {
     if (Array.isArray(value)) {
       throw new BadRequestException("Filtro de relatório inválido");
@@ -867,6 +958,18 @@ export class ReportingController {
     const trimmed = value?.trim();
 
     return trimmed ? trimmed : undefined;
+  }
+
+  private parseWhatsappInstanceId(
+    value?: string | string[],
+  ): string | undefined {
+    const parsed = this.trimOptional(value);
+
+    if (value !== undefined && !parsed) {
+      throw new BadRequestException("Instância WhatsApp inválida");
+    }
+
+    return parsed;
   }
 
   private isWhatsappClassificationFilter(

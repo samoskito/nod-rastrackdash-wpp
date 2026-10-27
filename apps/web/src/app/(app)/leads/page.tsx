@@ -3,22 +3,27 @@ import {
   leadSourceLabel,
   type LeadListItemDto,
   type LeadListPageDto,
+  type WhatsappConnectionDto,
 } from "@wpptrack/shared";
 import {
   ArrowUpRight,
-  CalendarDays,
   Filter,
+  MessageCircle,
   RotateCcw,
-  Search,
-  SlidersHorizontal,
   UserRoundSearch,
 } from "lucide-react";
 import Link from "next/link";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { formatDateTime } from "../../../lib/date-time";
 import { serverApiFetch } from "../../../lib/server-api";
+import {
+  hasEditableLeadFilter,
+  leadFiltersClearHref,
+  leadFiltersHref,
+  type LeadFilterValues,
+} from "./lead-filter-params";
 import { LeadExportMenu } from "./lead-export-menu";
-import { leadFiltersHref, type LeadFilterValues } from "./lead-filter-params";
+import { LeadFilters } from "./lead-filters";
 
 type LeadsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -37,6 +42,7 @@ type LeadFilters = {
   campaignId?: string;
   adSetId?: string;
   adId?: string;
+  whatsappInstanceId?: string;
   attribution?: string;
   since?: string;
   until?: string;
@@ -44,6 +50,35 @@ type LeadFilters = {
   page: number;
   pageSize: number;
 };
+
+type InstanceScope =
+  { state: "none" } | { state: "named"; name: string } | { state: "unnamed" };
+
+/**
+ * Names the instance the list is scoped to. The leads request itself enforces
+ * the scope, so a failed lookup only loses the name, never the filter.
+ */
+async function getInstanceScope(
+  whatsappInstanceId: string | undefined,
+): Promise<InstanceScope> {
+  if (!whatsappInstanceId) {
+    return { state: "none" };
+  }
+
+  try {
+    // nod: o número é a conexão WhatsApp do workspace.
+    const connections = await serverApiFetch<WhatsappConnectionDto[]>(
+      "/integrations/whatsapp-connections",
+    );
+    const connection = connections.find(({ id }) => id === whatsappInstanceId);
+
+    return connection
+      ? { state: "named", name: connection.displayName ?? connection.name }
+      : { state: "unnamed" };
+  } catch {
+    return { state: "unnamed" };
+  }
+}
 
 async function getLeads(filters: LeadFilters): Promise<LeadsResult> {
   try {
@@ -84,6 +119,7 @@ function leadQuery(filters: LeadFilters, page = filters.page): string {
     campaignId: filters.campaignId,
     adSetId: filters.adSetId,
     adId: filters.adId,
+    whatsappInstanceId: filters.whatsappInstanceId,
     attribution: filters.attribution,
     since: filters.since,
     until: filters.until,
@@ -213,6 +249,8 @@ export default async function LeadsPage({
   const campaignId = asStringParam(resolvedSearchParams.campaignId);
   const adSetId = asStringParam(resolvedSearchParams.adSetId);
   const adId = asStringParam(resolvedSearchParams.adId);
+  const whatsappInstanceId =
+    asStringParam(resolvedSearchParams.whatsappInstanceId)?.trim() || undefined;
   const attribution = asStringParam(resolvedSearchParams.attribution);
   // Only "returning"/"repeat" change the list; anything else is the default
   // (novos).
@@ -231,23 +269,9 @@ export default async function LeadsPage({
     positiveIntegerParam(asStringParam(resolvedSearchParams.pageSize), 25),
     100,
   );
-  const hasReportFilter = Boolean(campaignId || adSetId || adId || attribution);
+  const hasReportScope = Boolean(campaignId || adSetId || adId);
+  const hasReportFilter = hasReportScope || Boolean(attribution);
   const hasPeriodFilter = Boolean(since || until);
-  const hasAdvancedFilters = Boolean(
-    attribution || label || since || until || campaignId || adSetId || adId,
-  );
-  const hasAnyFilter = Boolean(
-    search || status || eventName || base || hasAdvancedFilters,
-  );
-  const advancedFilterCount = [
-    attribution,
-    label,
-    since,
-    until,
-    campaignId,
-    adSetId,
-    adId,
-  ].filter(Boolean).length;
   const leadFilters: LeadFilters = {
     search,
     status,
@@ -256,6 +280,7 @@ export default async function LeadsPage({
     campaignId,
     adSetId,
     adId,
+    whatsappInstanceId,
     attribution,
     since,
     until,
@@ -271,13 +296,17 @@ export default async function LeadsPage({
     campaignId: campaignId ?? "",
     adSetId: adSetId ?? "",
     adId: adId ?? "",
+    whatsappInstanceId: whatsappInstanceId ?? "",
     attribution: attribution ?? "",
     since: since ?? "",
     until: until ?? "",
     base: base ?? "",
     pageSize: String(pageSize),
   };
-  const result = await getLeads(leadFilters);
+  const [result, instanceScope] = await Promise.all([
+    getLeads(leadFilters),
+    getInstanceScope(whatsappInstanceId),
+  ]);
   const { leads } = result;
   const pendingCount = leads.filter((lead) => !lead.lastEventName).length;
   const pageStart =
@@ -311,6 +340,16 @@ export default async function LeadsPage({
     result.state !== "error" &&
     attributionCounts !== undefined &&
     attributionCounts.organic > 0;
+  const clearHref = leadFiltersClearHref(appliedFilters);
+  // Only scope applied: clearing would reload the same list, so the scope
+  // banners own the way out.
+  const emptyActionHref =
+    result.state === "error"
+      ? `/leads?${leadQuery(leadFilters)}`
+      : hasEditableLeadFilter(appliedFilters) ||
+          !(whatsappInstanceId || hasReportScope)
+        ? clearHref
+        : null;
 
   return (
     <section className="page-stack page-wide leads-page">
@@ -363,139 +402,37 @@ export default async function LeadsPage({
         </div>
       </header>
 
-      <form
-        className="surface-panel lead-filter-panel"
-        aria-label="Filtros de leads"
-        action="/leads"
-      >
-        <div className="lead-filter-primary">
-          <label className="lead-search-control">
-            <span className="sr-only">Buscar por nome ou telefone</span>
-            <Search aria-hidden="true" size={18} strokeWidth={2} />
-            <input
-              className="filter-control"
-              name="search"
-              placeholder="Nome ou telefone"
-              defaultValue={search}
-              data-presentation-sensitive-field="true"
-            />
-          </label>
-          <select
-            className="filter-control"
-            name="base"
-            aria-label="Base de leads"
-            title="Leads novos: primeiro contato no período. Voltaram: já falaram antes e iniciaram uma nova conversa por anúncio no período. 2+ conversas: iniciaram 2 ou mais conversas por anúncio no período, novos ou não."
-            defaultValue={base ?? ""}
-          >
-            <option value="">Leads novos</option>
-            <option value="returning">Voltaram</option>
-            <option value="repeat">2+ conversas</option>
-          </select>
-          <select
-            className="filter-control"
-            name="status"
-            aria-label="Situação operacional"
-            defaultValue={status ?? ""}
-          >
-            <option value="">Toda situação</option>
-            <option value="active">Em atendimento</option>
-            <option value="qualified">Qualificados</option>
-            <option value="converted">Compradores</option>
-            <option value="lost">Perdidos</option>
-          </select>
-          <select
-            className="filter-control"
-            name="eventName"
-            aria-label="Etapa do funil"
-            defaultValue={eventName ?? ""}
-          >
-            <option value="">Todas as etapas</option>
-            <option value="LeadSubmitted">Conversa iniciada</option>
-            <option value="QualifiedLead">Lead qualificado</option>
-            <option value="Purchase">Compra atribuída</option>
-          </select>
-          <button className="button primary" type="submit">
-            <Filter aria-hidden="true" size={17} strokeWidth={2.2} />
-            Aplicar
-          </button>
-          {hasAnyFilter ? (
-            <Link className="button ghost" href="/leads">
-              <RotateCcw aria-hidden="true" size={16} strokeWidth={2} />
-              Limpar
-            </Link>
-          ) : null}
-        </div>
+      <LeadFilters applied={appliedFilters} page={page} />
 
-        <details className="lead-advanced-filters" open={hasAdvancedFilters}>
-          <summary>
-            <span>
-              <SlidersHorizontal aria-hidden="true" size={17} strokeWidth={2} />
-              Filtros avançados
-            </span>
-            {advancedFilterCount > 0 ? (
-              <span className="lead-active-filter-count">
-                {advancedFilterCount} ativo(s)
-              </span>
+      {instanceScope.state !== "none" ? (
+        <div
+          className="lead-filter-context lead-instance-context"
+          role="status"
+        >
+          <MessageCircle aria-hidden="true" size={16} strokeWidth={2} />
+          <strong>Número WhatsApp</strong>
+          <span>
+            Exibindo leads associados atualmente a{" "}
+            {instanceScope.state === "named" ? (
+              <PresentationMask placeholder="número oculto">
+                {instanceScope.name}
+              </PresentationMask>
             ) : (
-              <span>Origem, etiqueta, período e exibição</span>
+              "número selecionado"
             )}
-          </summary>
-          <div className="lead-filter-advanced-grid">
-            <label className="filter-field">
-              <span>Origem</span>
-              <select
-                className="filter-control"
-                name="attribution"
-                defaultValue={attribution ?? ""}
-              >
-                <option value="">Toda origem</option>
-                <option value="paid">Anúncio</option>
-                <option value="organic">Orgânico (sem anúncio)</option>
-              </select>
-            </label>
-            <label className="filter-field">
-              <span>Etiqueta</span>
-              <input
-                className="filter-control"
-                name="label"
-                placeholder="Ex.: VIP"
-                defaultValue={label}
-                data-presentation-sensitive-field="true"
-              />
-            </label>
-            <label className="filter-field">
-              <span>Início</span>
-              <span className="lead-date-control">
-                <CalendarDays aria-hidden="true" size={16} strokeWidth={2} />
-                <input type="date" name="since" defaultValue={since} />
-              </span>
-            </label>
-            <label className="filter-field">
-              <span>Fim</span>
-              <span className="lead-date-control">
-                <CalendarDays aria-hidden="true" size={16} strokeWidth={2} />
-                <input type="date" name="until" defaultValue={until} />
-              </span>
-            </label>
-            <label className="filter-field">
-              <span>Por página</span>
-              <select
-                className="filter-control"
-                name="pageSize"
-                defaultValue={String(pageSize)}
-              >
-                <option value="25">25 leads</option>
-                <option value="50">50 leads</option>
-                <option value="100">100 leads</option>
-              </select>
-            </label>
-          </div>
-        </details>
-
-        <input type="hidden" name="campaignId" value={campaignId ?? ""} />
-        <input type="hidden" name="adSetId" value={adSetId ?? ""} />
-        <input type="hidden" name="adId" value={adId ?? ""} />
-      </form>
+            . O vínculo é o atual de cada lead, não o histórico de mensagens.
+          </span>
+          <Link
+            className="button ghost"
+            href={leadFiltersHref({
+              ...appliedFilters,
+              whatsappInstanceId: "",
+            })}
+          >
+            Ver todos os números
+          </Link>
+        </div>
+      ) : null}
 
       {hasReportFilter || hasPeriodFilter || base ? (
         <div className="lead-filter-context" role="status">
@@ -517,6 +454,20 @@ export default async function LeadsPage({
               ? `: ${since ?? "início"} até ${until ?? "hoje"}`
               : "."}
           </span>
+          {hasReportScope ? (
+            // Limpar keeps the drill-down; this is the way out of it.
+            <Link
+              className="button ghost"
+              href={leadFiltersHref({
+                ...appliedFilters,
+                campaignId: "",
+                adSetId: "",
+                adId: "",
+              })}
+            >
+              Remover recorte do relatório
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
@@ -703,17 +654,14 @@ export default async function LeadsPage({
               <strong>{emptyTitle}</strong>
               <span>{emptyDescription}</span>
             </div>
-            <Link
-              className="button ghost"
-              href={
-                result.state === "error"
-                  ? `/leads?${leadQuery(leadFilters)}`
-                  : "/leads"
-              }
-            >
-              <RotateCcw aria-hidden="true" size={16} strokeWidth={2} />
-              {result.state === "error" ? "Tentar novamente" : "Limpar filtros"}
-            </Link>
+            {emptyActionHref ? (
+              <Link className="button ghost" href={emptyActionHref}>
+                <RotateCcw aria-hidden="true" size={16} strokeWidth={2} />
+                {result.state === "error"
+                  ? "Tentar novamente"
+                  : "Limpar filtros"}
+              </Link>
+            ) : null}
           </div>
         )}
       </section>

@@ -24,6 +24,7 @@ const empty: LeadFilterValues = {
   campaignId: "",
   adSetId: "",
   adId: "",
+  whatsappInstanceId: "",
   attribution: "",
   since: "",
   until: "",
@@ -77,6 +78,17 @@ describe("leadExportHref", () => {
       ),
     ).toBe(
       "/leads/export?attribution=paid&since=2026-10-14&base=returning&format=csv",
+    );
+  });
+
+  it("6.3b: exports only the filtered WhatsApp number, like the list", () => {
+    expect(
+      leadExportHref(
+        { ...empty, whatsappInstanceId: "connection_1", since: "2026-10-14" },
+        "csv",
+      ),
+    ).toBe(
+      "/leads/export?whatsappInstanceId=connection_1&since=2026-10-14&format=csv",
     );
   });
 
@@ -250,6 +262,23 @@ describe("leads export route", () => {
       "leads_acme_todos.csv",
     );
     expect(await response.text()).toBe("Nome;Telefone\r\n");
+  });
+
+  it("6.3b: forwards the WhatsApp number so the file follows the list", async () => {
+    global.fetch = vi.fn(
+      async () => new Response("ok", { status: 200 }),
+    ) as typeof fetch;
+
+    await GET(
+      new Request(
+        "http://localhost/leads/export?format=csv&whatsappInstanceId=connection_1&page=2",
+      ),
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:3333/leads/export?format=csv&whatsappInstanceId=connection_1",
+      expect.anything(),
+    );
   });
 
   it("forwards the base so the file follows the list", async () => {

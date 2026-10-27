@@ -8,7 +8,7 @@ function readSource(path: string): string {
 describe("operational filter layout", () => {
   it("keeps purchase review controls dark and responsive to the content width", () => {
     const page = readSource(
-      "../src/app/(app)/events/purchase-reviews/page.tsx",
+      "../src/app/(app)/events/purchase-reviews/purchase-review-filters.tsx",
     );
     const css = readSource("../src/styles/globals.css");
 

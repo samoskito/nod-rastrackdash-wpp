@@ -357,6 +357,69 @@ Integrações (Kommo e Pipedrive): o quadro não depende de nenhuma delas.
   movimento, porque mover é registrar uma conversão.
 - Não há variável de ambiente nem migration para o quadro.
 
+### 10.8 Filtros da Visão Geral, Relatórios, Leads e Eventos (aplicados sozinhos)
+
+Os filtros se aplicam sozinhos: não existe mais o botão **Aplicar**. Ao trocar
+um seletor, a tela atualiza na hora (aparece "Atualizando..." e os números
+anteriores ficam visíveis até chegarem os novos). Nas datas e nos campos de
+texto, a tela espera você parar de digitar; **Enter** aplica na hora. Um
+período com o fim antes do início mostra "Fim antes do início" e não é
+aplicado. Todos os filtros ficam no endereço da página, então dá para salvar
+ou mandar o link.
+
+- **Visão Geral.** Período, contas de anúncio (caixa com busca e a moeda de
+  cada conta), Business Manager, **Número WhatsApp** e **Campanhas**.
+  - O número lista as conexões WhatsApp ativas do workspace (aba WhatsApp de
+    Integrações: Uazapi, WAHA e as demais). Uma
+    conexão removida sai da lista, mas um link antigo com ela continua valendo
+    ("Número removido").
+  - Campanhas: busque pelo nome ou ID e marque até 10. Com um número escolhido,
+    as campanhas que trouxeram conversas para ele aparecem primeiro, com a
+    contagem. As escolhidas viram etiquetas abaixo da barra, com "x" para
+    tirar uma e "Limpar campanhas".
+  - **Por que alguns valores mostram "-".** A Meta informa investimento e
+    conversas por campanha e por conta, nunca por número. Só com o número,
+    Investimento e Conversas Meta ficam "-" (são da conta). Com número e
+    campanha: se a campanha só levou conversas para esse número, os valores
+    são dela; se também levou para outro número, aparecem os valores da
+    campanha inteira, marcados, sem custo por etapa e sem ROAS; sem a
+    sincronização da Meta no período, aparece "Aguardando sincronização da
+    Meta". Uma campanha removida ou de outra conta mostra "Campanha não
+    encontrada" com o botão para limpar.
+  - "Abrir relatórios" leva o mesmo recorte (com várias campanhas, vai sem as
+    campanhas, porque Relatórios filtra uma por vez). Os atalhos dos cards de
+    leads levam o número e a campanha para a lista de Leads; quando a lista não
+    consegue reproduzir o mesmo número (várias campanhas, ou "voltaram" e
+    "2+ conversas" com campanha), o card fica sem link.
+- **Relatórios.** A barra fica em três grupos: **Período**, **Escopo**
+  (campanhas, conjuntos ou anúncios; contas, número, nome e os filtros
+  avançados) e **Ações** (exportar CSV e sincronizar a Meta). Com um número
+  escolhido, um aviso lembra que investimento e métricas Meta continuam no
+  escopo da campanha ou da conta, e o **Exportar CSV** leva o número também.
+  Se você estava dentro de uma campanha e trocou o BM ou a conta para um
+  recorte que não a contém, a tabela fica vazia (não é erro da API).
+- **Leads.** Busca, base (leads novos, voltaram, 2+ conversas), situação,
+  etapa e os filtros avançados se aplicam sozinhos. Vindo de uma conexão em
+  Integrações ("Ver leads deste número"), a lista mostra "Número WhatsApp" no
+  topo e só os leads dessa conexão; "Ver todos os números" tira esse recorte.
+  A exportação CSV/Excel leva os mesmos filtros, inclusive o número.
+- **Eventos Meta e Revisão de compras.** Período, evento, estado, origem,
+  visualização e regra também se aplicam sozinhos.
+- **Integrações → WhatsApp.** Cada conexão Uazapi ou WAHA mostra **Atividade do
+  número**: leads de anúncio (CTWA) de 24 horas, 7 dias e total, o último lead
+  e se chegou webhook nas últimas 24 horas, com o botão **Ver leads deste
+  número**. Se a leitura falhar, aparece "Atividade indisponível" (nunca zero
+  inventado). Na ponte das regras de frase da Uazapi/WAHA (aba Atendimento e
+  vendas), os contadores de entrada aparecem como "Não medido", porque o lead
+  de anúncio entra pela conexão WhatsApp.
+- **CRM Kanban.** O filtro de campanha do quadro (10.7) usa a mesma busca.
+- **Limite:** o filtro de número cobre as conexões WhatsApp do workspace (aba
+  WhatsApp de Integrações). Leads de Unnichat, Umbler, Gupshup, Data Crazy e
+  Meta Cloud não têm esse número e saem da lista quando um número é escolhido.
+- **Licença bloqueada:** filtros, atividade e exportação continuam funcionando
+  (são leituras).
+- Não há variável de ambiente nem migration para os filtros.
+
 ## 11. Marca (whitelabel) — opcional
 
 Defina `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR` para personalizar sua agência (veja [`../docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)). O rodapé residual **`RastrackDash · powered by PalmUP`** é fixo e não pode ser removido nem escondido, com ou sem essas variáveis.

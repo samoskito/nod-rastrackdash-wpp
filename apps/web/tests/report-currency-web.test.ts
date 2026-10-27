@@ -468,7 +468,8 @@ describe("filtro por conta de anúncio", () => {
     );
     expect(html).toContain('name="adAccountIds" value="act_BRL,act_USD"');
     expect(html).toContain("2 contas");
-    expect(html).toContain("Aplicar");
+    // Fase 6.3b (SaaS #116): os filtros da Visão Geral se aplicam sozinhos.
+    expect(html).not.toContain(">Aplicar<");
   });
 
   it("o CSV repassa adAccountIds para a API", async () => {

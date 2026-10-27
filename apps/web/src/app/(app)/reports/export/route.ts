@@ -14,6 +14,8 @@ const exportQueryParams = [
   "delivery",
   "selectedIds",
   "whatsappClassification",
+  // Fase 6.3b (nod): the CSV follows the WhatsApp number of the screen.
+  "whatsappInstanceId",
 ] as const;
 
 export async function GET(request: Request) {

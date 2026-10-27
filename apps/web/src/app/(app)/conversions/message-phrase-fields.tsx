@@ -109,7 +109,7 @@ export function MessagePhraseFields({
             maxLength={2_000}
             placeholder={
               carriesValue
-                ? "Ex.: Pagamento confirmado no valor de R$ 1.397,00"
+                ? `Ex.: Pagamento confirmado no valor de ${formatMoney(139_700, previewCurrency)}`
                 : "Ex.: Perfeito! Vou te passar os valores agora."
             }
           />

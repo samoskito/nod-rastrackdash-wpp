@@ -54,6 +54,17 @@ export class WhatsappConnectionsController {
     return this.connections.getEditableConnection(context, connectionId);
   }
 
+  /**
+   * Fase 6.3b (porte do SaaS #125): atividade da conexão (Uazapi BYO e WAHA).
+   * Só leitura, então continua liberada com a licença bloqueada.
+   */
+  @Get(":id/activity")
+  async activity(@AuthToken() refreshToken: string, @Param("id") id: string) {
+    const context = await this.getContext(refreshToken);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    return this.connections.getActivity(context.workspaceId, connectionId);
+  }
+
   @Post()
   async create(@AuthToken() refreshToken: string, @Body() body: unknown) {
     const context = await this.getContext(refreshToken);

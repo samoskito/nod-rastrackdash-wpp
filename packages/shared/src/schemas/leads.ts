@@ -11,6 +11,7 @@ export const leadStatuses = [
 export const leadBases = ["new", "returning", "repeat"] as const;
 
 export const leadListQuerySchema = z.object({
+  whatsappInstanceId: z.string().trim().min(1).max(191).optional(),
   search: z.string().trim().min(1).max(120).optional(),
   status: z.enum(leadStatuses).optional(),
   eventName: z.string().trim().min(1).max(120).optional(),
