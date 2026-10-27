@@ -7,7 +7,7 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json) (planned as 1.3.1; version and tag not defined). **One additive migration (`20261028100000_meta_lead_form_token_updated_at`): back up PostgreSQL first. No new variable.** Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json) (planned as 1.3.1; version and tag not defined). **No new migration and no new variable.** The Meta instant forms (Lead Ads) and the Dashboard Leads import of 1.3.0 were removed (see Removed); their two tables stay in the database, unused. Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.
 
 ### Added
 
@@ -15,29 +15,36 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
   (screen filters, up to 500 per click) or per event (Inspecionar), the
   events Meta refused for a cause the student can fix (Graph code 100 with
   any subcode, 10, 200-299, or old refusals stored without a code), inside
-  Meta's 7-day window. Same event_id; route, pixel and page are resolved
-  again with the current configuration (the stored pixel/page of the refused
-  attempt are cleared on the claim). Conditional error -> ready_to_send
-  claim (double click or concurrent send answers 409), never a sent event,
-  one audit per event, 423 with a locked license. CTWA page/pixel events get
-  their `sourcePayload.ctwaDestination` re-resolved from the number's current
-  route (refused with the reason when it is not ready); route-based events
-  keep the destination identity (the ad's current assignment wins) and read
-  its current pixel/page. Out: 190/102 (Reenviar bloqueados), usage limits
-  (requeued), 368, Kommo, Pipedrive and Meta Cloud (single-dispatch) and the
-  Meta lead form CRM stage.
-- **Formulários Meta: re-read failed leads**: saving a new Graph token,
-  subscribing the Page again or the new "Ler de novo" button re-reads by
-  leadgen_id the connection's `fetch_failed` submissions of the last 7 days
-  (25 per round, idempotent, same submission and lead), stopping at the first
-  token/permission/limit/network error. `POST
-  /integrations/meta-lead-forms/:id/refetch` (423 with a locked license).
+  Meta's 7-day window. Same event_id; the destination is resolved again with
+  the current configuration and written over the refused one: the claim
+  clears the stored pixel and page and replaces `metaConversionDestinationId`
+  (the Page/Pixel pair is the destination identity, so fixing it creates or
+  picks another destination). Events with a stored destination keep account
+  and connection and take the ad's current destination, then the account's,
+  then the connection default (the send order without an explicit
+  destination). `inbound_webhook:<provider>` events with an ad recompute the
+  ad's current route as at creation: entries (`inboundEventId`) need exactly
+  one active, valid route of the number matching it; number rules
+  (`providerConversionExecutionId`) use the purchase choice (UAZAPI/WAHA
+  bridges and Unnichat inheriting the workspace use the ad route, the others
+  exactly one route of the number). CTWA page/pixel events get their
+  `sourcePayload.ctwaDestination` re-resolved from the number's current
+  route. When the current route is not ready, the event stays Falhou with the
+  reason and the bulk result counts it apart (`notReady`, "fora por
+  configuração"). Once-per-lead events (LeadSubmitted, QualifiedLead) are
+  checked again against the new destination (another log of the same lead
+  already there: not resent, counted as `alreadyConverted`; best effort,
+  without the creation lock). The audit
+  `beforeSummary` keeps pixel, page, account, connection, destination and the
+  previous `sourcePayload`; a queue failure restores all of them.
+  Conditional error -> ready_to_send claim (double click or concurrent send
+  answers 409), never a sent event, one audit per event, 423 with a locked
+  license. Out: 190/102 (Reenviar bloqueados), usage limits (requeued), 368,
+  Kommo, Pipedrive and Meta Cloud (single-dispatch) and the CRM stage rows
+  left by the removed Meta instant forms.
 
 ### Changed
 
-- Formulários Meta: the "Reconecte a Página"/"Falta permissão" warning is
-  compared with the new `graphTokenUpdatedAt` (date the token was saved), not
-  with `updatedAt`: renaming or reactivating no longer clears it.
 - Kommo and Pipedrive: with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` an
   event with a production rule is no longer finished as blocked/ignored; it
   waits (no attempts consumed) and is re-evaluated every 15 minutes, sent once
@@ -49,12 +56,59 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
   (`attemptsMade > 0`) now re-arms a default-path `error`/
   `MetaCapiNetworkError` log to `ready_to_send` (conditional update), so
   transient failures are really sent again (before, the retry was skipped).
+  Kept on purpose: the re-arm applies to any `MetaCapiNetworkError` of the
+  default path (network or usage limit), with the same event_id; only the
+  single-dispatch triggers (Kommo, Pipedrive, Meta Cloud) stay out.
 - Screen texts no longer show environment variable names (Conversões,
   Integrações, Pipedrive, Meta Cloud, currency hint); the backoffice license
-  and onboarding pages keep them.
+  and onboarding pages keep them. Exception approved by Samuel: when a server
+  switch is off, the screen shows the variable and the exact action
+  ("No Dokploy, no serviço da API, troque
+  INBOUND_CONVERSION_PRODUCTION_ENABLED=false por true (ou apague a linha),
+  confira se INBOUND_CONVERSION_RULES_ENABLED=true e faça o deploy da API.")
+  in Conversões ("Envio desligado no servidor", new rule without sending,
+  error messages), Kommo, Pipedrive and the reprocess hint; the rules-off
+  banner names `INBOUND_WEBHOOKS_ENABLED`/`INBOUND_CONVERSION_RULES_ENABLED`
+  and the automatic-sending error names `INBOUND_WEBHOOK_PRODUCTION_ENABLED`.
+- `.env.example`: `INBOUND_WEBHOOKS_ENABLED`, `INBOUND_CONVERSION_RULES_ENABLED`
+  and `INBOUND_WEBHOOK_PRODUCTION_ENABLED` now come as `true` (required in the
+  student's Dokploy/production, as `dokploy.md` and `environment.md` already
+  said); `INBOUND_CONVERSION_PRODUCTION_ENABLED` stays empty and
+  `INBOUND_WEBHOOK_REPLAY_ENABLED` stays `false`. A local `.env` copied from
+  the example now asks for `INBOUND_WEBHOOK_ENCRYPTION_KEY` at API boot, like
+  the other values to fill. Existing `.env` files are not touched.
+
+### Removed
+
+- **Meta instant forms (Lead Ads, nod PR #91) and the Dashboard Leads import
+  (nod PR #92)**, absorbed in Fase 6.9 (#116) and adjusted in #117, #122 and
+  this release: the `meta-lead-forms` API module and its `/integrations/meta-lead-forms`
+  routes, the `leadgen` ingestion in `POST /webhooks/meta` (back to the
+  diagnostic-only path it had before 6.9), the CRM stage sent with a
+  QualifiedLead from the manual conversion and the CRM Kanban, the web panel,
+  the shared schemas, `WPPTRACK_WEB_META_LEAD_FORMS_ENABLED`, the
+  `dashboard-leads:import` command and its `SUPABASE_*` command-line
+  variables, the guides `docs/setup/meta-lead-forms.md` and
+  `docs/setup/dashboard-leads-import.md`, and the unpublished migration
+  `20261028100000_meta_lead_form_token_updated_at` (with `graphTokenUpdatedAt`).
+  The manual conversion, the CRM Kanban and "Reenviar bloqueados" work as
+  before 6.9.
+- Kept on purpose: the 1.3.0 migration `20261027145000_meta_lead_forms` and
+  its tables `MetaLeadFormConnection`/`MetaLeadSubmission` (models kept in
+  `schema.prisma`, unused, so there is no drift; deleting a workspace still
+  cascades them). Rows already written stay readable: a `manual_conversion`
+  with status `imported` still counts as converted for the once-per-lead guard
+  and the CRM Kanban (an ordinary manual conversion), and a leftover
+  `meta_lead_form_crm` event is closed as `skipped` instead of being sent
+  through the messaging route.
 
 ### Fixed
 
+- "Reenviar bloqueados e falhas de login da Meta" no longer picks Meta Cloud
+  events (`inbound_webhook:meta_cloud`): their permanent
+  `inbound-meta-dispatch:<id>` claim answered skipped and left the event
+  "queued" forever. Leftover `meta_lead_form_crm` rows stay out of
+  "Reenviar bloqueados" too.
 - `scripts/rollback/antes-de-voltar-para-1.2.sql` also moves the roichat,
   braip and yampi values out of `InboundWebhookDelivery`,
   `InboundWebhookEvent`, `IntegrationEndpointEvent`,
@@ -69,7 +123,7 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
 
 ## [1.3.0] - 2026-10-27
 
-Upgrade notes for students: [`docs/releases/1.3.0.json`](docs/releases/1.3.0.json). **Breaking: behavior changes on its own after the deploy (data-only promotion of observation to production, including Kommo and Pipedrive but not LeadSubmitted rules; rules following INBOUND_CONVERSION_RULES_ENABLED when INBOUND_CONVERSION_PRODUCTION_ENABLED is unset; Lead recebido moved to an active rule); read the guide before updating. Direct update from 1.0.0, 1.1.x and 1.2.0. Rollback needs the scripts in `scripts/rollback/` (see the notes), and includes the review fixes listed under Fixed.** **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit. Fase 6.4 (Meta Graph robustness): **two more additive migrations, `20261027130000_meta_creative_thumbnail` then `20261027130100_meta_reporting_sync_block` (they run by themselves at API boot): back up PostgreSQL before the redeploy**; only optional API variables, all with safe defaults (`WPPTRACK_META_USAGE_PAUSE_PERCENT`, `WPPTRACK_META_SYNC_DEDUPE_WINDOW_MINUTES`, `WPPTRACK_META_SYNC_MAX_DEFERRALS`, `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS` — on by default with 3 days, `0` turns it off —, `META_INSIGHTS_LEVEL_MODE` default `legacy`, `META_INSIGHTS_PAGE_LIMIT` default 500, `META_INSIGHTS_ASYNC_*` and `META_CAPI_BATCH_*` off by default, `WPPTRACK_CONVERSION_WORKER_CONCURRENCY` default 1); `META_VIDEO_THUMBNAILS_ENABLED` is unchanged; redeploy API, shared and web from the same commit. Fase 6.5 (Braip on the single URL): **two more migrations, `20261027140000_braip_provider` (enum values only) then `20261027140100_braip_parser_release` (inserts the Braip reader already certified: production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify (guide: [`docs/setup/braip.md`](docs/setup/braip.md)). Fase 6.9 (Meta instant forms / Lead Ads and the Dashboard Leads import; nod PRs #91 and #92 without #90): **one more additive migration, `20261027145000_meta_lead_forms` (two new tables; it runs by itself at API boot): back up PostgreSQL before the redeploy**; no new variable in `.env` (the forms use the existing `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_TOKEN_ENCRYPTION_KEY` and `API_PUBLIC_URL`; the optional import command reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` only on its own command line, never in `.env`); nothing changes by itself after the deploy; redeploy API, shared and web from the same commit (guides: [`docs/setup/meta-lead-forms.md`](docs/setup/meta-lead-forms.md), [`docs/setup/dashboard-leads-import.md`](docs/setup/dashboard-leads-import.md)). Fase 6.9b (a Meta form connection with submissions is deactivated instead of removed): no migration, no new variable; redeploy API and web from the same commit. Fase 6.8 (ROI Chat, WhatsApp API Oficial, one URL per number for the ad entry and the purchase): **two more migrations, `20261027170000_roichat_provider` (enum values only) then `20261027170100_roichat_parser_releases` (inserts the two ROI Chat readers already certified: production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify (guide: [`docs/setup/roichat.md`](docs/setup/roichat.md)). Fase 6.7 (Yampi on the single URL, open to every workspace): **two more migrations, `20261027160000_yampi_provider` (enum values only) then `20261027160100_yampi_parser_release` (inserts the Yampi reader already certified: validated in the SaaS with real Yampi payloads; production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify; register the single URL in a Yampi store webhook (guide: [`docs/setup/yampi.md`](docs/setup/yampi.md)). Review of PR #121 (fixes before publishing): no new migration and no new variable; the unpublished `20261027125000` was corrected (a paused number is never re-enabled through a sibling identity; a "Lead recebido" rule in observation is **not** promoted, the student turns it on with "Ligar esta regra"; Kommo and Pipedrive promotions write `production_direct_6_1c:kommo|pipedrive:<id>` audits and Pipedrive only with the creation checks); `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now also stops Kommo and Pipedrive and the Conversions screen says the sending is off; the optional `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` (secret) and `OPS_ALERT_SCAN_INTERVAL_MS` (Fase 6.1c) are documented; going back to 1.2.0 needs `scripts/rollback/antes-de-voltar-para-1.2.sql` **before** reverting the code if ROI Chat, Braip or Yampi were used, and `scripts/rollback/desfazer-producao-direta-6-1c.sql` undoes the promotion by its audits (see the rollback of `docs/releases/unreleased.json`). Direct upgrade from 1.0.0, 1.1.x and 1.2.0.
+Upgrade notes for students: [`docs/releases/1.3.0.json`](docs/releases/1.3.0.json). **Breaking: behavior changes on its own after the deploy (data-only promotion of observation to production, including Kommo and Pipedrive but not LeadSubmitted rules; rules following INBOUND_CONVERSION_RULES_ENABLED when INBOUND_CONVERSION_PRODUCTION_ENABLED is unset; Lead recebido moved to an active rule); read the guide before updating. Direct update from 1.0.0, 1.1.x and 1.2.0. Rollback needs the scripts in `scripts/rollback/` (see the notes), and includes the review fixes listed under Fixed.** **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit. Fase 6.4 (Meta Graph robustness): **two more additive migrations, `20261027130000_meta_creative_thumbnail` then `20261027130100_meta_reporting_sync_block` (they run by themselves at API boot): back up PostgreSQL before the redeploy**; only optional API variables, all with safe defaults (`WPPTRACK_META_USAGE_PAUSE_PERCENT`, `WPPTRACK_META_SYNC_DEDUPE_WINDOW_MINUTES`, `WPPTRACK_META_SYNC_MAX_DEFERRALS`, `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS` — on by default with 3 days, `0` turns it off —, `META_INSIGHTS_LEVEL_MODE` default `legacy`, `META_INSIGHTS_PAGE_LIMIT` default 500, `META_INSIGHTS_ASYNC_*` and `META_CAPI_BATCH_*` off by default, `WPPTRACK_CONVERSION_WORKER_CONCURRENCY` default 1); `META_VIDEO_THUMBNAILS_ENABLED` is unchanged; redeploy API, shared and web from the same commit. Fase 6.5 (Braip on the single URL): **two more migrations, `20261027140000_braip_provider` (enum values only) then `20261027140100_braip_parser_release` (inserts the Braip reader already certified: production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify (guide: [`docs/setup/braip.md`](docs/setup/braip.md)). Fase 6.9 (Meta instant forms / Lead Ads and the Dashboard Leads import; nod PRs #91 and #92 without #90): **one more additive migration, `20261027145000_meta_lead_forms` (two new tables; it runs by itself at API boot): back up PostgreSQL before the redeploy**; no new variable in `.env` (the forms use the existing `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_TOKEN_ENCRYPTION_KEY` and `API_PUBLIC_URL`; the optional import command reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` only on its own command line, never in `.env`); nothing changes by itself after the deploy; redeploy API, shared and web from the same commit (guides `docs/setup/meta-lead-forms.md` and `docs/setup/dashboard-leads-import.md`, removed in 1.3.1). Fase 6.9b (a Meta form connection with submissions is deactivated instead of removed): no migration, no new variable; redeploy API and web from the same commit. Fase 6.8 (ROI Chat, WhatsApp API Oficial, one URL per number for the ad entry and the purchase): **two more migrations, `20261027170000_roichat_provider` (enum values only) then `20261027170100_roichat_parser_releases` (inserts the two ROI Chat readers already certified: production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify (guide: [`docs/setup/roichat.md`](docs/setup/roichat.md)). Fase 6.7 (Yampi on the single URL, open to every workspace): **two more migrations, `20261027160000_yampi_provider` (enum values only) then `20261027160100_yampi_parser_release` (inserts the Yampi reader already certified: validated in the SaaS with real Yampi payloads; production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify; register the single URL in a Yampi store webhook (guide: [`docs/setup/yampi.md`](docs/setup/yampi.md)). Review of PR #121 (fixes before publishing): no new migration and no new variable; the unpublished `20261027125000` was corrected (a paused number is never re-enabled through a sibling identity; a "Lead recebido" rule in observation is **not** promoted, the student turns it on with "Ligar esta regra"; Kommo and Pipedrive promotions write `production_direct_6_1c:kommo|pipedrive:<id>` audits and Pipedrive only with the creation checks); `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now also stops Kommo and Pipedrive and the Conversions screen says the sending is off; the optional `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` (secret) and `OPS_ALERT_SCAN_INTERVAL_MS` (Fase 6.1c) are documented; going back to 1.2.0 needs `scripts/rollback/antes-de-voltar-para-1.2.sql` **before** reverting the code if ROI Chat, Braip or Yampi were used, and `scripts/rollback/desfazer-producao-direta-6-1c.sql` undoes the promotion by its audits (see the rollback of `docs/releases/unreleased.json`). Direct upgrade from 1.0.0, 1.1.x and 1.2.0.
 
 ### Added
 

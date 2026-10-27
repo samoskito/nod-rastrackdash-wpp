@@ -95,31 +95,6 @@ describe("delete-workspace FK-safe order (static; never executed)", () => {
 });
 
 describe("delete-workspace script covers every Restrict child", () => {
-  it("deletes the Fase 6.9 Meta lead form tables before Lead and Workspace", () => {
-    expect(edges).toContainEqual({
-      child: "MetaLeadSubmission",
-      parent: "Lead",
-      onDelete: "SetNull",
-    });
-    expect(edges).toContainEqual({
-      child: "MetaLeadSubmission",
-      parent: "MetaLeadFormConnection",
-      onDelete: "Cascade",
-    });
-    for (const model of ["MetaLeadSubmission", "MetaLeadFormConnection"]) {
-      expect(edges).toContainEqual({
-        child: model,
-        parent: "Workspace",
-        onDelete: "Cascade",
-      });
-      expect(position(model)).toBeGreaterThanOrEqual(0);
-      expect(position(model)).toBeLessThan(position("Lead"));
-    }
-    expect(position("MetaLeadSubmission")).toBeLessThan(
-      position("MetaLeadFormConnection"),
-    );
-  });
-
   it("lists only real, distinct schema models", () => {
     const delegates = new Set([...models.keys()].map(delegate));
     // Billing delegates of the SaaS stay in the list: the script skips a

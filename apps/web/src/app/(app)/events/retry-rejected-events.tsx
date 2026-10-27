@@ -20,7 +20,7 @@ function RetryRejectedSubmitButton({ disabled }: { disabled: boolean }) {
       title={
         disabled
           ? "Nenhum evento recusado pela Meta por causa corrigível neste período"
-          : "Envia de novo, com o mesmo identificador e a configuração atual (rota, pixel e página recalculados), os eventos que a Meta recusou por configuração, parâmetro ou permissão. Eventos com mais de 7 dias ficam de fora."
+          : "Envia de novo, com o mesmo identificador, os eventos que a Meta recusou por configuração, parâmetro ou permissão, pelo destino atual (do anúncio, do número, da conta ou da conexão): o destino, o pixel e a página da tentativa recusada não são reaproveitados. Ficam de fora os com mais de 7 dias e os cuja rota atual ainda não está pronta."
       }
       type="submit"
     >

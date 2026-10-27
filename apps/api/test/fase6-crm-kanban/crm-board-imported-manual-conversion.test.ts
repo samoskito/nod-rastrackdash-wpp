@@ -7,12 +7,12 @@ import {
 } from "../helpers/crm-pglite";
 
 /**
- * Fase 6.9 (PR #92 do nod): a QualifiedLead that Dashboard Leads already sent
- * is imported as a manual conversion with status "imported". The CRM Kanban
- * (#176) places the lead in that column, so dragging it there again (a new
- * manual conversion, refused by the #153 guard) is never needed. An imported
- * log of another trigger (the external MySQL import, the CRM stage of a form)
- * still never counts. PGlite: in-process Postgres, no project database.
+ * 1.3.1: a manual conversion with status "imported" (rows a 1.3.0 import
+ * already wrote; the import itself was removed) is read as an ordinary manual
+ * conversion. The CRM Kanban (#176) places the lead in that column, so
+ * dragging it there again (a new manual conversion, refused by the #153 guard)
+ * is never needed. An imported log of another trigger (the external MySQL
+ * import) still never counts. PGlite: in-process Postgres, no project database.
  */
 
 const range = {
@@ -45,7 +45,7 @@ beforeEach(async () => {
   await testDb.reset();
 });
 
-describe("CRM Kanban: qualificação importada do Dashboard Leads", () => {
+describe("CRM Kanban: conversão manual com status imported", () => {
   it("an imported manual QualifiedLead places the lead; other imported logs do not", async () => {
     await testDb.lead({ id: "lead_imported" });
     await testDb.lead({ id: "lead_other_import" });

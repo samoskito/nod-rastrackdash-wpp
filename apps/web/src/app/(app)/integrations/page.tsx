@@ -9,7 +9,6 @@ import type {
   MetaAssetsDto,
   MetaConnectionCapabilitiesDto,
   MetaConnectionDto,
-  MetaLeadFormConnectionDto,
   MetaManualConfigurationDto,
   ProviderConversionRuleDto,
   CurrentWorkspaceDto,
@@ -118,8 +117,6 @@ import {
   testMetaOAuthAdvancedConnectionAction,
   syncMetaManualHistoryAction,
 } from "./meta-manual-actions";
-import { MetaLeadFormsPanel } from "./meta-lead-forms-panel";
-import { metaLeadFormsVisible } from "./meta-lead-forms-visibility";
 import { MetaManualConnectionPanel } from "./meta-manual-connection-panel";
 import {
   metaAssetsRefreshSucceeded,
@@ -272,23 +269,6 @@ async function getLegacyWhatsappInstances(): Promise<
     return {
       data: instances,
       state: instances.length > 0 ? "real" : "empty",
-    };
-  } catch {
-    return { data: [], state: "error" };
-  }
-}
-
-/** Fase 6.9 (PR #91 do nod): conexões de formulários Meta (Lead Ads). */
-async function getMetaLeadFormConnections(): Promise<
-  ResourceResult<MetaLeadFormConnectionDto[]>
-> {
-  if (!metaLeadFormsVisible()) return { data: [], state: "empty" };
-  try {
-    return {
-      data: await serverApiFetch<MetaLeadFormConnectionDto[]>(
-        "/integrations/meta-lead-forms",
-      ),
-      state: "real",
     };
   } catch {
     return { data: [], state: "error" };
@@ -1083,7 +1063,6 @@ export default async function IntegrationsPage({
     kommoSettings,
     pipedriveSettings,
     singleUrlData,
-    metaLeadFormsResult,
   ] = await Promise.all([
     oauthConnected
       ? getMetaOAuthAdvancedConfiguration()
@@ -1104,7 +1083,6 @@ export default async function IntegrationsPage({
     ),
     // Fase 5.3: cada leitura falha sozinha (uma API antiga não derruba a tela).
     loadSingleUrlData(),
-    getMetaLeadFormConnections(),
   ]);
   const licenseLocked = Boolean(
     licenseStatus && licenseLockReason(licenseStatus) !== null,
@@ -2073,14 +2051,6 @@ export default async function IntegrationsPage({
                 </div>
               ) : null}
             </>
-          ) : null}
-          {metaLeadFormsVisible() ? (
-            <MetaLeadFormsPanel
-              connections={metaLeadFormsResult.data}
-              canManage={canManageIntegrations}
-              licenseLocked={licenseLocked}
-              loadFailed={metaLeadFormsResult.state === "error"}
-            />
           ) : null}
           <p className="muted integration-domain-note">
             {oauthAdvancedEnabled

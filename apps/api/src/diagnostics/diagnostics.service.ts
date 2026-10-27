@@ -34,6 +34,8 @@ import { authorizedCtwaDestinationSchema } from "@wpptrack/shared";
 import { safeErrorName } from "../common/errors/safe-error-name";
 import { isCrmCtwaContext } from "../crm-channels/crm-ctwa-context";
 import { resolveCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
+import { inboundMetaRouteMatches } from "../inbound-webhooks/inbound-webhook-meta-route-eligibility";
+import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { DiagnosticsQueueService } from "../common/queue/diagnostics-queue.service";
@@ -47,6 +49,17 @@ import {
   isMetaAuthFailureConversionEvent,
   isOutsideMetaEventTimeWindow
 } from "../conversion-events/conversion-event-retry";
+import {
+  findPriorLeadLifetimeConversion,
+  isLeadLifetimeEvent,
+  MANUAL_CONVERSION_TRIGGER,
+  pipelineOf,
+  resolveLeadConversionIdentity,
+  UAZAPI_AUTO_LEAD_TRIGGER
+} from "../conversion-events/lead-lifetime-conversion-guard";
+import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
+import { CTWA_DESTINATION_PROVIDER } from "../inbound-webhooks/authorized-ctwa-destination";
+import { effectiveUnnichatMetaRouting } from "../inbound-webhooks/inbound-webhook-effective-meta-routing";
 
 /** Meta login failure older than Meta's 7-day event_time window: never resent. */
 class MetaEventTimeExpiredRetryError extends BadRequestException {
@@ -56,6 +69,31 @@ class MetaEventTimeExpiredRetryError extends BadRequestException {
     );
   }
 }
+
+/**
+ * 1.3.1: "Reenviar recusados" de um evento cuja rota Meta atual (do número
+ * ou do anúncio) não está pronta. Fica de fora por configuração, não por já
+ * ter sido reenviado; o lote conta à parte (notReady).
+ */
+class RouteNotReadyRetryError extends BadRequestException {}
+
+/**
+ * 1.3.1: o destino atual do reenvio já recebeu este evento de uma vez por
+ * lead (LeadSubmitted, QualifiedLead) por outro log do mesmo lead: reenviar
+ * mandaria uma segunda conversão. O lote conta à parte (alreadyConverted).
+ */
+class LeadAlreadyConvertedRetryError extends ConflictException {
+  constructor() {
+    super(
+      "Lead já convertido para este pixel por outro evento: o recusado não é reenviado"
+    );
+  }
+}
+
+const ROUTE_NOT_READY_MESSAGE =
+  "A rota Meta do número ainda não está pronta (página e pixel). Corrija em Integrações e reenvie";
+const ACCOUNT_ROUTE_NOT_READY_MESSAGE =
+  "A conta Meta deste evento está sem destino de conversão pronto (anúncio, conta ou conexão). Corrija em Integrações e reenvie";
 
 const sensitiveKeyPattern =
   /(authorization|cookie|secret|token|api.?key|refresh|password)/i;
@@ -176,6 +214,8 @@ type ConversionEventLogRecord = {
   pageId?: string | null;
   sourcePayload?: unknown;
   metaAccountId: string | null;
+  metaBusinessConnectionId?: string | null;
+  metaConversionDestinationId?: string | null;
   campaignId: string | null;
   adSetId: string | null;
   adId: string | null;
@@ -212,6 +252,16 @@ export type BulkConversionRetryResult = {
   skipped: number;
   /** Skipped because the event is older than Meta's 7-day window. */
   expired: number;
+  /**
+   * Part of skipped (Reenviar recusados): the current Meta route of the
+   * number or of the ad is not ready, so it stays out by configuration.
+   */
+  notReady: number;
+  /**
+   * Part of skipped (Reenviar recusados): the current destination already has
+   * this once-per-lead event from another log of the same lead.
+   */
+  alreadyConverted: number;
   failed: number;
 };
 
@@ -1445,6 +1495,8 @@ export class DiagnosticsService {
       enqueued: 0,
       skipped: 0,
       expired: 0,
+      notReady: 0,
+      alreadyConverted: 0,
       failed: 0
     };
 
@@ -1480,6 +1532,9 @@ export class DiagnosticsService {
           result.skipped += 1;
           if (error instanceof MetaEventTimeExpiredRetryError)
             result.expired += 1;
+          if (error instanceof RouteNotReadyRetryError) result.notReady += 1;
+          if (error instanceof LeadAlreadyConvertedRetryError)
+            result.alreadyConverted += 1;
         } else {
           result.failed += 1;
         }
@@ -1595,6 +1650,23 @@ export class DiagnosticsService {
     const refreshedSourcePayload = fixableRejection
       ? await this.refreshedCtwaSourcePayload(conversionEvent)
       : undefined;
+    // Demais recusados: o destino gravado na tentativa recusada não pode
+    // prender o reenvio (o par Página/Pixel é a identidade do destino:
+    // corrigir o par cria ou escolhe OUTRO destino). Entradas e regras de
+    // URL/número (inbound_webhook:<provedor>) refazem a rota atual; o resto
+    // apaga o destino e mantém conta e conexão, e o envio cai no destino
+    // atual do anúncio, da conta ou da conexão.
+    const refreshedRoute =
+      fixableRejection && !refreshedSourcePayload
+        ? await this.refreshedRejectedRoute(conversionEvent)
+        : undefined;
+    // O destino mudou: confere de novo a regra de uma conversão por lead e
+    // pixel (o guard só roda na criação do evento).
+    if (refreshedRoute?.metaConversionDestinationId)
+      await this.assertLeadNotConvertedElsewhere(
+        conversionEvent,
+        refreshedRoute.metaConversionDestinationId
+      );
 
     const claimed = await this.prisma.conversionEventLog.updateMany({
       where: {
@@ -1612,6 +1684,7 @@ export class DiagnosticsService {
         // ligado a outra página). O envio resolve rota e destino de novo com
         // a configuração atual e grava os novos.
         ...(fixableRejection ? { pixelId: null, pageId: null } : {}),
+        ...(refreshedRoute ?? {}),
         ...(refreshedSourcePayload
           ? { sourcePayload: refreshedSourcePayload as Prisma.InputJsonValue }
           : {})
@@ -1652,6 +1725,15 @@ export class DiagnosticsService {
                 pageId: conversionEvent.pageId ?? null
               }
             : {}),
+          ...(refreshedRoute
+            ? {
+                metaAccountId: conversionEvent.metaAccountId,
+                metaBusinessConnectionId:
+                  conversionEvent.metaBusinessConnectionId ?? null,
+                metaConversionDestinationId:
+                  conversionEvent.metaConversionDestinationId ?? null
+              }
+            : {}),
           ...(refreshedSourcePayload
             ? {
                 sourcePayload:
@@ -1680,7 +1762,15 @@ export class DiagnosticsService {
           eventName: conversionEvent.eventName,
           sourceTrigger: conversionEvent.sourceTrigger,
           pixelId: conversionEvent.pixelId,
+          pageId: conversionEvent.pageId ?? null,
           metaAccountId: conversionEvent.metaAccountId,
+          metaBusinessConnectionId:
+            conversionEvent.metaBusinessConnectionId ?? null,
+          metaConversionDestinationId:
+            conversionEvent.metaConversionDestinationId ?? null,
+          ...(fixableRejection
+            ? { sourcePayload: conversionEvent.sourcePayload ?? null }
+            : {}),
           campaignId: conversionEvent.campaignId,
           adSetId: conversionEvent.adSetId,
           adId: conversionEvent.adId,
@@ -1794,7 +1884,7 @@ export class DiagnosticsService {
       include: { connection: true, routes: true }
     });
     if (!channel) {
-      throw new BadRequestException(
+      throw new RouteNotReadyRetryError(
         "O número deste evento não existe mais; o evento não pode ser reenviado"
       );
     }
@@ -1804,12 +1894,266 @@ export class DiagnosticsService {
       { crmAnyProvider: isCrmCtwaContext(source) }
     );
     if (resolved.kind !== "authorized_ctwa_destination") {
-      throw new BadRequestException(
-        "A rota Meta do número ainda não está pronta (página e pixel). Corrija em Integrações e reenvie"
-      );
+      throw new RouteNotReadyRetryError(ROUTE_NOT_READY_MESSAGE);
     }
 
     return { ...payload, ctwaDestination: resolved };
+  }
+
+  /**
+   * Recusado fora do destino CTWA: o destino que o envio deve usar agora,
+   * gravado no lugar do destino da tentativa recusada (que nunca é
+   * reaproveitado). Sem rota pronta, o reenvio é recusado com o motivo e o
+   * evento continua Falhou.
+   * - inbound_webhook:<provedor> com anúncio: a rota atual do anúncio, como
+   *   na criação. Entrada do número (inboundEventId): rota sem restrição e
+   *   exatamente uma rota ativa e válida do número que case com ela. Regra do
+   *   número (providerConversionExecutionId): a mesma escolha da compra
+   *   (previewPurchaseRoute): ponte UAZAPI/WAHA e Unnichat que herda a rota do
+   *   workspace usam a rota do anúncio; os demais, exatamente uma rota do
+   *   número que resolva o anúncio.
+   * - Demais com destino gravado (conversão manual, entrada da ponte, regras
+   *   sem número): a mesma ordem do envio sem destino explícito: destino
+   *   atual do anúncio, depois o da conta e por fim o padrão da conexão.
+   *   Conta e conexão ficam.
+   * - Sem destino gravado (rota antiga): nada muda.
+   */
+  private async refreshedRejectedRoute(
+    conversionEvent: ConversionEventLogRecord
+  ): Promise<{
+    metaAccountId?: string | null;
+    metaBusinessConnectionId?: string | null;
+    metaConversionDestinationId?: string | null;
+  }> {
+    const workspaceId = conversionEvent.workspaceId;
+    if (!workspaceId) return {};
+    const adId = conversionEvent.adId?.trim() || null;
+    const source =
+      conversionEvent.sourcePayload &&
+      typeof conversionEvent.sourcePayload === "object" &&
+      !Array.isArray(conversionEvent.sourcePayload)
+        ? (conversionEvent.sourcePayload as Record<string, unknown>)
+        : {};
+
+    if (conversionEvent.sourceTrigger.startsWith("inbound_webhook:") && adId) {
+      const route = await this.currentInboundRoute(workspaceId, adId, source);
+      return {
+        metaAccountId: route.adAccountId,
+        metaBusinessConnectionId: route.businessConnectionId,
+        metaConversionDestinationId: route.conversionDestinationId
+      };
+    }
+
+    if (!conversionEvent.metaConversionDestinationId) return {};
+    if (!conversionEvent.metaAccountId)
+      return { metaConversionDestinationId: null };
+
+    const account = await this.prisma.metaReportingAccount.findFirst({
+      where: { workspaceId, adAccountId: conversionEvent.metaAccountId },
+      select: {
+        id: true,
+        active: true,
+        businessConnectionId: true,
+        conversionDestinationId: true
+      }
+    });
+    if (!account?.active || !account.businessConnectionId)
+      throw new RouteNotReadyRetryError(ACCOUNT_ROUTE_NOT_READY_MESSAGE);
+    const connection = await this.prisma.metaBusinessConnection.findFirst({
+      where: { id: account.businessConnectionId, workspaceId },
+      select: { defaultConversionDestinationId: true }
+    });
+    const ad = adId
+      ? await this.prisma.metaAd.findFirst({
+          where: {
+            workspaceId,
+            adId,
+            adAccountId: conversionEvent.metaAccountId
+          },
+          select: {
+            destinationAssignment: {
+              select: { reportingAccountId: true, conversionDestinationId: true }
+            }
+          }
+        })
+      : null;
+    const adDestinationId =
+      ad?.destinationAssignment?.reportingAccountId === account.id
+        ? ad.destinationAssignment.conversionDestinationId
+        : null;
+    const destinationId =
+      adDestinationId ??
+      account.conversionDestinationId ??
+      connection?.defaultConversionDestinationId ??
+      null;
+    const destination = destinationId
+      ? await this.prisma.metaConversionDestination.findFirst({
+          where: { id: destinationId, workspaceId, status: "configured" },
+          select: { id: true }
+        })
+      : null;
+    if (!destination)
+      throw new RouteNotReadyRetryError(ACCOUNT_ROUTE_NOT_READY_MESSAGE);
+    return { metaConversionDestinationId: destination.id };
+  }
+
+  /** Rota atual de um evento inbound_webhook:<provedor> com anúncio. */
+  private async currentInboundRoute(
+    workspaceId: string,
+    adId: string,
+    source: Record<string, unknown>
+  ): Promise<{
+    adAccountId: string;
+    reportingAccountId: string;
+    businessConnectionId: string;
+    conversionDestinationId: string;
+  }> {
+    const reader = new InboundWebhookMetaRouteReaderService(
+      this.prisma as never
+    );
+    const channelId =
+      typeof source.channelId === "string" ? source.channelId : null;
+    const ready = (route: {
+      status: string;
+      adAccountId: string | null;
+      reportingAccountId: string | null;
+      businessConnectionId: string | null;
+      conversionDestinationId: string | null;
+    }) =>
+      route.status === "resolved" &&
+      !!route.adAccountId &&
+      !!route.reportingAccountId &&
+      !!route.businessConnectionId &&
+      !!route.conversionDestinationId;
+    const notReady = () =>
+      new RouteNotReadyRetryError(
+        "A rota Meta do anúncio deste evento ainda não está pronta (conta, conexão e destino). Corrija em Integrações e reenvie"
+      );
+
+    // Regra do número: a mesma escolha da criação da compra.
+    if (typeof source.providerConversionExecutionId === "string" && channelId) {
+      const channel = await this.prisma.inboundWebhookChannel.findFirst({
+        where: { workspaceId, id: channelId },
+        include: {
+          routes: { where: { active: true, validationStatus: "valid" } },
+          connection: true
+        }
+      });
+      if (!channel || channel.connection.workspaceId !== workspaceId)
+        throw new RouteNotReadyRetryError(ROUTE_NOT_READY_MESSAGE);
+      let inheritsWorkspace = isBridgedWhatsappProvider(
+        channel.connection.provider
+      );
+      if (
+        !inheritsWorkspace &&
+        String(channel.connection.provider) === CTWA_DESTINATION_PROVIDER
+      ) {
+        const policy = await effectiveUnnichatMetaRouting(
+          this.prisma as never,
+          channel as never
+        );
+        inheritsWorkspace =
+          policy.eligible && policy.source === "inherit_workspace";
+      }
+      if (!inheritsWorkspace) {
+        const matches = [];
+        for (const route of channel.routes) {
+          const preview = await reader.previewRoute({
+            workspaceId,
+            adId,
+            businessConnectionId: route.metaBusinessConnectionId,
+            reportingAccountId: route.metaReportingAccountId,
+            conversionDestinationId: route.metaConversionDestinationId
+          });
+          if (
+            ready(preview) &&
+            preview.businessConnectionId === route.metaBusinessConnectionId &&
+            (!route.metaReportingAccountId ||
+              preview.reportingAccountId === route.metaReportingAccountId) &&
+            (!route.metaConversionDestinationId ||
+              preview.conversionDestinationId ===
+                route.metaConversionDestinationId)
+          )
+            matches.push(preview);
+        }
+        if (matches.length !== 1)
+          throw new RouteNotReadyRetryError(ROUTE_NOT_READY_MESSAGE);
+        return matches[0] as never;
+      }
+    }
+
+    const route = await reader.previewRoute({ workspaceId, adId });
+    if (!ready(route)) throw notReady();
+
+    // Entrada do número: a rota atual precisa casar com uma rota do número.
+    if (typeof source.inboundEventId === "string") {
+      const routes = channelId
+        ? await this.prisma.inboundWebhookChannelRoute.findMany({
+            where: {
+              workspaceId,
+              channelId,
+              active: true,
+              validationStatus: "valid"
+            }
+          })
+        : [];
+      const resolved = {
+        businessConnectionId: route.businessConnectionId,
+        reportingAccountId: route.reportingAccountId,
+        conversionDestinationId: route.conversionDestinationId
+      };
+      if (
+        routes.filter((candidate) =>
+          inboundMetaRouteMatches(candidate, resolved)
+        ).length !== 1
+      )
+        throw new RouteNotReadyRetryError(ROUTE_NOT_READY_MESSAGE);
+    }
+    return route as never;
+  }
+
+  /**
+   * Regra de uma conversão por lead e pixel no reenvio: outro log do mesmo
+   * lead (variantes do telefone) já levou este evento ao destino do reenvio.
+   * Melhor esforço, sem a trava da criação; o lado seguro é não reenviar.
+   */
+  private async assertLeadNotConvertedElsewhere(
+    conversionEvent: ConversionEventLogRecord,
+    conversionDestinationId: string
+  ): Promise<void> {
+    const trigger = conversionEvent.sourceTrigger;
+    if (
+      !conversionEvent.workspaceId ||
+      !conversionEvent.leadId ||
+      !isLeadLifetimeEvent(conversionEvent.eventName) ||
+      !(
+        trigger === MANUAL_CONVERSION_TRIGGER ||
+        trigger === UAZAPI_AUTO_LEAD_TRIGGER ||
+        trigger.startsWith("inbound_webhook:")
+      )
+    )
+      return;
+    const identity = await resolveLeadConversionIdentity(
+      this.prisma as never,
+      conversionEvent.workspaceId,
+      conversionEvent.leadId
+    );
+    const source = conversionEvent.sourcePayload as
+      | { channelId?: unknown }
+      | null
+      | undefined;
+    const prior = await findPriorLeadLifetimeConversion(this.prisma as never, {
+      workspaceId: conversionEvent.workspaceId,
+      identity,
+      eventName: conversionEvent.eventName,
+      conversionDestinationId,
+      channelId: typeof source?.channelId === "string" ? source.channelId : null,
+      pipeline: pipelineOf(trigger),
+      ownDedupeKey: null,
+      includeAutoLead: true,
+      excludeLogId: conversionEvent.id
+    });
+    if (prior) throw new LeadAlreadyConvertedRetryError();
   }
 
   private toDto(event: DiagnosticEventRecord): DiagnosticEventDto {

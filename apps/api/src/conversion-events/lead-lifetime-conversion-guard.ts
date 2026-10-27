@@ -68,8 +68,10 @@ const NON_CONVERTING_LOG_STATUSES = [
   "skipped",
 ];
 /**
- * Status of a manual conversion imported from Dashboard Leads (Fase 6.9): it
- * was already sent there, so it counts as converting (see below).
+ * Status of a manual conversion recorded as "imported": an event already sent
+ * to Meta outside this installation, so it counts as converting (see below).
+ * 1.3.1: the import that wrote these rows (1.3.0) was removed; rows already in
+ * a database stay readable as an ordinary manual conversion.
  */
 export const IMPORTED_MANUAL_CONVERSION_STATUS = "imported";
 /** Bound of sibling leads (phone variants) and of prior logs inspected. */
@@ -274,12 +276,15 @@ export async function findPriorLeadLifetimeConversion(
     ownDedupeKey: string | null;
     /** Tarefa 20 (LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED): see AUTO_LEAD_*. */
     includeAutoLead?: boolean;
+    /** 1.3.1 (Reenviar recusados): the resent log itself never counts. */
+    excludeLogId?: string;
   },
 ): Promise<PriorLeadConversion | null> {
   if (!isLeadLifetimeEvent(input.eventName)) return null;
   const logs = await client.conversionEventLog.findMany({
     where: {
       workspaceId: input.workspaceId,
+      ...(input.excludeLogId ? { id: { not: input.excludeLogId } } : {}),
       leadId: { in: input.identity.leadIds },
       eventName: input.eventName,
       ...coveredConvertingLogWhere(input.includeAutoLead === true),
@@ -305,8 +310,9 @@ export const COVERED_CONVERTING_LOG_CONDITIONS = [
     sourceTrigger: MANUAL_CONVERSION_TRIGGER,
     status: { notIn: NON_CONVERTING_LOG_STATUSES },
   },
-  // Fase 6.9 (PR #92 do nod): a once-per-lead event Dashboard Leads already
-  // sent, imported as a manual conversion with status "imported". It never
+  // A once-per-lead event already sent outside this installation, kept as a
+  // manual conversion with status "imported" (rows of the 1.3.0 import,
+  // removed in 1.3.1). It never
   // goes to Meta again, but the lead IS converted: an automation or a new
   // manual registration must not send it a second time. Its destination is
   // unknown (null), so it counts for every pixel (the safe side).

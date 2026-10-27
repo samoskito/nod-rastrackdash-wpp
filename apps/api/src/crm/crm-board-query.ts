@@ -62,8 +62,8 @@ const ts = (date: Date) => Prisma.sql`CAST(${date.toISOString()} AS timestamp(3)
 
 /**
  * Valid conversion (design §2): sent or on its way, or a panel-only manual,
- * or (Fase 6.9, PR #92 do nod) a manual conversion imported from Dashboard
- * Leads, which that tool already sent to Meta.
+ * or a manual conversion with status "imported" (already sent to Meta outside
+ * this installation; rows of the 1.3.0 import, removed in 1.3.1).
  */
 export function crmValidConversionSql(alias = "c"): Prisma.Sql {
   const column = (name: string) => Prisma.raw(`${alias}."${name}"`);

@@ -2,6 +2,7 @@ import type {
   ProviderConversionObservationDetailDto,
   PurchaseReviewDto,
 } from "@wpptrack/shared";
+import { CONVERSION_SENDING_OFF_FIX } from "../../../lib/server-switch-copy";
 
 /**
  * Why a recognized event stayed in observation, and what a reprocess does
@@ -19,7 +20,7 @@ export const observationDetailCopy: Record<
   production_sending_disabled: {
     label: "Envio de conversões desligado no servidor",
     reprocess:
-      "Quem administra a instalação precisa religar o envio de conversões na configuração da API; depois, reprocessar envia à Meta.",
+      `${CONVERSION_SENDING_OFF_FIX} Depois, reprocessar envia à Meta.`,
   },
   lead_number_legacy_engine: {
     label: "Número do lead ainda no motor antigo de conversões",

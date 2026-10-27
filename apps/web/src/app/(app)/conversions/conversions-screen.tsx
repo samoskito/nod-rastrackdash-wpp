@@ -11,6 +11,7 @@ import type {
   ProviderConversionRuleOriginDto,
   ProviderConversionRuleUnifyCandidateDto,
 } from "@wpptrack/shared";
+import { CONVERSION_RULES_OFF_FIX } from "../../../lib/server-switch-copy";
 import {
   ArrowUpRight,
   History,
@@ -380,7 +381,7 @@ export function ConversionsScreen({
           </strong>
           <span>
             {rulesState === "disabled"
-              ? "Quem administra a instalação precisa ligar o recebimento de webhooks e as regras de conversão na configuração da API; depois, as regras aparecem aqui."
+              ? `${CONVERSION_RULES_OFF_FIX} Depois, as regras aparecem aqui.`
               : "Atualize a página em alguns instantes. Nenhuma regra foi alterada."}
           </span>
         </div>

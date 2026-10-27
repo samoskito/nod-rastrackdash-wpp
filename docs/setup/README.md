@@ -26,13 +26,13 @@ Os dois caminhos de instalação convergem nos mesmos passos de produto: licenç
 ## Ordem recomendada
 
 1. Escolha o caminho acima ([`local.md`](local.md) ou [`vps.md`](vps.md) → [`dokploy.md`](dokploy.md)).
-2. `pnpm setup` ou cópia manual de `.env.example` → `.env` (preencher `replace-me-*`) — veja a tabela completa em [`environment.md`](environment.md).
+2. `pnpm setup` ou cópia manual de `.env.example` → `.env` (preencher `replace-me-*` e `INBOUND_WEBHOOK_ENCRYPTION_KEY`, sem a qual a API não sobe) — veja a tabela completa em [`environment.md`](environment.md).
 3. Banco + migrations (`prisma migrate deploy` / `dev`).
 4. **Cliente de licença** — `LICENSE_SERVER_URL`, `LICENSE_KEY`, `LICENSE_ACCOUNT_IDENTITY`; a ativação acontece sozinha no boot da API → confira `/backoffice/license`.
 5. Crie o primeiro administrador e o primeiro workspace/cliente.
 6. [Meta Ads manual](meta-manual.md) (usuário do sistema) — anúncios e Pixel, não mensagens.
 7. WhatsApp, tudo em `/integrations` (o **Hub de Integrações**, com abas **WhatsApp**, **Atendimento e vendas**, **Anúncios** e **CRM**; cada card abre uma janela de conexão): aba **WhatsApp** com Uazapi BYO, WAHA (motor GoWS, servidor seu), WhatsApp Cloud API (Meta) e ROI Chat (WhatsApp API Oficial, Fase 6.8: uma conexão e uma URL por número, que recebe a entrada do anúncio e a compra; veja [`roichat.md`](roichat.md)) — Z-API e NOD API aparecem como **Em breve** (quem já tem conexão continua gerenciando); aba **Atendimento e vendas** com Umbler Talk, Gupshup, Data Crazy e Unnichat (conexão presa ao seu número; veja [`unnichat.md`](unnichat.md)); aba **Anúncios** com a Meta Ads (login social ou token; tráfego e conversões CAPI, sem receber conversas); aba **CRM** com o Kommo e o Pipedrive (guia em [`pipedrive.md`](pipedrive.md); a chave `PIPEDRIVE_CRM_ENCRYPTION_KEY` é gerada por você e diferente da do Kommo). Vendas da **Payt** viram conversões por uma regra em **Conversões** (sem conexão própria) — veja [`payt.md`](payt.md). Vendas da **Braip** (Fase 6.5) chegam por uma URL única da conta e viram conversões pela regra do número do comprador — veja [`braip.md`](braip.md). Vendas da **Yampi** (Fase 6.7, liberada para todos os workspaces) chegam do mesmo jeito, pelo webhook da loja, e a Compra leva os itens reais do pedido — veja [`yampi.md`](yampi.md). URL única da Payt e URLs por evento do Unnichat e da Umbler (Fase 5.3): [`url-unica.md`](url-unica.md). Leia o contrato de cada um e a matriz de ingestão em [`whatsapp-providers.md`](whatsapp-providers.md) antes de configurar (também: [`environment.md`](environment.md)).
-   - Precisa de **Conversões → Nova regra**? As envs `INBOUND_*` são **obrigatórias** e vêm desligadas por padrão.
+   - Precisa de **Conversões → Nova regra**? As envs `INBOUND_*` são **obrigatórias**; desde a 1.3.1 o `.env.example` já traz `INBOUND_WEBHOOKS_ENABLED`, `INBOUND_CONVERSION_RULES_ENABLED` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED` como `true` (confira no Dokploy) e falta só gerar `INBOUND_WEBHOOK_ENCRYPTION_KEY`.
 8. Personalização de marca opcional: `BRAND_*` (rodapé residual não removível).
 9. Deploy Dokploy (API) + Vercel (web) — ou permaneça local.
 10. [Guia de cobrança](billing/README.md) — opcional, gateway BYO do aluno.
@@ -66,8 +66,6 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [Provedores de WhatsApp, receivers e matriz de webhook](whatsapp-providers.md)
 - [Meta Cloud: produção e recuperação por owner](meta-cloud-recovery.md)
 - [Pipedrive CRM: etapa do negócio → conversão Meta](pipedrive.md)
-- [Formulários Meta: Lead Ads → etapa do CRM](meta-lead-forms.md)
-- [Migração do Dashboard Leads (configuração, importação e virada)](dashboard-leads-import.md)
 - [Payt: vendas como conversões (postback por regra)](payt.md)
 - [Braip: vendas como conversões (URL única)](braip.md)
 - [Yampi: vendas como conversões (URL única)](yampi.md)

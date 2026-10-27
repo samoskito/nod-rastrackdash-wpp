@@ -31,6 +31,9 @@ function matches(row: Row, where: Row): boolean {
         if (operator === "notIn")
           return !(operand as unknown[]).includes(row[key]);
         if (operator === "in") return (operand as unknown[]).includes(row[key]);
+        // 1.3.1: configurationBlockedConversionEventWhere exclui a etapa
+        // de CRM retirada (sourceTrigger: { not: ... }).
+        if (operator === "not") return row[key] !== operand;
         if (operator === "startsWith")
           return String(row[key]).startsWith(String(operand));
         if (operator === "gte") return (row[key] as Date) >= (operand as Date);

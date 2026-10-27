@@ -26,7 +26,6 @@ import {
   manualConversionEventLabel,
   manualConversionNotSentReasonLabels,
   type ManualConversionCancelResultDto,
-  type ManualConversionCrmStageResultDto,
   type ManualConversionInputDto,
   type ManualConversionNotSentReasonDto,
   type ManualConversionPreviewDto,
@@ -71,12 +70,6 @@ import {
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
 import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
 import { manualPurchaseSalesPlatformOf } from "./manual-conversion-sales-platforms";
-
-/**
- * 409 "Lead já convertido" of a once-per-lead event. Its own class so the
- * Fase 6.9 CRM stage (another dataset) can still be recorded once.
- */
-export class LeadAlreadyConvertedConflict extends ConflictException {}
 
 /** Rate limit per user (durable: counted on AuditLog, no extra table). */
 export const MANUAL_CONVERSION_RATE_LIMIT = {
@@ -348,34 +341,7 @@ export class ManualConversionService {
       mayExpireBeforeSend:
         !plan.notSentReason &&
         manualConversionMayExpireBeforeSend(input.occurredAt),
-      crmStage: await this.previewCrmStage(workspaceId, input, identity.leadIds),
     };
-  }
-
-  /** Fase 6.9: the CRM stage a QualifiedLead would record (confirmation). */
-  private async previewCrmStage(
-    workspaceId: string,
-    input: ManualConversionInputDto,
-    leadIds: string[],
-  ): Promise<ManualConversionPreviewDto["crmStage"]> {
-    if (input.eventName !== "QualifiedLead") return null;
-    if (typeof this.conversions.previewLeadFormCrmStage !== "function") return null;
-    try {
-      const preview = await this.conversions.previewLeadFormCrmStage(
-        workspaceId,
-        leadIds,
-      );
-      if (!preview) return null;
-      return input.sendToMeta
-        ? preview
-        : {
-            eventName: preview.eventName,
-            willSend: false,
-            reason: "Marcado para registrar só no painel (não enviar à Meta).",
-          };
-    } catch {
-      return null;
-    }
   }
 
   async create(
@@ -385,146 +351,7 @@ export class ManualConversionService {
     actor: ManualConversionActor,
   ): Promise<ManualConversionResultDto> {
     await this.assertKanbanSource(workspaceId, leadId, input);
-    const result = await this.createInTransaction(workspaceId, leadId, input, actor).catch(
-      async (error: unknown) => {
-        // Fase 6.9: the lead already has this QualifiedLead (another source),
-        // but the CRM stage of its Meta instant form is another dataset: it
-        // is still recorded once, and the 409 says so.
-        if (error instanceof LeadAlreadyConvertedConflict) {
-          const crm = await this.recordCrmStage(workspaceId, leadId, input, actor, null);
-          if (crm && crm.outcome !== "already_recorded")
-            throw new LeadAlreadyConvertedConflict(`${error.message} ${crm.message}`);
-        }
-        throw error;
-      },
-    );
-
-    if (result.replay)
-      return this.withCrmStage(
-        this.resultOf(result.replay, true),
-        await this.recordCrmStage(workspaceId, leadId, input, actor, result.replay.id),
-      );
-    const created = result.created!;
-    // CRM board cache (any source): the card moves on the next refresh.
-    this.crm?.invalidateWorkspace?.(workspaceId);
-    if (created.status === "ready_to_send") {
-      try {
-        await this.queue.enqueueSend(created.id, workspaceId);
-      } catch (error) {
-        // The log stays ready_to_send: the stalled-event retry requeues it.
-        this.logger.warn(
-          `manual conversion ${created.id} not enqueued: ${
-            error instanceof Error ? error.message : "unknown"
-          }`,
-        );
-      }
-    }
-    return this.withCrmStage(
-      this.resultOf(created, false),
-      await this.recordCrmStage(workspaceId, leadId, input, actor, created.id),
-    );
-  }
-
-  private withCrmStage(
-    result: ManualConversionResultDto,
-    crmStage: ManualConversionCrmStageResultDto | null,
-  ): ManualConversionResultDto {
-    return crmStage
-      ? { ...result, message: `${result.message} ${crmStage.message}`, crmStage }
-      : result;
-  }
-
-  /**
-   * Fase 6.9 (PR #91 do nod, "Qualificado" ligado ao #158/#176): a
-   * QualifiedLead registered here (lead detail or Kanban) also records the CRM
-   * stage of the lead's latest Meta instant-form submission, on the dataset of
-   * its form connection. Not when "Enviar à Meta" is off. Idempotent (its own
-   * dedupe key); it never fails the manual conversion itself.
-   */
-  private async recordCrmStage(
-    workspaceId: string,
-    leadId: string,
-    input: ManualConversionInputDto,
-    actor: ManualConversionActor,
-    originConversionEventLogId: string | null,
-  ): Promise<ManualConversionCrmStageResultDto | null> {
-    if (input.eventName !== "QualifiedLead" || !input.sendToMeta) return null;
-    if (typeof this.conversions.recordLeadFormCrmStage !== "function") return null;
-    try {
-      const lead = await this.prisma.lead.findFirst({
-        where: { workspaceId, id: leadId },
-        select: { id: true, phoneHash: true },
-      });
-      if (!lead) return null;
-      const identity = await resolveLeadConversionIdentity(
-        this.prisma as unknown as Prisma.TransactionClient,
-        workspaceId,
-        lead.id,
-      );
-      const recorded = await this.conversions.recordLeadFormCrmStage({
-        workspaceId,
-        leadId: lead.id,
-        leadIds: identity.leadIds,
-        phoneHash: lead.phoneHash,
-        actorUserId: actor.userId,
-        qualifiedAt: new Date(input.occurredAt),
-        originConversionEventLogId,
-      });
-      if (!recorded) return null;
-      const eventName = recorded.eventName;
-      const conversionEventLogId =
-        recorded.created[0] ?? recorded.duplicates[0] ?? "";
-      if (!conversionEventLogId) return null;
-      if (recorded.created.length === 0)
-        return {
-          outcome: "already_recorded",
-          eventName,
-          conversionEventLogId,
-          message: `A etapa ${eventName} do formulário Meta já estava registrada; nada foi reenviado.`,
-        };
-      if (recorded.status !== "ready_to_send")
-        return {
-          outcome: "not_eligible",
-          eventName,
-          conversionEventLogId,
-          message: `A etapa ${eventName} do formulário Meta não foi enviada: ${
-            recorded.errorMessage ?? "dados insuficientes"
-          }.`,
-        };
-      try {
-        await this.queue.enqueueSend(conversionEventLogId, workspaceId);
-      } catch (error) {
-        // Stays ready_to_send: the stalled-event retry requeues it.
-        this.logger.warn(
-          `crm stage ${conversionEventLogId} not enqueued: ${
-            error instanceof Error ? error.message : "unknown"
-          }`,
-        );
-      }
-      return {
-        outcome: "queued",
-        eventName,
-        conversionEventLogId,
-        message: `A etapa ${eventName} do formulário Meta foi enfileirada para o dataset do CRM.`,
-      };
-    } catch (error) {
-      this.logger.warn(
-        `crm stage of lead ${leadId} not recorded: ${
-          error instanceof Error ? error.message : "unknown"
-        }`,
-      );
-      return null;
-    }
-  }
-
-  /** The manual conversion itself (one transaction, as before Fase 6.9). */
-  private createInTransaction(
-    workspaceId: string,
-    leadId: string,
-    input: ManualConversionInputDto,
-    actor: ManualConversionActor,
-  ) {
-    return this.prisma.$transaction(async (transaction) => {
+    const result = await this.prisma.$transaction(async (transaction) => {
       const tx = transaction as Prisma.TransactionClient;
       // Per-user lock first: concurrent clicks of the same user serialize on
       // the hourly count, so the limit can never be exceeded.
@@ -564,10 +391,7 @@ export class ManualConversionService {
         plan,
         identity,
       );
-      if (duplicate)
-        throw duplicate.kind === "lead_already_converted"
-          ? new LeadAlreadyConvertedConflict(duplicate.message)
-          : new ConflictException(duplicate.message);
+      if (duplicate) throw new ConflictException(duplicate.message);
       // Decision 1a: the same +-24h event already exists for the lead: only
       // with the explicit "Registrar mesmo assim" (confirmDuplicate).
       const recent = await this.findRecentSameEvent(
@@ -592,7 +416,7 @@ export class ManualConversionService {
         // A concurrent identical click won the dedupe key, or the guard saw
         // a conversion the checks above could not (never expected).
         if (record.duplicateReasonCode)
-          throw new LeadAlreadyConvertedConflict(
+          throw new ConflictException(
             "Lead já convertido para este pixel: nada novo foi registrado.",
           );
         const existing = await tx.conversionEventLog.findFirst({
@@ -652,6 +476,24 @@ export class ManualConversionService {
         },
       };
     });
+
+    if (result.replay) return this.resultOf(result.replay, true);
+    const created = result.created!;
+    // CRM board cache (any source): the card moves on the next refresh.
+    this.crm?.invalidateWorkspace?.(workspaceId);
+    if (created.status === "ready_to_send") {
+      try {
+        await this.queue.enqueueSend(created.id, workspaceId);
+      } catch (error) {
+        // The log stays ready_to_send: the stalled-event retry requeues it.
+        this.logger.warn(
+          `manual conversion ${created.id} not enqueued: ${
+            error instanceof Error ? error.message : "unknown"
+          }`,
+        );
+      }
+    }
+    return this.resultOf(created, false);
   }
 
   /** Cancel while nothing reached Meta (decision 8): status -> skipped. */

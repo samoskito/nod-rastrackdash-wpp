@@ -8047,34 +8047,6 @@ th {
   gap: 26px;
 }
 
-/* Fase 6.9 (PR #91 do nod): Formulários Meta (Lead Ads) no card Meta. */
-.meta-lead-form-card {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  min-width: 0;
-}
-
-.meta-lead-form-card > header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.meta-lead-form-card code,
-.meta-config-section code {
-  overflow-wrap: anywhere;
-}
-
-.meta-lead-form-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .lead-attribution-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

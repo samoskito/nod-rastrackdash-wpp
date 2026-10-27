@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { BackofficeActionState } from "../../../components/backoffice-action-form";
 import { serverApiFetch } from "../../../lib/server-api";
+import { retryRejectedMessage } from "./retry-rejected-message";
 
 export async function retryMetaEventAction(
   _previousState: BackofficeActionState,
@@ -46,6 +47,11 @@ type RetryBlockedResult = {
   skipped: number;
   /** Part of skipped: older than Meta's 7-day window (absent on older APIs). */
   expired?: number;
+  /**
+   * Part of skipped (Reenviar recusados, 1.3.1): the current Meta route of the
+   * number or of the ad is not ready (absent on older APIs).
+   */
+  notReady?: number;
   failed: number;
 };
 
@@ -165,41 +171,6 @@ export async function retryRejectedMetaEventAction(
       nonce: Date.now()
     };
   }
-}
-
-function retryRejectedMessage(result: RetryBlockedResult): string {
-  const parts: string[] = [];
-
-  if (result.enqueued > 0) {
-    parts.push(
-      `${result.enqueued} ${plural(result.enqueued, "evento recusado enfileirado", "eventos recusados enfileirados")} com a configuração atual.`
-    );
-  }
-
-  const expired = Math.min(result.expired ?? 0, result.skipped);
-  const otherSkipped = result.skipped - expired;
-
-  if (otherSkipped > 0) {
-    parts.push(
-      `${otherSkipped} ${plural(otherSkipped, "já tinha sido reenviado e ficou", "já tinham sido reenviados e ficaram")} de fora.`
-    );
-  }
-
-  if (expired > 0) {
-    parts.push(
-      `${expired} ${plural(expired, "evento ficou", "eventos ficaram")} de fora por ter mais de 7 dias: a Meta não aceita mais.`
-    );
-  }
-
-  if (result.failed > 0) {
-    parts.push(
-      `${result.failed} ${plural(result.failed, "não pode ser enfileirado", "não puderam ser enfileirados")} agora; tente de novo em instantes.`
-    );
-  }
-
-  return parts.length
-    ? parts.join(" ")
-    : "Nenhum evento recusado para reenviar neste período.";
 }
 
 export async function retryRejectedMetaEventsAction(

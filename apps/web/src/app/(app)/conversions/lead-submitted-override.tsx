@@ -1,4 +1,5 @@
 import type { ConversionEventNameDto } from "@wpptrack/shared";
+import { CONVERSION_SENDING_OFF_FIX } from "../../../lib/server-switch-copy";
 
 /**
  * "Lead recebido pela regra" (porte do SaaS #155): com
@@ -135,5 +136,5 @@ export function activateRuleCopy(input: {
 /** Aviso da tela Conversões quando o envio está desligado na API. */
 export const conversionSendingOffCopy = {
   title: "Envio desligado no servidor",
-  body: "Nenhuma regra está mandando conversões para a Meta agora, nem as que aparecem como enviando (Kommo e Pipedrive também). O envio foi desligado na configuração da API. Para voltar a enviar, peça à sua IA ou a quem cuida do servidor para ligar o envio de conversões (guia: docs/setup/environment.md) e refazer o deploy da API.",
+  body: `Nenhuma regra está mandando conversões para a Meta agora, nem as que aparecem como enviando (Kommo e Pipedrive também). ${CONVERSION_SENDING_OFF_FIX}`,
 } as const;

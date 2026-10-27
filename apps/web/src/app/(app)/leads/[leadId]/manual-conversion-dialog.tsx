@@ -608,16 +608,9 @@ export function ManualConversionConfirm({
     initialConfirmDuplicate,
   );
   const blocked = Boolean(preview.duplicate);
-  // Fase 6.9: the lead is already converted on the WhatsApp pixel, but the
-  // CRM stage of its Meta instant form (another dataset) was never sent: the
-  // API records only that stage and answers "Lead já convertido".
-  const crmOnly =
-    blocked &&
-    preview.duplicate?.kind === "lead_already_converted" &&
-    Boolean(preview.crmStage?.willSend);
   const needsConfirmation = Boolean(preview.recentDuplicate);
   const disabled =
-    pending || (blocked && !crmOnly) || (needsConfirmation && !confirmDuplicate);
+    pending || blocked || (needsConfirmation && !confirmDuplicate);
   const destination =
     preview.destination.kind === "none"
       ? "Nenhum pixel resolvido para este lead"
@@ -659,18 +652,6 @@ export function ManualConversionConfirm({
               : (preview.notSentReasonLabel ?? "Não será enviado à Meta")}
           </dd>
         </div>
-        {preview.crmStage ? (
-          <div>
-            <dt>Formulário Meta (CRM)</dt>
-            <dd>
-              {preview.crmStage.willSend
-                ? `A etapa ${preview.crmStage.eventName} vai para o dataset do CRM`
-                : `Etapa ${preview.crmStage.eventName} não enviada: ${
-                    preview.crmStage.reason ?? "dados insuficientes"
-                  }`}
-            </dd>
-          </div>
-        ) : null}
       </dl>
       {notice ? <ManualConversionWarning title={notice} /> : null}
       {preview.mayExpireBeforeSend ? (
@@ -734,9 +715,7 @@ export function ManualConversionConfirm({
         >
           {pending
             ? "Registrando..."
-            : crmOnly
-              ? "Enviar só a etapa do formulário"
-              : needsConfirmation
+            : needsConfirmation
               ? "Registrar mesmo assim"
               : "Confirmar"}
         </button>

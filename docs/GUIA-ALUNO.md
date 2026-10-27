@@ -258,7 +258,7 @@ Veja o [guia de produção e recuperação](setup/meta-cloud-recovery.md).
 **Zap Responder** ainda não é implementado neste código. **Data Crazy** é
 suportado como conexão inbound por webhook, conforme o passo 10.2.
 
-⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API, desligadas por padrão.** Isso vale para as origens que usam gatilhos (Uazapi, NOD API, WAHA, Z-API, Umbler, Gupshup e Meta Cloud). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. O Data Crazy v1 é CTWA inbound somente e não usa gatilho de palavra-chave/tag. Checklist do mentor, direto na env da API (Dokploy):
+⚠️ **Gatilhos de conversão (`Nova regra`) exigem envs próprias da API.** Desde a 1.3.1 o `.env.example` já as traz como `true`; confira no Dokploy, onde uma instalação antiga pode ter `false` copiado do exemplo antigo. Isso vale para as origens que usam gatilhos (Uazapi, NOD API, WAHA, Z-API, Umbler, Gupshup e Meta Cloud). Sem essas envs, leads/webhooks podem chegar normalmente e mesmo assim `Gatilhos de conversão → Nova regra` não aparece. O Data Crazy v1 é CTWA inbound somente e não usa gatilho de palavra-chave/tag. Checklist do mentor, direto na env da API (Dokploy):
 
 1. `INBOUND_WEBHOOKS_ENABLED=true`
 2. `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gere com: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`
@@ -386,23 +386,26 @@ vínculo, reenvie.
   que usa o **Reenviar bloqueados e falhas de login da Meta**), limite de uso
   (volta para a fila sozinho) e bloqueio por política (368). Também ficam de
   fora os eventos da Kommo, do Pipedrive e do Meta Cloud, que só podem ser
-  enviados uma vez (a mesma regra do Reenviar bloqueados), e a etapa de CRM
-  dos Formulários Meta, que volta pelo Reenviar bloqueados.
+  enviados uma vez (a mesma regra do Reenviar bloqueados).
 - **Como:** corrija a causa mostrada no motivo da recusa (aba Resumo do
   **Inspecionar**). Depois use **Reenviar recusados** (em lote, com os filtros
   da tela, até 500 por clique) ou **Reenviar recusado** no Inspecionar do
   evento. O aviso antes do botão lembra: se a Meta recusar de novo, o evento
   volta a Falhou com o novo motivo.
 - **O que acontece:** o evento sai com o **mesmo identificador** (a Meta não
-  conta dois) e com a rota **recalculada com a configuração atual**; o pixel e
-  a página da tentativa recusada não são reaproveitados. Num lead de anúncio
-  sem o identificador do anúncio (página e pixel autorizados do número), o
-  destino é refeito com a configuração atual do número; se a rota do número
-  não estiver pronta, o reenvio é recusado com o motivo. Nos demais, vale o
-  destino atual do anúncio e, sem ele, o destino escolhido quando o evento
-  chegou, sempre com a página e o pixel atuais desse destino. Só eventos dos
-  últimos 7 dias (o prazo da Meta); um evento já enviado nunca é reenviado;
-  clicar duas vezes não envia duas vezes.
+  conta dois) e com o **destino recalculado com a configuração atual**: o
+  destino, o pixel e a página da tentativa recusada não são reaproveitados
+  (corrigir a Página ou o Pixel cria ou escolhe outro destino, e é esse que
+  vale). Num lead de anúncio sem o identificador do anúncio (página e pixel
+  autorizados do número), o destino é refeito com a configuração atual do
+  número. Na entrada do anúncio e nas regras de um número ou URL, vale a rota
+  atual do anúncio (o destino do anúncio ou o único destino autorizado da
+  conta), e, na entrada, ela precisa casar com a rota Meta do número. Nos
+  demais, vale o destino atual do anúncio, depois o destino da conta e, por
+  fim, o destino padrão da conexão. Se a rota atual não estiver pronta, o
+  evento fica de fora "por configuração", com o motivo, e continua Falhou.
+  Só eventos dos últimos 7 dias (o prazo da Meta); um evento já enviado nunca
+  é reenviado; clicar duas vezes não envia duas vezes.
 - **Quem pode:** owner ou administrador do workspace. Cada reenvio fica
   registrado na auditoria. Com a licença bloqueada, responde 423.
 ### 10.7 CRM Kanban (quadro dos leads por etapa da Jornada)
@@ -537,49 +540,7 @@ aditivas: faça o backup do PostgreSQL antes, como em toda migration).
 
 ### 10.10 Formulários Meta (Lead Ads) e importação do Dashboard Leads
 
-Opcional: só para quem anuncia com **formulário instantâneo** da Meta. A
-atualização tem uma migration aditiva (`20261027145000_meta_lead_forms`): faça
-o backup do PostgreSQL antes, como em toda migration. Não há variável nova; os
-formulários usam `META_APP_SECRET` (sem ela nenhum lead de formulário entra),
-`META_WEBHOOK_VERIFY_TOKEN`, `META_TOKEN_ENCRYPTION_KEY` e `API_PUBLIC_URL`, que
-já existem. Guia completo: `docs/setup/meta-lead-forms.md`.
-
-- **Configurar:** no app Meta, assine o campo `leadgen` do objeto Page com a
-  URL `{API_PUBLIC_URL}/webhooks/meta`. Em Integrações → Anúncios → card
-  **Meta** → **Formulários Meta**, cadastre a Página (token de System User e o
-  dataset do CRM) e clique em **Assinar Página**. A conexão já nasce ativa: não
-  há nada para liberar.
-- **Leads:** cada formulário enviado vira um lead com a origem "Formulário
-  Meta". Se a pessoa já conversava no WhatsApp, é o mesmo lead, com a mesma
-  atribuição.
-- **Etapa do CRM:** ao registrar **Lead qualificado** no lead (conversão
-  manual, 10.5) ou arrastar o card para essa coluna no **CRM** (10.7), a etapa
-  vai para o dataset do CRM da Meta, uma vez por formulário. A confirmação da
-  conversão manual mostra se ela será enviada. Um lead com formulário e
-  WhatsApp manda os dois eventos, cada um ao seu destino.
-- **Remover ou desativar:** uma conexão que **já recebeu formulários** não pode
-  ser removida (o botão some e a API responde 409, para não apagar o
-  histórico): use **Desativar**. Desativada, a Página para de receber leads (o
-  webhook responde 2xx e ignora, então a Meta não reentrega) e as etapas do CRM
-  dela ficam bloqueadas; envios, leads e etapas ficam guardados, e
-  **Reativar** volta a receber. Sem nenhum formulário recebido, **Remover**
-  continua disponível. Desativada, a Página segue reservada para o mesmo
-  workspace.
-- **Falhas:** configuração faltando (dataset, conexão desativada) e falha de login
-  da Meta aparecem em Eventos Meta e voltam com **Reenviar bloqueados**.
-- **Lead que chegou sem leitura (1.3.1):** se o token da Página venceu, os
-  leads chegam mas os dados não são lidos (a conexão mostra "Reconecte a
-  Página" e "Sem leitura (7 dias)"). Salve um token novo em **Editar** (ou
-  clique em **Assinar Página de novo**): os leads dos últimos 7 dias são lidos
-  de novo na hora, sem duplicar. O botão **Ler de novo** faz o mesmo. O aviso
-  só some quando o token é trocado, não ao editar o nome ou reativar.
-- **Dashboard Leads:** quem migra daquela ferramenta pode importar o histórico
-  com o comando `dashboard-leads:import` (simula por padrão; o que já foi
-  enviado à Meta não é reenviado). Passo a passo:
-  `docs/setup/dashboard-leads-import.md`. As credenciais do Supabase vão só na
-  linha do comando, nunca no `.env`.
-- **Licença bloqueada:** a seção mostra as conexões, mas criar, alterar,
-  assinar, desativar, reativar e remover respondem 423; a importação com `--apply` é recusada.
+Retirados na 1.3.1: os Formulários Meta e a importação do Dashboard Leads da 1.3.0 saíram do produto. As tabelas criadas pela migration da 1.3.0 ficam no banco, sem uso.
 
 ## 11. Marca (whitelabel) — opcional
 
