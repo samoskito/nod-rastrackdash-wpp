@@ -12,7 +12,9 @@ import { AuthService } from "../../src/auth/auth.service";
 import {
   canRetryFixableMetaRejectionConversionEvent,
   isFixableMetaRejectionResponse,
+  isMetaAuthFailureConversionEvent,
   META_EVENT_TIME_WINDOW_MS,
+  metaAuthFailureConversionEventWhere,
 } from "../../src/conversion-events/conversion-event-retry";
 import { ConversionEventsService } from "../../src/conversion-events/conversion-events.service";
 import { DiagnosticsService } from "../../src/diagnostics/diagnostics.service";
@@ -260,7 +262,15 @@ describe("DiagnosticsService.retryRejectedConversionEvent", () => {
         input,
         context,
       ),
-    ).resolves.toEqual({ claimed: 1, enqueued: 1, skipped: 1, expired: 1, failed: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      enqueued: 1,
+      skipped: 1,
+      expired: 1,
+      notReady: 0,
+      alreadyConverted: 0,
+      failed: 0,
+    });
     expect(h.queue.retrySend).toHaveBeenCalledTimes(1);
   });
 });
@@ -318,14 +328,24 @@ describe("destino CTWA (página + pixel do número) refeito no reenvio", () => {
   });
 });
 
-describe("rota recalculada no envio (configuração atual)", () => {
-  // Caminho por conta/anúncio: o resolver lê pixel e página do destino atual
-  // (e prefere o destino atual do anúncio); o pixel e a página gravados na
-  // tentativa recusada são apagados para nunca servirem de reserva.
-  it("depois do reenvio, o envio usa o pixel e a página atuais do destino, não os gravados", async () => {
-    const encryption = new MetaTokenEncryptionService({
-      META_TOKEN_ENCRYPTION_KEY: "test-only-encryption-key",
-    });
+describe("destino recalculado no envio (configuração atual)", () => {
+  // O par Página/Pixel é a identidade do destino: corrigir o par cria ou
+  // escolhe OUTRO destino. O reenvio não pode ficar preso ao destino da
+  // tentativa recusada (metaConversionDestinationId).
+  const encryption = new MetaTokenEncryptionService({
+    META_TOKEN_ENCRYPTION_KEY: "test-only-encryption-key",
+  });
+  const destinations: Record<string, { pixelId: string; pageId: string }> = {
+    "destination-a": { pixelId: "pixel-antigo", pageId: "pagina-errada" },
+    "destination-b": { pixelId: "pixel-novo", pageId: "pagina-do-anuncio" },
+  };
+
+  function metaWorld(options: {
+    defaultDestinationId: string;
+    adAssignmentDestinationId?: string | null;
+    allowedDestinationIds?: string[];
+    channelRoutes?: Array<Record<string, unknown>>;
+  }) {
     const credential = {
       id: "credential-a",
       workspaceId: "workspace_1",
@@ -339,8 +359,14 @@ describe("rota recalculada no envio (configuração atual)", () => {
       status: "active",
       credentialId: credential.id,
       credential,
-      defaultConversionDestinationId: "destination-a",
+      defaultConversionDestinationId: options.defaultDestinationId,
     };
+    const allowed = (options.allowedDestinationIds ?? []).map((id) => ({
+      workspaceId: "workspace_1",
+      reportingAccountId: "account-a",
+      conversionDestinationId: id,
+      active: true,
+    }));
     const account = {
       id: "account-a",
       workspaceId: "workspace_1",
@@ -348,46 +374,371 @@ describe("rota recalculada no envio (configuração atual)", () => {
       adAccountId: "act-a",
       businessConnectionId: connection.id,
       conversionDestinationId: null,
+      allowedDestinations: allowed,
     };
-    // O aluno corrigiu o vínculo: o destino agora aponta para a página certa.
-    const destination = {
-      id: "destination-a",
-      workspaceId: "workspace_1",
-      status: "configured",
-      pixelId: "pixel-corrigido",
-      pageId: "pagina-do-anuncio",
-    };
-    const prisma = {
+    return {
       metaIntegration: { findUnique: vi.fn(async () => null) },
       metaReportingAccount: {
         findFirst: vi.fn(async () => account),
         findMany: vi.fn(async () => [account]),
       },
       metaBusinessConnection: { findFirst: vi.fn(async () => connection) },
-      metaAd: { findFirst: vi.fn(async () => null) },
-      metaConversionDestination: { findFirst: vi.fn(async () => destination) },
-      metaReportingAccountDestination: { findMany: vi.fn(async () => []) },
+      metaAd: {
+        findFirst: vi.fn(async () =>
+          options.adAssignmentDestinationId === undefined
+            ? null
+            : {
+                adAccountId: "act-a",
+                destinationAssignment: options.adAssignmentDestinationId
+                  ? {
+                      reportingAccountId: "account-a",
+                      conversionDestinationId: options.adAssignmentDestinationId,
+                    }
+                  : null,
+              },
+        ),
+      },
+      metaConversionDestination: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
+          destinations[where.id]
+            ? {
+                id: where.id,
+                workspaceId: "workspace_1",
+                status: "configured",
+                ...destinations[where.id],
+              }
+            : null,
+        ),
+      },
+      metaReportingAccountDestination: { findMany: vi.fn(async () => allowed) },
+      inboundWebhookChannelRoute: {
+        findMany: vi.fn(async () => options.channelRoutes ?? []),
+      },
     };
-    const resolver = new MetaConnectionResolverService(prisma as never, encryption);
+  }
+
+  function harness(
+    world: ReturnType<typeof metaWorld>,
+    events: Array<ReturnType<typeof rejected>>,
+  ) {
+    const h = diagnosticsHarness(events);
+    Object.assign(h.prisma, world);
+    const resolver = new MetaConnectionResolverService(world as never, encryption);
     const sender = new ConversionEventsService(
-      prisma as never,
+      world as never,
       {} as never,
       encryption,
       resolver,
       {} as never,
     );
+    const routeOf = (event: Record<string, unknown>) =>
+      (sender as any).resolveDeliveryRoute(event);
+    return { ...h, routeOf };
+  }
 
-    const h = diagnosticsHarness([
-      rejected({ metaAccountId: "act-a", metaConversionDestinationId: "destination-a" }),
-    ]);
+  const refusedOnA = (overrides: Record<string, unknown> = {}) =>
+    rejected({
+      sourceTrigger: "manual_conversion",
+      metaAccountId: "act-a",
+      metaBusinessConnectionId: "connection-a",
+      metaConversionDestinationId: "destination-a",
+      adId: null,
+      ...overrides,
+    });
+
+  it("destino A recusado; o aluno cria o destino B como padrão: o reenvio vai para B", async () => {
+    const world = metaWorld({
+      defaultDestinationId: "destination-b",
+      allowedDestinationIds: ["destination-a", "destination-b"],
+    });
+    const h = harness(world, [refusedOnA()]);
+    // Antes da correção, o destino gravado (A) prendia o envio.
+    await expect(h.routeOf(h.events[0]!)).resolves.toMatchObject({
+      conversionDestinationId: "destination-a",
+    });
+
     await h.service.retryRejectedConversionEvent("rejected_1", input, context);
-    const route = await (sender as any).resolveDeliveryRoute(h.events[0]);
-    expect(route).toMatchObject({
-      pixelId: "pixel-corrigido",
+
+    expect(h.events[0]).toMatchObject({
+      eventId: "evento_meta_1",
+      metaAccountId: "act-a",
+      metaBusinessConnectionId: "connection-a",
+      // O destino atual é gravado no lugar do recusado (nunca nulo: um log
+      // sem destino bloquearia o lead em todos os pixels).
+      metaConversionDestinationId: "destination-b",
+      pixelId: null,
+      pageId: null,
+    });
+    await expect(h.routeOf(h.events[0]!)).resolves.toMatchObject({
+      conversionDestinationId: "destination-b",
+      pixelId: "pixel-novo",
       pageId: "pagina-do-anuncio",
       routeError: null,
     });
-    expect(h.events[0]).toMatchObject({ pixelId: null, pageId: null });
+    expect(h.prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          beforeSummary: expect.objectContaining({
+            pixelId: "pixel-antigo",
+            pageId: "pagina-errada",
+            metaConversionDestinationId: "destination-a",
+            metaBusinessConnectionId: "connection-a",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("destino do anúncio trocado de A para B: o reenvio vai para B, sem 'destino explícito difere'", async () => {
+    const world = metaWorld({
+      defaultDestinationId: "destination-a",
+      adAssignmentDestinationId: "destination-b",
+      allowedDestinationIds: ["destination-a", "destination-b"],
+    });
+    const h = harness(world, [refusedOnA({ adId: "ad-1" })]);
+    await expect(h.routeOf(h.events[0]!)).resolves.toMatchObject({
+      routeError: "O destino explícito difere da rota do anúncio",
+    });
+
+    await h.service.retryRejectedConversionEvent("rejected_1", input, context);
+
+    await expect(h.routeOf(h.events[0]!)).resolves.toMatchObject({
+      conversionDestinationId: "destination-b",
+      pixelId: "pixel-novo",
+      routeError: null,
+    });
+  });
+
+  it("entrada do número (inbound_webhook:<provedor>): refaz a rota atual do anúncio e do número", async () => {
+    const world = metaWorld({
+      defaultDestinationId: "destination-a",
+      adAssignmentDestinationId: "destination-b",
+      allowedDestinationIds: ["destination-a", "destination-b"],
+      channelRoutes: [
+        {
+          metaBusinessConnectionId: "connection-a",
+          metaReportingAccountId: "account-a",
+          metaConversionDestinationId: null,
+        },
+      ],
+    });
+    const h = harness(world, [
+      refusedOnA({
+        sourceTrigger: "inbound_webhook:uazapi",
+        adId: "ad-1",
+        sourcePayload: { inboundEventId: "entrada_1", channelId: "canal_1" },
+      }),
+    ]);
+
+    await h.service.retryRejectedConversionEvent("rejected_1", input, context);
+
+    expect(h.events[0]).toMatchObject({
+      metaAccountId: "act-a",
+      metaBusinessConnectionId: "connection-a",
+      metaConversionDestinationId: "destination-b",
+    });
+    await expect(h.routeOf(h.events[0]!)).resolves.toMatchObject({
+      conversionDestinationId: "destination-b",
+      routeError: null,
+    });
+  });
+
+  it("número sem rota que case com a rota atual: não reenvia e o lote conta como fora por configuração", async () => {
+    const world = metaWorld({
+      defaultDestinationId: "destination-a",
+      adAssignmentDestinationId: "destination-b",
+      allowedDestinationIds: ["destination-a", "destination-b"],
+      channelRoutes: [
+        {
+          metaBusinessConnectionId: "connection-a",
+          metaReportingAccountId: "account-a",
+          metaConversionDestinationId: "destination-a",
+        },
+      ],
+    });
+    const h = harness(world, [
+      refusedOnA({
+        sourceTrigger: "inbound_webhook:uazapi",
+        adId: "ad-1",
+        sourcePayload: { inboundEventId: "entrada_1", channelId: "canal_1" },
+      }),
+    ]);
+
+    await expect(
+      h.service.retryRejectedConversionEvents(["rejected_1"], input, context),
+    ).resolves.toEqual({
+      claimed: 0,
+      enqueued: 0,
+      skipped: 1,
+      expired: 0,
+      notReady: 1,
+      alreadyConverted: 0,
+      failed: 0,
+    });
+    expect(h.events[0]).toMatchObject({
+      status: "error",
+      metaConversionDestinationId: "destination-a",
+    });
+    expect(h.queue.retrySend).not.toHaveBeenCalled();
+  });
+
+  it("a fila falhou: devolve destino, conta, conexão, pixel e página", async () => {
+    const world = metaWorld({
+      defaultDestinationId: "destination-a",
+      adAssignmentDestinationId: "destination-b",
+      allowedDestinationIds: ["destination-a", "destination-b"],
+    });
+    const h = harness(world, [
+      refusedOnA({ sourceTrigger: "inbound_webhook:waha:message_phrase", adId: "ad-1" }),
+    ]);
+    h.queue.retrySend.mockRejectedValueOnce(new Error("fila fora"));
+
+    await expect(
+      h.service.retryRejectedConversionEvent("rejected_1", input, context),
+    ).rejects.toThrow("fila fora");
+
+    expect(h.events[0]).toMatchObject({
+      status: "error",
+      errorCode: "MetaCapiRejected",
+      metaAccountId: "act-a",
+      metaBusinessConnectionId: "connection-a",
+      metaConversionDestinationId: "destination-a",
+      pixelId: "pixel-antigo",
+      pageId: "pagina-errada",
+    });
+  });
+});
+
+describe("uma conversão por lead e pixel no reenvio", () => {
+  it("o destino atual já recebeu o evento de outro log do lead: não reenvia", async () => {
+    const encryption = new MetaTokenEncryptionService({
+      META_TOKEN_ENCRYPTION_KEY: "test-only-encryption-key",
+    });
+    const h = diagnosticsHarness([
+      rejected({
+        sourceTrigger: "manual_conversion",
+        leadId: "lead_1",
+        metaAccountId: "act-a",
+        metaBusinessConnectionId: "connection-a",
+        metaConversionDestinationId: "destination-a",
+        adId: null,
+      }),
+      rejected({
+        id: "rejected_2",
+        sourceTrigger: "manual_conversion",
+        leadId: "lead_2",
+        metaAccountId: "act-a",
+        metaBusinessConnectionId: "connection-a",
+        metaConversionDestinationId: "destination-a",
+        adId: null,
+      }),
+    ]);
+    Object.assign(h.prisma, {
+      metaReportingAccount: {
+        findFirst: vi.fn(async () => ({
+          id: "account-a",
+          active: true,
+          businessConnectionId: "connection-a",
+          conversionDestinationId: null,
+        })),
+      },
+      metaBusinessConnection: {
+        findFirst: vi.fn(async () => ({
+          defaultConversionDestinationId: "destination-b",
+        })),
+      },
+      metaAd: { findFirst: vi.fn(async () => null) },
+      metaConversionDestination: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({
+          id: where.id,
+        })),
+      },
+      lead: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({
+          id: where.id,
+          phoneHash: `hash_${where.id}`,
+          phoneDisplay: null,
+        })),
+        findMany: vi.fn(async () => []),
+      },
+    });
+    // lead_1 já tem o Lead recebido enviado ao destino B por outra origem.
+    (h.prisma.conversionEventLog as any).findMany = vi.fn(
+      async ({ where }: { where: { leadId: { in: string[] } } }) =>
+        where.leadId.in.includes("lead_1")
+          ? [
+              {
+                id: "outro_log",
+                leadId: "lead_1",
+                eventName: "LeadSubmitted",
+                dedupeKey: "dedupe_outro",
+                sourceTrigger: "inbound_webhook:waha",
+                sourcePayload: { channelId: "canal_2" },
+                metaConversionDestinationId: "destination-b",
+                status: "sent",
+              },
+            ]
+          : [],
+    );
+    void encryption;
+
+    await expect(
+      h.service.retryRejectedConversionEvents(
+        ["rejected_1", "rejected_2"],
+        input,
+        context,
+      ),
+    ).resolves.toEqual({
+      claimed: 1,
+      enqueued: 1,
+      skipped: 1,
+      expired: 0,
+      notReady: 0,
+      alreadyConverted: 1,
+      failed: 0,
+    });
+    expect(h.events[0]).toMatchObject({
+      status: "error",
+      metaConversionDestinationId: "destination-a",
+    });
+    expect(h.events[1]).toMatchObject({
+      status: "ready_to_send",
+      metaConversionDestinationId: "destination-b",
+    });
+    // O próprio log nunca conta.
+    expect((h.prisma.conversionEventLog as any).findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: { not: "rejected_1" } }),
+      }),
+    );
+  });
+});
+
+describe("Reenviar bloqueados e falhas de login: Meta Cloud fica de fora", () => {
+  const authFailure = (sourceTrigger: string) => ({
+    status: "error",
+    errorCode: "MetaCapiRejected",
+    sourceTrigger,
+    providerResponseSummary: { httpStatus: 400, error: { code: 190 } },
+  });
+
+  it("a trava de envio único do Meta Cloud deixaria o evento para sempre na fila", () => {
+    expect(isMetaAuthFailureConversionEvent(authFailure("inbound_webhook:waha"))).toBe(
+      true,
+    );
+    for (const sourceTrigger of [
+      "inbound_webhook:meta_cloud",
+      "kommo_stage",
+      "pipedrive_stage",
+    ])
+      expect(isMetaAuthFailureConversionEvent(authFailure(sourceTrigger))).toBe(false);
+    expect(metaAuthFailureConversionEventWhere.sourceTrigger.notIn).toEqual(
+      expect.arrayContaining([
+        "inbound_webhook:meta_cloud",
+        "kommo_stage",
+        "pipedrive_stage",
+      ]),
+    );
   });
 });
 
@@ -407,6 +758,8 @@ async function controllerHarness(role: string, accessMode = "membership") {
       enqueued: 1,
       skipped: 0,
       expired: 0,
+      notReady: 0,
+      alreadyConverted: 0,
       failed: 0,
     })),
   };

@@ -15,7 +15,6 @@ import {
   Post,
   Query,
   RawBody,
-  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { safeErrorName } from "../common/errors/safe-error-name";
@@ -51,8 +50,6 @@ import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.p
 import { mapWahaSessionStatus } from "../integrations/whatsapp-providers/waha-session-status";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
 import { LeadsService } from "../leads/leads.service";
-import { parseLeadgenPayload } from "../meta-lead-forms/meta-leadgen";
-import { MetaLeadFormsService } from "../meta-lead-forms/meta-lead-forms.service";
 import {
   parseUazapiWebhook,
   type ParsedUazapiWebhook,
@@ -140,9 +137,6 @@ export class WebhooksController {
     @Optional()
     @Inject(RUNTIME_ENV)
     private readonly env: RuntimeEnv = process.env,
-    @Optional()
-    @Inject(MetaLeadFormsService)
-    private readonly metaLeadForms?: MetaLeadFormsService,
   ) {}
 
   @Get("meta")
@@ -372,72 +366,6 @@ export class WebhooksController {
     @Headers("x-workspace-id") workspaceId?: string,
   ) {
     this.assertMetaWebhookSignature(rawBody, signature);
-
-    // Fase 6.9 (PR #91 do nod): instant-form leads of a Page with an active
-    // lead form connection become leads. Other Pages keep the diagnostic-only
-    // path below.
-    // Only the leadgen changes of those Pages are ingested; whatever else the
-    // delivery carries (other Pages, other fields) still goes to the
-    // diagnostic path. Only a TRANSIENT Graph read failure (network, 5xx,
-    // usage limit) answers 503 so Meta redelivers; a permanent one (dead
-    // token, missing permission) is saved as fetch_failed and answered 2xx:
-    // redelivering cannot fix it, and hours of 503 may make Meta disable the
-    // app subscription that feeds this whole endpoint. The connection screen
-    // asks to reconnect the Page or grant the permission.
-    // A Page whose connection was deactivated (it already received forms, so
-    // it can only be deactivated, not removed) is answered 2xx and ignored:
-    // nothing is read or saved and Meta does not redeliver.
-    const leadgen = parseLeadgenPayload(body);
-    if (leadgen && leadgen.changes.length > 0 && this.metaLeadForms) {
-      const pageIds = leadgen.changes.map((change) => change.page_id);
-      const pages = await this.metaLeadForms.activeConnectionPages(
-        pageIds,
-        workspaceId,
-      );
-      const routable = leadgen.changes.filter((change) =>
-        pages.has(change.page_id),
-      );
-      const inactive =
-        routable.length < leadgen.changes.length
-          ? await this.metaLeadForms.inactiveConnectionPages(
-              pageIds.filter((pageId) => !pages.has(pageId)),
-              workspaceId,
-            )
-          : new Set<string>();
-      const ignored = leadgen.changes.filter(
-        (change) => !pages.has(change.page_id) && inactive.has(change.page_id),
-      ).length;
-      if (routable.length > 0 || ignored > 0) {
-        const result =
-          routable.length > 0
-            ? await this.metaLeadForms.ingestLeadgen(routable, { workspaceId })
-            : { received: 0, saved: 0, duplicates: 0, unrouted: 0, fetchFailed: 0 };
-        if (routable.length + ignored < leadgen.total) {
-          try {
-            const context = await this.resolveMetaContext(body);
-            await this.recordMetaWebhook(body, context);
-          } catch (error) {
-            this.logger.warn(
-              `meta webhook: parte sem conexão de formulário não registrada (${
-                error instanceof Error ? error.message : "erro"
-              })`,
-            );
-          }
-        }
-        if (result.fetchFailed > 0)
-          throw new ServiceUnavailableException(
-            "Leitura do lead na Graph API falhou; a Meta vai reenviar",
-          );
-        if (ignored > 0) {
-          this.logger.log(
-            `meta webhook: ${ignored} leadgen de Página com conexão desativada ignorado(s)`,
-          );
-          return { ...result, ignoredInactive: ignored };
-        }
-        return result;
-      }
-    }
-
     const context = await this.resolveMetaContext(body);
 
     if (workspaceId && workspaceId !== context.workspaceId) {

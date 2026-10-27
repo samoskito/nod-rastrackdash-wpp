@@ -34,6 +34,11 @@ import {
 } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
 import { licenseLockedMessageFor } from "../../../lib/license-locked-message";
+import {
+  CONVERSION_RULES_OFF_FIX,
+  CONVERSION_SENDING_OFF_FIX,
+  WEBHOOK_PRODUCTION_OFF_FIX,
+} from "../../../lib/server-switch-copy";
 import { isApiRequestError, serverApiFetch } from "../../../lib/server-api";
 
 /**
@@ -150,9 +155,9 @@ const curatedMessages: Readonly<Record<string, string>> = {
   "Cada combinacao de atributos do catalogo deve ser unica":
     "Cada opção do catálogo deve ser única.",
   "Regras de conversao de provedores estao desativadas":
-    "As regras de conversão estão desligadas nesta instalação.",
+    `As regras de conversão estão desligadas nesta instalação. ${CONVERSION_RULES_OFF_FIX}`,
   "Eventos de conversao por provedor ainda nao estao habilitados":
-    "As regras de conversão estão desligadas nesta instalação.",
+    `As regras de conversão estão desligadas nesta instalação. ${CONVERSION_RULES_OFF_FIX}`,
   "Selecione ao menos duas regras": "Escolha ao menos duas regras iguais.",
   "Selecione ao menos um numero": "Escolha ao menos um número.",
   "Algumas destas regras ja foram unificadas; atualize a lista":
@@ -183,9 +188,9 @@ const curatedMessages: Readonly<Record<string, string>> = {
   "Ative a regra antes de promover para producao":
     "Reative a regra antes de ativar o envio automático.",
   "Envio automatico de webhooks ainda nao esta habilitado":
-    "O envio automático está desligado nesta instalação.",
+    `O envio automático está desligado nesta instalação. ${WEBHOOK_PRODUCTION_OFF_FIX}`,
   "Materializacao de conversoes por provedor ainda nao esta habilitada":
-    "O envio automático está desligado nesta instalação.",
+    `O envio de conversões está desligado nesta instalação. ${CONVERSION_SENDING_OFF_FIX}`,
   "O catalogo desta regra nao esta ativo": "O catálogo desta regra não está ativo.",
   "Catalogo estruturado nao configurado":
     "Esta regra ainda não tem catálogo configurado.",
@@ -691,7 +696,7 @@ function createdRuleMessage(
   const base =
     mode === "production"
       ? "Regra criada e enviando: cada conversão reconhecida vai para a Meta pelo destino de cada número."
-      : "Regra criada sem envio: o envio de conversões está desligado na configuração da API, ou esta integração ainda não pode enviar. Depois de resolver, use “Ativar envio” nesta regra.";
+      : `Regra criada sem envio: o envio de conversões está desligado no servidor, ou esta integração ainda não pode enviar. Se for o envio desligado: ${CONVERSION_SENDING_OFF_FIX} Depois de resolver, use “Ativar envio” nesta regra.`;
   return hasWebhookUrl
     ? `${base} Copie o endereço agora: ele não é exibido de novo.`
     : base;

@@ -440,6 +440,7 @@ model Workspace {
   members                          WorkspaceMember[]
   invites                          WorkspaceInvite[]
   whatsappInstances                WhatsappInstance[]
+  /// Sem uso desde a 1.3.1; mantido para não gerar drift; decisão futura do Samuel.
   metaLeadFormConnections          MetaLeadFormConnection[]
   metaLeadSubmissions              MetaLeadSubmission[]
   uazapiChatLabelStates            UazapiChatLabelState[]
@@ -1499,6 +1500,7 @@ model Lead {
   purchaseReviews             PurchaseReview[]
   providerConversionDecisions ProviderConversionDecisionAudit[]
   pipedriveWebhookEvents      PipedriveWebhookEvent[]
+  /// Sem uso desde a 1.3.1; mantido para não gerar drift; decisão futura do Samuel.
   metaLeadSubmissions         MetaLeadSubmission[]
 
   @@unique([workspaceId, id])
@@ -2818,10 +2820,9 @@ model KommoConversionDedupe {
   @@index([publicationStatus, publicationNextAttemptAt])
 }
 
-/// Fase 6.9 (PR #91 do nod): formulários instantâneos da Meta (Lead Ads) de
-/// uma Página roteados para este workspace. Tokens em AES-256-GCM com
-/// META_TOKEN_ENCRYPTION_KEY: o token Graph lê os leads (leads_retrieval); o
-/// token do dataset envia a etapa do CRM (Conversions API for CRM).
+/// Sem uso desde a 1.3.1; mantido para não gerar drift; decisão futura do
+/// Samuel. Tabela criada pela migration 20261027145000 (1.3.0): conexões de
+/// formulários instantâneos da Meta por Página, com tokens cifrados.
 model MetaLeadFormConnection {
   id                  String    @id @default(cuid())
   workspaceId         String
@@ -2835,10 +2836,6 @@ model MetaLeadFormConnection {
   graphTokenIv        String
   graphTokenTag       String
   graphTokenLast4     String
-  /// Quando o token Graph foi salvo (criação ou troca). O aviso "Reconecte a
-  /// Página" some só quando o token é trocado depois da falha, não em
-  /// qualquer edição. Nulo em conexões antigas: vale createdAt.
-  graphTokenUpdatedAt DateTime?
   capiTokenEncrypted  String?
   capiTokenIv         String?
   capiTokenTag        String?
@@ -2856,9 +2853,9 @@ model MetaLeadFormConnection {
   @@index([pageId, active])
 }
 
-/// Um envio de formulário instantâneo. O Lead é uma pessoa por telefone: quem
-/// preenche o formulário e conversa no WhatsApp é o mesmo Lead; cada envio
-/// guarda o seu ID de lead da Meta, que o evento de CRM usa (user_data.lead_id).
+/// Sem uso desde a 1.3.1; mantido para não gerar drift; decisão futura do
+/// Samuel. Tabela criada pela migration 20261027145000 (1.3.0): envios de
+/// formulário instantâneo lidos na 1.3.0 (dados pessoais).
 model MetaLeadSubmission {
   id            String    @id @default(cuid())
   workspaceId   String

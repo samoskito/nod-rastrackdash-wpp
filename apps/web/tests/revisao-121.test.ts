@@ -2,8 +2,6 @@
 
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import type { MetaLeadFormConnectionDto } from "@wpptrack/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setupUser } from "./user-shim";
 import { buildProviderRuleRows } from "../src/app/(app)/conversions/conversion-rules-view";
@@ -21,15 +19,6 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
-vi.mock("../src/app/(app)/integrations/meta-lead-form-actions", () => ({
-  createMetaLeadFormConnectionAction: vi.fn(),
-  deleteMetaLeadFormConnectionAction: vi.fn(),
-  setMetaLeadFormConnectionActiveAction: vi.fn(),
-  subscribeMetaLeadFormPageAction: vi.fn(),
-  updateMetaLeadFormConnectionAction: vi.fn(),
-}));
-
-import { MetaLeadFormsPanel } from "../src/app/(app)/integrations/meta-lead-forms-panel";
 
 afterEach(() => {
   cleanup();
@@ -40,7 +29,7 @@ afterEach(() => {
 /**
  * Revisão do #121: D1 (a regra "Lead recebido" em observação não é ligada
  * pela atualização; o aluno liga com "Ligar esta regra"), aviso de envio
- * desligado no servidor e aviso de reconexão nos Formulários Meta.
+ * desligado no servidor.
  */
 
 function props(
@@ -124,7 +113,7 @@ describe("D1: ligar a regra Lead recebido", () => {
 });
 
 describe("envio desligado no servidor", () => {
-  it("avisa em linguagem simples, sem nome de variável", () => {
+  it("mostra o nome da variável e a ação exata (exceção aprovada)", () => {
     render(
       createElement(
         ConversionsScreen,
@@ -138,7 +127,9 @@ describe("envio desligado no servidor", () => {
       .getAllByRole("alert")
       .find((node) => node.getAttribute("data-conversion-sending-off"));
     expect(alert?.textContent).toContain(conversionSendingOffCopy.title);
-    expect(alert?.textContent).not.toContain("INBOUND_");
+    expect(alert?.textContent).toContain(
+      "No Dokploy, no serviço da API, troque INBOUND_CONVERSION_PRODUCTION_ENABLED=false por true (ou apague a linha), confira se INBOUND_CONVERSION_RULES_ENABLED=true e faça o deploy da API.",
+    );
   });
 
   it("não aparece com o envio ligado", () => {
@@ -146,46 +137,5 @@ describe("envio desligado no servidor", () => {
       createElement(ConversionsScreen, props({ eventName: "QualifiedLead" })),
     );
     expect(container.querySelector("[data-conversion-sending-off]")).toBeNull();
-  });
-});
-
-describe("Formulários Meta: aviso quando a leitura do lead falha de vez", () => {
-  const connection: MetaLeadFormConnectionDto = {
-    id: "conexao_1",
-    label: "Página Exemplo",
-    pageId: "100000000000001",
-    formIds: [],
-    crmDatasetId: null,
-    qualifiedEventName: "LeadQualificado",
-    graphTokenLast4: "abcd",
-    capiTokenLast4: null,
-    active: true,
-    pageSubscribedAt: "2026-10-20T12:00:00.000Z",
-    webhookUrl: "https://api.exemplo.test/webhooks/meta",
-    submissionCount: 3,
-    lastSubmissionAt: "2026-10-26T12:00:00.000Z",
-    createdAt: "2026-10-20T12:00:00.000Z",
-    updatedAt: "2026-10-26T12:00:00.000Z",
-  };
-  const html = (fetchProblem: MetaLeadFormConnectionDto["fetchProblem"]) =>
-    renderToStaticMarkup(
-      createElement(MetaLeadFormsPanel, {
-        connections: [{ ...connection, fetchProblem }],
-        canManage: true,
-        licenseLocked: false,
-        loadFailed: false,
-      }),
-    );
-
-  it("token recusado: “Reconecte a Página”", () => {
-    expect(html("reconnect")).toContain("Reconecte a Página");
-  });
-
-  it("falta de permissão: “Falta permissão”", () => {
-    expect(html("permission")).toContain("Falta permissão");
-  });
-
-  it("sem problema, sem aviso", () => {
-    expect(html(null)).not.toContain("data-lead-form-fetch-problem");
   });
 });

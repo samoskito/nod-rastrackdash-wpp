@@ -540,6 +540,8 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 
 ### 6.9 — Absorver os PRs do nod (#91 e #92), fora do porte
 
+> **Retirada na 1.3.1 (decisão do Samuel, 27/10/2026):** todo o código desta fase (formulários Meta e importação do Dashboard Leads) saiu do produto no PR #124. A migration `20261027145000_meta_lead_forms` e as tabelas ficam no banco, sem uso. O texto abaixo é histórico.
+
 - Plano próprio depois da 6.8: rebase sem o #90, migration renomeada e chaves de dedupe do #158/#153.
 - Estimativa à parte (~5 a 7 dias).
 - **Ordem real (27/10/2026):** a 6.9 vem **antes** da 6.6, 6.7 e 6.8, que esperam validação no SaaS. Ela não depende delas.

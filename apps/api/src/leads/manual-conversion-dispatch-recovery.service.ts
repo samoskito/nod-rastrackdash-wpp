@@ -1,4 +1,3 @@
-import { META_LEAD_FORM_CRM_TRIGGER } from "../meta-lead-forms/meta-crm-capi";
 import {
   Inject,
   Injectable,
@@ -90,11 +89,7 @@ export class ManualConversionDispatchRecoveryService
               },
               status: "dispatching",
               createdAt: { gte: createdAfter },
-              // Fase 6.9: the CRM stage of a Meta instant form claims the
-              // same way (ready_to_send -> dispatching) before its post.
-              sourceTrigger: {
-                in: [MANUAL_CONVERSION_TRIGGER, META_LEAD_FORM_CRM_TRIGGER],
-              },
+              sourceTrigger: MANUAL_CONVERSION_TRIGGER,
             },
             select: { id: true, errorMessage: true, createdAt: true },
             take: BATCH - stuck.length,

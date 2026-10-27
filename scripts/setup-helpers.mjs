@@ -26,7 +26,11 @@ export function isNodeVersionSupported(versionString) {
 export function resolveEnvFileAction({ envExists }) {
   return envExists
     ? { action: "skip", message: ".env already exists — leaving it untouched." }
-    : { action: "copy", message: "created .env — fill replace-me-* values" };
+    : {
+        action: "copy",
+        message:
+          "created .env — fill replace-me-* values and INBOUND_WEBHOOK_ENCRYPTION_KEY (the API does not start without it)",
+      };
 }
 
 /** Run pnpm install only when node_modules is missing (idempotent re-runs stay fast). */

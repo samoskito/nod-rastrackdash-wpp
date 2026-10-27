@@ -193,7 +193,7 @@ describe("diagnostics conversion retries", () => {
         input,
         context,
       ),
-    ).toEqual({ claimed: 2, enqueued: 1, skipped: 4, expired: 0, failed: 1 });
+    ).toEqual({ claimed: 2, enqueued: 1, skipped: 4, expired: 0, notReady: 0, alreadyConverted: 0, failed: 1 });
     expect(events[0]).toMatchObject(event());
     expect(events[1].status).toBe("ready_to_send");
     expect(queue.retrySend.mock.calls).toEqual([
@@ -207,7 +207,7 @@ describe("diagnostics conversion retries", () => {
     prisma.conversionEventLog.updateMany.mockResolvedValueOnce({ count: 0 });
     expect(
       await service.retryBlockedConversionEvents(["blocked"], input, context),
-    ).toEqual({ claimed: 0, enqueued: 0, skipped: 1, expired: 0, failed: 0 });
+    ).toEqual({ claimed: 0, enqueued: 0, skipped: 1, expired: 0, notReady: 0, alreadyConverted: 0, failed: 0 });
     expect(queue.retrySend).not.toHaveBeenCalled();
   });
 
@@ -219,8 +219,8 @@ describe("diagnostics conversion retries", () => {
     ]);
     expect(results).toEqual(
       expect.arrayContaining([
-        { claimed: 1, enqueued: 1, skipped: 0, expired: 0, failed: 0 },
-        { claimed: 0, enqueued: 0, skipped: 1, expired: 0, failed: 0 },
+        { claimed: 1, enqueued: 1, skipped: 0, expired: 0, notReady: 0, alreadyConverted: 0, failed: 0 },
+        { claimed: 0, enqueued: 0, skipped: 1, expired: 0, notReady: 0, alreadyConverted: 0, failed: 0 },
       ]),
     );
     expect(queue.retrySend).toHaveBeenCalledTimes(1);
@@ -233,7 +233,7 @@ describe("diagnostics conversion retries", () => {
     );
     expect(
       await service.retryBlockedConversionEvents(["blocked"], input, context),
-    ).toEqual({ claimed: 1, enqueued: 0, skipped: 0, expired: 0, failed: 1 });
+    ).toEqual({ claimed: 1, enqueued: 0, skipped: 0, expired: 0, notReady: 0, alreadyConverted: 0, failed: 1 });
     expect(events[0]).toMatchObject(event());
   });
 
@@ -244,7 +244,7 @@ describe("diagnostics conversion retries", () => {
     );
     expect(
       await service.retryBlockedConversionEvents(["blocked"], input, context),
-    ).toEqual({ claimed: 1, enqueued: 1, skipped: 0, expired: 0, failed: 1 });
+    ).toEqual({ claimed: 1, enqueued: 1, skipped: 0, expired: 0, notReady: 0, alreadyConverted: 0, failed: 1 });
     expect(events[0].status).toBe("ready_to_send");
   });
 
@@ -255,14 +255,14 @@ describe("diagnostics conversion retries", () => {
     const { service, queue } = harness(events);
     expect(
       await service.retryBlockedConversionEvents([], input, context),
-    ).toEqual({ claimed: 0, enqueued: 0, skipped: 0, expired: 0, failed: 0 });
+    ).toEqual({ claimed: 0, enqueued: 0, skipped: 0, expired: 0, notReady: 0, alreadyConverted: 0, failed: 0 });
     expect(
       await service.retryBlockedConversionEvents(
         [events[0].id, ...events.map((row) => row.id)],
         input,
         context,
       ),
-    ).toEqual({ claimed: 500, enqueued: 500, skipped: 0, expired: 0, failed: 0 });
+    ).toEqual({ claimed: 500, enqueued: 500, skipped: 0, expired: 0, notReady: 0, alreadyConverted: 0, failed: 0 });
     expect(queue.retrySend).toHaveBeenCalledTimes(500);
     expect(events[500].status).toBe("not_configured");
   });
@@ -314,6 +314,8 @@ describe("diagnostics conversion retries", () => {
         enqueued: 2,
         skipped: 7,
         expired: 1,
+        notReady: 0,
+        alreadyConverted: 0,
         failed: 0,
       });
       expect(queue.retrySend.mock.calls).toEqual([
@@ -378,7 +380,7 @@ describe("diagnostics conversion retries", () => {
       prisma.conversionEventLog.updateMany.mockResolvedValueOnce({ count: 0 });
       expect(
         await service.retryBlockedConversionEvents(["auth_190"], input, context),
-      ).toEqual({ claimed: 0, enqueued: 0, skipped: 1, expired: 0, failed: 0 });
+      ).toEqual({ claimed: 0, enqueued: 0, skipped: 1, expired: 0, notReady: 0, alreadyConverted: 0, failed: 0 });
       expect(queue.retrySend).not.toHaveBeenCalled();
     });
   });

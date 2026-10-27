@@ -72,3 +72,38 @@ describe("Reenviar recusados", () => {
     expect(page).toContain("summary.metaRejectedRetryable");
   });
 });
+
+describe("Reenviar recusados em lote: resumo", () => {
+  it("separa os que ficaram de fora por configuração dos já reenviados", async () => {
+    const { retryRejectedMessage } = await import(
+      "../src/app/(app)/events/retry-rejected-message"
+    );
+    const message = retryRejectedMessage({
+      claimed: 1,
+      enqueued: 1,
+      skipped: 5,
+      expired: 1,
+      notReady: 2,
+      alreadyConverted: 1,
+      failed: 0,
+    });
+    expect(message).toContain("1 evento recusado enfileirado");
+    expect(message).toContain("1 já tinha sido reenviado e ficou de fora.");
+    expect(message).toContain(
+      "2 eventos ficaram de fora por configuração: a rota Meta do número ou do anúncio ainda não está pronta.",
+    );
+    expect(message).toContain("1 evento ficou de fora por ter mais de 7 dias");
+    expect(message).toContain(
+      "1 evento ficou de fora porque o lead já foi convertido para o pixel atual",
+    );
+  });
+
+  it("API antiga sem notReady: tudo como antes", async () => {
+    const { retryRejectedMessage } = await import(
+      "../src/app/(app)/events/retry-rejected-message"
+    );
+    expect(
+      retryRejectedMessage({ claimed: 0, enqueued: 0, skipped: 2, failed: 0 }),
+    ).toBe("2 já tinham sido reenviados e ficaram de fora.");
+  });
+});

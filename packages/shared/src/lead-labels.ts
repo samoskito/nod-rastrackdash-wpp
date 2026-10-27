@@ -54,13 +54,5 @@ export function leadSourceLabel(
     return "NOD API";
   }
 
-  if (source === "meta_lead_form") {
-    return "Formulário Meta";
-  }
-
-  if (source === "dashboard_leads") {
-    return "Dashboard Leads (importado)";
-  }
-
   return source ?? adId ?? "Origem parcial";
 }

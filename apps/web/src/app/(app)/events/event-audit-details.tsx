@@ -480,9 +480,10 @@ export function EventAuditDetails({
                           <strong>Recusado pela Meta</strong>
                           <small>{RETRY_REJECTED_WARNING}</small>
                           <small>
-                            O reenvio usa o mesmo identificador do evento e
-                            recalcula rota, pixel e página com a configuração
-                            atual.
+                            O reenvio usa o mesmo identificador do evento e o
+                            destino atual (do anúncio, do número, da conta ou
+                            da conexão); o destino, o pixel e a página da
+                            tentativa recusada não são reaproveitados.
                           </small>
                         </span>
                         <BackofficeActionForm
