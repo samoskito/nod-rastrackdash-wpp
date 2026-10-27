@@ -218,6 +218,19 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
   - **Eventos que já ficaram Bloqueado:** não voltam sozinhos. Depois do Trocar token, **atualize a instância** (API e web) e, como owner, abra `/events`, escolha um período que cubra desde quando os eventos ficaram bloqueados, clique em **Aplicar** e em **Reenviar bloqueados**. Até 500 por clique; evento já enviado nunca é reenviado. Numa instância ainda não atualizada o botão não existe e os bloqueados não são reenviados. Não crie BM novo, não use **+ Nova conexao** e não recrie leads.
 - **Verificação:** os eventos reenviados passam para **Na fila** e depois **Enviado**, e os **próximos** LeadSubmitted já chegam assim. Se algum voltar para **Bloqueado**, refaça o Trocar token no mesmo card e clique em **Reenviar bloqueados** de novo. Passo a passo completo em [`update.md`](update.md#eventos-que-já-ficaram-bloqueado).
 
+## Evento "Falhou" com "A Meta recusou o evento"
+
+- **Sintoma:** em `/events` (ou nos **Eventos do Pixel/CAPI** do lead), o evento aparece como **Falhou** com "A Meta recusou o evento (código X…)".
+- **Diagnóstico seguro:** abra o evento e veja o **Motivo técnico** no Resumo e a aba **Resposta Meta**. O texto já diz o motivo e o que fazer; o painel guarda só o código, o subcódigo, o tipo e o identificador da Meta (nunca a mensagem da Meta, que pode trazer dados do lead).
+- **Causa e correção pelo código:**
+  - **190 ou 102** (login ou token expirado): reconecte a Meta em **Integrações** (Trocar token no card do BM) e clique em **Reenviar bloqueados**.
+  - **10, 3 ou 200–299** (sem permissão): no Gerenciador de Negócios, dê ao usuário do sistema (ou ao app) acesso ao conjunto de dados do pixel e confira as permissões do token.
+  - **4, 17, 32, 341, 613 ou 80000–80014** (limite de chamadas): aguarde alguns minutos; os próximos eventos passam sozinhos.
+  - **1 ou 2** (erro temporário da Meta): aguarde e acompanhe os próximos eventos.
+  - **100** (parâmetro inválido): confira se o pixel e a página do destino são os do anúncio, se o clique (`ctwa_clid`) veio de um anúncio dessa página e se o evento tem menos de 7 dias.
+  - **Outro código:** o texto mostra o código, o subcódigo e o **Identificador para suporte da Meta**; leve esse identificador ao suporte da Meta (ele expira rápido).
+- **Verificação:** os próximos eventos do mesmo destino passam para **Enviado**. Recusas antigas, de antes desta versão, podem mostrar só "A Meta recusou o evento".
+
 ## Não aparece "Reenviar bloqueados" em `/events`
 
 - **Sintoma:** você tem eventos **Bloqueado** na **Auditoria de conversoes**, mas não vê o botão **Reenviar bloqueados**, ou ele está apagado.

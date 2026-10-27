@@ -446,6 +446,22 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
 
 ### Fixed
 
+- **Fase 6 — Readable reason when Meta refuses a Conversions API event (API
+  and web; no migration, no new variable)**. A `MetaCapiRejected` refusal now
+  stores only `code`, `error_subcode`, `type` (must match `^[A-Za-z]{1,64}$`)
+  and `fbtrace_id` (≤ 256 safe characters) of the Graph error, in the single
+  and the batch send; `message`, `error_user_title`, `error_user_msg` and any
+  other provider text are never kept (they may carry lead data). A map by
+  code/subcode, limited to codes documented by Meta (Graph API error handling
+  and rate limiting, Marketing API error reference), turns it into a
+  Portuguese reason plus what to do (expired login/token, missing dataset
+  permission, call limit, temporary error, policy block, invalid parameter);
+  unknown codes show "A Meta recusou o evento (código X, subcódigo Y)" with
+  the Meta support identifier. Shown in the Eventos list, the audit Resumo
+  and "Resposta Meta" tab, and the lead's Pixel/CAPI events.
+  `MissingMetaDestination` also shows the known resolver reason (e.g. "Conta
+  Meta inativa"). `errorCode`, retries, dedupe and "Reenviar bloqueados"
+  (190/102, same text as before) are unchanged.
 - **Fase 6.3a — Meta spend and conversations follow the chosen period (API)**,
   ported from the SaaS (`d4420843`, #157): with a period, campaign, ad set and
   ad Meta numbers come only from the stored daily rows of that period (zero
