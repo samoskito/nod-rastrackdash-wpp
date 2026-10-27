@@ -72,9 +72,9 @@ describe("Formulários Meta (Lead Ads) em Integrações", () => {
     const html = render();
     for (const word of ["observação", "Observação", "liberar", "Liberar", "certific", "QR", "em teste"])
       expect(html).not.toContain(word);
-    // Paused connections resume, never "Ativar envio".
+    // Deactivated connections are reactivated, never "Ativar envio".
     expect(render({ connections: [{ ...connection, active: false }] })).toContain(
-      "Retomar",
+      "Reativar",
     );
     expect(html).not.toContain("Ativar envio");
     // The integrations-route rule: this panel never names a "Token CAPI".
@@ -113,5 +113,41 @@ describe("Formulários Meta (Lead Ads) em Integrações", () => {
     );
     expect(dialog).toContain("Formulário Meta (CRM)");
     expect(dialog).toContain("preview.crmStage");
+  });
+});
+
+describe("Formulários Meta: remover só sem envios (decisão de 27/10/2026)", () => {
+  it("with submissions: no Remover, Desativar and the short reason", () => {
+    const html = render();
+
+    expect(html).not.toContain(">Remover<");
+    expect(html).toContain("Desativar");
+    expect(html).toContain("Esta Página já recebeu formulários: não dá para remover");
+    expect(html).toContain("o histórico fica guardado");
+  });
+
+  it("deactivated with submissions: Reativar, still no Remover", () => {
+    const html = render({ connections: [{ ...connection, active: false }] });
+
+    expect(html).toContain("Reativar");
+    expect(html).toContain("Desativada");
+    expect(html).not.toContain(">Remover<");
+  });
+
+  it("without submissions: Remover stays available", () => {
+    const html = render({
+      connections: [{ ...connection, submissionCount: 0, lastSubmissionAt: null }],
+    });
+
+    expect(html).toContain(">Remover<");
+    expect(html).not.toContain("não dá para remover");
+  });
+
+  it("the actions call the deactivate and reactivate routes", () => {
+    const actions = readFileSync(
+      resolve(__dirname, "../src/app/(app)/integrations/meta-lead-form-actions.ts"),
+      "utf8",
+    );
+    expect(actions).toContain('"reactivate" : "deactivate"');
   });
 });

@@ -35,6 +35,9 @@ import {
 
 export const META_LEAD_FORM_SOURCE = "meta_lead_form";
 
+export const META_LEAD_FORM_DELETE_BLOCKED_MESSAGE =
+  "Esta Página já recebeu formulários. Desative a conexão para parar de receber; o histórico fica guardado.";
+
 type Env = Record<string, string | undefined>;
 
 type ConnectionRecord = Prisma.MetaLeadFormConnectionGetPayload<object>;
@@ -197,11 +200,45 @@ export class MetaLeadFormsService {
     return this.toDto(connection);
   }
 
+  /**
+   * Removes only a connection that never received a form submission. With
+   * submissions the history must stay: the answer is 409 and the way out is
+   * to deactivate. The check and the delete are one statement, so a lead
+   * arriving in between is never cascaded away.
+   */
   async deleteConnection(workspaceId: string, connectionId: string) {
     await this.requireConnection(workspaceId, connectionId);
-    await this.prisma.metaLeadFormConnection.delete({
-      where: { id: connectionId },
+    const deleted = await this.prisma.metaLeadFormConnection.deleteMany({
+      where: { id: connectionId, workspaceId, submissions: { none: {} } },
     });
+    if (deleted.count === 0) {
+      throw new ConflictException(META_LEAD_FORM_DELETE_BLOCKED_MESSAGE);
+    }
+  }
+
+  /**
+   * Deactivated: the Page stops receiving leads (the webhook answers 2xx and
+   * ignores them) and every submission stays. The Page stays reserved for
+   * this workspace, so reactivating never conflicts with another workspace.
+   */
+  async setConnectionActive(
+    workspaceId: string,
+    connectionId: string,
+    active: boolean,
+  ): Promise<MetaLeadFormConnectionDto> {
+    await this.requireConnection(workspaceId, connectionId);
+    const connection = await this.prisma.metaLeadFormConnection.update({
+      where: { id: connectionId },
+      data: { active },
+    });
+    const [stats] = await this.prisma.metaLeadSubmission.groupBy({
+      by: ["connectionId"],
+      where: { workspaceId, connectionId },
+      _count: { _all: true },
+      _max: { createdAt: true },
+    });
+
+    return this.toDto(connection, stats);
   }
 
   /** Subscribes the app to the Page "leadgen" webhook field. */
@@ -235,6 +272,23 @@ export class MetaLeadFormsService {
   /** True when an active connection exists for one of these Pages. */
   async hasActiveConnectionForPages(pageIds: string[]): Promise<boolean> {
     return (await this.activeConnectionPages(pageIds)).size > 0;
+  }
+
+  /** Pages (of these) whose connection is deactivated: their leads are ignored. */
+  async inactiveConnectionPages(
+    pageIds: string[],
+    workspaceId?: string,
+  ): Promise<Set<string>> {
+    if (pageIds.length === 0) return new Set();
+    const found = await this.prisma.metaLeadFormConnection.findMany({
+      where: {
+        pageId: { in: pageIds },
+        active: false,
+        ...(workspaceId ? { workspaceId } : {}),
+      },
+      select: { pageId: true },
+    });
+    return new Set(found.map((row) => row.pageId));
   }
 
   /** Pages (of these) with an active connection, optionally in one workspace. */
