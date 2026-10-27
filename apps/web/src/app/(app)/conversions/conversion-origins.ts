@@ -111,6 +111,20 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     // lista de eventos, vale todo o catálogo.
   },
   {
+    // Fase 6.8 (porte do #183): a compra chega na mesma URL do número do ROI
+    // Chat que recebeu a entrada do lead; uma conexão por número.
+    id: "automation_roichat",
+    kind: "provider",
+    label: "Compra no ROI Chat",
+    description:
+      "Quando o ROI Chat avisa uma compra na URL do número (event_name Purchase), com o valor e a moeda da venda.",
+    logoProvider: "roichat",
+    fallbackChannelProviders: ["roichat"],
+    connection: "provider_anchor",
+    lockedEvent: "Purchase",
+    allowedEvents: ["Purchase"],
+  },
+  {
     id: "automation_payt",
     kind: "provider",
     label: "Venda na Payt",
@@ -125,6 +139,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "data_crazy",
       "unnichat",
       "waha",
+      "roichat",
     ],
     connection: "any",
     // O evento vem do status de cada venda; o valor vem da própria venda.
@@ -147,6 +162,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "data_crazy",
       "unnichat",
       "waha",
+      "roichat",
     ],
     connection: "any",
     // O evento vem do status de cada venda; o valor vem da própria venda.
@@ -270,6 +286,7 @@ export function hubProviderForInbound(
     case "unnichat":
     case "meta_cloud":
     case "waha":
+    case "roichat":
       return provider;
     default:
       return null;
@@ -298,6 +315,8 @@ export function providerDisplayName(provider: string): string {
       return "Data Crazy";
     case "unnichat":
       return "Unnichat";
+    case "roichat":
+      return "ROI Chat";
     default:
       return provider;
   }
@@ -313,9 +332,11 @@ export function crmManageHref(origin: CrmRuleOrigin): string {
  * texto do nod ("da Umbler", "do Unnichat"; "na Umbler", "no Unnichat").
  */
 export function automationPlatformOf(origin: string): string {
+  if (origin === "automation_roichat") return "do ROI Chat";
   return origin === "automation_umbler" ? "da Umbler" : "do Unnichat";
 }
 
 export function automationPlatformIn(origin: string): string {
+  if (origin === "automation_roichat") return "no ROI Chat";
   return origin === "automation_umbler" ? "na Umbler" : "no Unnichat";
 }

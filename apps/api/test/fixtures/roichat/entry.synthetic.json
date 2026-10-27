@@ -1,0 +1,16 @@
+{
+  "source_url": "https://www.instagram.com/p/EXEMPLO000/",
+  "source_id": "120200000000000001",
+  "source_type": "ad",
+  "body": "Texto ficticio do anuncio\nSegunda linha",
+  "headline": "RECEBA A RECEITA NO WHATSAPP",
+  "media_type": "video",
+  "video_url": "https://www.facebook.com/reel/000000000000001",
+  "thumbnail_url": "https://scontent.example.fbcdn.net/thumb-ficticia.jpg",
+  "ctwa_clid": "AfjX-clique-ficticio-0001",
+  "welcome_message": { "text": "Oi! Como podemos ajudar?" },
+  "event_id": "5547999990000",
+  "event_time": 1792000000,
+  "nome": "Fulana de Teste",
+  "telefone": "+5547999990000"
+}

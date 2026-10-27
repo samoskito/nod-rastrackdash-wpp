@@ -19,7 +19,8 @@ export const diagnosticSources = [
   "data_crazy",
   "payt",
   "unnichat",
-  "braip"
+  "braip",
+  "roichat"
 ] as const;
 export const diagnosticSeverities = [
   "info",

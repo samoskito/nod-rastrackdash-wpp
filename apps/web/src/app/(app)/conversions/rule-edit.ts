@@ -72,7 +72,9 @@ export function ruleEditCapabilities(
       carriesValue &&
       (origin === "whatsapp_label" ||
         origin === "automation_umbler" ||
-        origin === "automation_unnichat"),
+        origin === "automation_unnichat" ||
+        // Fase 6.8: ROI Chat, valor de reserva opcional (a compra traz o valor).
+        origin === "automation_roichat"),
     currency: carriesValue && origin !== "structured_catalog",
     catalogAliases: origin === "structured_catalog" && Boolean(rule.catalog),
     productFilter:
@@ -227,7 +229,9 @@ export function buildRuleUpdatePayload(
   // Umbler/Unnichat: "Ampliar para todas as conexões" (or back to the
   // rule's connection only).
   const automation =
-    draft.origin === "automation_unnichat" || draft.origin === "automation_umbler";
+    draft.origin === "automation_unnichat" ||
+    draft.origin === "automation_umbler" ||
+    draft.origin === "automation_roichat";
   const crossChanged =
     automation &&
     draft.scope === "all_numbers" &&
@@ -274,7 +278,12 @@ export function buildRuleUpdatePayload(
   }
 
   if (capabilities.value) {
-    const values = valueChanges(rule, draft, false);
+    // ROI Chat: the rule value is only a fallback (optional, removable).
+    const values = valueChanges(
+      rule,
+      draft,
+      draft.origin === "automation_roichat",
+    );
     if (!values.ok) return values;
     Object.assign(payload, values.value);
   }

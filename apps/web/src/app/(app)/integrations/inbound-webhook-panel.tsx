@@ -48,6 +48,7 @@ import {
   unnichatRoutingSourceLabel,
 } from "./inbound-webhook-labels";
 import { UnnichatEntrySetupPanel } from "./unnichat-setup";
+import { RoichatSetupPanel } from "./roichat-setup";
 
 type InboundWebhookAction = (
   formData: FormData,
@@ -115,6 +116,7 @@ export function inboundWebhookProviderLabel(provider: string): string {
     meta_cloud: "Meta WhatsApp (Cloud API)",
     umbler: "Umbler Talk",
     unnichat: "Unnichat",
+    roichat: "ROI Chat",
     uazapi: "Uazapi",
   };
 
@@ -130,7 +132,30 @@ const inboundPasteInstructions: Record<string, string> = {
   umbler: "Cole esta URL no painel/webhook da Umbler Talk.",
   unnichat:
     "Cole esta URL na chamada HTTP do fluxo do Unnichat que recebe a conversa do anúncio.",
+  roichat:
+    "Cole esta URL no webhook deste número no ROI Chat: ela recebe a entrada do lead que veio do anúncio e a compra.",
 };
+
+/**
+ * Regras que valem para esta conexão: as presas a ela e as de "Todos os
+ * números (todas as conexões)" do mesmo provedor ancoradas em outra conexão
+ * (Unnichat, Umbler e ROI Chat criam uma conexão por número).
+ */
+export function rulesCoveringConnection(
+  rules: readonly ProviderConversionRuleDto[],
+  connection: { id: string; provider: string },
+  connections: readonly { id: string; provider: string }[],
+): ProviderConversionRuleDto[] {
+  const providerOf = new Map(connections.map((item) => [item.id, item.provider]));
+  return rules.filter(
+    (rule) =>
+      rule.connectionId === connection.id ||
+      (rule.crossConnectionScope === true &&
+        rule.scope === "all_numbers" &&
+        rule.connectionId !== null &&
+        providerOf.get(rule.connectionId) === connection.provider),
+  );
+}
 
 export function inboundPasteInstruction(provider: string): string {
   return (
@@ -141,10 +166,14 @@ export function inboundPasteInstruction(provider: string): string {
 
 // Data Crazy nao aceita cadastro manual de numero: o canal nasce do primeiro
 // webhook recebido (a API bloqueia o canal provisorio para esse provider).
-// Unnichat tambem nao: o numero do cliente e informado ao criar a conexao.
+// Unnichat e ROI Chat tambem nao: o numero do cliente e informado ao criar a
+// conexao (uma conexao = um numero = uma URL).
 function allowsManualChannelRegistration(provider: string): boolean {
   return (
-    provider !== "uazapi" && provider !== "data_crazy" && provider !== "unnichat"
+    provider !== "uazapi" &&
+    provider !== "data_crazy" &&
+    provider !== "unnichat" &&
+    provider !== "roichat"
   );
 }
 
@@ -152,6 +181,9 @@ function allowsManualChannelRegistration(provider: string): boolean {
 function createDescription(provider: string, allowCreate: boolean): string {
   if (provider === "unnichat") {
     return "Dê um nome e informe o número de WhatsApp atendido pelo Unnichat. A conexão já nasce presa a esse número; só conversas vindas de anúncio (CTWA) viram lead.";
+  }
+  if (provider === "roichat") {
+    return "Dê um nome e informe o número de WhatsApp atendido pelo ROI Chat. Cada número tem a própria URL, que recebe a entrada do lead que veio do anúncio e a compra.";
   }
 
   return allowCreate
@@ -387,7 +419,7 @@ export function InboundWebhookPanel({
       ) : null}
       {createOpen && canCreate ? (
         <form
-          className={`inbound-webhook-create${selectedCreateProvider === "unnichat" ? " has-phone" : ""}`}
+          className={`inbound-webhook-create${selectedCreateProvider === "unnichat" || selectedCreateProvider === "roichat" ? " has-phone" : ""}`}
           onSubmit={handleCreate}
         >
           {scopedProvider ? (
@@ -443,6 +475,28 @@ export function InboundWebhookPanel({
               </span>
             </label>
           ) : null}
+          {selectedCreateProvider === "roichat" ? (
+            <label>
+              <span className="field-label">Número de WhatsApp do cliente</span>
+              <input
+                name="connectedPhone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                minLength={8}
+                maxLength={32}
+                placeholder="Ex.: +55 11 99999-0001"
+                required
+                aria-describedby="roichat-whatsapp-help"
+                disabled={pendingAction === "create"}
+              />
+              <span id="roichat-whatsapp-help" className="field-help muted">
+                É o número atendido pelo ROI Chat (o seu), com DDI e DDD. Nunca
+                o telefone do lead. Um número por conexão: cada número recebe a
+                própria URL.
+              </span>
+            </label>
+          ) : null}
           <button
             className="button primary"
             type="submit"
@@ -470,6 +524,7 @@ export function InboundWebhookPanel({
       {oneTimeSecret?.provider === "unnichat" ? (
         <UnnichatEntrySetupPanel />
       ) : null}
+      {oneTimeSecret?.provider === "roichat" ? <RoichatSetupPanel /> : null}
 
       {notice ? (
         <div
@@ -771,7 +826,9 @@ export function InboundWebhookPanel({
                           ? "O canal aparece sozinho quando o primeiro webhook do Data Crazy chegar; a partir daí ele já envia e pode receber regras."
                           : connection.provider === "unnichat"
                             ? "Esta conexão ainda não tem o número do cliente. Remova-a e crie de novo informando o número de WhatsApp atendido pelo Unnichat."
-                            : "Nenhum canal cadastrado ainda. Cadastre o número conectado para criar as regras de conversão antes do primeiro lead chegar."}
+                            : connection.provider === "roichat"
+                              ? "Esta conexão ainda não tem o número do cliente. Remova-a e crie de novo informando o número de WhatsApp atendido pelo ROI Chat."
+                              : "Nenhum canal cadastrado ainda. Cadastre o número conectado para criar as regras de conversão antes do primeiro lead chegar."}
                       </p>
                     ) : (
                       channels.map((channel) => {
@@ -876,7 +933,8 @@ export function InboundWebhookPanel({
                   </div>
 
                   {connection.provider === "umbler" ||
-                  connection.provider === "unnichat" ? (
+                  connection.provider === "unnichat" ||
+                  connection.provider === "roichat" ? (
                     <section className="provider-conversion-summary">
                       <div className="provider-conversion-summary-icon">
                         <Settings2 size={18} aria-hidden="true" />
@@ -885,8 +943,12 @@ export function InboundWebhookPanel({
                         <span className="eyebrow">Gatilhos de conversão</span>
                         <strong>
                           {
-                            providerRules.filter(
-                              (rule) => rule.connectionId === connection.id,
+                            rulesCoveringConnection(
+                              providerRules,
+                              connection,
+                              allConnections.map(
+                                (item) => item.overview.connection,
+                              ),
                             ).length
                           }{" "}
                           regra(s) nesta conexão
@@ -938,7 +1000,11 @@ export function InboundWebhookOneTimeSecretPanel({
   onDismiss: () => void;
 }) {
   const providerLabel = inboundWebhookProviderLabel(secret.provider);
-  const providerPreposition = secret.provider === "data_crazy" || secret.provider === "unnichat" ? "no" : "na";
+  const providerPreposition = secret.provider === "data_crazy" ||
+    secret.provider === "unnichat" ||
+    secret.provider === "roichat"
+      ? "no"
+      : "na";
   const showVerifyToken = secret.provider === "meta_cloud";
 
   return (

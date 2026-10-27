@@ -162,6 +162,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   braip: "Braip",
   umbler: "Umbler",
   unnichat: "Unnichat",
+  roichat: "ROI Chat",
   gupshup: "Gupshup",
   data_crazy: "Data Crazy",
   uazapi: "Uazapi",

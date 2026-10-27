@@ -108,6 +108,7 @@ export const integrationProviderIds = [
   "waha",
   "zapi",
   "meta_cloud",
+  "roichat",
   "umbler",
   "gupshup",
   "data_crazy",
@@ -127,7 +128,12 @@ export type WhatsappIntegrationProvider =
 
 /** Inbound webhook providers (`InboundWebhookPanel`, scoped to one). */
 export type InboundIntegrationProvider =
-  "meta_cloud" | "umbler" | "gupshup" | "data_crazy" | "unnichat";
+  | "meta_cloud"
+  | "umbler"
+  | "gupshup"
+  | "data_crazy"
+  | "unnichat"
+  | "roichat";
 
 export type CrmIntegrationProvider = "kommo" | "pipedrive";
 
@@ -188,6 +194,8 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   waha: { file: "waha.png", surface: "light" },
   zapi: { file: "zapi.svg", surface: "dark" },
   meta_cloud: { file: "meta.svg", surface: "dark" },
+  // Neutral wordmark. PENDENTE: official ROI Chat logo.
+  roichat: { file: "roichat.svg", surface: "dark" },
   umbler: { file: "umbler.svg", surface: "light" },
   gupshup: { file: "gupshup.svg", surface: "light" },
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
@@ -240,6 +248,20 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Use a sua própria WAHA (motor GoWS): você hospeda o servidor e lê o QR no painel dela, e o RastrackDash recebe as conversas dos anúncios por webhook.",
     gate: { kind: "whatsapp_provider", provider: "waha" },
+  },
+  {
+    // Fase 6.8 (porte do #183): ROI Chat (WhatsApp API Oficial). Sem gate de
+    // integração privada no nod: o card aparece sempre, ao lado de WAHA e
+    // Meta Cloud. Uma conexão = um número = uma URL.
+    id: "roichat",
+    name: "ROI Chat",
+    category: "whatsapp_official",
+    logo: integrationLogoPath("roichat"),
+    initials: "RC",
+    logoSurface: logoSurface("roichat"),
+    description:
+      "Receba as conversas de anúncio e as compras que chegam no ROI Chat (API oficial do WhatsApp), com uma URL por número.",
+    gate: { kind: "inbound_provider", provider: "roichat" },
   },
   {
     id: "zapi",

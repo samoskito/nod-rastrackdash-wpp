@@ -128,6 +128,8 @@ export function executionReasonLabel(reasonCode: string | null): string {
     channel_unresolved: "Canal não localizado",
     channel_not_active: "Envio do número desligado: ative em Integrações",
     purchase_within_24h: "Compra repetida em menos de 24h",
+    purchase_repeated_within_12h:
+      "Mesma compra (mesmo valor e moeda) repetida em menos de 12h",
     provider_conversion_paid_lead_missing: "Lead pago não localizado",
     provider_conversion_catalog_mismatch: "Mensagem divergiu do catálogo",
     provider_conversion_payload_unavailable: "Payload não está mais disponível",
@@ -198,6 +200,17 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "O contato não confere com a conversa original do anúncio",
     inbound_webhook_unnichat_channel_binding_missing:
       "A conexão do Unnichat está sem o número do cliente: recrie a conexão informando o número",
+    roichat_v1_invalid_payload:
+      "Corpo do webhook do ROI Chat inválido ou sem o telefone do lead",
+    roichat_automation_v1_invalid_payload:
+      "Compra do ROI Chat inválida (sem telefone, ou valor/moeda ilegível)",
+    roichat_automation_v1_not_purchase:
+      "Aviso do ROI Chat que não é compra",
+    roichat_purchase_without_rule:
+      "Compra do ROI Chat sem regra “Compra no ROI Chat” para este número",
+    roichat_event_not_supported: "Aviso do ROI Chat ignorado (não é entrada nem compra)",
+    inbound_webhook_roichat_channel_binding_missing:
+      "A conexão do ROI Chat está sem o número do cliente: recrie a conexão informando o número",
   };
 
   if (reasonCode.startsWith("provider_conversion_route_")) {

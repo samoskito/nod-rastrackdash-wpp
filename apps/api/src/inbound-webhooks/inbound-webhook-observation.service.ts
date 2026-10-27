@@ -590,7 +590,11 @@ export class InboundWebhookObservationService {
 
       return parser.parse(
         payload,
-        inboundWebhookParserContext(delivery.workspaceId, connectedPhone),
+        inboundWebhookParserContext(
+          delivery.workspaceId,
+          connectedPhone,
+          delivery.firstReceivedAt,
+        ),
       );
     } catch (error) {
       if (error instanceof InboundWebhookDeterministicFailure) {
@@ -612,7 +616,8 @@ export class InboundWebhookObservationService {
     delivery: LoadedDelivery,
     parser: InboundWebhookParser,
   ): Promise<string | null> {
-    if (parser.provider !== "unnichat") {
+    // Fase 6.8: the ROI Chat number URL is bound the same way.
+    if (parser.provider !== "unnichat" && parser.provider !== "roichat") {
       return null;
     }
 
@@ -628,7 +633,9 @@ export class InboundWebhookObservationService {
     });
     if (!channel?.connectedPhone?.trim()) {
       throw new InboundWebhookDeterministicFailure(
-        "inbound_webhook_unnichat_channel_binding_missing",
+        parser.provider === "roichat"
+          ? "inbound_webhook_roichat_channel_binding_missing"
+          : "inbound_webhook_unnichat_channel_binding_missing",
         "invalid_payload",
       );
     }

@@ -131,6 +131,8 @@ describe("MetaInitialSyncPeriodService", () => {
                 "meta_cloud",
                 "data_crazy",
                 "unnichat",
+                // Fase 6.8: ROI Chat numbers anchor the first sync too.
+                "roichat",
               ],
             },
             removedAt: null,

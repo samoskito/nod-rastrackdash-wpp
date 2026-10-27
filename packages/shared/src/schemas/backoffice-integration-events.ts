@@ -155,6 +155,7 @@ export const integrationReceiptReasons = {
   integration_provider_unsupported: "Plataforma não suportada",
   unnichat_automation_v1_invalid_payload: "Formato da automação não reconhecido",
   umbler_automation_v1_invalid_payload: "Formato da automação não reconhecido",
+  roichat_automation_v1_invalid_payload: "Formato da compra do ROI Chat não reconhecido",
 } as const;
 
 /** Texto de um motivo gravado no recibo (qualquer resultado). */

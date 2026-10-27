@@ -126,20 +126,29 @@ export type InboundWebhookParserResult = {
 export type InboundWebhookParserContext = {
   organizationId?: string;
   /**
-   * Channel phone bound by the connection (Unnichat), never a provider
-   * payload field.
+   * Channel phone bound by the connection (Unnichat, ROI Chat), never a
+   * provider payload field.
    */
   connectedPhone?: string;
+  /**
+   * First arrival of the delivery. Providers whose payload may omit the event
+   * time (ROI Chat) use it instead, and cap a future event time to it.
+   */
+  receivedAt?: Date;
 };
 
 export function inboundWebhookParserContext(
   workspaceId: string,
   connectedPhone?: string | null,
+  /** Fase 6.8: first arrival of the delivery (ROI Chat without event_time). */
+  receivedAt?: Date | null,
 ): Readonly<InboundWebhookParserContext> {
-  // connectedPhone: only the number bound to the connection (Unnichat).
-  return connectedPhone
-    ? { organizationId: workspaceId, connectedPhone }
-    : { organizationId: workspaceId };
+  // connectedPhone: only the number bound to the connection (Unnichat, ROI Chat).
+  return {
+    organizationId: workspaceId,
+    ...(connectedPhone ? { connectedPhone } : {}),
+    ...(receivedAt ? { receivedAt } : {}),
+  };
 }
 
 export interface InboundWebhookParser {

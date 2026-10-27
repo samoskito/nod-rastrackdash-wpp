@@ -32,6 +32,9 @@ export function inboundParserProductionEligible(
         "braip",
         // Fase 4b: Unnichat entry and automation parsers (certified by migration).
         "unnichat",
+        // Fase 6.8: ROI Chat entry and purchase parsers (certified by
+        // migration: validated with real payloads received in the SaaS).
+        "roichat",
       ].includes(release.provider) && release.status === "certified"
     );
   try {

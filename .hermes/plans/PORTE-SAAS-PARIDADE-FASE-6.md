@@ -528,6 +528,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
   - **licença:** criar conexão é escrita (423).
 - **Notas:** backup obrigatório; guia de configuração do webhook do ROI Chat.
 - **Estimativa:** ~6 a 8 dias.
+- **Execução (27/10/2026, branch `feat/fase-6.8-roichat`):** decisão do Samuel de 27/10 (§ "Decisões do Samuel (26/10/2026): GATE 1 APROVADO", item 6): o ROI Chat entra agora, validado com os payloads reais recebidos no SaaS, em produção direta. Portados #183 (`f4f74673`) e #185 (`37bee70d`); nenhuma correção posterior do ROI Chat no `origin/main` do SaaS (`git log -i --grep=roichat --grep="roi chat"`). Migrations `20261027170000_roichat_provider` (só enum, ADD VALUE IF NOT EXISTS em `InboundWebhookProvider` e `DiagnosticSource`, **sem** `WhatsappSeatProvider`) e `20261027170100_roichat_parser_releases` (`roichat/v1` e `roichat/automation-v1` **certificadas**, ON CONFLICT, só promove o que estiver `observation_only`, retirada continua retirada). Adaptações: sem `roichat-feature-gate`, sem integrações privadas, sem hunks de billing/vaga (`externalChannelSeatProviders` e `legacy-billing-backfill` não existem no nod) e sem a contagem de evidência do replay (só existe no SaaS); card sempre no hub, na aba WhatsApp ao lado de WAHA e Meta Cloud; o número ROI Chat é roteado como os provedores genéricos (rota aprendida pelo anúncio da entrada; o modo Herdar do workspace é só do Unnichat); `receivedAt` entra no `inboundWebhookParserContext` do nod (observação, produção e replay); origem `automation_roichat` na matriz de capacidades do nod; leitores no `inboundParserProductionEligible`. Novo: dedupe entre a entrada do ROI Chat e um número WAHA do mesmo lead (trava do #153), 423 nas escritas do ROI Chat e guia `docs/setup/roichat.md`. Sem variável nova.
 
 ### 6.8b — GoHighLevel (reservada; depois de terminado no SaaS)
 
@@ -624,6 +625,17 @@ Migrations: (nome; aditiva; timestamp > maior do main)
 Testes: (lista da subfase + licensing-client + brand-footer/app-layout/navigation)
 ```
 
+```text
+Status: IMPLEMENTANDO
+Branch: feat/fase-6.8-roichat (worktree C:\Users\samue\Documents\nod-fase-6.8, a partir de origin/integracao/fase-6 @ ca3485fa)
+Executor: Claude Code
+Modelo/reasoning: Claude Opus 5.5
+Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.8
+Escopo: #183 (f4f74673) e #185 (37bee70d); dedupe ROI Chat x WAHA; 423; nada além
+Migrations: 20261027170000_roichat_provider (enum, aditiva, IF NOT EXISTS) e 20261027170100_roichat_parser_releases (releases certificadas, ON CONFLICT, idempotente); timestamps > 20261027140100_braip_parser_release
+Testes: fase6-roichat (parsers com a fixture real do #185, integration, purchase-rule, provider-migration, license-lock 423), dedupe ROI Chat x WAHA em fase6-envio-meta, web roichat-integration + integrations-hub-registry; licensing-client + brand-footer/app-layout/navigation
+```
+
 ## 5. Checklist ponta a ponta (instância de aluno, depois da 6.8)
 
 Use uma instância de teste com uma licença real de teste, num workspace sem dados de cliente real.
@@ -682,7 +694,7 @@ Use uma instância de teste com uma licença real de teste, num workspace sem da
 3. **GoHighLevel VAI.** Antes disso, a integração precisa ser **terminada no SaaS (dash-com-ia)**, porque hoje ela só observa. O Samuel tem um exemplo para isso. Depois, entra como fase própria no nod.
 4. **PR #90 (qualificação manual) será fechado.** Quem o substitui são o #158 (conversão manual) e o #176 (Kanban). Os PRs **#91 e #92 entram na 6.9**, depois do porte.
 5. **Importação #92:** só foi rodada em teste, não em aluno real. Não há dados a corrigir.
-6. **Certificação:** um leitor validado com venda real no SaaS vai **certificado por migration** para o nod. O aluno não precisa liberar nada. ~~a regra continua começando em observação e é ativada pelo aluno~~ **Substituído em 26/10 pela produção direta (§0): conexões e regras nascem em produção.** Leitor ainda não validado no SaaS (hoje, o ROI Chat) só é portado depois de validado.
+6. **Certificação:** um leitor validado com venda real no SaaS vai **certificado por migration** para o nod. O aluno não precisa liberar nada. ~~a regra continua começando em observação e é ativada pelo aluno~~ **Substituído em 26/10 pela produção direta (§0): conexões e regras nascem em produção.** **Decisão do Samuel (27/10/2026):** o ROI Chat vai para o aluno agora, sem esperar validação no SaaS (o teste real é numa conta de aluno). Entra funcionando em produção direta: leitores certificados por migration, conexão e regras nascendo enviando, sem passo de observar, retestar ou liberar para o aluno. Ajuste da regra no mesmo dia: payload real recebido e lido corretamente pelo leitor = validado; o ROI Chat conta como validado com os payloads reais recebidos no SaaS (o #185 corrigiu o leitor a partir do formato real).
 7. **Escopo:** levar **tudo** que afeta o uso dos alunos, sem entregar pela metade. O prazo não é o problema.
 
 ## Decisões do Samuel (26/10/2026, depois da auditoria)

@@ -89,6 +89,14 @@ import {
   type ParsedUnnichatAutomationV1,
   UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
 } from "./providers/unnichat/unnichat-automation-v1.parser";
+import {
+  parseRoichatAutomationV1,
+  type ParsedRoichatAutomationV1,
+  ROICHAT_AUTOMATION_V1_NOT_PURCHASE,
+  ROICHAT_AUTOMATION_V1_PARSER_VERSION,
+  ROICHAT_PURCHASE_REPEAT_WINDOW_SECONDS,
+  ROICHAT_PURCHASE_REPEATED_REASON,
+} from "./providers/roichat/roichat-automation-v1.parser";
 
 const publicEndpointNotFoundMessage = "Webhook não encontrado";
 const publicPersistenceFailureMessage = "Webhook temporariamente indisponível";
@@ -100,6 +108,7 @@ const ignoredParseErrors = new Set<string>([
   "payt_automation_v1_event_not_in_rule",
   "braip_automation_v1_not_purchase",
   "braip_automation_v1_event_not_in_rule",
+  ROICHAT_AUTOMATION_V1_NOT_PURCHASE,
 ]);
 const ignoredEmptyTemplateReason = "ignored_empty_template";
 const paytLeadOtherChannelMessage =
@@ -263,7 +272,8 @@ type ParsedUnnichatAutomation = ParsedUnnichatAutomationV1 & {
 type ParsedAutomation =
   | ParsedUmblerAutomationV1
   | ParsedSaleAutomationV1
-  | ParsedUnnichatAutomation;
+  | ParsedUnnichatAutomation
+  | ParsedRoichatAutomationV1;
 type AutomationParseResult =
   | { ok: true; value: ParsedAutomation }
   | { ok: false; errorCode: string };
@@ -415,6 +425,88 @@ export class InboundConversionAutomationIngestionService {
     });
   }
 
+  /**
+   * ROI Chat: a purchase received by the NUMBER's own URL (one connection per
+   * number) and routed to the rule "Compra no ROI Chat" that owns that
+   * number. Same path as the rule's own URL (delivery, decision, gates,
+   * replay); the origin is the URL's number, never guessed from the lead.
+   * Null when the rule can no longer receive callbacks.
+   */
+  async ingestFromConnection(input: {
+    workspaceId: string;
+    providerRuleId: string;
+    rawBody: Buffer;
+    providerAttempt: number | null;
+    origin: AutomationCallbackOrigin;
+  }): Promise<InboundConversionAutomationIngestionResult | null> {
+    this.assertFeatureEnabled();
+    const endpoint = await this.loadRoutableEndpoint(
+      input.workspaceId,
+      input.providerRuleId,
+    );
+    if (!endpoint) return null;
+    return this.ingestForEndpoint({
+      endpoint,
+      rawBody: input.rawBody,
+      providerAttempt: input.providerAttempt,
+      integrationEndpointId: null,
+      touchRuleEndpoint: false,
+      origin: input.origin,
+    });
+  }
+
+  /**
+   * ROI Chat 12h repeat guard (owner decision, 25/10/2026). The contract has
+   * no order id: the same lead, on the same number, with the same value and
+   * currency, arriving again within 12 hours is the SAME purchase resent; it
+   * is counted on the first delivery and never observed again. A different
+   * value/currency, another number or more than 12 hours later is a new
+   * purchase (repurchase is allowed). Production applies the same window to
+   * the frozen decisions (businessDedupePolicy), under its advisory lock.
+   */
+  private async findRoichatRepeatedPurchase(input: {
+    endpoint: PublicConversionEndpoint;
+    parsed: ParsedRoichatAutomationV1;
+    channelId: string | null;
+    receivedAt: Date;
+  }): Promise<{ id: string; firstReceivedAt: Date } | null> {
+    if (!input.channelId) return null;
+    try {
+      return await this.prisma.inboundWebhookDelivery.findFirst({
+        where: {
+          workspaceId: input.endpoint.workspaceId,
+          provider: "roichat",
+          purpose: "conversion_automation",
+          firstReceivedAt: {
+            gte: new Date(
+              input.receivedAt.getTime() -
+                ROICHAT_PURCHASE_REPEAT_WINDOW_SECONDS * 1_000,
+            ),
+            lte: input.receivedAt,
+          },
+          AND: [
+            {
+              normalizedSummary: {
+                path: ["purchaseFingerprint"],
+                equals: input.parsed.purchaseFingerprint,
+              },
+            },
+            {
+              normalizedSummary: {
+                path: ["callbackOrigin", "channelId"],
+                equals: input.channelId,
+              },
+            },
+          ],
+        },
+        orderBy: [{ firstReceivedAt: "desc" }, { id: "desc" }],
+        select: { id: true, firstReceivedAt: true },
+      });
+    } catch {
+      throw new ServiceUnavailableException(publicPersistenceFailureMessage);
+    }
+  }
+
   private async ingestForEndpoint(input: {
     endpoint: PublicConversionEndpoint;
     rawBody: Buffer;
@@ -438,8 +530,10 @@ export class InboundConversionAutomationIngestionService {
     const touchRuleEndpoint =
       input.touchRuleEndpoint ?? input.integrationEndpointId === null;
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
-    const parsed = this.parseAutomation(endpoint, payload);
+    // The arrival is read first: a ROI Chat purchase without event_time takes
+    // it as its time (re-evaluations pass the stored firstReceivedAt).
     const receivedAt = new Date();
+    const parsed = this.parseAutomation(endpoint, payload, receivedAt);
     // When the occurrence happened for the production gate (a retry keeps
     // the original receipt time); bookkeeping stays at "now".
     const occurrenceReceivedAt = input.occurrenceReceivedAt ?? receivedAt;
@@ -506,6 +600,34 @@ export class InboundConversionAutomationIngestionService {
           reasonCode: parsed.errorCode,
         },
       };
+    }
+
+    if (parsed.ok && parsed.value.provider === "roichat") {
+      const repeated = await this.findRoichatRepeatedPurchase({
+        endpoint,
+        parsed: parsed.value,
+        channelId: input.origin?.channelId ?? null,
+        receivedAt,
+      });
+      if (repeated) {
+        await this.recordDuplicate(
+          endpoint,
+          repeated.id,
+          providerAttempt,
+          receivedAt,
+          touchRuleEndpoint,
+        );
+        return {
+          status: "accepted",
+          deliveryId: repeated.id,
+          duplicate: true,
+          observationStatus: "duplicate",
+          ruleOutcome: {
+            status: "duplicate",
+            reasonCode: ROICHAT_PURCHASE_REPEATED_REASON,
+          },
+        };
+      }
     }
 
     const deliveryId = randomUUID();
@@ -1807,7 +1929,10 @@ export class InboundConversionAutomationIngestionService {
       rule.conversionRule.triggerType !== "provider_automation" ||
       (!isPaytAutomation &&
         rule.connection.provider !== "umbler" &&
-        rule.connection.provider !== "unnichat") ||
+        rule.connection.provider !== "unnichat" &&
+        // Fase 6.8: the ROI Chat rule's own URL is born disabled (the
+        // purchase arrives on the number URL); kept here for parity.
+        rule.connection.provider !== "roichat") ||
       rule.connection.removedAt !== null ||
       !["observation", "production"].includes(rule.connection.status) ||
       rule.parserRelease.status === "retired"
@@ -1849,7 +1974,9 @@ export class InboundConversionAutomationIngestionService {
       rule.conversionRule.triggerType !== "provider_automation" ||
       (!isPaytAutomation &&
         rule.connection.provider !== "umbler" &&
-        rule.connection.provider !== "unnichat") ||
+        rule.connection.provider !== "unnichat" &&
+        // Fase 6.8: the ROI Chat purchase routed from the number URL.
+        rule.connection.provider !== "roichat") ||
       rule.connection.removedAt !== null ||
       !["observation", "production"].includes(rule.connection.status) ||
       rule.parserRelease.status === "retired"
@@ -1966,6 +2093,14 @@ export class InboundConversionAutomationIngestionService {
       return parseUmblerAutomationV1(payload);
     }
     if (
+      rule.parserRelease.provider === "roichat" &&
+      rule.parserRelease.version === ROICHAT_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      // The rule only takes purchases (the number URL also receives the
+      // lead entries, which never reach a rule).
+      return parseRoichatAutomationV1(payload, receivedAt ?? new Date());
+    }
+    if (
       rule.parserRelease.provider === "unnichat" &&
       rule.parserRelease.version === UNNICHAT_AUTOMATION_V1_PARSER_VERSION
     ) {
@@ -2001,6 +2136,8 @@ export class InboundConversionAutomationIngestionService {
         return "braip-automation-v1";
       case "unnichat":
         return "unnichat-automation-v1";
+      case "roichat":
+        return "roichat-automation-v1";
       default:
         return "umbler-automation-v1";
     }
@@ -2103,6 +2240,14 @@ export class InboundConversionAutomationIngestionService {
           currency:
             "currency" in input.parsed ? input.parsed.currency : undefined,
           testCallback: "test" in input.parsed ? input.parsed.test : undefined,
+          // ROI Chat: 12h repeat guard identity (digest, no PII) and where
+          // the purchase time came from (payload, arrival or future-capped).
+          ...("purchaseFingerprint" in input.parsed
+            ? {
+                purchaseFingerprint: input.parsed.purchaseFingerprint,
+                eventTimeSource: input.parsed.eventTimeSource,
+              }
+            : {}),
           decisionId: observed.decisionId,
           decisionCode: observed.decisionCode,
           executionStatus: this.automationObservationStatus(observed),
@@ -2364,6 +2509,7 @@ export class InboundConversionAutomationIngestionService {
         encryptionKeyVersion: true,
         payloadExpiresAt: true,
         normalizedSummary: true,
+        firstReceivedAt: true,
       },
     });
     if (
@@ -2394,6 +2540,7 @@ export class InboundConversionAutomationIngestionService {
       const parsed = this.parseAutomation(
         endpoint,
         JSON.parse(rawBody.toString("utf8")) as unknown,
+        delivery.firstReceivedAt,
       );
       return {
         rawBody,
@@ -2569,6 +2716,9 @@ export class InboundConversionAutomationIngestionService {
                   parserStatus: "parsed",
                   automation: parsed.automation,
                   eventName: parsed.eventName,
+                  ...("purchaseFingerprint" in parsed
+                    ? { purchaseFingerprint: parsed.purchaseFingerprint }
+                    : {}),
                   executionStatus: "decision_pending",
                   reasonCode: "decision_pending",
                   channelResolved: false,

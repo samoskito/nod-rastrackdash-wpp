@@ -1428,12 +1428,14 @@ export class InboundWebhookChannelRoutesService {
     // UAZAPI/NOD channels are bridged automatically from the WhatsApp
     // instance. Data Crazy payloads carry no business phone, only an instance
     // id, so a phone-keyed provisional channel could never be merged.
-    // Unnichat binds its number when the connection is created (Fase 4b).
+    // Unnichat binds its number when the connection is created (Fase 4b),
+    // and so does ROI Chat (Fase 6.8: one connection = one number = one URL).
     if (
       connection.provider === "uazapi" ||
       connection.provider === "waha" ||
       connection.provider === "data_crazy" ||
-      connection.provider === "unnichat"
+      connection.provider === "unnichat" ||
+      connection.provider === "roichat"
     ) {
       throw new BadRequestException(
         "Este provedor cadastra o canal automaticamente",

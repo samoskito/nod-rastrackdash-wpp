@@ -123,6 +123,7 @@ import {
   type ParsedUnnichatAutomationV1,
   UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
+import { ROICHAT_PURCHASE_REPEATED_REASON } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
 
 /** Automation callbacks re-parsed at production time (Umbler, Unnichat). */
 type ParsedAutomationForProduction =
@@ -132,7 +133,6 @@ type ParsedAutomationForProduction =
       automation: "crm_movement";
       eventName: ConversionEventNameDto;
     });
-
 const PURCHASE_DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1_000;
 const terminalStatuses = new Set(["materialized", "duplicate", "blocked"]);
 const executionInclude = {
@@ -1232,7 +1232,9 @@ export class ProviderConversionProductionService
             : otherNumberDuplicate
             ? otherNumberDuplicate.reasonCode
             : dedupePolicy.mode === "rolling_window"
-              ? "purchase_within_24h"
+              ? occurrence.provider === "roichat"
+                ? ROICHAT_PURCHASE_REPEATED_REASON
+                : "purchase_within_24h"
               : "qualified_lead_already_materialized";
         await transaction.providerConversionRuleExecution.update({
           where: { id: execution.id },

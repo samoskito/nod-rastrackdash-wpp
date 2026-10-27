@@ -1447,6 +1447,28 @@ export default async function IntegrationsPage({
     ) : (
       inboundPanel(provider)
     );
+  // Fase 6.8 (porte do #183): ROI Chat, uma conexão por número; a URL de
+  // cada número recebe a entrada do lead E a compra (regra "Compra no ROI
+  // Chat"). Produção direta: nasce enviando, sem passo de liberação.
+  const roichatPanel = (
+    <div className="integration-modal-stack">
+      <div className="integration-modal-note">
+        <strong>Uma URL por número, para a entrada e a compra</strong>
+        <p className="muted">
+          Crie uma conexão para cada número do ROI Chat e cadastre a URL dele
+          no ROI Chat. A mesma URL recebe a entrada do lead que veio do anúncio
+          e a compra (com <code>event_name: "Purchase"</code>, valor e moeda).
+          A compra vira conversão pela regra “Compra no ROI Chat”, em
+          Conversões. Com a rota Meta do número configurada, tudo já segue
+          para a Meta.
+        </p>
+      </div>
+      {inboundPanel("roichat", {
+        scopeDescription:
+          "Informe o nome e o número, gere a URL do número e cadastre-a no ROI Chat.",
+      })}
+    </div>
+  );
   const paytRulesBlock = (
     <div className="integration-modal-note">
       <strong>Regras de venda</strong>
@@ -2000,6 +2022,7 @@ export default async function IntegrationsPage({
     waha: whatsappProviderPanel("waha"),
     ...comingSoonPanels,
     meta_cloud: inboundPanel("meta_cloud"),
+    roichat: roichatPanel,
     umbler: automationUrlsPanel("umbler"),
     gupshup: inboundPanel("gupshup"),
     data_crazy: inboundPanel("data_crazy"),
@@ -2205,6 +2228,7 @@ export default async function IntegrationsPage({
           waha: [rulesLink],
           zapi: [rulesLink],
           meta_cloud: [rulesLink],
+          roichat: [rulesLink],
           umbler: [rulesLink],
           gupshup: [rulesLink],
           data_crazy: [rulesLink],

@@ -193,6 +193,22 @@ pixel do número. Cada número escolhe o roteamento Meta: **Herdar do workspace*
 número e regras já nascem enviando. Passo a passo, verificação e rollback em
 [`setup/unnichat.md`](setup/unnichat.md).
 
+**ROI Chat** (WhatsApp API Oficial, Fase 6.8) fica na aba **WhatsApp**, ao
+lado de WAHA e WhatsApp Cloud API, e é uma conexão por número: no card **ROI
+Chat**, clique em **Gerar webhook**, informe o nome e o número de WhatsApp
+atendido pelo ROI Chat (o seu, nunca o do lead) e copie a URL completa (com
+`?token=`, aparece uma vez). No ROI Chat, cole essa URL no webhook do mesmo
+número: ela recebe a **entrada** do lead que veio do anúncio (cria o lead) e a
+**compra** (`event_name: "Purchase"`, `valor_venda` e `moeda`). Para a
+compra virar `Purchase` na Meta, crie em **Conversões → Nova regra → Compra no
+ROI Chat** a regra para todos os números do ROI Chat ou para números
+específicos; o valor vem da própria compra. A mesma compra repetida em menos de
+12 horas conta uma vez só. Os leitores já vêm em uso (validados com payloads
+reais do ROI Chat): conexão, número e regra já nascem enviando, sem liberar
+nada. A rota da Meta do número é aprendida pelo anúncio da primeira entrada
+(com a conta de anúncio conectada em Meta Ads). Passo a passo, conferência e
+recuperação em [`setup/roichat.md`](setup/roichat.md).
+
 ### 10.3 Meta WhatsApp (Cloud API) — conectar a Meta direto (CTWA)
 
 É a opção para conectar **seu número oficial da Meta sem intermediário**, no mesmo papel que Kinbox/Data Crazy cumprem quando "conectam a Meta". Não é a conexão de Meta Ads do passo 9 e não usa o token do Gerenciador de Negócios.

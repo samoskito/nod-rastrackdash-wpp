@@ -1694,6 +1694,8 @@ describe("provider rules API: Conversões screen support", () => {
         "data_crazy",
         "unnichat",
         "waha",
+        // Fase 6.8: a ROI Chat number is a WhatsApp number too.
+        "roichat",
       ],
       // Fase 4b: the Unnichat automation runs on its own connection number.
       automation_unnichat: ["unnichat"],
@@ -1706,7 +1708,10 @@ describe("provider rules API: Conversões screen support", () => {
         "data_crazy",
         "unnichat",
         "waha",
+        "roichat",
       ],
+      // Fase 6.8: the ROI Chat purchase runs on the ROI Chat numbers.
+      automation_roichat: ["roichat"],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
@@ -1737,6 +1742,7 @@ describe("provider rules API: Conversões screen support", () => {
       automation_umbler: [true, true],
       automation_payt: [false, true],
       automation_unnichat: [true, true],
+      automation_roichat: [true, true],
       automation_braip: [false, true],
     });
     // Unnichat: any catalog event (the rule chooses it), never unified.

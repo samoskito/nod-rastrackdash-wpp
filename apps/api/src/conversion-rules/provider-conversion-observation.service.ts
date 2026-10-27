@@ -32,6 +32,7 @@ import {
   type ParsedSaleAutomationV1,
 } from "../inbound-webhooks/providers/sales-platform-sale";
 import type { ParsedUnnichatAutomationV1 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
+import type { ParsedRoichatAutomationV1 } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
 import {
   PAYT_LEAD_OTHER_CHANNEL_REASON,
   resolvePurchaseChannels,
@@ -169,7 +170,8 @@ type ParsedProviderAutomation =
       provider: "unnichat";
       automation: "crm_movement";
       eventName: ConversionEventNameDto;
-    });
+    })
+  | ParsedRoichatAutomationV1;
 
 export type ProviderConversionObservationResult = {
   executionIds: string[];
@@ -373,8 +375,12 @@ export class ProviderConversionObservationService {
     // numbers is attributed to the number whose automation called, never to
     // the latest conversation.
     const spansConnections = automationSpansConnections(rule);
+    // Fase 6.8 (porte do #183): the ROI Chat purchase came through ONE
+    // number's own URL, so that number is always the origin (also for a rule
+    // of a single connection).
+    const roichat = rule.parserRelease.provider === "roichat";
     const origin: AutomationCallbackOrigin =
-      spansConnections && input.origin
+      (spansConnections || roichat) && input.origin
         ? input.origin
         : { connectionId: input.connectionId, channelId: null };
     // A Payt sale is attributed only to a tracked CTWA lead: its verified
@@ -383,7 +389,8 @@ export class ProviderConversionObservationService {
     // (a rule "todas as conexões": then on any number of its scope).
     const purchaseLead =
       isSalesPlatformProvider(rule.parserRelease.provider) ||
-      rule.parserRelease.provider === "unnichat"
+      rule.parserRelease.provider === "unnichat" ||
+      roichat
       ? await this.resolveAutomationPurchaseLead({
           input,
           rule,
@@ -969,6 +976,11 @@ export class ProviderConversionObservationService {
       phone: input.input.automation.phone,
       phoneCandidates: input.phoneCandidates,
     };
+    if (input.rule.parserRelease.provider === "roichat") {
+      // ROI Chat leads come from an ad (source_id): the lead of this phone
+      // with its own ad attribution. No CTWA page/pixel proof path.
+      return this.paidLeads.resolve(base);
+    }
     if (input.rule.parserRelease.provider !== "unnichat") {
       return this.paidLeads.resolve({ ...base, ctwaProofAnyChannel: true });
     }
@@ -1013,6 +1025,22 @@ export class ProviderConversionObservationService {
     );
     if (contactIdentityHashes.length === 0 || channelIds.length === 0)
       return null;
+
+    // ROI Chat: one URL per number. The number is the URL's (the router
+    // proved it); it is never looked up from the lead's other conversations,
+    // so a purchase on number A can never be attributed to number B.
+    if (input.rule.parserRelease.provider === "roichat") {
+      const channelId = input.origin.channelId;
+      if (!channelId || !channelIds.includes(channelId)) return null;
+      return this.prisma.inboundWebhookChannel.findFirst({
+        where: {
+          id: channelId,
+          workspaceId: input.workspaceId,
+          connectionId: input.origin.connectionId,
+        },
+        select: observedChannelSelect,
+      });
+    }
 
     if (
       input.rule.parserRelease.provider === "unnichat" &&
