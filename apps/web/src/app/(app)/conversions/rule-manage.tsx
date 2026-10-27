@@ -56,6 +56,7 @@ const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_unnichat",
   "automation_payt",
   "automation_braip",
+  "automation_roichat",
 ];
 
 /**
@@ -71,7 +72,11 @@ export function ruleManageTabs(
     { id: "edit", label: "Editar" },
   ];
   if (automationOrigins.includes(origin)) {
-    tabs.push({ id: "endpoint", label: "Endereço e configuração" });
+    // Fase 6.8: a compra do ROI Chat chega pela URL de cada número
+    // (Integrações); a regra não tem endereço próprio para mostrar.
+    if (origin !== "automation_roichat") {
+      tabs.push({ id: "endpoint", label: "Endereço e configuração" });
+    }
     if (canManage) tabs.push({ id: "received", label: "Eventos recebidos" });
   }
   if (origin === "structured_catalog" && rule.catalog) {
@@ -84,6 +89,9 @@ export const unseenUrlWarning =
   "O novo endereço só aparece agora e o anterior já parou de funcionar. Copie e cole na plataforma antes de sair daqui.";
 
 export function deleteConfirmText(origin: ProviderConversionRuleOriginDto): string {
+  if (origin === "automation_roichat") {
+    return "A regra para de reconhecer as compras do ROI Chat na hora (as URLs dos números continuam recebendo as entradas). O histórico continua salvo. Não dá para desfazer.";
+  }
   return automationOrigins.includes(origin)
     ? "A regra para de reconhecer conversões na hora e o endereço dela deixa de funcionar. O histórico continua salvo. Não dá para desfazer."
     : "A regra para de reconhecer conversões na hora. O histórico continua salvo. Não dá para desfazer.";

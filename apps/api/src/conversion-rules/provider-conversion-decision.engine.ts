@@ -1,4 +1,5 @@
 import { isSalesPlatformProvider } from "../inbound-webhooks/providers/sales-platform-sale";
+import { roichatPurchaseDedupePolicy } from "./roichat-purchase-dedupe";
 import type {
   ProviderConversionDecisionConversionDto,
   ProviderConversionDecisionDto,
@@ -426,6 +427,10 @@ export class ProviderConversionDecisionEngine {
     ) {
       return { mode: "lifetime", scopeKey: input.occurrence.purchaseKey };
     }
+    // ROI Chat: repurchase allowed; only the same purchase (lead, number,
+    // value and currency) within 12h is a duplicate (roichat-purchase-dedupe).
+    const roichat = roichatPurchaseDedupePolicy(input);
+    if (roichat) return roichat;
     const scopeKey = [
       input.rule.eventName,
       input.occurrence.workspaceId,

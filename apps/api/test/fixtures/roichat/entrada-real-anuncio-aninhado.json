@@ -1,0 +1,14 @@
+{
+  "nome": "Fulana Ficticia",
+  "telefone": "+5547900000002",
+  "anuncio": {
+    "source_url": "https://fb.me/ficticio",
+    "source_id": "120200000000000001",
+    "source_type": "ad",
+    "headline": "Titulo ficticio",
+    "media_type": "video",
+    "video_url": "https://www.facebook.com/story.php?story_fbid=1&id=2",
+    "thumbnail_url": "https://scontent.example.fbcdn.net/v/ficticio.jpg",
+    "ctwa_clid": "AfhgFICTICIOctwaClidAninhado0000000000000000"
+  }
+}

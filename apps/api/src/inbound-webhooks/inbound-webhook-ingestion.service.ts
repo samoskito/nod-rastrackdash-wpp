@@ -10,6 +10,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   PayloadTooLargeException,
   ServiceUnavailableException,
   UnsupportedMediaTypeException,
@@ -30,6 +31,10 @@ import {
 import { extractUmblerV1DeliveryIdentity } from "./providers/umbler/umbler-v1-delivery-identity";
 import { extractMetaCloudV1DeliveryIdentity } from "./providers/meta-cloud/meta-cloud-v1-delivery-identity";
 import { MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES } from "./inbound-webhook-limits";
+import {
+  ROICHAT_PURCHASE_INGRESS,
+  type RoichatPurchaseIngressHandler,
+} from "./roichat-purchase-ingress.token";
 
 export { MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES } from "./inbound-webhook-limits";
 
@@ -126,6 +131,9 @@ export class InboundWebhookIngestionService {
     private readonly encryption: InboundWebhookPayloadEncryptionService,
     @Inject(InboundWebhookQueueService)
     private readonly queue: InboundWebhookQueueService,
+    @Optional()
+    @Inject(ROICHAT_PURCHASE_INGRESS)
+    private readonly roichatPurchases?: RoichatPurchaseIngressHandler,
   ) {}
 
   async ingest(
@@ -142,6 +150,25 @@ export class InboundWebhookIngestionService {
     const providerAttempt = parseInboundWebhookProviderAttempt(
       input.providerAttempt,
     );
+    // Fase 6.8 (porte do #183): the ROI Chat number URL also receives the
+    // purchase, which belongs to the rule "Compra no ROI Chat" of this number
+    // (never a lead entry). Without a rule it falls through and is stored as
+    // a delivery of the connection ("compra sem regra", never sent).
+    if (connection.provider === "roichat" && this.roichatPurchases) {
+      const purchase = await this.roichatPurchases.ingestPurchase({
+        connection: { id: connection.id, workspaceId: connection.workspaceId },
+        rawBody,
+        providerAttempt,
+      });
+      if (purchase) {
+        return {
+          status: "accepted",
+          deliveryId: purchase.deliveryId,
+          duplicate: purchase.duplicate,
+          queueStatus: purchase.duplicate ? "existing" : "queued",
+        };
+      }
+    }
     const identity = this.extractIdentity(connection, rawBody);
     const existing = await this.findExistingDelivery(connection.id, identity);
 

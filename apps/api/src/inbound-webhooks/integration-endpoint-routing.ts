@@ -43,7 +43,10 @@ export type IntegrationRoutingProvider =
   | "payt"
   | "braip"
   | "unnichat"
-  | "umbler";
+  | "umbler"
+  // Fase 6.8: the ROI Chat purchase arrives on the number's own URL and is
+  // routed to its rule (roichat-purchase-ingress.service.ts).
+  | "roichat";
 
 const routingRuleSelect = {
   id: true,

@@ -64,11 +64,32 @@ export const providerConversionRuleModeSchema = z.enum(
  * comportamento original, em que o proprio provedor WhatsApp (Umbler) envia o
  * callback. "payt"/"braip" marcam uma regra de venda vinda da plataforma (Payt
  * na Fase 4a, Braip na 6.5): o valor de cada venda chega no payload.
+ * "roichat" (Fase 6.8) marca a regra "Compra no ROI Chat".
  */
-export const providerConversionAutomationSources = ["payt", "braip"] as const;
+export const providerConversionAutomationSources = [
+  "payt",
+  "braip",
+  "roichat",
+] as const;
 export const providerConversionAutomationSourceSchema = z.enum(
   providerConversionAutomationSources,
 );
+
+/**
+ * Fase 6.8 (porte do #183): ROI Chat (WhatsApp API Oficial). A compra chega
+ * na MESMA URL do numero que recebe a entrada do lead, com
+ * `event_name: "Purchase"`, `valor_venda` e `moeda`. Nao e plataforma de
+ * venda. A regra "Compra no ROI Chat" envia so Purchase; o valor vem da venda
+ * e o valor da regra e apenas reserva (opcional) para uma compra que chegar
+ * sem `valor_venda`.
+ */
+export const ROICHAT_PROVIDER = "roichat" as const;
+export const roichatEventNames = ["Purchase"] as const;
+export function isRoichatProvider(
+  provider: string | null | undefined,
+): provider is typeof ROICHAT_PROVIDER {
+  return provider === ROICHAT_PROVIDER;
+}
 
 /**
  * Fase 4a: eventos padrao que um postback da Payt pode virar. O evento vem do
@@ -143,7 +164,8 @@ export const providerConversionRuleScopeSchema = z.enum(
  * whatsapp_label = etiqueta do WhatsApp (Uazapi); automation_umbler = callback
  * assinado da automacao Umbler; automation_payt = postback de venda da Payt;
  * automation_unnichat = fluxo do Unnichat chamando a URL da regra (Fase 4b);
- * automation_braip = postback de venda da Braip (6.5).
+ * automation_braip = postback de venda da Braip (6.5);
+ * automation_roichat = compra do ROI Chat na URL do numero (6.8).
  * As automacoes por URL ficam sempre ligadas a uma conexao.
  */
 export const providerConversionRuleOrigins = [
@@ -154,6 +176,7 @@ export const providerConversionRuleOrigins = [
   "automation_payt",
   "automation_unnichat",
   "automation_braip",
+  "automation_roichat",
 ] as const;
 export const providerConversionRuleOriginSchema = z.enum(
   providerConversionRuleOrigins,
@@ -422,6 +445,8 @@ type ValuedRuleInput = {
 function refineEventValueFields(
   input: ValuedRuleInput,
   context: z.RefinementCtx,
+  /** ROI Chat: the sale carries its value; the rule's is only a fallback. */
+  options: { valueOptional?: boolean } = {},
 ): void {
   if (!conversionEventCarriesValue(input.eventName)) {
     if (input.defaultValueCents != null) {
@@ -449,6 +474,7 @@ function refineEventValueFields(
   }
 
   if (
+    !options.valueOptional &&
     conversionEventRequiresValue(input.eventName) &&
     input.valueMode !== "message_extracted" &&
     !input.defaultValueCents
@@ -540,8 +566,27 @@ const providerAutomationCreateSchema = z
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
+    if (isRoichatProvider(input.automationSource)) {
+      // ROI Chat: so compra; o valor vem da venda (valor da regra = reserva).
+      if (input.eventName !== "Purchase") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "O ROI Chat envia somente compra",
+          path: ["eventName"],
+        });
+      }
+      if (input.triggerPhrases || input.triggerLabels) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "A compra do ROI Chat nao usa etiquetas",
+          path: ["triggerPhrases"],
+        });
+      }
+    }
     if (!isSalesPlatformProvider(input.automationSource)) {
-      refineEventValueFields(input, context);
+      refineEventValueFields(input, context, {
+        valueOptional: isRoichatProvider(input.automationSource),
+      });
       if (input.productFilterCodes && input.productFilterCodes.length > 0) {
         context.addIssue({
           code: z.ZodIssueCode.custom,

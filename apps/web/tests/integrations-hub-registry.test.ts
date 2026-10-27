@@ -83,6 +83,8 @@ describe("integration registry", () => {
         "payt",
         // Fase 6.5: Braip (same base as Payt, always offered).
         "braip",
+        // Fase 6.8: ROI Chat (WhatsApp API Oficial, one URL per number).
+        "roichat",
         "kommo",
         "pipedrive",
         "meta",
@@ -149,6 +151,8 @@ describe("integration registry", () => {
       "uazapi_byo",
       "meta_cloud",
       "waha",
+      // Fase 6.8: next to WAHA and Meta Cloud.
+      "roichat",
       "zapi",
       "nod_api",
     ]);

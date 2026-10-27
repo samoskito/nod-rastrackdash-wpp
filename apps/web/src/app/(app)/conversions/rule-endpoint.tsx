@@ -37,11 +37,13 @@ const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = 
   automation_unnichat: "Unnichat",
   automation_payt: "Payt",
   automation_braip: "Braip",
+  automation_roichat: "ROI Chat",
 };
 
 // Artigo por plataforma: "na Umbler Talk", "na Payt", mas "no Unnichat".
 const platformLocatives: Partial<Record<ProviderConversionRuleOriginDto, string>> = {
   automation_unnichat: "no Unnichat",
+  automation_roichat: "no ROI Chat",
 };
 
 function inPlatform(origin: ProviderConversionRuleOriginDto): string {

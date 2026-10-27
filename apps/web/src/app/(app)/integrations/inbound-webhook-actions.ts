@@ -44,12 +44,18 @@ const connectionStatusOperationalErrors = new Set([
 ]);
 const connectionCreateOperationalErrors = new Set([
   "Conexões Unnichat exigem o número de WhatsApp do cliente",
+  "Conexões ROI Chat exigem o número de WhatsApp do cliente",
 ]);
 const providerObservationUnavailableApiMessage =
   "Versão do leitor do provedor indisponível";
 
 function providerObservationUnavailableMessage(provider: string): string {
-  const name = provider === "unnichat" ? "O Unnichat" : "Este provedor";
+  const name =
+    provider === "unnichat"
+      ? "O Unnichat"
+      : provider === "roichat"
+        ? "O ROI Chat"
+        : "Este provedor";
 
   return `${name} ainda não está liberado nesta instalação: rode as migrations da API e tente de novo.`;
 }
@@ -82,10 +88,12 @@ export async function createInboundWebhookConnectionAction(
   formData: FormData,
 ): Promise<InboundWebhookActionResult> {
   const provider = formText(formData, "provider");
-  // Unnichat: o webhook de entrada não traz o canal, então a conexão nasce
-  // com o número de WhatsApp do cliente (nunca o telefone do lead).
+  // Unnichat e ROI Chat: o webhook de entrada não traz o canal, então a
+  // conexão nasce com o número de WhatsApp do cliente (nunca o telefone do
+  // lead).
+  const bindsPhone = provider === "unnichat" || provider === "roichat";
   const input = inboundWebhookConnectionCreateInputSchema.safeParse(
-    provider === "unnichat"
+    bindsPhone
       ? {
           provider,
           displayName: formText(formData, "displayName"),
@@ -96,8 +104,8 @@ export async function createInboundWebhookConnectionAction(
 
   if (!input.success) {
     return failure(
-      provider === "unnichat" && formText(formData, "displayName")
-        ? "Informe o número de WhatsApp do cliente atendido pelo Unnichat, com DDI e DDD."
+      bindsPhone && formText(formData, "displayName")
+        ? `Informe o número de WhatsApp do cliente atendido pelo ${provider === "roichat" ? "ROI Chat" : "Unnichat"}, com DDI e DDD.`
         : invalidFormMessage,
     );
   }

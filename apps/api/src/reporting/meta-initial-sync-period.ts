@@ -17,6 +17,8 @@ const INBOUND_WHATSAPP_PROVIDERS = [
   "meta_cloud",
   "data_crazy",
   "unnichat",
+  // Fase 6.8: ROI Chat (uma conexão por número).
+  "roichat",
 ] as const;
 
 export type MetaInitialSyncAnchorSource =

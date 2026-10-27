@@ -7,6 +7,7 @@ import type {
   ProviderConversionRuleOriginDto,
   ProviderConversionRulePendingNumberDto,
 } from "@wpptrack/shared";
+import { formatMoney } from "@wpptrack/shared";
 import type { KommoConnectionDetailDto } from "../integrations/kommo-actions";
 import type { PipedriveConnectionDetailDto } from "../integrations/pipedrive-actions";
 import {
@@ -257,6 +258,7 @@ export function providerRuleOrigin(
   if (rule.origin) return rule.origin;
   if (rule.automationSource === "payt") return "automation_payt";
   if (rule.automationSource === "braip") return "automation_braip";
+  if (rule.automationSource === "roichat") return "automation_roichat";
 
   switch (rule.conversionRule.triggerType) {
     case "message_phrase":
@@ -269,6 +271,7 @@ export function providerRuleOrigin(
         : null;
       if (provider === "umbler") return "automation_umbler";
       if (provider === "unnichat") return "automation_unnichat";
+      if (provider === "roichat") return "automation_roichat";
       return "whatsapp_label";
     }
   }
@@ -421,6 +424,11 @@ function triggerDetailForProviderRule(
     case "automation_braip":
       // Só pela URL única da Braip (uma para a conta toda).
       return "URL única da Braip";
+    case "automation_roichat":
+      // Fase 6.8: a compra chega pela URL de cada número do ROI Chat.
+      return rule.conversionRule.defaultValueCents
+        ? `Valor de cada compra do ROI Chat (reserva: ${formatMoney(rule.conversionRule.defaultValueCents, rule.conversionRule.defaultCurrency ?? "BRL")})`
+        : "Valor de cada compra vem do ROI Chat";
   }
 }
 

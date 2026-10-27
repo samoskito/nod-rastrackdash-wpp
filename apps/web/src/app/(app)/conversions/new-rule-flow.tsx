@@ -405,6 +405,13 @@ export function NewRuleFlow({
             canManage
           />
         ) : null}
+        {origin === "automation_roichat" ? (
+          <p className="action-note">
+            Pronto para receber: as compras chegam pela URL de cada número do
+            ROI Chat (a mesma da entrada do lead). Peça ao ROI Chat para enviar
+            a compra com event_name &quot;Purchase&quot;, valor_venda e moeda.
+          </p>
+        ) : null}
         {singleUrlProvider && draft && singleUrlActions && !result.webhookUrl ? (
           <SingleUrlAfterCreate
             provider={singleUrlProvider}
@@ -779,8 +786,9 @@ function EventStep({
       <legend>Qual evento vai para a Meta?</legend>
       {definition.lockedEvent ? (
         <p className="muted">
-          Pedidos do catálogo sempre viram Compra realizada, com o valor
-          calculado pelo catálogo.
+          {draft.origin === "automation_roichat"
+            ? "O ROI Chat avisa a compra com event_name Purchase, então o evento é sempre Compra realizada, com o valor e a moeda de cada compra."
+            : "Pedidos do catálogo sempre viram Compra realizada, com o valor calculado pelo catálogo."}
         </p>
       ) : null}
       <label className="conversion-field">
@@ -920,7 +928,12 @@ export function ScopeStep({
     <fieldset className="conversion-flow-fieldset" disabled={disabled}>
       <legend>{legend}</legend>
 
-      {automation ? (
+      {automation && draft.origin === "automation_roichat" ? (
+        <p className="action-note">
+          Cada número do ROI Chat tem a própria URL, que já recebe a entrada e
+          a compra: a compra de um número nunca vale para outro.
+        </p>
+      ) : automation ? (
         <p className="action-note">
           Uma regra serve para todos os números {platformOf}: a mesma URL
           vale em todos os fluxos, de qualquer conexão.
@@ -1446,6 +1459,14 @@ function DetailsStep({
         </>
       ) : null}
 
+      {draft.origin === "automation_roichat" ? (
+        <RoichatPurchaseFields
+          draft={draft}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      ) : null}
+
       {draft.origin === "automation_payt" ? (
         <>
           {singleUrl ? (
@@ -1508,6 +1529,16 @@ function DetailsStep({
           <dt>Alcance</dt>
           <dd>{scopeSummary}</dd>
         </div>
+        {draft.origin === "automation_roichat" ? (
+          <div>
+            <dt>Valor enviado</dt>
+            <dd>
+              {draft.averageValue.trim()
+                ? `O valor de cada compra (reserva: ${draft.currency || "moeda da conta"} ${draft.averageValue.trim()})`
+                : "O valor de cada compra (valor_venda)"}
+            </dd>
+          </div>
+        ) : null}
         {(draft.origin === "automation_payt" && singleUrl) ||
         draft.origin === "automation_braip" ? (
           <div>
@@ -1584,7 +1615,50 @@ function SingleUrlAfterCreate({
 }
 
 /** O que a moeda da regra significa em cada origem. */
+/**
+ * Fase 6.8 (porte do #183): ROI Chat. O valor de cada compra vem do payload;
+ * a regra guarda só um valor de reserva opcional, usado quando a compra chega
+ * sem valor_venda.
+ */
+function RoichatPurchaseFields({
+  draft,
+  onChange,
+  disabled,
+}: {
+  draft: RuleDraft;
+  onChange: (update: Partial<RuleDraft>) => void;
+  disabled: boolean;
+}) {
+  return (
+    <>
+      <label className="conversion-field">
+        <span className="field-label">Valor de reserva (opcional)</span>
+        <input
+          value={draft.averageValue}
+          onChange={(event) => onChange({ averageValue: event.target.value })}
+          inputMode="decimal"
+          placeholder="Ex.: 20,00"
+          disabled={disabled}
+        />
+      </label>
+      <small className="action-note">
+        Usado só quando a compra chegar sem valor_venda. Com o valor na compra,
+        vai o valor da compra.
+      </small>
+      <p className="action-note">
+        As compras chegam pela URL de cada número do ROI Chat, a mesma que
+        recebe a entrada do lead: não há URL nova para cadastrar. A mesma
+        pessoa pode comprar mais de uma vez; a mesma compra (mesmo lead, número,
+        valor e moeda) repetida em até 12 horas conta uma vez só.
+      </p>
+    </>
+  );
+}
+
 export function ruleCurrencyHint(origin: string): string {
+  if (origin === "automation_roichat") {
+    return "A moeda da compra vence; esta só vale quando a compra não informa a moeda.";
+  }
   if (origin === "automation_payt" || origin === "automation_braip") {
     return "A moeda da venda vence; esta só vale quando a venda não informa a moeda.";
   }

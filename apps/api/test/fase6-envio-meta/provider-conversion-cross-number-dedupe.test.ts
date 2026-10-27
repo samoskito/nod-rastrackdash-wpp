@@ -415,7 +415,7 @@ function createStore(
     lead: LeadFixture;
     destinationId?: string;
     /** nod: the Meta Cloud (WABA) CTWA entry uses the same writer. */
-    provider?: "uazapi" | "meta_cloud" | "unnichat";
+    provider?: "uazapi" | "meta_cloud" | "unnichat" | "roichat";
     /** Porte do SaaS #155: what resolveLeadSubmittedRuleOverride answered. */
     deferToProviderRule?: { ruleIds: string[] } | null;
     occurredAt?: Date;
@@ -956,6 +956,74 @@ describe("nod: WAHA bridge and Meta Cloud entry under the once-per-lead rule", (
     ).toMatch(
       /leadLifetimeGuard: \{\s*channelId: event\.channelId,\s*pipeline: "ctwa_entry",\s*inTransaction: true,/,
     );
+  });
+});
+
+// Oracle of the once-per-lead guard with the ROI Chat entry's source trigger
+// (inbound_webhook:roichat). The real ROI Chat entry goes through the generic
+// CTWA writer of inbound-webhook-production.service.ts, whose guard call is
+// pinned for every provider by the source-contract test above.
+describe("Fase 6.8: ROI Chat entry and a WAHA number of the same lead (once per lead and pixel)", () => {
+  it("a WAHA phrase LeadSubmitted after the ROI Chat CTWA entry is not sent again", async () => {
+    const store = createStore();
+    await expect(
+      store.recordEntry({ eventKey: "roichat_ctwa_1", channelId: "channel_roichat", lead: leadA, provider: "roichat" }),
+    ).resolves.toMatchObject({ status: "created" });
+    store.receivePhrase({ id: "waha_after_roichat", channelId: "channel_waha", lead: leadA, eventName: "LeadSubmitted", provider: "waha" });
+
+    await expect(store.process("waha_after_roichat")).resolves.toEqual({ status: "duplicate" });
+    expect(store.executions.get("waha_after_roichat")!.reasonCode).toBe(
+      LEAD_CONVERTED_ON_ANOTHER_NUMBER,
+    );
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+    expect(sentLogs(store, "LeadSubmitted")[0]!.sourceTrigger).toBe("inbound_webhook:roichat");
+  });
+
+  it("the ROI Chat CTWA entry after a WAHA phrase LeadSubmitted keeps its receipt but is not sent", async () => {
+    const store = createStore();
+    store.receivePhrase({ id: "waha_first", channelId: "channel_waha", lead: leadA, eventName: "LeadSubmitted", provider: "waha" });
+    await expect(store.process("waha_first")).resolves.toEqual({ status: "materialized" });
+
+    await expect(
+      store.recordEntry({ eventKey: "roichat_ctwa_2", channelId: "channel_roichat", lead: leadA, provider: "roichat" }),
+    ).resolves.toMatchObject({
+      status: "duplicate",
+      duplicateReasonCode: LEAD_CONVERTED_ON_ANOTHER_NUMBER,
+    });
+    expect(
+      store.logs.find((log) => log.sourceTrigger === "inbound_webhook:roichat"),
+    ).toMatchObject({ status: "not_eligible", errorCode: LEAD_CONVERTED_ON_ANOTHER_NUMBER });
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+  });
+
+  it("an old 9th-digit row of the lead on the WAHA number is the same lead as the ROI Chat entry", async () => {
+    const store = createStore();
+    store.addLead(leadAOld);
+    await store.recordEntry({ eventKey: "roichat_ctwa_3", channelId: "channel_roichat", lead: leadA, provider: "roichat" });
+    store.receivePhrase({ id: "waha_old_row", channelId: "channel_waha", lead: leadAOld, eventName: "LeadSubmitted", provider: "waha" });
+    await expect(store.process("waha_old_row")).resolves.toEqual({ status: "duplicate" });
+    expect(sentLogs(store, "LeadSubmitted")).toHaveLength(1);
+  });
+
+  it("still sends for another lead, another pixel or another event", async () => {
+    const store = createStore();
+    await store.recordEntry({ eventKey: "roichat_ctwa_4", channelId: "channel_roichat", lead: leadA, provider: "roichat" });
+    // Another lead on the WAHA number.
+    store.receivePhrase({ id: "waha_lead_b", channelId: "channel_waha", lead: leadB, eventName: "LeadSubmitted", provider: "waha" });
+    await expect(store.process("waha_lead_b")).resolves.toEqual({ status: "materialized" });
+    // Same lead, another event (QualifiedLead) on the WAHA number.
+    store.receivePhrase({ id: "waha_qualified", channelId: "channel_waha", lead: leadA, provider: "waha" });
+    await expect(store.process("waha_qualified")).resolves.toEqual({ status: "materialized" });
+    // Same lead, ROI Chat entry for another Meta destination (per pixel).
+    await expect(
+      store.recordEntry({
+        eventKey: "roichat_ctwa_5",
+        channelId: "channel_roichat_2",
+        lead: leadA,
+        provider: "roichat",
+        destinationId: "destination_pixel_b",
+      }),
+    ).resolves.toMatchObject({ status: "created" });
   });
 });
 

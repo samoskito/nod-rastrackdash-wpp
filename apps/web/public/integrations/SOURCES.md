@@ -30,6 +30,7 @@ instead of a broken image.
 | File | Reason |
 | --- | --- |
 | `datacrazy.svg` | datacrazy.io only serves a 175x59 WebP logo (below 256 px, not SVG/PNG). |
+| `roichat.svg` | ROI Chat (WhatsApp API Oficial, Fase 6.8); plain wordmark placeholder, same file as the SaaS reference (copied 2026-10-27). PENDENTE: get the official ROI Chat logo and its usage permission and swap the file, keeping the name. |
 | `meta.svg` | (also the WhatsApp Cloud API card) Meta's brand resource center requires accepting its terms and Brand Review approval before use — the account owner must do this. |
 | `uazapi.svg` | No official logo file could be retrieved with a verifiable source (docs.uazapi.com was not reachable when this was prepared); neutral wordmark until the owner provides the file. |
 | `nod-api.svg`, `zapi.svg` | "Em breve" cards; no public logo kit found; neutral wordmarks. |

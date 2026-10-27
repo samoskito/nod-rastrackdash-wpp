@@ -930,7 +930,16 @@ export class InboundWebhookProductionService {
     }
     const result = parser.parse(
       payload,
-      inboundWebhookParserContext(delivery.workspaceId),
+      inboundWebhookParserContext(
+        delivery.workspaceId,
+        // Fase 6.8: ROI Chat binds the number to the connection (one URL per
+        // number): the re-parse needs the same bound phone and arrival time
+        // as the observation.
+        connection.provider === "roichat"
+          ? item.event.channel?.connectedPhone
+          : null,
+        connection.provider === "roichat" ? delivery.firstReceivedAt : null,
+      ),
     );
     const parsedEvent = result.events.find(
       (candidate) => candidate.dedupeKey === item.event.dedupeKey,

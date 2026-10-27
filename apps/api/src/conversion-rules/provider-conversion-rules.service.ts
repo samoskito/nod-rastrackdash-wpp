@@ -176,6 +176,18 @@ function isUnifiableAutomationOrigin(
 }
 
 /**
+ * Origins that may take "Todos os numeros da <plataforma> (todas as
+ * conexoes)": the unifiable automations plus the ROI Chat purchase (one
+ * connection per number). ROI Chat is new, so it has no legacy per-connection
+ * duplicates to "Unificar".
+ */
+function supportsCrossConnectionScope(
+  origin: ProviderRuleOrigin | null | undefined,
+): boolean {
+  return isUnifiableAutomationOrigin(origin) || origin === "automation_roichat";
+}
+
+/**
  * "Numero removido": the rule can no longer receive anything because the
  * number it belongs to was removed. Endpoint automations: their connection
  * (anchor of the URL) was removed. Specific rules: every chosen number's
@@ -298,6 +310,8 @@ type GlobalNumberActivation = {
 /** Fase 6.5: a Braip rule has no per-rule URL to reopen or rotate. */
 const braipSingleUrlOnlyMessage =
   "A Braip recebe só pela URL única da conta: gere, mostre ou gire a URL em Integrações → Braip";
+const roichatNumberUrlOnlyMessage =
+  "O ROI Chat manda a compra pela URL de cada número: confira em Integrações → ROI Chat";
 
 @Injectable()
 export class ProviderConversionRulesService {
@@ -752,6 +766,30 @@ export class ProviderConversionRulesService {
               `A ${salesPlatformLabels[salesPlatform]} envia compra aprovada, Pix/boleto gerado ou carrinho abandonado`,
             );
           }
+          // Fase 6.8 (porte do #183): the ROI Chat purchase rule belongs to a
+          // ROI Chat connection (its numbers' URLs receive the purchase) and
+          // only sends Purchase. No private-integration gate in the nod.
+          const automationSource =
+            input.triggerType === "provider_automation"
+              ? input.automationSource
+              : undefined;
+          const roichatRule =
+            input.triggerType === "provider_automation" &&
+            (automationSource === "roichat" ||
+              connection?.provider === "roichat");
+          if (roichatRule) {
+            if (
+              connection?.provider !== "roichat" ||
+              automationSource !== "roichat"
+            ) {
+              throw new BadRequestException(
+                "A compra do ROI Chat pertence a uma conexão ROI Chat",
+              );
+            }
+            if (input.eventName !== "Purchase") {
+              throw new BadRequestException("O ROI Chat envia somente compra");
+            }
+          }
 
           const productFilterCodes =
             input.triggerType === "provider_automation"
@@ -766,13 +804,18 @@ export class ProviderConversionRulesService {
           // URL: its per-rule URL is always born disabled (internal anchor).
           perRuleUrlDisabled =
             input.triggerType === "provider_automation" &&
-            (input.perRuleUrl === false || salesPlatform === "braip");
+            (input.perRuleUrl === false ||
+              salesPlatform === "braip" ||
+              // Fase 6.8: the ROI Chat purchase arrives on each number's own URL.
+              roichatRule);
 
           if (
             input.triggerType === "provider_automation" &&
             !isPaytAutomation &&
             connection &&
-            !["umbler", "uazapi", "unnichat"].includes(connection.provider)
+            !["umbler", "uazapi", "unnichat", "roichat"].includes(
+              connection.provider,
+            )
           ) {
             throw new BadRequestException(
               "Automação por tag ainda só está disponível para este provedor",
@@ -793,16 +836,17 @@ export class ProviderConversionRulesService {
             input.scope ?? "specific_numbers";
           const origin = this.createOrigin(input, connection, salesPlatform);
           // "Todos os numeros da <plataforma> (todas as conexoes)": explicit,
-          // only for Umbler/Unnichat automations for all numbers.
+          // only for Umbler/Unnichat automations (and, since 6.8, the ROI
+          // Chat purchase) for all numbers.
           const crossConnectionScope =
             input.triggerType === "provider_automation" &&
             input.crossConnectionScope === true;
           if (
             crossConnectionScope &&
-            (!isUnifiableAutomationOrigin(origin) || scope !== "all_numbers")
+            (!supportsCrossConnectionScope(origin) || scope !== "all_numbers")
           ) {
             throw new BadRequestException(
-              "Todas as conexões só existe para automações Unnichat/Umbler em todos os números",
+              "Todas as conexões só existe para automações Unnichat/Umbler/ROI Chat em todos os números",
             );
           }
           if (!connection && providerRuleOriginRequiresConnection(origin)) {
@@ -833,7 +877,8 @@ export class ProviderConversionRulesService {
               : salesPlatform
                 ? salesPlatform
                 : connection?.provider === "umbler" ||
-                    connection?.provider === "unnichat"
+                    connection?.provider === "unnichat" ||
+                    connection?.provider === "roichat"
                   ? connection.provider
                   : null;
           if (endpointAutomationProvider) {
@@ -1491,9 +1536,9 @@ export class ProviderConversionRulesService {
         nextScope === "all_numbers" &&
         (input.crossConnectionScope ?? currentCross);
       if (input.crossConnectionScope === true) {
-        if (!isUnifiableAutomationOrigin(origin) || nextScope !== "all_numbers") {
+        if (!supportsCrossConnectionScope(origin) || nextScope !== "all_numbers") {
           throw new BadRequestException(
-            "Todas as conexões só existe para automações Unnichat/Umbler em todos os números",
+            "Todas as conexões só existe para automações Unnichat/Umbler/ROI Chat em todos os números",
           );
         }
       }
@@ -1653,6 +1698,14 @@ export class ProviderConversionRulesService {
           this.salesPlatformOfRule(current) === "braip"
         ) {
           throw new ConflictException(braipSingleUrlOnlyMessage);
+        }
+        // Fase 6.8: the ROI Chat purchase arrives on each number's own URL;
+        // the rule's address (internal anchor) is never reopened either.
+        if (
+          input.publicUrlDisabled === false &&
+          this.isRoichatPurchaseRule(current)
+        ) {
+          throw new ConflictException(roichatNumberUrlOnlyMessage);
         }
         const isDisabled = current.endpoint.publicUrlDisabledAt != null;
         if (input.publicUrlDisabled && !isDisabled) {
@@ -4201,6 +4254,17 @@ export class ProviderConversionRulesService {
     }
   }
 
+  /** Fase 6.8: ROI Chat purchase rule (its parser release names the provider). */
+  private isRoichatPurchaseRule(rule: {
+    conversionRule: { triggerType: string };
+    parserRelease?: { provider: string } | null;
+  }): boolean {
+    return (
+      rule.conversionRule.triggerType === "provider_automation" &&
+      rule.parserRelease?.provider === "roichat"
+    );
+  }
+
   /** Sales-platform rule (Payt, Braip): its parser release names it. */
   private isPaytAutomationRule(rule: PersistedProviderRule): boolean {
     return this.salesPlatformOfRule(rule) !== null;
@@ -4292,7 +4356,9 @@ export class ProviderConversionRulesService {
     if (
       isValuedRule &&
       input.defaultValueCents === null &&
-      nextValueMode !== "message_extracted"
+      nextValueMode !== "message_extracted" &&
+      // ROI Chat: the sale carries its value; the rule's is only a fallback.
+      !this.isRoichatPurchaseRule(current)
     ) {
       throw new BadRequestException(
         "Regras com valor fixo precisam manter um valor positivo",
@@ -4643,7 +4709,9 @@ export class ProviderConversionRulesService {
       exampleMessage: messagePhrase.exampleMessage,
       // The parser release is stored with the rule, so this remains available
       // after a connection changes and does not require a new database column.
-      automationSource: this.salesPlatformOfRule(rule),
+      automationSource:
+        this.salesPlatformOfRule(rule) ??
+        (this.isRoichatPurchaseRule(rule) ? "roichat" : null),
       productFilterCodes: rule.productFilterCodes ?? [],
       endpoint: rule.endpoint ? this.endpointToDto(rule.endpoint) : null,
       catalog: rule.catalog ? this.catalogToDto(rule.catalog) : null,

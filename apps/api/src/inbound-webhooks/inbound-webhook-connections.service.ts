@@ -71,7 +71,9 @@ type UnnichatConnectionBind = {
 function resolveUnnichatConnectionBind(
   input: InboundWebhookConnectionCreateInputDto,
 ): UnnichatConnectionBind | null {
-  if (input.provider !== "unnichat") return null;
+  // Fase 6.8 (porte do #183): ROI Chat is bound the same way (one connection
+  // = one client number = one URL); a URL only ever attributes to its number.
+  if (input.provider !== "unnichat" && input.provider !== "roichat") return null;
   const connectedPhone = input.connectedPhone
     ? normalizePhoneIdentity(input.connectedPhone)
     : undefined;
@@ -208,11 +210,12 @@ export class InboundWebhookConnectionsService {
     const countsByClassification = new Map(
       eventCounts.map((row) => [row.classification, row._count._all]),
     );
-    // Fase 4b: the Unnichat sale automation has its own parser release.
+    // Fase 4b: the Unnichat sale automation has its own parser release (and,
+    // since 6.8, the ROI Chat purchase received on the number URL).
     const automationParserRelease =
-      connection.provider === "unnichat"
+      connection.provider === "unnichat" || connection.provider === "roichat"
         ? await this.prisma.inboundWebhookParserRelease.findFirst({
-            where: { provider: "unnichat", version: "automation-v1" },
+            where: { provider: connection.provider, version: "automation-v1" },
             select: { id: true, version: true, status: true },
           })
         : undefined;
@@ -334,12 +337,17 @@ export class InboundWebhookConnectionsService {
       );
     }
     const unnichatBind = resolveUnnichatConnectionBind(input);
-    if (input.provider === "unnichat" && !unnichatBind) {
+    if (
+      (input.provider === "unnichat" || input.provider === "roichat") &&
+      !unnichatBind
+    ) {
       // The shared schema already requires it; keep the service boundary
       // fail-closed for direct callers too: the connection must own the
       // client's number before any payload can be parsed.
       throw new ConflictException(
-        "Conexões Unnichat exigem o número de WhatsApp do cliente",
+        input.provider === "roichat"
+          ? "Conexões ROI Chat exigem o número de WhatsApp do cliente"
+          : "Conexões Unnichat exigem o número de WhatsApp do cliente",
       );
     }
 
@@ -394,7 +402,13 @@ export class InboundWebhookConnectionsService {
         const channelState = bornChannelState(created, release, bornAt);
         await transaction.inboundWebhookChannel.create({
           data: {
-            metaRoutingMode: "inherit_workspace",
+            // Unnichat numbers explicitly follow the workspace Meta
+            // configuration (as in the SaaS); a ROI Chat number keeps the
+            // column default, like the other non-Unnichat providers, whose
+            // routing ignores this mode (route learned from the entry's ad).
+            ...(input.provider === "unnichat"
+              ? { metaRoutingMode: "inherit_workspace" as const }
+              : {}),
             workspaceId,
             connectionId: created.id,
             organizationId: workspaceId,

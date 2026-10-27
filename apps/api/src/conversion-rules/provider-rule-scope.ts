@@ -126,6 +126,7 @@ export const WHATSAPP_CHANNEL_PROVIDERS = [
   "data_crazy",
   "unnichat",
   "waha",
+  "roichat",
 ] as const;
 /** Payt events (Fase 4a); "Carrinho abandonado" is still beta. */
 export const PAYT_RULE_EVENT_NAMES = [...paytSaleEventNames];
@@ -166,6 +167,7 @@ export function providerRuleOrigin(
       if (provider === "braip") return "automation_braip";
       if (provider === "umbler") return "automation_umbler";
       if (provider === "unnichat") return "automation_unnichat";
+      if (provider === "roichat") return "automation_roichat";
       return null;
     }
     default:
@@ -188,6 +190,8 @@ export function providerRuleOriginChannelProviders(
       return ["umbler"];
     case "automation_unnichat":
       return ["unnichat"];
+    case "automation_roichat":
+      return ["roichat"];
     case "automation_payt":
     case "automation_braip":
       return WHATSAPP_CHANNEL_PROVIDERS;
@@ -212,7 +216,11 @@ export function providerRuleChannelProviders(
   return providerRuleOriginChannelProviders(origin);
 }
 
-/** Umbler/Unnichat automations (signed URL per rule + URL per event). */
+/**
+ * Umbler/Unnichat automations (signed URL per rule + URL per event) and the
+ * ROI Chat purchase (received by each number's own URL). All three may span
+ * every connection of the provider ("Todos os numeros da <plataforma>").
+ */
 export function providerRuleIsConnectionAutomation(
   rule: Pick<
     ScopedProviderRule,
@@ -220,7 +228,11 @@ export function providerRuleIsConnectionAutomation(
   >,
 ): boolean {
   const origin = providerRuleOrigin(rule);
-  return origin === "automation_umbler" || origin === "automation_unnichat";
+  return (
+    origin === "automation_umbler" ||
+    origin === "automation_unnichat" ||
+    origin === "automation_roichat"
+  );
 }
 
 /**
@@ -329,6 +341,7 @@ export function providerRuleOriginRequiresConnection(
   return (
     origin === "automation_umbler" ||
     origin === "automation_unnichat" ||
+    origin === "automation_roichat" ||
     origin === "automation_payt" ||
     origin === "automation_braip"
   );
@@ -441,6 +454,23 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       ),
       labelMatch: null,
       unifiable: false,
+    },
+    {
+      // Fase 6.8 (porte do #183): "Compra no ROI Chat". The purchase arrives
+      // on each ROI Chat number's own URL (one connection per number) and is
+      // routed to the rule that owns that number. Only Purchase; the value
+      // comes from the sale (the rule's value is an optional fallback).
+      origin: "automation_roichat",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: ["roichat"],
+      authorChannelProviders: null,
+      connectionBound: true,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_roichat",
+      ),
+      labelMatch: null,
+      unifiable: false,
+      eventNames: ["Purchase"],
     },
   ];
   return {

@@ -14,6 +14,7 @@ export const parserProviderLabels: Record<
   unnichat: "Unnichat",
   waha: "WAHA",
   braip: "Braip",
+  roichat: "ROI Chat",
 };
 
 /** Texto do estado de um leitor (sem jargão de certificação). */

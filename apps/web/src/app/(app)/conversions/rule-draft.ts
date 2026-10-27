@@ -137,7 +137,9 @@ export function automationSingleConnectionNote(origin: string): string {
 
 /** "Unnichat" / "Umbler" no texto do alcance de uma automação. */
 export function automationPlatformName(origin: string): string {
-  return origin === "automation_umbler" ? "Umbler" : "Unnichat";
+  if (origin === "automation_umbler") return "Umbler";
+  if (origin === "automation_roichat") return "ROI Chat";
+  return "Unnichat";
 }
 
 /**
@@ -516,6 +518,30 @@ export function buildRulePayload(
             : {}),
         },
       };
+    case "automation_roichat": {
+      // Fase 6.8 (porte do #183): só compra; o valor vem da venda
+      // (valor_venda/moeda). O valor da regra é só reserva, opcional.
+      const cents = moneyToCents(draft.averageValue);
+      if (draft.averageValue.trim() && !cents) {
+        return { ok: false, message: "Informe um valor de reserva válido." };
+      }
+      return {
+        ok: true,
+        value: {
+          ...base,
+          triggerType: "provider_automation",
+          eventName: "Purchase",
+          automationSource: "roichat",
+          ...(cents ? { defaultValueCents: cents } : {}),
+          ...(draft.currency ? { defaultCurrency: draft.currency } : {}),
+          ...(draft.scope === "all_numbers" && draft.crossConnection
+            ? { crossConnectionScope: true }
+            : {}),
+          // A compra chega pela URL de cada número (sem URL por regra).
+          perRuleUrl: false,
+        },
+      };
+    }
     case "automation_umbler":
     case "automation_unnichat": {
       const values = valueFields({ ...draft, eventName }, false);
