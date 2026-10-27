@@ -7,9 +7,46 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit. Fase 6.4 (Meta Graph robustness): **two more additive migrations, `20261027130000_meta_creative_thumbnail` then `20261027130100_meta_reporting_sync_block` (they run by themselves at API boot): back up PostgreSQL before the redeploy**; only optional API variables, all with safe defaults (`WPPTRACK_META_USAGE_PAUSE_PERCENT`, `WPPTRACK_META_SYNC_DEDUPE_WINDOW_MINUTES`, `WPPTRACK_META_SYNC_MAX_DEFERRALS`, `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS` — on by default with 3 days, `0` turns it off —, `META_INSIGHTS_LEVEL_MODE` default `legacy`, `META_INSIGHTS_PAGE_LIMIT` default 500, `META_INSIGHTS_ASYNC_*` and `META_CAPI_BATCH_*` off by default, `WPPTRACK_CONVERSION_WORKER_CONCURRENCY` default 1); `META_VIDEO_THUMBNAILS_ENABLED` is unchanged; redeploy API, shared and web from the same commit.
 
 ### Added
+
+- **Fase 6.4 — Robustness of the Meta Graph calls (API, shared and web;
+  two additive migrations; optional variables only)**. Ported from the
+  SaaS (`918a0837`, `0403cbce`, `f1ec6a9e`, `6a3f2c79`, `c0cec66c`,
+  `c685ef66`, `0f16c25c`, `213047d3`, `70625e41`, `bc72b208`; release notes
+  `33adb781`). Typed Graph errors and a **reporting-only circuit breaker**
+  (`MetaReportingAccount.reportingSyncBlockedAt`): a dead token (190/102)
+  or a lost ad account permission (10/200) pauses only the report sync of
+  the failing account (every account of the token once a cached `GET /me`
+  confirms 190/102), never CAPI/CTWA routing; reconnect, revalidate, rotate or "Testar" lifts it.
+  Relatórios shows "Reconecte a conta Meta" and the Meta coverage warning
+  of Visão Geral/Relatórios now lists blocked accounts (the "bloqueada"
+  reason waiting since Fase 6.3a). Usage-aware yield (`X-App-Usage`,
+  `X-Business-Use-Case-Usage`, `X-FB-Ads-Insights-Throttle`,
+  `X-Ad-Account-Usage`) moves report jobs to delayed instead of retrying;
+  sync jobs are deduplicated per account/period/window; the auto-sync
+  takes a Redis marker per interval and pages through every workspace.
+  **Persisted creative thumbnails** (`MetaCreativeThumbnail`, 320 px, at
+  most 100 KB, fetched once per creative with bounded refresh and a
+  15-minute pause after a Meta rate limit) served by
+  `GET /reports/creative-thumbnails/ads/:adId` (workspace-scoped, read
+  only) and used by the lead page, the ad rows of Relatórios and the CRM
+  Kanban cards (the stored thumbnail waiting since Fase 6.2b); expired
+  signed Meta CDN URLs are no longer rendered. Optional ad-level Insights
+  with local aggregation (`META_INSIGHTS_LEVEL_MODE`), 500-row pages,
+  optional async reports, an incremental auto-sync window verified
+  against Meta's totals (spend and conversations) and optional CAPI
+  micro-batching (`META_CAPI_BATCH_ENABLED`, plain dispatches only; a
+  batch-wide 190/102 or throttle is not resent one by one). nod adaptations: the URGENT
+  mitigation stays (saved previews reused, `/{video}/thumbnails` only with
+  `META_VIDEO_THUMBNAILS_ENABLED=true`, first auto-sync after a random
+  10-30 min instead of the SaaS boot jitter); app-level usage is tracked
+  per Meta app (PalmUP social login vs the student's own app), so one hot
+  app does not pause the other; CAPI batches keep the strict nod
+  acknowledgement and never store the provider body;
+  `apps/api/scripts/delete-workspace.js` deletes the new table before
+  `Workspace` (`delete-workspace-order` test).
 
 - **Fase 6.3b — Filters of Visão Geral and Relatórios, applied automatically
   (API, shared and web; no migration, no new variable)**. Ported from the

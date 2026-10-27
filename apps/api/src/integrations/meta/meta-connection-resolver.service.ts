@@ -128,6 +128,8 @@ export class MetaConnectionResolverService {
         where: {
           workspaceId,
           active: true,
+          // Reporting-only breaker; CAPI/CTWA routes ignore this field.
+          reportingSyncBlockedAt: null,
           businessConnectionId: { not: null },
           businessConnection: {
             is: {
@@ -161,7 +163,7 @@ export class MetaConnectionResolverService {
       select: { status: true },
     });
     const activeAccounts = await this.prisma.metaReportingAccount.count({
-      where: { workspaceId, active: true },
+      where: { workspaceId, active: true, reportingSyncBlockedAt: null },
     });
 
     return legacy?.status === "connected" && activeAccounts > 0

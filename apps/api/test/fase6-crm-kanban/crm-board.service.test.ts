@@ -59,6 +59,8 @@ function harness(options: {
   stages?: FunnelStageConfigurationDto[];
   deferredReceipt?: boolean;
   instances?: Array<{ id: string; name: string; status: string }>;
+  /** Fase 6.4: persisted creative thumbnails (MetaCreativeThumbnail). */
+  thumbnails?: Array<{ creativeId: string; version: string | null }>;
 } = {}) {
   const queries: string[] = [];
   const leadFindMany = vi.fn(async (args: any) => {
@@ -104,6 +106,13 @@ function harness(options: {
     metaCampaign: {
       findMany: vi.fn(async () => [{ campaignId: "camp_1", name: "Black Friday" }]),
     },
+    ...(options.thumbnails
+      ? {
+          metaCreativeThumbnail: {
+            findMany: vi.fn(async () => options.thumbnails),
+          },
+        }
+      : {}),
   };
   const funnel = {
     getConfiguration: vi.fn(async () => ({ stages: options.stages ?? journey() })),
@@ -224,7 +233,7 @@ describe("CRM board service", () => {
       origin: "ctwa",
       campaignName: "Black Friday",
       adName: "Criativo carrossel",
-      // nod: no stored thumbnails yet (SaaS Fase 6.4): the ad thumbnail URL.
+      // Without a stored thumbnail (Fase 6.4): the ad thumbnail URL.
       creative: {
         thumbnailUrl: "https://cdn.example.test/ad_1.jpg",
         thumbnailVersion: null,
@@ -245,6 +254,33 @@ describe("CRM board service", () => {
     );
     expect(next.cards.map((card) => card.leadId)).toEqual(["novo_02", "novo_01", "novo_00"]);
     expect(next).toMatchObject({ remaining: 0, nextCursor: null });
+  });
+
+  it("cards carry the stored creative thumbnail version (Fase 6.4)", async () => {
+    await testDb.lead({ id: "buyer", adId: "ad_1", campaignId: "camp_1" });
+    await testDb.log({
+      leadId: "buyer",
+      eventName: "Purchase",
+      status: "sent",
+      at: daysAgo(1),
+    });
+    const { service, prisma } = harness({
+      thumbnails: [{ creativeId: "cr_1", version: "abcdef0123456789" }],
+    });
+    const board = await service.getBoard(WS, {}, { canMoveCards: true }, NOW);
+    const card = board.columns.flatMap((column) => column.cards)[0];
+
+    expect(card?.creative).toEqual({
+      thumbnailUrl: "https://cdn.example.test/ad_1.jpg",
+      thumbnailVersion: "abcdef0123456789",
+    });
+    expect(
+      (prisma as { metaCreativeThumbnail: { findMany: unknown } })
+        .metaCreativeThumbnail.findMany,
+    ).toHaveBeenCalledWith({
+      where: { workspaceId: WS, creativeId: { in: ["cr_1"] }, status: "ready" },
+      select: { creativeId: true, version: true },
+    });
   });
 
   it("override mode adds Conversas iniciadas with the deferred leads", async () => {

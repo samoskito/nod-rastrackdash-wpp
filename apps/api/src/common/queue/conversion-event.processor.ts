@@ -16,7 +16,25 @@ type LegacyConversionEventJobPayload = Omit<
 type ConversionEventWorkerPayload =
   ConversionEventJobPayload | LegacyConversionEventJobPayload;
 
-@Processor(CONVERSION_EVENTS_QUEUE)
+/**
+ * Worker concurrency (default 1, previous behavior). Meta CAPI micro-batching
+ * (META_CAPI_BATCH_ENABLED) only coalesces events that are in flight at the
+ * same time, so it needs concurrency > 1 to save requests.
+ */
+export function conversionEventWorkerConcurrency(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const parsed = Number.parseInt(
+    env.WPPTRACK_CONVERSION_WORKER_CONCURRENCY ?? "",
+    10
+  );
+
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 50) : 1;
+}
+
+@Processor(CONVERSION_EVENTS_QUEUE, {
+  concurrency: conversionEventWorkerConcurrency()
+})
 export class ConversionEventProcessor extends WorkerHost {
   constructor(
     @Inject(ConversionEventsService)

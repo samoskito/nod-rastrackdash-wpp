@@ -80,7 +80,30 @@ export type MetaCapiSendEventResult = {
   deliveryOutcome?: "unknown";
 };
 
+/**
+ * Graph codes that fail every event of a batch the same way (dead token or
+ * throttling): resending one by one would only spend the app limit again.
+ */
+const BATCH_WIDE_REJECTION_CODES = new Set([
+  102, 190, 4, 17, 32, 341, 613, 80000, 80001, 80002, 80003, 80004, 80005,
+  80006, 80008, 80009, 80014,
+]);
+/** Parallel single POSTs when a batch must be resent one by one. */
+const BATCH_FALLBACK_CONCURRENCY = 4;
+
+type BatchItem = {
+  url: string;
+  requestPayload: MetaCapiPayload;
+  ctwaDestination: boolean;
+  resolve: (result: MetaCapiSendEventResult) => void;
+};
+
 export class MetaCapiAdapter {
+  private readonly batchGroups = new Map<
+    string,
+    { items: BatchItem[]; timer: ReturnType<typeof setTimeout> | null }
+  >();
+
   constructor(
     private readonly env: MetaCapiEnv = process.env,
     private readonly fetcher: Fetcher = fetch,
@@ -126,7 +149,38 @@ export class MetaCapiAdapter {
       customData: input.customData ?? null,
       testEventCode: input.testEventCode ?? null,
     });
+    const ctwaDestination = Boolean(input.pagePixelDestination);
 
+    // Dispatches with a deadline/signal or a lease (Kommo, Pipedrive, the
+    // inbound rules and the CTWA page/pixel path) own an exactly-once guard
+    // around the single POST: never batch those.
+    if (
+      this.batchingEnabled() &&
+      !dispatch.signal &&
+      !dispatch.beforeDispatch
+    ) {
+      return this.enqueueBatched({
+        url: url.toString(),
+        requestPayload,
+        ctwaDestination,
+      });
+    }
+
+    return this.postEvents(
+      url.toString(),
+      requestPayload,
+      ctwaDestination,
+      dispatch,
+    );
+  }
+
+  /** One POST /{pixel}/events for one event (original behavior). */
+  private async postEvents(
+    requestUrl: string,
+    requestPayload: MetaCapiPayload,
+    ctwaDestination: boolean,
+    dispatch: DispatchOptions = {},
+  ): Promise<MetaCapiSendEventResult> {
     let response: Response | undefined;
     let payload: unknown;
     let dispatched = false;
@@ -143,7 +197,7 @@ export class MetaCapiAdapter {
       dispatch.beforeDispatch?.();
       dispatched = true;
       response = await bounded(
-        this.fetcher(url.toString(), request),
+        this.fetcher(requestUrl, request),
         dispatch.signal,
       );
       // A received non-2xx is an explicit rejection even if its body is not JSON.
@@ -181,7 +235,7 @@ export class MetaCapiAdapter {
     } catch {
       // As in the SaaS: a CTWA page/pixel event whose final authorization
       // (credential expiry/deadline) failed before the POST was never sent.
-      if (input.pagePixelDestination && !dispatched)
+      if (ctwaDestination && !dispatched)
         return notConfigured(
           "MissingMetaDestination",
           "CTWA authorization unavailable before dispatch",
@@ -241,6 +295,233 @@ export class MetaCapiAdapter {
       errorMessage: null,
       errorCode: null,
     };
+  }
+
+  private networkError(
+    requestPayload: MetaCapiPayload,
+  ): MetaCapiSendEventResult {
+    return {
+      status: "error",
+      requestPayload,
+      responseSummary: null,
+      errorMessage: "Meta CAPI network request failed",
+      errorCode: "MetaCapiNetworkError",
+      deliveryOutcome: "unknown",
+    };
+  }
+
+  private batchingEnabled(): boolean {
+    return this.env.META_CAPI_BATCH_ENABLED?.trim().toLowerCase() === "true";
+  }
+
+  private batchSettings(): { windowMs: number; maxEvents: number } {
+    const windowMs = Number.parseInt(
+      this.env.META_CAPI_BATCH_WINDOW_MS ?? "",
+      10,
+    );
+    const maxEvents = Number.parseInt(
+      this.env.META_CAPI_BATCH_MAX_EVENTS ?? "",
+      10,
+    );
+
+    return {
+      windowMs:
+        Number.isFinite(windowMs) && windowMs >= 0
+          ? Math.min(windowMs, 5_000)
+          : 250,
+      // Meta accepts at most 1,000 events per request.
+      maxEvents:
+        Number.isFinite(maxEvents) && maxEvents > 0
+          ? Math.min(maxEvents, 1_000)
+          : 1_000,
+    };
+  }
+
+  /**
+   * Micro-batching: events for the same pixel, token and test_event_code
+   * that arrive inside the window share one POST. Each caller still receives
+   * its own per-event result (status, payload, error), so dedupe/status
+   * tracking and BullMQ retries stay per event.
+   */
+  private enqueueBatched(item: {
+    url: string;
+    requestPayload: MetaCapiPayload;
+    ctwaDestination: boolean;
+  }): Promise<MetaCapiSendEventResult> {
+    const key = `${item.url}\u0000${item.requestPayload.test_event_code ?? ""}`;
+    const { windowMs, maxEvents } = this.batchSettings();
+
+    return new Promise<MetaCapiSendEventResult>((resolve) => {
+      let group = this.batchGroups.get(key);
+
+      if (!group) {
+        group = { items: [], timer: null };
+        this.batchGroups.set(key, group);
+      }
+
+      group.items.push({ ...item, resolve });
+
+      if (group.items.length >= maxEvents) {
+        void this.flushBatch(key);
+      } else if (!group.timer) {
+        group.timer = setTimeout(() => void this.flushBatch(key), windowMs);
+      }
+    });
+  }
+
+  /** Sends whatever is pending (also used by tests and shutdown). */
+  async flushAllBatches(): Promise<void> {
+    await Promise.all(
+      [...this.batchGroups.keys()].map((key) => this.flushBatch(key)),
+    );
+  }
+
+  private async flushBatch(key: string): Promise<void> {
+    const group = this.batchGroups.get(key);
+
+    if (!group) {
+      return;
+    }
+
+    this.batchGroups.delete(key);
+
+    if (group.timer) {
+      clearTimeout(group.timer);
+    }
+
+    const items = group.items;
+
+    try {
+      if (items.length === 1) {
+        const [item] = items;
+        item.resolve(
+          await this.postEvents(
+            item.url,
+            item.requestPayload,
+            item.ctwaDestination,
+          ),
+        );
+        return;
+      }
+
+      const testEventCode = items[0].requestPayload.test_event_code;
+      const batchPayload: MetaCapiPayload = {
+        data: items.flatMap((item) => item.requestPayload.data),
+        ...(testEventCode ? { test_event_code: testEventCode } : {}),
+      };
+      let response: Response;
+      let payload: unknown;
+
+      try {
+        response = await this.fetcher(items[0].url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(batchPayload),
+        });
+        payload = await response.json().catch(() => null);
+      } catch {
+        // Unknown outcome for every event: same as a single lost POST.
+        // BullMQ retries each job; Meta dedupes by event_id.
+        items.forEach((item) =>
+          item.resolve(this.networkError(item.requestPayload)),
+        );
+        return;
+      }
+
+      // nod: same strict acknowledgement as a single POST (events_received,
+      // messages and fbtrace_id) and never persist the provider body (PII).
+      const ack =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? (payload as Record<string, unknown>)
+          : null;
+      const acknowledged =
+        response.ok &&
+        ack !== null &&
+        !("error" in ack) &&
+        ack.events_received === items.length &&
+        Array.isArray(ack.messages) &&
+        ack.messages.every((message) => typeof message === "string") &&
+        typeof ack.fbtrace_id === "string" &&
+        Boolean(ack.fbtrace_id.trim()) &&
+        ack.fbtrace_id.length <= 256;
+
+      if (acknowledged) {
+        const messageCount = (ack.messages as unknown[]).length;
+
+        items.forEach((item) =>
+          item.resolve({
+            status: "sent",
+            requestPayload: item.requestPayload,
+            responseSummary: {
+              events_received: 1,
+              messageCount,
+              batch_size: items.length,
+            },
+            errorMessage: null,
+            errorCode: null,
+          }),
+        );
+        return;
+      }
+
+      // nod: a dead token (190/102) or a throttle fails every event alike;
+      // answer each one with the same rejection instead of 1 POST per event
+      // (only the numeric Graph code is kept, as in the single path).
+      const graphErrorCode = response.ok
+        ? null
+        : metaGraphErrorCodeFromResponse(payload);
+
+      if (
+        graphErrorCode !== null &&
+        BATCH_WIDE_REJECTION_CODES.has(graphErrorCode)
+      ) {
+        const responseSummary: Record<string, unknown> = {
+          httpStatus: response.status,
+          error: { code: graphErrorCode },
+        };
+
+        items.forEach((item) =>
+          item.resolve({
+            status: "error",
+            requestPayload: item.requestPayload,
+            responseSummary,
+            errorMessage: isMetaAuthFailureResponse(responseSummary)
+              ? "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend"
+              : "Meta CAPI request failed",
+            errorCode: "MetaCapiRejected",
+          }),
+        );
+        return;
+      }
+
+      // Meta rejects the whole request when one event is invalid (or did not
+      // confirm every event): resend one by one so each event gets its own
+      // status. Resending an accepted event is deduplicated by event_id.
+      // Bounded concurrency keeps a large batch from holding the jobs long.
+      for (
+        let offset = 0;
+        offset < items.length;
+        offset += BATCH_FALLBACK_CONCURRENCY
+      ) {
+        await Promise.all(
+          items
+            .slice(offset, offset + BATCH_FALLBACK_CONCURRENCY)
+            .map(async (item) =>
+              item.resolve(
+                await this.postEvents(
+                  item.url,
+                  item.requestPayload,
+                  item.ctwaDestination,
+                ),
+              ),
+            ),
+        );
+      }
+    } catch {
+      items.forEach((item) =>
+        item.resolve(this.networkError(item.requestPayload)),
+      );
+    }
   }
 }
 

@@ -557,7 +557,52 @@ describe("leads service", () => {
     expect(detail.attribution.creative).toEqual({
       thumbnailUrl: null,
       destinationUrl: null,
+      thumbnailVersion: null,
     });
+  });
+
+  it("returns the persisted creative thumbnail version for the attributed ad", async () => {
+    const { db, prisma, service } = createHarness();
+    db.ads[0] = { ...db.ads[0]!, creativeId: "120200000001" } as never;
+    const findFirst = vi.fn(async () => ({ version: "abcdef0123456789" }));
+    Object.assign(prisma, { metaCreativeThumbnail: { findFirst } });
+
+    const detail = await service.getLeadDetail("workspace_1", "lead_1");
+
+    expect(prisma.metaAd.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ creativeId: true }),
+      }),
+    );
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "workspace_1",
+        creativeId: "120200000001",
+        status: "ready",
+      },
+      select: { version: true },
+    });
+    expect(detail.attribution.creative.thumbnailVersion).toBe(
+      "abcdef0123456789",
+    );
+  });
+
+  it("drops expired signed Meta CDN thumbnails and falls back to the ad thumbnail", async () => {
+    const { db, service } = createHarness();
+    const expiredOe = Math.floor(Date.UTC(2020, 0, 1) / 1000).toString(16);
+    const liveOe = Math.floor(Date.UTC(2099, 0, 1) / 1000).toString(16);
+    db.leads[0]!.ctwaThumbnailUrl = `https://scontent.xx.fbcdn.net/v/t45/a.jpg?oe=${expiredOe}`;
+    db.ads[0] = {
+      ...db.ads[0]!,
+      thumbnailUrl: `https://scontent.xx.fbcdn.net/v/t45/b.jpg?oe=${liveOe}`,
+    } as never;
+
+    const detail = await service.getLeadDetail("workspace_1", "lead_1");
+
+    expect(detail.attribution.creative.thumbnailUrl).toBe(
+      `https://scontent.xx.fbcdn.net/v/t45/b.jpg?oe=${liveOe}`,
+    );
+    expect(detail.attribution.creative.thumbnailVersion).toBeNull();
   });
 });
 

@@ -148,6 +148,8 @@ export const leadDetailSchema = z.object({
     creative: z.object({
       thumbnailUrl: z.string().url().nullable(),
       destinationUrl: z.string().url().nullable(),
+      /** Set when a persisted thumbnail exists for the attributed ad. */
+      thumbnailVersion: z.string().min(1).nullable().optional(),
     }),
   }),
   conversionEvents: z.array(leadDetailConversionEventSchema),

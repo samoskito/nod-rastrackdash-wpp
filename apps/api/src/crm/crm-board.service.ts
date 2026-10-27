@@ -36,6 +36,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { FunnelConfigurationService } from "../conversion-rules/funnel-configuration.service";
 import { dateRangeInTimezone } from "../external-data/external-event-policy";
+import { liveHttpUrl } from "../integrations/meta/meta-cdn-url";
 import {
   firstContactScopeCorrections,
   resolveRuleOverrideReportMode,
@@ -57,23 +58,6 @@ import {
 const CRM_TIMEZONE = "America/Sao_Paulo";
 /** Board query slower than this is logged as a warning. */
 export const CRM_BOARD_SLOW_QUERY_MS = 2_000;
-
-/**
- * nod: http(s) URL or null (same rule as the lead detail). The SaaS also drops
- * expired signed Meta CDN URLs and serves stored thumbnails (Fase 6.4, not
- * ported yet), so the card shows the empty thumbnail when the URL expired.
- */
-function publicHttpUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url.toString()
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 /** A column of the board without its cards (layout of the Jornada). */
 export type CrmColumnLayout = Omit<CrmColumnDto, "total" | "cards" | "nextCursor">;
@@ -582,12 +566,20 @@ export class CrmBoardService {
         }),
       ),
     ];
-    const campaigns = campaignIds.length
-      ? ((await this.prisma.metaCampaign.findMany({
-          where: { workspaceId, campaignId: { in: campaignIds } },
-          select: { campaignId: true, name: true },
-        })) as Array<{ campaignId: string; name: string }>)
-      : [];
+    const creativeIds = [
+      ...new Set(ads.flatMap((ad) => (ad.creativeId ? [ad.creativeId] : []))),
+    ];
+    const [campaigns, thumbnails] = await Promise.all([
+      campaignIds.length
+        ? (this.prisma.metaCampaign.findMany({
+            where: { workspaceId, campaignId: { in: campaignIds } },
+            select: { campaignId: true, name: true },
+          }) as Promise<Array<{ campaignId: string; name: string }>>)
+        : Promise.resolve([]),
+      creativeIds.length
+        ? this.thumbnailVersions(workspaceId, creativeIds)
+        : Promise.resolve(new Map<string, string>()),
+    ]);
     const campaignName = new Map(campaigns.map((c) => [c.campaignId, c.name]));
     const instanceById = new Map(instances.map((i) => [i.id, i]));
     const leadById = new Map(leads.map((lead) => [lead.id, lead]));
@@ -618,11 +610,14 @@ export class CrmBoardService {
         adId: lead.adId || null,
         adName: ad?.name?.trim() || null,
         creative: {
+          // Stored thumbnail (Fase 6.4) wins on the web; otherwise only a
+          // not-yet-expired CTWA/Meta CDN URL (oe= expiry) is returned.
           thumbnailUrl:
-            publicHttpUrl(lead.ctwaThumbnailUrl) ??
-            publicHttpUrl(ad?.thumbnailUrl ?? null),
-          // nod: no stored creative thumbnails yet (SaaS Fase 6.4).
-          thumbnailVersion: null,
+            liveHttpUrl(lead.ctwaThumbnailUrl) ??
+            liveHttpUrl(ad?.thumbnailUrl ?? null),
+          thumbnailVersion: ad?.creativeId
+            ? (thumbnails.get(ad.creativeId) ?? null)
+            : null,
         },
         enteredStageAt: new Date(row.enteredAt).toISOString(),
         arrivedAt: new Date(row.arrivedAt).toISOString(),
@@ -636,5 +631,31 @@ export class CrmBoardService {
       });
     }
     return cards;
+  }
+
+  /** Persisted creative thumbnail versions (cache keys), ready rows only. */
+  private async thumbnailVersions(
+    workspaceId: string,
+    creativeIds: string[],
+  ): Promise<Map<string, string>> {
+    const client = this.prisma as unknown as {
+      metaCreativeThumbnail?: {
+        findMany(args: unknown): Promise<unknown>;
+      };
+    };
+    if (!client.metaCreativeThumbnail) return new Map();
+    try {
+      const rows = (await client.metaCreativeThumbnail.findMany({
+        where: { workspaceId, creativeId: { in: creativeIds }, status: "ready" },
+        select: { creativeId: true, version: true },
+      })) as Array<{ creativeId: string; version: string | null }>;
+      return new Map(
+        rows.flatMap((row) =>
+          row.version ? [[row.creativeId, row.version] as const] : [],
+        ),
+      );
+    } catch {
+      return new Map();
+    }
   }
 }

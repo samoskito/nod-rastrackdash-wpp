@@ -334,8 +334,8 @@ Integrações (Kommo e Pipedrive): o quadro não depende de nenhuma delas.
   só no painel). Canceladas, bloqueadas, duplicadas e com falha não contam. O
   topo mostra o total real de cada coluna; cada coluna mostra 20 cards e
   "Carregar mais (N restantes)".
-- **Card.** Nome, telefone, campanha e anúncio (com miniatura quando a Meta a
-  fornece), há quantos dias está na etapa, o valor nas colunas de compra e o
+- **Card.** Nome, telefone, campanha e anúncio (com a miniatura guardada do
+  criativo, 10.9, ou a da Meta enquanto o link dela vale), há quantos dias está na etapa, o valor nas colunas de compra e o
   número de WhatsApp quando há mais de uma conexão ativa. O modo apresentação
   esconde os dados sensíveis. Clicar no card abre o detalhe do lead numa
   janela; ao fechar, o quadro continua onde estava.
@@ -419,6 +419,35 @@ ou mandar o link.
 - **Licença bloqueada:** filtros, atividade e exportação continuam funcionando
   (são leituras).
 - Não há variável de ambiente nem migration para os filtros.
+
+### 10.9 Menos chamadas à Meta e miniaturas guardadas
+
+Nada para configurar; vale depois da atualização (que tem duas migrations
+aditivas: faça o backup do PostgreSQL antes, como em toda migration).
+
+- **Conta Meta que precisa reconectar.** Se a Meta disser que o token não vale
+  mais ou que a conta de anúncios perdeu a permissão, a sincronização dos
+  relatórios **dessa conta** pausa (sem ficar tentando de novo) e Relatórios
+  mostra "Reconecte a conta Meta". O aviso "Atenção aos dados da Meta" (10.6)
+  passa a listar essa conta como bloqueada. O envio de conversões à Meta
+  continua normal. Para liberar, reconecte, valide ou use "Testar" na conexão
+  Meta em Integrações.
+- **Limite de uso da Meta.** Quando o app Meta está perto do limite de uso, a
+  sincronização em segundo plano espera e volta sozinha; o login e o botão
+  **Conectar Meta (PalmUP)** nunca ficam bloqueados por isso. O limite é por
+  app: o app da PalmUP e o seu app próprio são contados separados (não dê o
+  nome "Login social PalmUP" a um token do seu app).
+- **Miniaturas dos criativos.** A imagem de cada criativo é buscada uma vez e
+  guardada no seu banco. A página do lead, os anúncios de Relatórios e os
+  cards do CRM Kanban (10.7) mostram essa imagem mesmo depois que o link da
+  Meta expira. Logo depois da atualização as miniaturas aparecem aos poucos,
+  conforme as próximas sincronizações (até 150 criativos por conta em cada uma,
+  primeiro os anúncios com entrega).
+- **Ajustes opcionais** (leitura só por anúncio, relatório assíncrono, envio
+  da CAPI em lote, janela incremental): todas as variáveis têm padrão seguro e
+  estão em `docs/setup/environment.md` ("Limite de uso da Meta").
+- **Licença bloqueada:** ver relatórios e miniaturas continua funcionando;
+  "Sincronizar Meta" é escrita e responde 423, como antes.
 
 ## 11. Marca (whitelabel) — opcional
 

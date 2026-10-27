@@ -8,9 +8,11 @@ import { IntegrationsController } from "./integrations.controller";
 import { IntegrationsService } from "./integrations.service";
 import { MetaAdDestinationRoutingService } from "./meta/meta-ad-destination-routing.service";
 import { MetaAdapter } from "./meta/meta.adapter";
+import { MetaGraphUsageMonitor } from "./meta/meta-graph-usage";
 import { MetaAssetsService } from "./meta/meta-assets.service";
 import { MetaConnectionResolverService } from "./meta/meta-connection-resolver.service";
 import { MetaConnectionsService } from "./meta/meta-connections.service";
+import { MetaCreativeThumbnailService } from "./meta/meta-creative-thumbnail.service";
 import { MetaManualConnectionsService } from "./meta/meta-manual-connections.service";
 import { MetaPalmupConnectService } from "./meta/meta-palmup-connect.service";
 import { MetaPalmupPairingStore } from "./meta/meta-palmup-pairing.store";
@@ -34,10 +36,12 @@ export { INTEGRATION_ENV } from "./integration.types";
     },
     MetaAdDestinationRoutingService,
     MetaAdapter,
+    MetaGraphUsageMonitor,
     MetaAssetsService,
     MetaConnectionResolverService,
     MetaTokenEncryptionService,
     MetaConnectionsService,
+    MetaCreativeThumbnailService,
     MetaManualConnectionsService,
     MetaPalmupConnectService,
     MetaPalmupPairingStore,
@@ -47,10 +51,12 @@ export { INTEGRATION_ENV } from "./integration.types";
   exports: [
     MetaAdDestinationRoutingService,
     MetaAdapter,
+    MetaGraphUsageMonitor,
     MetaAssetsService,
     MetaConnectionResolverService,
     MetaTokenEncryptionService,
     MetaConnectionsService,
+    MetaCreativeThumbnailService,
     MetaManualConnectionsService,
     IntegrationsService,
     WhatsappProvidersModule,

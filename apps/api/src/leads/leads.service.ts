@@ -23,6 +23,7 @@ import {
   normalizePhoneIdentity,
 } from "../common/phone/phone-identity";
 import { dateRangeInTimezone } from "../external-data/external-event-policy";
+import { liveHttpUrl } from "../integrations/meta/meta-cdn-url";
 import {
   chunked,
   deferredLeadNovoPeriodWhere,
@@ -106,6 +107,8 @@ type AdRecord = {
   campaignId: string;
   adSetId: string;
   name: string;
+  creativeId?: string | null;
+  thumbnailUrl?: string | null;
 };
 
 type AdHierarchyRecord = {
@@ -912,11 +915,17 @@ export class LeadsService {
                 campaignId: true,
                 adSetId: true,
                 name: true,
+                creativeId: true,
+                thumbnailUrl: true,
               },
             }) as Promise<AdRecord[]>)
           : Promise.resolve([]),
       ]);
     const ad = ads[0];
+    const thumbnailVersion = await this.storedThumbnailVersion(
+      workspaceId,
+      ad?.creativeId ?? null,
+    );
     const resolvedLead = ad
       ? {
           ...lead,
@@ -951,8 +960,13 @@ export class LeadsService {
         adSetName: resolvedAdSets[0]?.name ?? null,
         adName: ads[0]?.name ?? null,
         creative: {
-          thumbnailUrl: this.publicHttpUrl(lead.ctwaThumbnailUrl),
+          // Persisted image (served by our API) wins; otherwise only a
+          // not-yet-expired CTWA/Meta CDN URL is returned (oe= expiry).
+          thumbnailUrl:
+            liveHttpUrl(lead.ctwaThumbnailUrl) ??
+            liveHttpUrl(ad?.thumbnailUrl ?? null),
           destinationUrl: this.publicHttpUrl(lead.ctwaSourceUrl),
+          thumbnailVersion,
         },
       },
       conversionEvents: conversionLogs.map((event) => ({
@@ -1115,6 +1129,26 @@ export class LeadsService {
       createdAt: lead.createdAt.toISOString(),
       updatedAt: lead.updatedAt.toISOString(),
     };
+  }
+
+  private async storedThumbnailVersion(
+    workspaceId: string,
+    creativeId: string | null,
+  ): Promise<string | null> {
+    if (!creativeId || !this.prisma.metaCreativeThumbnail) {
+      return null;
+    }
+
+    try {
+      const row = (await this.prisma.metaCreativeThumbnail.findFirst({
+        where: { workspaceId, creativeId, status: "ready" },
+        select: { version: true },
+      })) as { version: string | null } | null;
+
+      return row?.version || null;
+    } catch {
+      return null;
+    }
   }
 
   private publicHttpUrl(value: string | null): string | null {

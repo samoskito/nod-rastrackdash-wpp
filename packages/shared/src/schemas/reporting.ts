@@ -337,6 +337,8 @@ export const adReportRowSchema = z.object({
   effectiveStatus: z.string().min(1).nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
   previewUrl: z.string().url().nullable().optional(),
+  /** Set when a persisted thumbnail exists; cache key for the image route. */
+  thumbnailVersion: z.string().min(1).nullable().optional(),
   ...reportMetricShape,
 });
 

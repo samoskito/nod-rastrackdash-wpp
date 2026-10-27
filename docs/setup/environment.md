@@ -254,6 +254,15 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`) | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `META_VIDEO_THUMBNAILS_ENABLED` | Não (padrão desligado) | Só `true` liga a busca extra de miniaturas de vídeo (`/{video}/thumbnails`). Deixe desligado ao usar o login social PalmUP: o limite de chamadas do app Meta é compartilhado | `.env` da API | Não |
+| `WPPTRACK_META_USAGE_PAUSE_PERCENT` | Não (padrão `75`) | Uso do app Meta (%) a partir do qual a sincronização de relatórios em segundo plano cede a vez e é retomada sozinha depois. O limite vale **por app**: o app da PalmUP (botão **Conectar Meta (PalmUP)**) e o seu app próprio são contados separados — veja [Limite de uso da Meta](#limite-de-uso-da-meta-fase-64-opcional) | `.env` da API / env do serviço da API | Não |
+| `WPPTRACK_META_SYNC_DEDUPE_WINDOW_MINUTES` | Não (padrão `15`) | Janela (minutos) em que pedidos iguais de sincronização da mesma conta e período viram um só | `.env` da API / env do serviço da API | Não |
+| `WPPTRACK_META_SYNC_MAX_DEFERRALS` | Não (padrão `12`) | Quantas vezes uma sincronização adia por limite da Meta antes de desistir (o próximo ciclo automático cobre o período) | `.env` da API / env do serviço da API | Não |
+| `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS` | Não (padrão `3`, **ligado**; `0` desliga) | Sync automático incremental: uma leitura completa por dia e, nas outras rodadas, só os últimos N dias. Se os dias guardados não fecharem com o total da Meta, lê a janela inteira. Precisa do Redis (sem ele toda rodada é completa) | `.env` da API / env do serviço da API | Não |
+| `META_INSIGHTS_LEVEL_MODE` | Não (padrão `legacy`) | `legacy` (como antes), `shadow` (lê também por anúncio e só registra no log se os totais batem: `META_INSIGHTS_AD_LEVEL_PARITY ... mismatched=0`) ou `ad_level` (lê só no nível de anúncio e soma campanhas/conjuntos localmente: menos chamadas). Use `shadow` antes de `ad_level` | `.env` da API / env do serviço da API | Não |
+| `META_INSIGHTS_PAGE_LIMIT` | Não (padrão `500`) | Linhas por página dos Insights; volta sozinho para 100 se a Meta pedir menos dados. `100` = comportamento anterior | `.env` da API / env do serviço da API | Não |
+| `META_INSIGHTS_ASYNC_ENABLED` | Não (padrão **desligado**) | `true` usa o relatório assíncrono da Meta em períodos longos (com volta automática ao modo normal). Ajustes: `META_INSIGHTS_ASYNC_MIN_DAYS` (padrão `31`), `META_INSIGHTS_ASYNC_POLL_MS` (padrão `3000`), `META_INSIGHTS_ASYNC_MAX_POLLS` (padrão `40`) | `.env` da API / env do serviço da API | Não |
+| `META_CAPI_BATCH_ENABLED` | Não (padrão **desligado**) | `true` junta eventos de conversão simultâneos do mesmo pixel em um envio à Meta (status por evento; se a Meta recusar o lote por um evento inválido, reenvia um a um; se recusar por token inválido ou limite, todos ficam com a mesma recusa, sem reenvio). Só entram no lote os envios simples: Kommo, Pipedrive, as regras de entrada e o caminho CTWA página/pixel (que têm prazo e garantia de envio único) nunca entram. Ajustes: `META_CAPI_BATCH_WINDOW_MS` (padrão `250`), `META_CAPI_BATCH_MAX_EVENTS` (padrão `1000`) | `.env` da API / env do serviço da API | Não |
+| `WPPTRACK_CONVERSION_WORKER_CONCURRENCY` | Não (padrão `1`, máximo `50`) | Quantos eventos de conversão a API processa ao mesmo tempo. O envio em lote da CAPI só junta eventos com valor maior que 1 (sugestão do SaaS: 4 a 10) | `.env` da API / env do serviço da API | Não |
 | `META_CAPI_SEND_FIRST_NAME` | Não (padrão **desligado**) | Só `true` (ou `1`, `on`, `yes`) envia o primeiro nome do lead (`fn`) na Conversions API, normalizado e com hash SHA-256. Fica desligado porque o nome do perfil do WhatsApp nem sempre é o nome real (apelidos, frases). Nomes vazios, genéricos, só emoji ou com cara de telefone nunca são enviados | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
 | `PTAX_SYNC_ENABLED` | Não (padrão **desligado**) | Só ligue (`true`) se anuncia ou vende em USD/EUR: busca a cotação PTAX do Banco Central para os relatórios por moeda — veja [Cotação PTAX](#cotação-ptax-relatórios-por-moeda-opcional) | `.env` da API | Não |
@@ -379,6 +388,56 @@ de uma venda feita em outra moeda.
   nenhum relatório quebra e nada é enviado à Meta por causa disso.
 - Não confunda com `WPPTRACK_PTAX_SYNC_ENABLED` (nome usado no SaaS): aqui ela
   não tem efeito. Reinicie a API depois de mudar a variável.
+
+### Limite de uso da Meta (Fase 6.4, opcional)
+
+Todas as variáveis desta parte são **opcionais**: sem valor, vale o padrão da
+tabela acima. Nenhuma é segredo e nenhuma é pedida pelo `pnpm setup` nem pelo
+checklist de `/onboarding/status`. Preencha só no env do serviço da **API**
+(Dokploy, VPS ou `.env` local); o web não usa nenhuma delas. Reinicie a API
+depois de mudar.
+
+- **Ligado por padrão (sem configurar nada):**
+  - disjuntor só dos relatórios: se a Meta disser que o token ou a permissão
+    da conta de anúncios não vale mais (erros 190/102 ou 10/200), a
+    sincronização **daquela conta** pausa e Relatórios mostra "Reconecte a
+    conta Meta". Com 190/102 confirmado por uma leitura barata de `/me`,
+    pausam também as outras contas do mesmo token. O envio de conversões
+    (CAPI) continua normal. Reconectar, revalidar ou "Testar" a conexão em
+    Integrações libera de novo;
+  - pausa por uso: com o uso do app Meta acima de
+    `WPPTRACK_META_USAGE_PAUSE_PERCENT` (ou com erro de limite da Meta), a
+    sincronização em segundo plano espera e retoma sozinha. O login e o
+    botão **Conectar Meta (PalmUP)** nunca são bloqueados por isso;
+  - pedidos repetidos de sincronização dentro da janela viram um só;
+  - miniaturas dos criativos guardadas no banco (tabela
+    `MetaCreativeThumbnail`): cada criativo novo é buscado uma vez (até 150
+    por sincronização, ~30 s no máximo, pausa de 15 min após erro de limite);
+  - sync automático incremental (`WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS=3`)
+    e páginas de 500 linhas nos Insights.
+- **Desligado por padrão:** `META_INSIGHTS_LEVEL_MODE` (fica `legacy`),
+  `META_INSIGHTS_ASYNC_ENABLED` e `META_CAPI_BATCH_ENABLED`.
+- **Limite por app:** o app Meta usado pode ser o da PalmUP (botão
+  **Conectar Meta (PalmUP)**, compartilhado entre as instalações) ou o seu
+  app próprio (token do usuário do sistema). A pausa por uso do app é contada
+  separada para cada um, então o uso alto do app da PalmUP não pausa a
+  sincronização das contas conectadas pelo seu app, e vice-versa. O limite
+  por conta de anúncios vale para qualquer app. A API reconhece o app da
+  PalmUP pelo nome que o botão dá à credencial ("Login social PalmUP"); não
+  use esse nome num token do seu app.
+- `META_VIDEO_THUMBNAILS_ENABLED` continua igual: desligada, nenhuma chamada
+  extra a `/{video}/thumbnails`; a miniatura do vídeo vem do próprio criativo.
+- Ajustes finos das miniaturas (raramente necessários):
+  `META_CREATIVE_THUMBNAIL_MAX_PER_SYNC` (150),
+  `META_CREATIVE_THUMBNAIL_STAGE_BUDGET_MS` (30000),
+  `META_CREATIVE_THUMBNAIL_RATE_LIMIT_PAUSE_MS` (900000),
+  `META_CREATIVE_THUMBNAIL_DOWNLOAD_TIMEOUT_MS` (3000),
+  `META_CREATIVE_THUMBNAIL_DOWNLOAD_CONCURRENCY` (4) e
+  `META_CREATIVE_THUMBNAIL_MAX_BYTES` (102400).
+- Para voltar ao comportamento anterior de leitura:
+  `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS=0`,
+  `META_INSIGHTS_PAGE_LIMIT=100`, `META_INSIGHTS_LEVEL_MODE=legacy` e
+  `META_CAPI_BATCH_ENABLED=false`.
 
 ## URLs, cookie e primeiro administrador
 

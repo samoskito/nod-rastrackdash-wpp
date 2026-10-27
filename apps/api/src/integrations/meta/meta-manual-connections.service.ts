@@ -33,6 +33,7 @@ import type { IntegrationEnv } from "../integration.types";
 import { INTEGRATION_ENV } from "../integration.types";
 import { MetaAdDestinationRoutingService } from "./meta-ad-destination-routing.service";
 import { MetaAdapter } from "./meta.adapter";
+import { clearMetaReportingSyncBlocks } from "./meta-reporting-sync-block";
 import { MetaTokenEncryptionService } from "./meta-token-encryption.service";
 
 type CredentialRecord = {
@@ -234,6 +235,7 @@ export class MetaManualConnectionsService {
             },
           })) as CredentialRecord);
 
+      await clearMetaReportingSyncBlocks(this.prisma, { workspaceId });
       await this.recordAudit({
         workspaceId,
         actorUserId: actorUserId ?? null,
@@ -786,6 +788,10 @@ export class MetaManualConnectionsService {
         };
       });
 
+      await clearMetaReportingSyncBlocks(this.prisma, {
+        workspaceId,
+        businessConnectionId: saved.connectionId,
+      });
       await this.recordAudit({
         workspaceId,
         actorUserId: actorUserId ?? null,
@@ -901,6 +907,10 @@ export class MetaManualConnectionsService {
         }),
       ]);
 
+      await clearMetaReportingSyncBlocks(this.prisma, {
+        workspaceId,
+        businessConnection: { is: { credentialId: credential.id } },
+      });
       await this.recordAudit({
         workspaceId,
         actorUserId: actorUserId ?? null,
@@ -1167,6 +1177,11 @@ export class MetaManualConnectionsService {
           },
         }),
       ]);
+      // The token answered: lift the reporting-only breaker for its accounts.
+      await clearMetaReportingSyncBlocks(this.prisma, {
+        workspaceId,
+        businessConnection: { is: { credentialId: connection.credentialId } },
+      });
       await this.recordAudit({
         workspaceId,
         actorUserId: actorUserId ?? null,

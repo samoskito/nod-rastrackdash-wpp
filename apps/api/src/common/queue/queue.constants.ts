@@ -61,6 +61,13 @@ export interface MetaReportSyncJobPayload {
   reportingAccountId: string | null;
   since: string;
   until: string;
+  /**
+   * Incremental auto-sync: entity totals cover [totalsSince, until] while
+   * daily rows are refreshed only for [since, until].
+   */
+  totalsSince?: string | null;
+  /** Times the job yielded to Meta rate limits (moved to delayed). */
+  deferrals?: number;
 }
 
 export interface ExternalDataSyncJobPayload {

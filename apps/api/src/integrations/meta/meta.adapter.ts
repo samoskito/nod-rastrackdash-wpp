@@ -16,6 +16,14 @@ import type {
   IntegrationHealthDto,
 } from "../integration.types";
 import { INTEGRATION_ENV } from "../integration.types";
+import {
+  MetaGraphError,
+  isMetaCredentialFatalError,
+  isMetaFieldFallbackEligible,
+  isMetaRateLimitError,
+  metaGraphErrorFromPayload,
+} from "./meta-graph-error";
+import { MetaGraphUsageMonitor } from "./meta-graph-usage";
 
 type MetaTokenResponse = {
   access_token?: unknown;
@@ -153,6 +161,11 @@ export type MetaAdAsset = {
   detectedPageIds: string[];
 };
 
+export type MetaCreativeThumbnailCandidate = {
+  url: string;
+  source: "image" | "video";
+};
+
 /**
  * Why a batched Graph sub-request produced no usable item. Only an HTTP 429 or
  * a documented Graph throttling code counts as rateLimited; a null/omitted
@@ -239,6 +252,47 @@ export type MetaAdDailyInsight = MetaAdInsight & {
 };
 
 export type MetaInsightReadMode = "legacy" | "manual";
+
+/**
+ * One ad-level insight row with the raw per-type action counts kept, so
+ * campaign/ad set totals can be aggregated locally with the exact same
+ * conversation semantics as a campaign-level read (see
+ * meta-insights-aggregation.ts). `date` is null for a window aggregate.
+ */
+export type MetaAdInsightRow = {
+  adId: string;
+  adSetId: string;
+  campaignId: string;
+  date: string | null;
+  spendCents: number;
+  impressions: number;
+  clicks: number;
+  actionValues: Record<string, number>;
+};
+
+/**
+ * Every ad effective_status. Account-level insights at level=ad omit
+ * ARCHIVED/DELETED ads unless filtered explicitly, while campaign-level rows
+ * include their spend; filtering keeps locally aggregated totals complete.
+ */
+export const META_AD_EFFECTIVE_STATUSES_ALL = [
+  "ACTIVE",
+  "PAUSED",
+  "DELETED",
+  "ARCHIVED",
+  "PENDING_REVIEW",
+  "DISAPPROVED",
+  "PREAPPROVED",
+  "PENDING_BILLING_INFO",
+  "CAMPAIGN_PAUSED",
+  "ADSET_PAUSED",
+  "IN_PROCESS",
+  "WITH_ISSUES",
+] as const;
+
+const DEFAULT_INSIGHTS_PAGE_LIMIT = 500;
+const FALLBACK_INSIGHTS_PAGE_LIMIT = 100;
+const REDUCE_DATA_PATTERN = /reduce the amount of data/i;
 
 type MetaCampaignGraphNode = {
   id?: unknown;
@@ -357,6 +411,9 @@ export class MetaAdapter implements IntegrationAdapter {
     @Optional()
     @Inject(RUNTIME_FETCH)
     private readonly fetchImpl: RuntimeFetch = fetch,
+    @Optional()
+    @Inject(MetaGraphUsageMonitor)
+    private readonly usageMonitor?: MetaGraphUsageMonitor,
   ) {}
 
   async getHealth(): Promise<IntegrationHealthDto> {
@@ -580,6 +637,22 @@ export class MetaAdapter implements IntegrationAdapter {
         .map((permission) => this.asString(permission.permission))
         .filter((permission): permission is string => Boolean(permission)),
     };
+  }
+
+  /**
+   * Cheapest token liveness check (GET /me?fields=id). Throws a typed
+   * MetaGraphError, so callers can confirm a 190 before acting on it.
+   */
+  async probeAccessToken(input: { accessToken: string }): Promise<void> {
+    const params = new URLSearchParams({
+      fields: "id",
+      access_token: input.accessToken,
+    });
+
+    await this.getGraphPages<unknown>(
+      `https://graph.facebook.com/${this.getGraphApiVersion()}/me?${params.toString()}`,
+      "/me",
+    );
   }
 
   async getBusiness(input: {
@@ -892,6 +965,8 @@ export class MetaAdapter implements IntegrationAdapter {
         input.accessToken,
       );
     } catch (error) {
+      // Dead tokens and throttles fail identically with fewer fields.
+      if (!isMetaFieldFallbackEligible(error)) throw error;
       console.warn("[wpptrack:meta-graph] ad destination enrichment failed", {
         adAccountId: input.adAccountId,
         message:
@@ -903,7 +978,8 @@ export class MetaAdapter implements IntegrationAdapter {
           "id,name,campaign_id,adset_id,status,effective_status,tracking_specs,creative{id,call_to_action_type,thumbnail_url}",
           input.accessToken,
         );
-      } catch {
+      } catch (fallbackError) {
+        if (!isMetaFieldFallbackEligible(fallbackError)) throw fallbackError;
         response = await this.getGraphList<MetaAdGraphNode>(
           `/${input.adAccountId}/ads`,
           "id,name,campaign_id,adset_id,status,effective_status,creative{id,call_to_action_type,thumbnail_url}",
@@ -1212,8 +1288,97 @@ export class MetaAdapter implements IntegrationAdapter {
       );
   }
 
+  /**
+   * Ad-level insights including ARCHIVED/DELETED ads, with raw messaging
+   * action counts per type. One call family replaces the campaign + ad set +
+   * ad reads (totals are aggregated locally). `daily` uses time_increment=1.
+   * Long daily ranges may use an async report run (META_INSIGHTS_ASYNC_*).
+   */
+  async listAdInsightRows(input: {
+    accessToken: string;
+    adAccountId: string;
+    since: string;
+    until: string;
+    daily: boolean;
+    readMode?: MetaInsightReadMode;
+  }): Promise<MetaAdInsightRow[]> {
+    const payload = await this.listInsights({
+      accessToken: input.accessToken,
+      adAccountId: input.adAccountId,
+      since: input.since,
+      until: input.until,
+      readMode: input.readMode,
+      fields: input.daily
+        ? "campaign_id,adset_id,ad_id,date_start,date_stop,spend,impressions,clicks,actions"
+        : "campaign_id,adset_id,ad_id,spend,impressions,clicks,actions",
+      level: "ad",
+      ...(input.daily ? { timeIncrement: 1 } : {}),
+      filtering: [
+        {
+          field: "ad.effective_status",
+          operator: "IN",
+          value: [...META_AD_EFFECTIVE_STATUSES_ALL],
+        },
+      ],
+      allowAsync: input.daily,
+    });
+
+    return payload
+      .map((item) => ({
+        adId: this.asString(item.ad_id),
+        adSetId: this.asString(item.adset_id),
+        campaignId: this.asString(item.campaign_id),
+        date: input.daily ? this.asString(item.date_start) : null,
+        spendCents: this.asMoneyCents(item.spend),
+        impressions: this.asInteger(item.impressions),
+        clicks: this.asInteger(item.clicks),
+        actionValues: this.messagingActionValues(item.actions),
+      }))
+      .filter(
+        (item): item is MetaAdInsightRow =>
+          Boolean(item.adId && item.adSetId && item.campaignId) &&
+          (!input.daily || Boolean(item.date)),
+      );
+  }
+
+  /** Raw counts of the action types the conversation metric can read. */
+  private messagingActionValues(
+    actions: MetaInsightGraphNode["actions"],
+  ): Record<string, number> {
+    const values: Record<string, number> = {};
+
+    for (const action of actions ?? []) {
+      const type = this.asString(action.action_type);
+
+      if (
+        !type ||
+        !type.toLowerCase().includes("messaging_conversation_started")
+      ) {
+        continue;
+      }
+
+      values[type] = (values[type] ?? 0) + this.asInteger(action.value);
+    }
+
+    return values;
+  }
+
   private getGraphApiVersion(): string {
     return this.env.META_GRAPH_API_VERSION ?? "v21.0";
+  }
+
+  private insightsPageLimit(): number {
+    const parsed = Number.parseInt(this.env.META_INSIGHTS_PAGE_LIMIT ?? "", 10);
+
+    return Number.isFinite(parsed) && parsed > 0
+      ? Math.min(parsed, 5000)
+      : DEFAULT_INSIGHTS_PAGE_LIMIT;
+  }
+
+  private nonNegativeIntegerEnv(name: string, fallback: number): number {
+    const parsed = Number.parseInt(this.env[name] ?? "", 10);
+
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
   }
 
   private getScopes(): string[] {
@@ -1428,20 +1593,24 @@ export class MetaAdapter implements IntegrationAdapter {
     until: string;
     timeIncrement?: number;
     readMode?: MetaInsightReadMode;
+    filtering?: unknown[];
+    allowAsync?: boolean;
   }): Promise<MetaInsightGraphNode[]> {
     const params = new URLSearchParams({
       fields: input.fields,
       level: input.level,
-      limit: "100",
       time_range: JSON.stringify({
         since: input.since,
         until: input.until,
       }),
-      access_token: input.accessToken,
     });
 
     if (input.timeIncrement) {
       params.set("time_increment", String(input.timeIncrement));
+    }
+
+    if (input.filtering?.length) {
+      params.set("filtering", JSON.stringify(input.filtering));
     }
 
     if (input.readMode === "manual") {
@@ -1449,11 +1618,196 @@ export class MetaAdapter implements IntegrationAdapter {
       params.set("action_report_time", "conversion");
       params.set("use_unified_attribution_setting", "true");
     }
-    const initialUrl = `https://graph.facebook.com/${this.getGraphApiVersion()}/${input.adAccountId}/insights?${params.toString()}`;
+
+    const operation = `/${input.adAccountId}/insights?level=${input.level}`;
+
+    if (
+      input.allowAsync &&
+      this.shouldUseAsyncInsights(input.since, input.until)
+    ) {
+      try {
+        return await this.listInsightsAsync({
+          accessToken: input.accessToken,
+          adAccountId: input.adAccountId,
+          params,
+          operation,
+        });
+      } catch (error) {
+        // Throttles and dead tokens fail the same way synchronously.
+        if (isMetaRateLimitError(error) || isMetaCredentialFatalError(error)) {
+          throw error;
+        }
+
+        console.warn("[wpptrack:meta-graph] async insights fell back to sync", {
+          adAccountId: input.adAccountId,
+          message:
+            error instanceof Error ? error.message : "Meta async report failed",
+        });
+      }
+    }
+
+    const pageLimit = this.insightsPageLimit();
+    const urlWithLimit = (limit: number) => {
+      const query = new URLSearchParams(params);
+      query.set("limit", String(limit));
+      query.set("access_token", input.accessToken);
+
+      return `https://graph.facebook.com/${this.getGraphApiVersion()}/${input.adAccountId}/insights?${query.toString()}`;
+    };
+
+    try {
+      return await this.getGraphPages<MetaInsightGraphNode>(
+        urlWithLimit(pageLimit),
+        operation,
+      );
+    } catch (error) {
+      // Bigger pages save calls; Meta may ask for smaller ones on heavy
+      // accounts ("Please reduce the amount of data"). Retry once at 100.
+      // Also covers bodiless 5xx and code 2 (service temporarily
+      // unavailable), which Meta returns for oversized insight pages.
+      const reduceData =
+        error instanceof MetaGraphError &&
+        (error.details.code === 1 ||
+          error.details.code === 2 ||
+          (error.details.code === null &&
+            (error.details.httpStatus ?? 0) >= 500) ||
+          REDUCE_DATA_PATTERN.test(error.message));
+
+      if (
+        pageLimit > FALLBACK_INSIGHTS_PAGE_LIMIT &&
+        reduceData &&
+        !isMetaRateLimitError(error) &&
+        !isMetaCredentialFatalError(error)
+      ) {
+        return this.getGraphPages<MetaInsightGraphNode>(
+          urlWithLimit(FALLBACK_INSIGHTS_PAGE_LIMIT),
+          operation,
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  /** Async report runs only for long daily ranges and when enabled. */
+  private shouldUseAsyncInsights(since: string, until: string): boolean {
+    if (this.env.META_INSIGHTS_ASYNC_ENABLED?.trim().toLowerCase() !== "true") {
+      return false;
+    }
+
+    const minDays = this.nonNegativeIntegerEnv(
+      "META_INSIGHTS_ASYNC_MIN_DAYS",
+      31,
+    );
+    const days =
+      Math.round(
+        (Date.parse(`${until}T00:00:00.000Z`) -
+          Date.parse(`${since}T00:00:00.000Z`)) /
+          86_400_000,
+      ) + 1;
+
+    return Number.isFinite(days) && days >= Math.max(1, minDays);
+  }
+
+  /**
+   * POST /act_x/insights (async report run), poll /{report_run_id} until
+   * "Job Completed", then page /{report_run_id}/insights. Polls are cheap
+   * reads; the heavy query runs once on Meta's side instead of synchronously.
+   */
+  private async listInsightsAsync(input: {
+    accessToken: string;
+    adAccountId: string;
+    params: URLSearchParams;
+    operation: string;
+  }): Promise<MetaInsightGraphNode[]> {
+    const base = `https://graph.facebook.com/${this.getGraphApiVersion()}`;
+    const body = new URLSearchParams(input.params);
+    body.set("access_token", input.accessToken);
+    const response = await this.fetchImpl(
+      `${base}/${input.adAccountId}/insights`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      },
+    );
+    this.observeGraphUsage(response);
+    const payload = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+
+    if (!response.ok) {
+      throw metaGraphErrorFromPayload(
+        payload,
+        response.status,
+        `Meta Graph HTTP ${response.status}`,
+      );
+    }
+
+    const reportRunId = this.asString(payload.report_run_id);
+
+    if (!reportRunId || !/^\d{1,30}$/.test(reportRunId)) {
+      throw new Error("Meta async insights did not return a report_run_id");
+    }
+
+    const pollMs = this.nonNegativeIntegerEnv(
+      "META_INSIGHTS_ASYNC_POLL_MS",
+      3_000,
+    );
+    const maxPolls = Math.max(
+      1,
+      this.nonNegativeIntegerEnv("META_INSIGHTS_ASYNC_MAX_POLLS", 40),
+    );
+    const statusParams = new URLSearchParams({
+      fields: "async_status,async_percent_completion",
+      access_token: input.accessToken,
+    });
+    let completed = false;
+
+    for (let poll = 0; poll < maxPolls && !completed; poll += 1) {
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+      const statusResponse = await this.fetchImpl(
+        `${base}/${reportRunId}?${statusParams.toString()}`,
+      );
+      this.observeGraphUsage(statusResponse);
+      const status = (await statusResponse.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+
+      if (!statusResponse.ok) {
+        throw metaGraphErrorFromPayload(
+          status,
+          statusResponse.status,
+          `Meta Graph HTTP ${statusResponse.status}`,
+        );
+      }
+
+      const asyncStatus = this.asString(status.async_status);
+
+      if (asyncStatus === "Job Completed") {
+        completed = true;
+      } else if (
+        asyncStatus === "Job Failed" ||
+        asyncStatus === "Job Skipped"
+      ) {
+        throw new Error(`Meta async insights ${asyncStatus}`);
+      }
+    }
+
+    if (!completed) {
+      throw new Error("Meta async insights did not complete in time");
+    }
+
+    const resultParams = new URLSearchParams({
+      limit: String(this.insightsPageLimit()),
+      access_token: input.accessToken,
+    });
 
     return this.getGraphPages<MetaInsightGraphNode>(
-      initialUrl,
-      `/${input.adAccountId}/insights?level=${input.level}`,
+      `${base}/${reportRunId}/insights?${resultParams.toString()}`,
+      `${input.operation}&async=1`,
     );
   }
 
@@ -1650,6 +2004,185 @@ export class MetaAdapter implements IntegrationAdapter {
     return previews;
   }
 
+  /**
+   * Resolves one small thumbnail URL per creative for the persisted
+   * thumbnails (MetaCreativeThumbnailService). Called only for creatives that
+   * are new or due in MetaCreativeThumbnail (never on every sync).
+   * `thumbnail_url` is rendered by Meta at the requested size, which covers
+   * image and video creatives in a single batch; `/{video}/thumbnails` is a
+   * fallback only for video creatives without any image candidate, and only
+   * when META_VIDEO_THUMBNAILS_ENABLED=true (rate-limit mitigation).
+   *
+   * nod: getGraphBatch never throws, so a batch-level throttle is re-raised
+   * here as a MetaGraphError (code 4) for the service's rate-limit pause.
+   */
+  async getCreativeThumbnails(input: {
+    accessToken: string;
+    creativeIds: string[];
+    size: number;
+  }): Promise<Map<string, MetaCreativeThumbnailCandidate>> {
+    const creativeIds = [...new Set(input.creativeIds.filter(Boolean))];
+
+    if (creativeIds.length === 0) {
+      return new Map();
+    }
+
+    const size = String(Math.max(64, Math.min(1200, Math.round(input.size))));
+    const creativeFields = [
+      "id",
+      "thumbnail_url",
+      "image_url",
+      "video_id",
+      "object_story_spec",
+      "asset_feed_spec",
+    ].join(",");
+    const creatives = await this.getGraphBatch<MetaCreativeGraphNode>(
+      creativeIds.map((creativeId) => {
+        const params = new URLSearchParams({
+          fields: creativeFields,
+          thumbnail_width: size,
+          thumbnail_height: size,
+        });
+
+        return {
+          key: creativeId,
+          relativeUrl: `${creativeId}?${params.toString()}`,
+        };
+      }),
+      input.accessToken,
+      "/creative-thumbnails",
+    );
+    this.throwIfBatchRateLimited(creatives);
+    const thumbnails = new Map<string, MetaCreativeThumbnailCandidate>();
+    const videoFallbacks = new Map<string, string[]>();
+
+    for (const [creativeId, creative] of creatives.results) {
+      const videoId = this.creativeVideoId(creative);
+      const source = videoId ? "video" : "image";
+      const url = this.creativeThumbnailUrl(creative);
+
+      if (url) {
+        thumbnails.set(creativeId, { url, source });
+      } else if (videoId) {
+        videoFallbacks.set(videoId, [
+          ...(videoFallbacks.get(videoId) ?? []),
+          creativeId,
+        ]);
+      }
+    }
+
+    if (videoFallbacks.size === 0 || !this.videoThumbnailsEnabled()) {
+      return thumbnails;
+    }
+
+    const videoThumbnailPayloads = await this.getGraphBatch<
+      MetaGraphListResponse<MetaVideoThumbnailGraphNode>
+    >(
+      [...videoFallbacks.keys()].map((videoId) => {
+        const params = new URLSearchParams({
+          fields: "uri,width,height,is_preferred",
+          limit: "25",
+        });
+
+        return {
+          key: videoId,
+          relativeUrl: `${videoId}/thumbnails?${params.toString()}`,
+        };
+      }),
+      input.accessToken,
+      "/video-thumbnails",
+    );
+    this.throwIfBatchRateLimited(videoThumbnailPayloads);
+
+    for (const [videoId, payload] of videoThumbnailPayloads.results) {
+      const url = this.closestVideoThumbnailUrl(payload.data, Number(size));
+
+      if (!url) {
+        continue;
+      }
+
+      for (const creativeId of videoFallbacks.get(videoId) ?? []) {
+        thumbnails.set(creativeId, { url, source: "video" });
+      }
+    }
+
+    return thumbnails;
+  }
+
+  private throwIfBatchRateLimited<T>(batch: MetaGraphBatchResult<T>): void {
+    if (
+      [...batch.failures.values()].some((reason) => reason === "rateLimited")
+    ) {
+      throw new MetaGraphError("Meta Graph batch rate limited", {
+        httpStatus: 429,
+        code: 4,
+        subcode: null,
+        type: null,
+        isTransient: true,
+      });
+    }
+  }
+
+  private creativeThumbnailUrl(creative: MetaCreativeGraphNode): string | null {
+    const candidates = [
+      creative.thumbnail_url,
+      creative.image_url,
+      creative.object_story_spec?.video_data?.image_url,
+      creative.object_story_spec?.link_data?.image_url,
+      ...(creative.object_story_spec?.link_data?.child_attachments ?? []).map(
+        (attachment) => attachment.image_url,
+      ),
+      ...(creative.asset_feed_spec?.images ?? []).map((image) => image.url),
+      ...(creative.asset_feed_spec?.videos ?? []).map(
+        (video) => video.thumbnail_url,
+      ),
+    ];
+
+    for (const candidate of candidates) {
+      const url = this.asHttpUrl(candidate);
+
+      if (url) {
+        return url;
+      }
+    }
+
+    return null;
+  }
+
+  /** Smallest thumbnail at least `size` wide (preferred first); else largest. */
+  private closestVideoThumbnailUrl(
+    thumbnails: MetaVideoThumbnailGraphNode[] | undefined,
+    size: number,
+  ): string | null {
+    const candidates = (thumbnails ?? [])
+      .map((thumbnail) => ({
+        width: this.asInteger(thumbnail.width),
+        area:
+          this.asInteger(thumbnail.width) * this.asInteger(thumbnail.height),
+        preferred: thumbnail.is_preferred === true,
+        url: this.asHttpUrl(thumbnail.uri),
+      }))
+      .filter((thumbnail): thumbnail is typeof thumbnail & { url: string } =>
+        Boolean(thumbnail.url),
+      );
+    const bigEnough = candidates
+      .filter((thumbnail) => thumbnail.width >= size)
+      .sort(
+        (left, right) =>
+          Number(right.preferred) - Number(left.preferred) ||
+          left.area - right.area,
+      );
+
+    if (bigEnough[0]) {
+      return bigEnough[0].url;
+    }
+
+    return (
+      [...candidates].sort((left, right) => right.area - left.area)[0]?.url ??
+      null
+    );
+  }
+
   private countBatchFailures(
     stats: MetaPreviewEnrichmentStats,
     failures: Map<string, MetaGraphBatchFailureReason>,
@@ -1796,6 +2329,7 @@ export class MetaAdapter implements IntegrationAdapter {
             },
           );
           status = response.status;
+          this.observeGraphUsage(response);
           payload = (await response.json().catch(() => null)) as unknown;
 
           if (!response.ok || !Array.isArray(payload)) {
@@ -1946,14 +2480,16 @@ export class MetaAdapter implements IntegrationAdapter {
       for (let page = 0; nextUrl && page < 100; page += 1) {
         pageCount = page + 1;
         const response = await this.fetchImpl(nextUrl);
+        this.observeGraphUsage(response, nextUrl);
         const payload = (await response
           .json()
           .catch(() => ({}))) as MetaGraphListResponse<T>;
 
         if (!response.ok) {
-          throw new Error(
-            this.asString(payload.error?.message) ??
-              `Meta Graph HTTP ${response.status}`,
+          throw metaGraphErrorFromPayload(
+            payload,
+            response.status,
+            `Meta Graph HTTP ${response.status}`,
           );
         }
 
@@ -1978,6 +2514,15 @@ export class MetaAdapter implements IntegrationAdapter {
         pageCount,
         data.length,
       );
+    }
+  }
+
+  /** Passive rate-limit telemetry; never blocks or fails the request. */
+  private observeGraphUsage(response: Response, url?: string | null): void {
+    try {
+      this.usageMonitor?.record(response?.headers, url ?? null);
+    } catch {
+      // Telemetry must not interfere with Graph calls.
     }
   }
 

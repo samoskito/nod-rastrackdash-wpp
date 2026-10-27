@@ -49,6 +49,7 @@ const order = [
   "metaAdDestinationAssignment",
   "metaAdDailyInsight",
   "metaAd",
+  "metaCreativeThumbnail",
   "metaAdSetDailyInsight",
   "metaAdSet",
   "metaCampaignDailyInsight",

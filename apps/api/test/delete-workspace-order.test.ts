@@ -71,6 +71,19 @@ describe("delete-workspace FK-safe order (static; never executed)", () => {
     }
   });
 
+  it("deletes the Fase 6.4 creative thumbnails before the Workspace", () => {
+    expect(models.has("MetaCreativeThumbnail")).toBe(true);
+    expect(edges).toContainEqual({
+      child: "MetaCreativeThumbnail",
+      parent: "Workspace",
+      onDelete: "Cascade",
+    });
+    expect(order).toContain("metaCreativeThumbnail");
+    expect(position("MetaCreativeThumbnail")).toBeLessThan(
+      position("Workspace"),
+    );
+  });
+
   it("deletes every Restrict child before each listed parent", () => {
     const violations = edges
       .filter((edge) => blocks(edge) && edge.child !== edge.parent)

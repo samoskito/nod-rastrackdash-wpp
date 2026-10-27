@@ -509,11 +509,16 @@ export class ReportingController {
       throw new ForbiddenException("Sem permissão para sincronizar relatórios");
     }
 
-    return this.metaReportSyncQueueService.enqueueWorkspaceSync({
-      workspaceId: workspace.id,
-      since: period.since as string,
-      until: period.until as string,
-    });
+    // Manual/post-reconnect trigger: replaces a finished job with the same
+    // dedupe id; a still-pending one is reported as already_queued.
+    return this.metaReportSyncQueueService.enqueueWorkspaceSync(
+      {
+        workspaceId: workspace.id,
+        since: period.since as string,
+        until: period.until as string,
+      },
+      "manual",
+    );
   }
 
   @Get("meta/initial-sync-period")

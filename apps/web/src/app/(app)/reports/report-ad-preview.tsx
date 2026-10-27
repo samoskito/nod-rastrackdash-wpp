@@ -4,6 +4,10 @@ import { ImageOff, Maximize2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePresentationMode } from "../../../components/presentation-mode-toggle";
+import {
+  liveCreativeImageUrl,
+  storedCreativeThumbnailSrc,
+} from "../../../lib/creative-thumbnail";
 
 type HoverPosition = {
   left: number;
@@ -15,14 +19,26 @@ const hoverHeight = 468;
 const hoverGap = 10;
 
 export function ReportAdPreview({
+  adId,
   adName,
-  previewUrl,
-  thumbnailUrl,
+  previewUrl: rawPreviewUrl,
+  thumbnailUrl: rawThumbnailUrl,
+  thumbnailVersion,
 }: {
+  adId?: string | null;
   adName: string;
   previewUrl?: string | null;
   thumbnailUrl?: string | null;
+  thumbnailVersion?: string | null;
 }) {
+  // Persisted thumbnail (our API) first for the small image; a still-valid
+  // high-res Meta URL first for the enlarged preview. Expired signed Meta
+  // CDN URLs (oe=) are never rendered.
+  const storedSrc = storedCreativeThumbnailSrc(adId, thumbnailVersion);
+  const liveThumbnailUrl = liveCreativeImageUrl(rawThumbnailUrl);
+  const livePreviewUrl = liveCreativeImageUrl(rawPreviewUrl);
+  const thumbnailUrl = storedSrc ?? liveThumbnailUrl;
+  const previewUrl = livePreviewUrl ?? storedSrc ?? null;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [previewFailed, setPreviewFailed] = useState(false);

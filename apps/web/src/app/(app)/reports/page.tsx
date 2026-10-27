@@ -2722,6 +2722,12 @@ export default async function ReportsPage({
     metaSyncPeriod.since === since &&
     metaSyncPeriod.until === until;
   const metaPeriodCoversReport = metaSyncCoversPeriod(metaAssets, since, until);
+  // Reporting-only breaker (API): sync paused until the Meta account is
+  // reconnected/validated. Conversions are not affected.
+  const metaReconnectAccounts = (metaAssets?.reportingAccounts ?? []).filter(
+    (account) =>
+      account.active && account.syncError?.startsWith("Reconecte a conta Meta"),
+  );
   const metaPeriodProvidesReport =
     activeView === "campaigns"
       ? metaPeriodCoversReport
@@ -3091,6 +3097,20 @@ export default async function ReportsPage({
         <div className={`feedback-banner ${pageNotice.tone}`} role="status">
           <strong>{pageNotice.title}</strong>
           <span>{pageNotice.message}</span>
+        </div>
+      ) : null}
+
+      {metaReconnectAccounts.length > 0 ? (
+        <div className="feedback-banner warn" role="status">
+          <strong>Reconecte a conta Meta</strong>
+          <span>
+            A sincronização de relatórios está pausada para{" "}
+            {metaReconnectAccounts.length === 1
+              ? metaReconnectAccounts[0].adAccountName
+              : `${metaReconnectAccounts.length} contas de anúncios`}
+            . Reconecte ou valide a conexão em Integrações; o envio de
+            conversões continua normalmente.
+          </span>
         </div>
       ) : null}
 
@@ -3620,9 +3640,11 @@ export default async function ReportsPage({
                           workspaceId={currentWorkspaceId}
                         />
                         <ReportAdPreview
+                          adId={row.id}
                           adName={row.name}
                           previewUrl={row.previewUrl}
                           thumbnailUrl={row.thumbnailUrl}
+                          thumbnailVersion={row.thumbnailVersion}
                         />
                         <div className="report-entity-copy">
                           <strong>

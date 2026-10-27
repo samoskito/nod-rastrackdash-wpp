@@ -86,9 +86,30 @@ import {
   type MetaCampaignDailyInsight,
   type MetaCampaignInsight,
   type MetaPreviewEnrichmentStats,
+  type MetaAdInsightRow,
+  type MetaInsightReadMode,
 } from "../integrations/meta/meta.adapter";
+import {
+  aggregateAdDailyInsightRows,
+  aggregateAdInsightRows,
+  compareInsightTotals,
+  metaInsightsLevelMode,
+} from "./meta-insights-aggregation";
 import { evaluateMetaPreviewUrlFreshness } from "../integrations/meta/meta-preview-url-freshness";
 import { MetaAdDestinationRoutingService } from "../integrations/meta/meta-ad-destination-routing.service";
+import { liveHttpUrl } from "../integrations/meta/meta-cdn-url";
+import { MetaCreativeThumbnailService } from "../integrations/meta/meta-creative-thumbnail.service";
+import {
+  META_PERMISSION_MESSAGE,
+  META_RATE_LIMIT_MESSAGE,
+  META_RECONNECT_MESSAGE,
+  MetaCredentialInvalidError,
+  type MetaCredentialFatalScope,
+  isMetaRateLimitError,
+  metaCredentialFatalScope,
+  sanitizedMetaGraphReason,
+} from "../integrations/meta/meta-graph-error";
+import { blockMetaReportingSync } from "../integrations/meta/meta-reporting-sync-block";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 import { MetaConnectionResolverService } from "../integrations/meta/meta-connection-resolver.service";
 import {
@@ -130,6 +151,11 @@ export type MetaStructureSyncInput = {
   reportingAccountId?: string | null;
   since: string;
   until: string;
+  /**
+   * Incremental auto-sync: entity totals cover [totalsSince, until] while
+   * daily rows are refreshed only for [since, until].
+   */
+  totalsSince?: string | null;
 };
 
 export type MetaStructureSyncResult = {
@@ -234,7 +260,12 @@ type MetaReportingAccountRecord = {
   adAccountId: string;
   adAccountName: string;
   active: boolean;
+  reportingSyncBlockedAt?: Date | null;
+  syncError?: string | null;
 };
+
+/** How long a /me liveness verdict is reused per token fingerprint. */
+const TOKEN_PROBE_CACHE_TTL_MS = 10 * 60_000;
 
 /**
  * Media previously saved for one workspace + reporting account, keyed by
@@ -336,6 +367,7 @@ type MetaAdRecord = {
   effectiveStatus: string | null;
   destinationType?: string | null;
   callToActionType?: string | null;
+  creativeId?: string | null;
   thumbnailUrl?: string | null;
   previewUrl?: string | null;
   businessId?: string | null;
@@ -506,6 +538,10 @@ type WhatsappOverrideUpdateData = {
 @Injectable()
 export class MetaReportingService {
   private readonly logger = new Logger(MetaReportingService.name);
+  private readonly tokenProbeCache = new Map<
+    string,
+    { dead: boolean; expiresAt: number }
+  >();
   /** `${workspaceId}|${businessId}|${adAccountId}|${creativeId}` -> expiry ms */
   private readonly previewMissUntil = new Map<string, number>();
 
@@ -527,6 +563,9 @@ export class MetaReportingService {
     @Optional()
     @Inject(RUNTIME_ENV)
     private readonly env?: RuntimeEnv,
+    @Optional()
+    @Inject(MetaCreativeThumbnailService)
+    private readonly creativeThumbnails?: MetaCreativeThumbnailService,
   ) {}
 
   async syncWorkspaceMetaStructure(
@@ -549,6 +588,7 @@ export class MetaReportingService {
     let accessToken: string;
     let accounts: MetaReportingAccountRecord[];
     let legacyShadowParity: LegacyRouteShadowParity | null = null;
+    let credentialId: string | null = null;
 
     if (normalizedJob) {
       if (!this.connectionResolver) {
@@ -573,7 +613,16 @@ export class MetaReportingService {
         throw new NotFoundException("Conta Meta ativa não encontrada");
       }
 
+      if (account.reportingSyncBlockedAt) {
+        // Reporting-only breaker: no Meta calls until revalidation.
+        throw new MetaCredentialInvalidError(
+          account.syncError ?? META_RECONNECT_MESSAGE,
+          "reporting_sync_blocked",
+        );
+      }
+
       accessToken = route.accessToken;
+      credentialId = route.credentialId;
       accounts = [account];
     } else {
       // Existing OAuth workspaces stay on the original token and account path.
@@ -592,6 +641,18 @@ export class MetaReportingService {
         selectedAdAccountId: connection.selectedAdAccountId,
         accounts,
       });
+      const runnable = accounts.filter(
+        (account) => !account.reportingSyncBlockedAt,
+      );
+
+      if (accounts.length > 0 && runnable.length === 0) {
+        throw new MetaCredentialInvalidError(
+          accounts[0].syncError ?? META_RECONNECT_MESSAGE,
+          "reporting_sync_blocked",
+        );
+      }
+
+      accounts = runnable;
     }
 
     if (accounts.length === 0) {
@@ -607,7 +668,23 @@ export class MetaReportingService {
       adsSynced: 0,
     };
 
+    // Reporting-only breaker state; never credential/connection status.
+    let deadToken: { error: unknown } | null = null;
+    const blockedAccounts: Array<{
+      id: string;
+      error: unknown;
+      scope: MetaCredentialFatalScope;
+    }> = [];
+    const processedAccountIds = new Set<string>();
+
     for (const account of accounts) {
+      if (deadToken) {
+        // Confirmed dead token: do not spend calls on the remaining accounts.
+        break;
+      }
+
+      processedAccountIds.add(account.id);
+
       try {
         await this.prisma.metaReportingAccount.update({
           where: { id: account.id },
@@ -623,6 +700,7 @@ export class MetaReportingService {
           account,
           since: input.since,
           until: input.until,
+          totalsSince: input.totalsSince ?? undefined,
           insightReadMode: normalizedJob ? "manual" : "legacy",
         });
 
@@ -656,13 +734,94 @@ export class MetaReportingService {
         result.adsSynced += accountResult.adsSynced;
       } catch (error) {
         result.accountsFailed += 1;
+
+        if (isMetaRateLimitError(error)) {
+          // Yield the whole job: the processor delays it instead of retrying.
+          await this.prisma.metaReportingAccount.update({
+            where: { id: account.id },
+            data: {
+              syncStatus: "pending",
+              syncError: META_RATE_LIMIT_MESSAGE,
+            },
+          });
+
+          // nod: accounts already found dead/without permission in this run
+          // stay blocked (otherwise the delayed job would call Meta again).
+          if (blockedAccounts.length > 0) {
+            await this.blockReportingSync({
+              workspaceId: input.workspaceId,
+              normalizedJob,
+              credentialId,
+              deadToken: Boolean(deadToken),
+              blockedAccounts,
+            });
+          }
+
+          throw error;
+        }
+
+        const fatalScope = metaCredentialFatalScope(error);
+
+        if (fatalScope) {
+          blockedAccounts.push({ id: account.id, error, scope: fatalScope });
+
+          // 190/102 only escalate to every account of the token after a
+          // cheap, cached /me probe confirms the token is really dead.
+          if (
+            fatalScope === "credential" &&
+            (await this.isAccessTokenConfirmedDead(accessToken))
+          ) {
+            deadToken = { error };
+          }
+        }
+
         await this.prisma.metaReportingAccount.update({
           where: { id: account.id },
           data: {
             syncStatus: "error",
-            syncError: this.errorMessage(error),
+            syncError: fatalScope
+              ? this.credentialFailureMessage(fatalScope)
+              : this.errorMessage(error),
           },
         });
+      }
+    }
+
+    if (blockedAccounts.length > 0) {
+      const first = deadToken ?? blockedAccounts[0];
+      const reason = sanitizedMetaGraphReason(first.error);
+      const skippedAccounts = accounts.filter(
+        (account) => !processedAccountIds.has(account.id),
+      );
+
+      await this.blockReportingSync({
+        workspaceId: input.workspaceId,
+        normalizedJob,
+        credentialId,
+        deadToken: Boolean(deadToken),
+        blockedAccounts,
+      });
+      result.accountsFailed += skippedAccounts.length;
+
+      this.logger.warn(
+        `META_REPORTING_SYNC_BLOCKED workspace=${input.workspaceId} accounts=${blockedAccounts.length} tokenWide=${Boolean(deadToken)} ${reason}`,
+      );
+
+      if (result.accountsSynced === 0) {
+        const error = new MetaCredentialInvalidError(
+          this.credentialFailureMessage(
+            deadToken ? "credential" : blockedAccounts[0].scope,
+          ),
+          reason,
+        );
+        await this.recordMetaReportingSyncDiagnostics({
+          input,
+          startedAt,
+          result,
+          error,
+          legacyShadowParity,
+        });
+        throw error;
       }
     }
 
@@ -706,6 +865,7 @@ export class MetaReportingService {
     account: MetaReportingAccountRecord;
     since: string;
     until: string;
+    totalsSince?: string;
     insightReadMode: "legacy" | "manual";
   }): Promise<{
     campaignsSynced: number;
@@ -713,106 +873,27 @@ export class MetaReportingService {
     adsSynced: number;
   }> {
     const adAccountId = input.account.adAccountId;
-    const [
+    const {
       campaigns,
       adSets,
       adListing,
       campaignInsights,
-      campaignDailyInsightsBatch,
       adSetInsights,
-      adSetDailyInsightsBatch,
       adInsights,
-      adDailyInsightsBatch,
-    ] = await Promise.all([
-      this.metaAdapter.listCampaigns({
-        accessToken: input.accessToken,
-        adAccountId,
-      }),
-      this.metaAdapter.listAdSets({
-        accessToken: input.accessToken,
-        adAccountId,
-      }),
-      this.listAdsReusingSavedMedia({
-        workspaceId: input.workspaceId,
-        accessToken: input.accessToken,
-        account: input.account,
-      }),
-      this.metaAdapter.listCampaignInsights({
-        accessToken: input.accessToken,
-        adAccountId,
-        since: input.since,
-        until: input.until,
-        readMode: input.insightReadMode,
-      }),
-      this.metaAdapter.listCampaignDailyInsights({
-        accessToken: input.accessToken,
-        adAccountId,
-        since: input.since,
-        until: input.until,
-        readMode: input.insightReadMode,
-      }),
-      this.metaAdapter.listAdSetInsights({
-        accessToken: input.accessToken,
-        adAccountId,
-        since: input.since,
-        until: input.until,
-        readMode: input.insightReadMode,
-      }),
-      this.metaAdapter.listAdSetDailyInsights({
-        accessToken: input.accessToken,
-        adAccountId,
-        since: input.since,
-        until: input.until,
-        readMode: input.insightReadMode,
-      }),
-      this.metaAdapter.listAdInsights({
-        accessToken: input.accessToken,
-        adAccountId,
-        since: input.since,
-        until: input.until,
-        readMode: input.insightReadMode,
-      }),
-      this.metaAdapter.listAdDailyInsights({
-        accessToken: input.accessToken,
-        adAccountId,
-        since: input.since,
-        until: input.until,
-        readMode: input.insightReadMode,
-      }),
-    ]);
-    const campaignDailyInsights =
-      input.insightReadMode === "manual"
-        ? await this.resolveManualCampaignDailyInsights({
-            accessToken: input.accessToken,
-            adAccountId,
-            since: input.since,
-            until: input.until,
-            aggregateInsights: campaignInsights,
-            dailyInsights: campaignDailyInsightsBatch,
-          })
-        : campaignDailyInsightsBatch;
-    const adSetDailyInsights =
-      input.insightReadMode === "manual"
-        ? await this.resolveManualAdSetDailyInsights({
-            accessToken: input.accessToken,
-            adAccountId,
-            since: input.since,
-            until: input.until,
-            aggregateInsights: adSetInsights,
-            dailyInsights: adSetDailyInsightsBatch,
-          })
-        : adSetDailyInsightsBatch;
-    const adDailyInsights =
-      input.insightReadMode === "manual"
-        ? await this.resolveManualAdDailyInsights({
-            accessToken: input.accessToken,
-            adAccountId,
-            since: input.since,
-            until: input.until,
-            aggregateInsights: adInsights,
-            dailyInsights: adDailyInsightsBatch,
-          })
-        : adDailyInsightsBatch;
+      campaignDailyInsights,
+      adSetDailyInsights,
+      adDailyInsights,
+      dailySince,
+    } = await this.fetchAccountInsights({
+      accessToken: input.accessToken,
+      adAccountId,
+      since: input.since,
+      until: input.until,
+      totalsSince: this.effectiveTotalsSince(input.totalsSince, input.since),
+      readMode: input.insightReadMode,
+      workspaceId: input.workspaceId,
+      account: input.account,
+    });
     const { ads, previewStats, savedMedia } = adListing;
     const mediaCounters: AdMediaResolutionCounters = {
       preservedAfterFailure: 0,
@@ -1023,7 +1104,7 @@ export class MetaReportingService {
         account: input.account,
         campaignIds: campaigns.map((campaign) => campaign.id),
         insights: campaignDailyInsights,
-        since: input.since,
+        since: dailySince,
         syncedAt,
         until: input.until,
       }),
@@ -1035,7 +1116,7 @@ export class MetaReportingService {
           campaignId: adSet.campaignId,
         })),
         insights: adSetDailyInsights,
-        since: input.since,
+        since: dailySince,
         syncedAt,
         until: input.until,
       }),
@@ -1048,13 +1129,27 @@ export class MetaReportingService {
           campaignId: ad.campaignId,
         })),
         insights: adDailyInsights,
-        since: input.since,
+        since: dailySince,
         syncedAt,
         until: input.until,
       }),
     ]);
 
     await this.reconcileTrackingHierarchy(input.workspaceId, ads);
+
+    // Persisted thumbnails: Meta is called only for new creatives or rows
+    // whose backoff elapsed (bounded count and ~30s budget, delivering ads
+    // first; paused after a Meta rate limit). Cosmetic: never fails a sync.
+    await this.creativeThumbnails
+      ?.refreshCreatives({
+        workspaceId: input.workspaceId,
+        accessToken: input.accessToken,
+        creativeIds: [
+          ...ads.filter((ad) => insightByAd.has(ad.id)),
+          ...ads.filter((ad) => !insightByAd.has(ad.id)),
+        ].map((ad) => ad.creativeId),
+      })
+      .catch(() => undefined);
 
     return {
       campaignsSynced: campaigns.length,
@@ -1288,6 +1383,531 @@ export class MetaReportingService {
         `thumbnailsPreserved=${input.counters.thumbnailsPreserved}`,
       ].join(" "),
     );
+  }
+
+  /** totalsSince only widens the window (incremental auto-sync). */
+  private effectiveTotalsSince(
+    totalsSince: string | null | undefined,
+    since: string,
+  ): string {
+    return typeof totalsSince === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(totalsSince) &&
+      totalsSince < since
+      ? totalsSince
+      : since;
+  }
+
+  private shiftReportDate(date: string, days: number): string {
+    const value = new Date(`${date}T12:00:00.000Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+
+    return value.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Reads entities and insights for one ad account.
+   *
+   * - Entity totals (campaign/ad set/ad columns) always cover
+   *   [totalsSince, until], exactly like a full sync.
+   * - Daily rows are read for [since, until]. When totalsSince < since
+   *   (incremental auto-sync) the fresh days plus the stored older days must
+   *   add up to Meta's window totals; otherwise the full daily window is read
+   *   again, so stored numbers equal what a full sync would store.
+   * - META_INSIGHTS_LEVEL_MODE=ad_level reads ad rows only (incl.
+   *   ARCHIVED/DELETED) and aggregates campaign/ad set totals locally.
+   */
+  private async fetchAccountInsights(input: {
+    workspaceId: string;
+    account: MetaReportingAccountRecord;
+    accessToken: string;
+    adAccountId: string;
+    since: string;
+    until: string;
+    totalsSince: string;
+    readMode: MetaInsightReadMode;
+  }): Promise<{
+    campaigns: MetaCampaignAsset[];
+    adSets: MetaAdSetAsset[];
+    // nod: ads come with the saved-preview reuse of the URGENT mitigation.
+    adListing: Awaited<
+      ReturnType<MetaReportingService["listAdsReusingSavedMedia"]>
+    >;
+    campaignInsights: MetaCampaignInsight[];
+    adSetInsights: MetaAdSetInsight[];
+    adInsights: MetaAdInsight[];
+    campaignDailyInsights: MetaCampaignDailyInsight[];
+    adSetDailyInsights: MetaAdSetDailyInsight[];
+    adDailyInsights: MetaAdDailyInsight[];
+    dailySince: string;
+  }> {
+    const mode = metaInsightsLevelMode();
+    const { accessToken, adAccountId, until, readMode } = input;
+    const totalsRange = {
+      accessToken,
+      adAccountId,
+      since: input.totalsSince,
+      until,
+      readMode,
+    };
+    type Daily = {
+      campaigns: MetaCampaignDailyInsight[];
+      adSets: MetaAdSetDailyInsight[];
+      ads: MetaAdDailyInsight[];
+    };
+    const fetchDaily = async (since: string): Promise<Daily> => {
+      const range = { accessToken, adAccountId, since, until, readMode };
+
+      if (mode === "ad_level") {
+        return aggregateAdDailyInsightRows(
+          await this.metaAdapter.listAdInsightRows({ ...range, daily: true }),
+          readMode,
+        );
+      }
+
+      const [campaigns, adSets, ads] = await Promise.all([
+        this.metaAdapter.listCampaignDailyInsights(range),
+        this.metaAdapter.listAdSetDailyInsights(range),
+        this.metaAdapter.listAdDailyInsights(range),
+      ]);
+
+      return { campaigns, adSets, ads };
+    };
+    const fetchAggregates = async () => {
+      if (mode === "ad_level") {
+        return aggregateAdInsightRows(
+          await this.metaAdapter.listAdInsightRows({
+            ...totalsRange,
+            daily: false,
+          }),
+          readMode,
+        );
+      }
+
+      const [campaigns, adSets, ads] = await Promise.all([
+        this.metaAdapter.listCampaignInsights(totalsRange),
+        this.metaAdapter.listAdSetInsights(totalsRange),
+        this.metaAdapter.listAdInsights(totalsRange),
+      ]);
+
+      return { campaigns, adSets, ads };
+    };
+    const [campaigns, adSets, adListing, aggregates, initialDaily] =
+      await Promise.all([
+        this.metaAdapter.listCampaigns({ accessToken, adAccountId }),
+        this.metaAdapter.listAdSets({ accessToken, adAccountId }),
+        this.listAdsReusingSavedMedia({
+          workspaceId: input.workspaceId,
+          accessToken,
+          account: input.account,
+        }),
+        fetchAggregates(),
+        fetchDaily(input.since),
+      ]);
+    let daily = initialDaily;
+    let dailySince = input.since;
+    let verified = false;
+
+    if (input.totalsSince < input.since) {
+      const stored = await this.loadStoredDailySpend({
+        workspaceId: input.workspaceId,
+        adAccountId,
+        since: input.totalsSince,
+        until: this.shiftReportDate(input.since, -1),
+      });
+      // Spend (rounding tolerance) AND conversations (exact) must add up per
+      // entity; late-attributed conversations on an older stored day, or a
+      // missing/failed previous full sync, force the full daily window.
+      const matches = <
+        T extends { spendCents: number; metaConversationsStarted: number },
+      >(
+        aggregate: T[],
+        rows: T[],
+        id: (row: T) => string,
+      ) =>
+        this.dailySpendMatchesAggregate(
+          aggregate,
+          rows,
+          id,
+          id,
+          input.totalsSince,
+          until,
+        ) && this.dailyConversationsMatchAggregate(aggregate, rows, id);
+
+      verified =
+        matches<{
+          spendCents: number;
+          metaConversationsStarted: number;
+          campaignId: string;
+        }>(
+          aggregates.campaigns,
+          [...stored.campaigns, ...daily.campaigns],
+          (row) => row.campaignId,
+        ) &&
+        matches<{
+          spendCents: number;
+          metaConversationsStarted: number;
+          adSetId: string;
+        }>(
+          aggregates.adSets,
+          [...stored.adSets, ...daily.adSets],
+          (row) => row.adSetId,
+        ) &&
+        matches<{
+          spendCents: number;
+          metaConversationsStarted: number;
+          adId: string;
+        }>(aggregates.ads, [...stored.ads, ...daily.ads], (row) => row.adId);
+
+      if (!verified) {
+        this.logger.warn(
+          `META_INSIGHTS_INCREMENTAL_MISMATCH account=${adAccountId} window=${input.totalsSince}..${until}; reading the full daily window`,
+        );
+        dailySince = input.totalsSince;
+        daily = await fetchDaily(dailySince);
+      }
+    }
+
+    if (!verified && readMode === "manual") {
+      const window = {
+        accessToken,
+        adAccountId,
+        since: dailySince,
+        until,
+      };
+
+      if (mode === "ad_level") {
+        daily = await this.resolveManualAdRowDailyInsights({
+          ...window,
+          aggregateInsights: aggregates.ads,
+          daily,
+        });
+      } else {
+        const campaignsDaily = await this.resolveManualCampaignDailyInsights({
+          ...window,
+          aggregateInsights: aggregates.campaigns,
+          dailyInsights: daily.campaigns,
+        });
+        const adSetsDaily = await this.resolveManualAdSetDailyInsights({
+          ...window,
+          aggregateInsights: aggregates.adSets,
+          dailyInsights: daily.adSets,
+        });
+        const adsDaily = await this.resolveManualAdDailyInsights({
+          ...window,
+          aggregateInsights: aggregates.ads,
+          dailyInsights: daily.ads,
+        });
+        daily = {
+          campaigns: campaignsDaily,
+          adSets: adSetsDaily,
+          ads: adsDaily,
+        };
+      }
+    }
+
+    if (mode === "shadow") {
+      await this.logAdLevelParity({
+        accessToken,
+        adAccountId,
+        totalsSince: input.totalsSince,
+        dailySince,
+        until,
+        readMode,
+        aggregates,
+        daily,
+      });
+    }
+
+    return {
+      campaigns,
+      adSets,
+      adListing,
+      campaignInsights: aggregates.campaigns,
+      adSetInsights: aggregates.adSets,
+      adInsights: aggregates.ads,
+      campaignDailyInsights: daily.campaigns,
+      adSetDailyInsights: daily.adSets,
+      adDailyInsights: daily.ads,
+      dailySince,
+    };
+  }
+
+  /** Exact per-entity conversation totals (no rounding involved). */
+  private dailyConversationsMatchAggregate<
+    T extends { metaConversationsStarted: number },
+  >(aggregate: T[], rows: T[], id: (row: T) => string): boolean {
+    const expected = new Map<string, number>();
+    const actual = new Map<string, number>();
+
+    for (const row of aggregate) {
+      expected.set(id(row), row.metaConversationsStarted);
+    }
+
+    for (const row of rows) {
+      actual.set(
+        id(row),
+        (actual.get(id(row)) ?? 0) + row.metaConversationsStarted,
+      );
+    }
+
+    return [...new Set([...expected.keys(), ...actual.keys()])].every(
+      (key) => (expected.get(key) ?? 0) === (actual.get(key) ?? 0),
+    );
+  }
+
+  /** Stored daily spend/conversations of older days (incremental check). */
+  private async loadStoredDailySpend(input: {
+    workspaceId: string;
+    adAccountId: string;
+    since: string;
+    until: string;
+  }): Promise<{
+    campaigns: Array<{
+      campaignId: string;
+      spendCents: number;
+      metaConversationsStarted: number;
+    }>;
+    adSets: Array<{
+      adSetId: string;
+      spendCents: number;
+      metaConversationsStarted: number;
+    }>;
+    ads: Array<{
+      adId: string;
+      spendCents: number;
+      metaConversationsStarted: number;
+    }>;
+  }> {
+    const where = {
+      workspaceId: input.workspaceId,
+      adAccountId: input.adAccountId,
+      localDate: { gte: input.since, lte: input.until },
+    };
+    const [campaigns, adSets, ads] = await Promise.all([
+      this.prisma.metaCampaignDailyInsight.findMany({
+        where,
+        select: {
+          campaignId: true,
+          spendCents: true,
+          metaConversationsStarted: true,
+        },
+      }) as Promise<
+        Array<{
+          campaignId: string;
+          spendCents: number;
+          metaConversationsStarted: number;
+        }>
+      >,
+      this.prisma.metaAdSetDailyInsight.findMany({
+        where,
+        select: {
+          adSetId: true,
+          spendCents: true,
+          metaConversationsStarted: true,
+        },
+      }) as Promise<
+        Array<{
+          adSetId: string;
+          spendCents: number;
+          metaConversationsStarted: number;
+        }>
+      >,
+      this.prisma.metaAdDailyInsight.findMany({
+        where,
+        select: {
+          adId: true,
+          spendCents: true,
+          metaConversationsStarted: true,
+        },
+      }) as Promise<
+        Array<{
+          adId: string;
+          spendCents: number;
+          metaConversationsStarted: number;
+        }>
+      >,
+    ]);
+
+    return { campaigns, adSets, ads };
+  }
+
+  /**
+   * ad_level counterpart of the manual daily recovery: only the ad level is
+   * re-read one day at a time (campaign/ad set days are aggregated from it),
+   * i.e. 1 call per day instead of 3.
+   */
+  private async resolveManualAdRowDailyInsights(input: {
+    accessToken: string;
+    adAccountId: string;
+    since: string;
+    until: string;
+    aggregateInsights: MetaAdInsight[];
+    daily: {
+      campaigns: MetaCampaignDailyInsight[];
+      adSets: MetaAdSetDailyInsight[];
+      ads: MetaAdDailyInsight[];
+    };
+  }) {
+    const matchesAggregate = (dailyInsights: MetaAdDailyInsight[]) =>
+      this.dailySpendMatchesAggregate(
+        input.aggregateInsights,
+        dailyInsights,
+        (insight) => insight.adId,
+        (insight) => insight.adId,
+        input.since,
+        input.until,
+      );
+
+    if (matchesAggregate(input.daily.ads)) {
+      return input.daily;
+    }
+
+    this.logger.warn(
+      `Meta ad daily insights diverged for ${input.adAccountId} from ${input.since} to ${input.until}; retrying one day at a time`,
+    );
+    const dates = this.reportDateRange(input.since, input.until);
+    const rows: MetaAdInsightRow[] = [];
+    const concurrency = 3;
+
+    for (let index = 0; index < dates.length; index += concurrency) {
+      const batch = await Promise.all(
+        dates.slice(index, index + concurrency).map(async (date) => {
+          const dayRows = await this.metaAdapter.listAdInsightRows({
+            accessToken: input.accessToken,
+            adAccountId: input.adAccountId,
+            since: date,
+            until: date,
+            daily: false,
+            readMode: "manual",
+          });
+
+          return dayRows.map((row) => ({ ...row, date }));
+        }),
+      );
+
+      rows.push(...batch.flat());
+    }
+
+    const recovered = aggregateAdDailyInsightRows(rows, "manual");
+
+    if (!matchesAggregate(recovered.ads)) {
+      throw new Error(
+        "Meta retornou totais diários de anúncios inconsistentes com o investimento agregado",
+      );
+    }
+
+    return recovered;
+  }
+
+  /**
+   * Shadow mode: reads ad-level rows too (2 extra calls) and logs whether the
+   * locally aggregated campaign/ad set totals match Meta's own. Never fails
+   * the sync and never changes stored data.
+   */
+  private async logAdLevelParity(input: {
+    accessToken: string;
+    adAccountId: string;
+    totalsSince: string;
+    dailySince: string;
+    until: string;
+    readMode: MetaInsightReadMode;
+    aggregates: {
+      campaigns: MetaCampaignInsight[];
+      adSets: MetaAdSetInsight[];
+    };
+    daily: {
+      campaigns: MetaCampaignDailyInsight[];
+    };
+  }): Promise<void> {
+    try {
+      const base = {
+        accessToken: input.accessToken,
+        adAccountId: input.adAccountId,
+        until: input.until,
+        readMode: input.readMode,
+      };
+      const [aggregateRows, dailyRows] = await Promise.all([
+        this.metaAdapter.listAdInsightRows({
+          ...base,
+          since: input.totalsSince,
+          daily: false,
+        }),
+        this.metaAdapter.listAdInsightRows({
+          ...base,
+          since: input.dailySince,
+          daily: true,
+        }),
+      ]);
+      const local = aggregateAdInsightRows(aggregateRows, input.readMode);
+      const localDaily = aggregateAdDailyInsightRows(dailyRows, input.readMode);
+      // Rounding tolerance: 1 cent per ad row summed into the entity.
+      const rowsPer = (
+        rows: MetaAdInsightRow[],
+        key: (row: MetaAdInsightRow) => string,
+      ) => {
+        const counts = new Map<string, number>();
+        rows.forEach((row) =>
+          counts.set(key(row), (counts.get(key(row)) ?? 0) + 1),
+        );
+
+        return (id: string) => Math.max(1, counts.get(id) ?? 1);
+      };
+      const reports = [
+        {
+          scope: "window",
+          report: compareInsightTotals({
+            level: "campaign",
+            expected: input.aggregates.campaigns,
+            actual: local.campaigns,
+            idOf: (row) => row.campaignId,
+            spendToleranceCentsFor: rowsPer(
+              aggregateRows,
+              (row) => row.campaignId,
+            ),
+          }),
+        },
+        {
+          scope: "window",
+          report: compareInsightTotals({
+            level: "adset",
+            expected: input.aggregates.adSets,
+            actual: local.adSets,
+            idOf: (row) => row.adSetId,
+            spendToleranceCentsFor: rowsPer(
+              aggregateRows,
+              (row) => row.adSetId,
+            ),
+          }),
+        },
+        {
+          scope: "daily",
+          report: compareInsightTotals({
+            level: "campaign",
+            expected: input.daily.campaigns,
+            actual: localDaily.campaigns,
+            idOf: (row) => `${row.campaignId}:${row.date}`,
+            spendToleranceCentsFor: rowsPer(
+              dailyRows,
+              (row) => `${row.campaignId}:${row.date}`,
+            ),
+          }),
+        },
+      ];
+
+      for (const { scope, report } of reports) {
+        const line = `META_INSIGHTS_AD_LEVEL_PARITY account=${input.adAccountId} level=${report.level} scope=${scope} compared=${report.compared} mismatched=${report.mismatched} maxSpendDeltaCents=${report.maxSpendDeltaCents}`;
+
+        if (report.mismatched > 0) {
+          this.logger.warn(`${line} sample=${JSON.stringify(report.sample)}`);
+        } else {
+          this.logger.log(line);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `META_INSIGHTS_AD_LEVEL_PARITY_FAILED account=${input.adAccountId} ${sanitizedMetaGraphReason(error)}`,
+      );
+    }
   }
 
   private async resolveManualCampaignDailyInsights(input: {
@@ -2517,10 +3137,8 @@ export class MetaReportingService {
    * Cobertura dos dados da Meta para os avisos de Visão Geral e Relatórios.
    * Duas leituras baratas (contas ativas + MIN indexado de localDate por
    * conta). Nunca derruba o relatório: sem cobertura calculável, devolve
-   * undefined e a tela simplesmente não avisa.
-   *
-   * nod: a coluna `reportingSyncBlockedAt` (bloqueio da sincronização) chega
-   * com a Fase 6.4; até lá nenhuma conta aparece como "bloqueada".
+   * undefined e a tela simplesmente não avisa. Conta com
+   * `reportingSyncBlockedAt` (disjuntor da Fase 6.4) aparece como "bloqueada".
    */
   async getMetaSyncCoverage(
     workspaceId: string,
@@ -2537,6 +3155,7 @@ export class MetaReportingService {
             syncStatus: true,
             syncError: true,
             lastSyncedAt: true,
+            reportingSyncBlockedAt: true,
             createdAt: true,
           },
         }),
@@ -2563,7 +3182,7 @@ export class MetaReportingService {
       });
     } catch (error) {
       this.logger.warn(
-        `Cobertura da Meta indisponivel (${error instanceof Error ? error.name : typeof error})`,
+        `Cobertura da Meta indisponível (${error instanceof Error ? error.name : typeof error})`,
       );
 
       return undefined;
@@ -3682,7 +4301,11 @@ export class MetaReportingService {
       currency: adCurrency(ad),
       ...rowExchangeRateFields(conversionLogsByAd.get(ad.adId) ?? []),
     }));
-    const rows = paginated.items;
+    const rows = await this.attachStoredThumbnailVersions(
+      input.workspaceId,
+      paginated.items,
+      filteredAds,
+    );
     const totalsMeta = filteredAds.reduce(
       (totals, ad) => ({
         spendCents:
@@ -4246,6 +4869,105 @@ export class MetaReportingService {
     }
   }
 
+  private credentialFailureMessage(scope: MetaCredentialFatalScope): string {
+    return scope === "account"
+      ? META_PERMISSION_MESSAGE
+      : META_RECONNECT_MESSAGE;
+  }
+
+  /**
+   * Reporting-only circuit breaker. Writes ONLY MetaReportingAccount
+   * reportingSyncBlockedAt/Reason (+ syncStatus/syncError for the UI): never
+   * credential/connection/integration status, validationError or
+   * lastValidatedAt, which CAPI/CTWA routing read. Revalidation, reconnect
+   * and "Testar" flows clear the block.
+   */
+  private async blockReportingSync(input: {
+    workspaceId: string;
+    normalizedJob: boolean;
+    credentialId: string | null;
+    deadToken: boolean;
+    blockedAccounts: Array<{
+      id: string;
+      error: unknown;
+      scope: MetaCredentialFatalScope;
+    }>;
+  }): Promise<void> {
+    const now = new Date();
+
+    try {
+      for (const account of input.blockedAccounts) {
+        await blockMetaReportingSync(
+          this.prisma,
+          { id: account.id, workspaceId: input.workspaceId },
+          {
+            reason: sanitizedMetaGraphReason(account.error),
+            message: this.credentialFailureMessage(account.scope),
+            now,
+          },
+        );
+      }
+
+      if (input.deadToken) {
+        // Every reporting account that uses this token, and only those.
+        const sharingToken = input.normalizedJob
+          ? input.credentialId
+            ? {
+                workspaceId: input.workspaceId,
+                businessConnection: {
+                  is: { credentialId: input.credentialId },
+                },
+              }
+            : null
+          : { workspaceId: input.workspaceId, active: true };
+
+        if (sharingToken) {
+          await blockMetaReportingSync(this.prisma, sharingToken, {
+            reason: `token_confirmed_dead ${sanitizedMetaGraphReason(
+              input.blockedAccounts[0]?.error,
+            )}`,
+            message: META_RECONNECT_MESSAGE,
+            now,
+          });
+        }
+      }
+    } catch {
+      this.logger.warn("META_REPORTING_SYNC_BLOCK_FAILED");
+    }
+  }
+
+  /** Cached GET /me: true only when Meta confirms the token itself is dead. */
+  private async isAccessTokenConfirmedDead(
+    accessToken: string,
+  ): Promise<boolean> {
+    const key = this.encryption.fingerprint(accessToken);
+    const cached = this.tokenProbeCache.get(key);
+    const now = Date.now();
+
+    if (cached && cached.expiresAt > now) {
+      return cached.dead;
+    }
+
+    let dead = false;
+
+    try {
+      await this.metaAdapter.probeAccessToken({ accessToken });
+    } catch (error) {
+      dead = metaCredentialFatalScope(error) === "credential";
+    }
+
+    this.tokenProbeCache.set(key, {
+      dead,
+      expiresAt: now + TOKEN_PROBE_CACHE_TTL_MS,
+    });
+
+    if (this.tokenProbeCache.size > 1_000) {
+      this.tokenProbeCache.delete(this.tokenProbeCache.keys().next().value!);
+    }
+
+    return dead;
+  }
+
   private async getConnection(
     workspaceId: string,
   ): Promise<MetaIntegrationRecord> {
@@ -4539,6 +5261,56 @@ export class MetaReportingService {
     };
   }
 
+  /** Adds the persisted-thumbnail version (cache key) to ad report rows. */
+  private async attachStoredThumbnailVersions<
+    T extends { id: string; thumbnailVersion?: string | null },
+  >(workspaceId: string, rows: T[], ads: MetaAdRecord[]): Promise<T[]> {
+    const creativeByAd = new Map(
+      ads
+        .filter((ad) => ad.creativeId)
+        .map((ad) => [ad.adId, ad.creativeId as string]),
+    );
+    const creativeIds = [
+      ...new Set(
+        rows
+          .map((row) => creativeByAd.get(row.id))
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    if (creativeIds.length === 0 || !this.prisma.metaCreativeThumbnail) {
+      return rows;
+    }
+
+    try {
+      const stored = (await this.prisma.metaCreativeThumbnail.findMany({
+        where: {
+          workspaceId,
+          creativeId: { in: creativeIds },
+          status: "ready",
+        },
+        select: { creativeId: true, version: true },
+      })) as Array<{ creativeId: string; version: string | null }>;
+      const versionByCreative = new Map(
+        stored
+          .filter((row) => row.version)
+          .map((row) => [row.creativeId, row.version as string]),
+      );
+
+      return rows.map((row) => {
+        const creativeId = creativeByAd.get(row.id);
+        const version = creativeId ? versionByCreative.get(creativeId) : null;
+
+        return version ? { ...row, thumbnailVersion: version } : row;
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Stored creative thumbnails unavailable: ${this.errorMessage(error)}`,
+      );
+      return rows;
+    }
+  }
+
   private toAdReportRow(input: {
     ad: MetaAdRecord;
     campaignName: string;
@@ -4571,8 +5343,11 @@ export class MetaReportingService {
       status: this.toReportStatus(input.ad.status),
       configuredStatus: input.ad.status,
       effectiveStatus: input.ad.effectiveStatus,
-      thumbnailUrl: input.ad.thumbnailUrl ?? null,
-      previewUrl: input.ad.previewUrl ?? null,
+      // Signed Meta CDN URLs whose oe= expiry passed are dropped so the UI
+      // falls back to the persisted thumbnail instead of a broken image.
+      thumbnailUrl: liveHttpUrl(input.ad.thumbnailUrl),
+      previewUrl: liveHttpUrl(input.ad.previewUrl),
+      thumbnailVersion: null,
       businessId: input.ad.businessId,
       adAccountId: input.ad.adAccountId,
       whatsappClassification: input.ad.whatsappClassification,

@@ -37,6 +37,7 @@ describe("lead detail route", () => {
             creative: {
               thumbnailUrl: "https://cdn.example.test/creative.jpg",
               destinationUrl: "https://www.instagram.com/p/creative/",
+              thumbnailVersion: "abcdef0123456789",
             },
           },
           conversionEvents: [
@@ -89,7 +90,11 @@ describe("lead detail route", () => {
     expect(html).toContain("Publico quente");
     expect(html).toContain("Criativo WhatsApp");
     expect(html).toContain("Atribuição");
-    expect(html).toContain("https://cdn.example.test/creative.jpg");
+    // The persisted thumbnail (same-origin, versioned) is rendered first.
+    expect(html).toContain(
+      "/reports/creative-thumbnails/ads/ad_1?v=abcdef0123456789",
+    );
+    expect(html).not.toContain("Miniatura indisponível");
     expect(html).toContain("Ver no Instagram");
     expect(html).toContain("https://www.instagram.com/p/creative/");
     expect(html).toContain("QualifiedLead");

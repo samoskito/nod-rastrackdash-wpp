@@ -458,6 +458,7 @@ model Workspace {
   metaAdSetDailyInsights           MetaAdSetDailyInsight[]
   metaAds                          MetaAd[]
   metaAdDailyInsights              MetaAdDailyInsight[]
+  metaCreativeThumbnails           MetaCreativeThumbnail[]
   externalDataConnectors           ExternalDataConnector[]
   externalIngestionRecords         ExternalIngestionRecord[]
   activeSessions                   AuthSession[]                        @relation("AuthSessionActiveWorkspace")
@@ -1675,6 +1676,9 @@ model MetaReportingAccount {
   lastSyncSince           String?
   lastSyncUntil           String?
   syncError               String?
+  /// Disjuntor só da sincronização de relatórios. Nunca lido pelo envio CAPI/CTWA.
+  reportingSyncBlockedAt  DateTime?
+  reportingSyncBlockReason String?
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
 
@@ -1691,6 +1695,7 @@ model MetaReportingAccount {
   @@index([workspaceId, active])
   @@index([workspaceId, active, businessId, adAccountId])
   @@index([workspaceId, businessConnectionId, active])
+  @@index([workspaceId, reportingSyncBlockedAt])
   @@index([businessConnectionId])
   @@index([conversionDestinationId])
   @@index([businessId])
@@ -2332,6 +2337,38 @@ model MetaAd {
   @@index([workspaceId, adSetId])
   @@index([workspaceId, businessId, adAccountId, whatsappClassification])
   @@index([workspaceId, status])
+}
+
+/// Miniatura guardada do criativo (uma linha por workspace + criativo Meta).
+/// Criativos da Meta não mudam: os bytes são buscados uma vez e servidos pelo
+/// nosso endpoint autenticado; URLs assinadas do fbcdn (expiram em oe=) ficam
+/// só como origem/fallback. Nunca rebuscada em toda sincronização.
+model MetaCreativeThumbnail {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  creativeId         String
+  /// image | video
+  source             String?
+  /// ready | url_only | missing | failed
+  status             String
+  sourceUrl          String?
+  sourceUrlExpiresAt DateTime?
+  contentType        String?
+  imageBytes         Bytes?
+  byteSize           Int?
+  /// Hash curto do conteúdo, usado como versão (cache) da URL da imagem.
+  version            String?
+  fetchedAt          DateTime?
+  nextAttemptAt      DateTime?
+  attemptCount       Int       @default(0)
+  lastError          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, creativeId])
+  @@index([workspaceId, status, nextAttemptAt])
 }
 
 model MetaAdDailyInsight {

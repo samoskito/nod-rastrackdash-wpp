@@ -22,6 +22,7 @@ import type {
 import { META_OAUTH_DISCONNECT_CONFIRMATION } from "@wpptrack/shared";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { MetaAdapter } from "./meta.adapter";
+import { clearMetaReportingSyncBlocks } from "./meta-reporting-sync-block";
 import { MetaTokenEncryptionService } from "./meta-token-encryption.service";
 
 export type SaveMetaConnectionInput = {
@@ -228,6 +229,10 @@ export class MetaConnectionsService {
       };
     });
     const connection = saved.connection as MetaIntegrationRecord;
+    // OAuth reconnect lifts the reporting-only breaker for the workspace.
+    await clearMetaReportingSyncBlocks(this.prisma, {
+      workspaceId: input.workspaceId,
+    });
     await this.recordMetaAudit({
       workspaceId: input.workspaceId,
       actorUserId: input.actorUserId ?? null,

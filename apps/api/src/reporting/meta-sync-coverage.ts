@@ -9,8 +9,7 @@ export type MetaCoverageAccount = {
   syncStatus: string;
   syncError: string | null;
   lastSyncedAt: Date | null;
-  /** nod: column arrives with Fase 6.4 (sync block); absent = not blocked. */
-  reportingSyncBlockedAt?: Date | null;
+  reportingSyncBlockedAt: Date | null;
   createdAt: Date;
 };
 

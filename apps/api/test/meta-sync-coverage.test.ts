@@ -183,6 +183,30 @@ describe("MetaReportingService.getMetaSyncCoverage", () => {
     expect(coverage?.periodStartsBeforeCoverage).toBe(true);
   });
 
+  it("lê reportingSyncBlockedAt (Fase 6.4) e mostra a conta como bloqueada", async () => {
+    const blockedAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const prisma = {
+      metaReportingAccount: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([account({ reportingSyncBlockedAt: blockedAt })]),
+      },
+      metaCampaignDailyInsight: { groupBy: vi.fn().mockResolvedValue([]) },
+    };
+    const coverage = await service(prisma).getMetaSyncCoverage(
+      "ws_1",
+      "2026-09-01",
+      now,
+    );
+
+    expect(prisma.metaReportingAccount.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ reportingSyncBlockedAt: true }),
+      }),
+    );
+    expect(coverage?.problemAccounts[0]?.reason).toBe("blocked");
+  });
+
   it("nunca derruba o relatório: falha na leitura devolve undefined", async () => {
     const prisma = {
       metaReportingAccount: {

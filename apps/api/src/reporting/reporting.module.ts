@@ -9,10 +9,12 @@ import { DiagnosticsModule } from "../diagnostics/diagnostics.module";
 import { InboundWebhooksModule } from "../inbound-webhooks/inbound-webhooks.module";
 import { IntegrationsModule } from "../integrations/integrations.module";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
+import { CreativeThumbnailsController } from "./creative-thumbnails.controller";
 import { MetaReportSyncProcessor } from "./meta-report-sync.processor";
 import { MetaReportAutoSyncService } from "./meta-report-auto-sync.service";
 import { MetaInitialSyncPeriodService } from "./meta-initial-sync-period";
 import { MetaReportSyncQueueService } from "./meta-report-sync-queue.service";
+import { MetaReportSyncThrottleService } from "./meta-report-sync-throttle.service";
 import { MetaReportingService } from "./meta-reporting.service";
 import { ReportingMetricsEngine } from "./reporting-metrics.engine";
 import { ReportingController } from "./reporting.controller";
@@ -31,13 +33,14 @@ import { WhatsappCampaignClassifierService } from "./whatsapp-campaign-classifie
       name: META_REPORT_SYNC_QUEUE,
     }),
   ],
-  controllers: [ReportingController],
+  controllers: [ReportingController, CreativeThumbnailsController],
   providers: [
     MetaReportingService,
     MetaReportAutoSyncService,
     MetaInitialSyncPeriodService,
     MetaReportSyncQueueService,
     MetaReportSyncProcessor,
+    MetaReportSyncThrottleService,
     ReportingMetricsEngine,
     WhatsappCampaignClassifierService,
     PrismaService,

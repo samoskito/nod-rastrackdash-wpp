@@ -4,21 +4,46 @@ import { ExternalLink, ImageOff } from "lucide-react";
 import { useState } from "react";
 import { PresentationMask } from "../../../../components/presentation-mask";
 import { usePresentationMode } from "../../../../components/presentation-mode-toggle";
+import {
+  liveCreativeImageUrl,
+  storedCreativeThumbnailSrc,
+} from "../../../../lib/creative-thumbnail";
 
 type CreativePreviewProps = {
+  adId?: string | null;
   adName: string;
   destinationUrl: string | null;
   thumbnailUrl: string | null;
+  thumbnailVersion?: string | null;
 };
 
+export function creativePreviewSources(input: {
+  adId?: string | null;
+  thumbnailUrl: string | null;
+  thumbnailVersion?: string | null;
+}): string[] {
+  return [
+    storedCreativeThumbnailSrc(input.adId, input.thumbnailVersion),
+    liveCreativeImageUrl(input.thumbnailUrl),
+  ].filter((source): source is string => Boolean(source));
+}
+
 export function CreativePreview({
+  adId,
   adName,
   destinationUrl,
   thumbnailUrl,
+  thumbnailVersion,
 }: CreativePreviewProps) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
   const presentationMode = usePresentationMode();
-  const showImage = Boolean(thumbnailUrl) && !imageFailed && !presentationMode;
+  const sources = creativePreviewSources({
+    adId,
+    thumbnailUrl,
+    thumbnailVersion,
+  });
+  const source = sources[failedCount] ?? null;
+  const showImage = Boolean(source) && !presentationMode;
 
   return (
     <aside className="lead-creative-panel" aria-label="Criativo do anúncio">
@@ -31,8 +56,10 @@ export function CreativePreview({
           <img
             alt={`Miniatura do anúncio ${adName}`}
             decoding="async"
-            onError={() => setImageFailed(true)}
-            src={thumbnailUrl ?? undefined}
+            key={source ?? undefined}
+            onError={() => setFailedCount((count) => count + 1)}
+            referrerPolicy="no-referrer"
+            src={source ?? undefined}
           />
         ) : (
           <div className="lead-creative-placeholder">

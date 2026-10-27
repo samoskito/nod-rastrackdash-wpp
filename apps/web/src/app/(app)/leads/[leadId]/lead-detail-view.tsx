@@ -315,9 +315,13 @@ export function LeadDetailView({
 
         {lead.adId ? (
           <CreativePreview
+            adId={lead.adId}
             adName={detail.attribution.adName ?? lead.adId}
             destinationUrl={detail.attribution.creative?.destinationUrl ?? null}
             thumbnailUrl={detail.attribution.creative?.thumbnailUrl ?? null}
+            thumbnailVersion={
+              detail.attribution.creative?.thumbnailVersion ?? null
+            }
           />
         ) : null}
       </div>

@@ -12,31 +12,10 @@ import { ImageOff, Smartphone } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { usePresentationMode } from "../../../components/presentation-mode-toggle";
-
-/**
- * nod: http(s) URL that is not a known-expired signed Meta CDN URL (`oe` =
- * hex unix seconds). The SaaS also serves stored thumbnails (Fase 6.4, not
- * ported yet); without one the card shows the empty thumbnail.
- */
-function liveCreativeImageUrl(
-  value: string | null | undefined,
-  now: Date = new Date(),
-): string | null {
-  if (!value) return null;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-  const oe = url.searchParams.get("oe");
-  if (oe && /^[0-9a-f]{6,12}$/iu.test(oe)) {
-    const expiresAtMs = Number.parseInt(oe, 16) * 1000;
-    if (Number.isFinite(expiresAtMs) && expiresAtMs <= now.getTime()) return null;
-  }
-  return value;
-}
+import {
+  liveCreativeImageUrl,
+  storedCreativeThumbnailSrc,
+} from "../../../lib/creative-thumbnail";
 
 export type CrmCardOptions = {
   showWhatsappNumber: boolean;
@@ -47,7 +26,10 @@ export type CrmCardOptions = {
 
 function CreativeThumb({ card }: { card: CrmLeadCardDto }) {
   const presentationMode = usePresentationMode();
-  const sources = [liveCreativeImageUrl(card.creative.thumbnailUrl)].filter((source): source is string => Boolean(source));
+  const sources = [
+    storedCreativeThumbnailSrc(card.adId, card.creative.thumbnailVersion),
+    liveCreativeImageUrl(card.creative.thumbnailUrl),
+  ].filter((source): source is string => Boolean(source));
   const [failed, setFailed] = useState(0);
   const source = sources[failed];
   if (!source || presentationMode)

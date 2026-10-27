@@ -29,6 +29,7 @@ export type ReportInsightRow = ReportInsightSourceRow & {
   campaignName?: string;
   previewUrl?: string | null;
   thumbnailUrl?: string | null;
+  thumbnailVersion?: string | null;
 };
 
 export type ReportInsightFetch =
@@ -140,9 +141,11 @@ function InsightItem({
       <div className="report-insight-entity">
         {level === "ads" ? (
           <ReportAdPreview
+            adId={item.row.id}
             adName={item.row.name}
             previewUrl={item.row.previewUrl}
             thumbnailUrl={item.row.thumbnailUrl}
+            thumbnailVersion={item.row.thumbnailVersion}
           />
         ) : null}
         <div className="report-entity-copy">
