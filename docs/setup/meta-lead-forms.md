@@ -1,5 +1,9 @@
 # Formulários Meta (Lead Ads → etapa do CRM)
 
+> **Oculto a partir da 1.3.1.** Este recurso ainda não foi validado para os alunos e o card não
+> aparece em Integrações. Não ligue `WPPTRACK_WEB_META_LEAD_FORMS_ENABLED` sem orientação da
+> PalmUP. Nada foi removido: a API, o banco e o webhook continuam iguais.
+
 Fase 6.9 (PR #91 do nod). Recebe os leads dos **formulários instantâneos** da Meta e, quando alguém
 registra **Lead qualificado** nesse lead (pela conversão manual na tela do lead ou arrastando o card
 no **CRM**), envia a etapa para a Meta pela **Conversions API for CRM**
