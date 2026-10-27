@@ -21,7 +21,8 @@ import { BackofficeActionForm } from "../../../components/backoffice-action-form
 import { PresentationMask } from "../../../components/presentation-mask";
 import { usePresentationMode } from "../../../components/presentation-mode-toggle";
 import { apiFetch } from "../../../lib/api";
-import { retryMetaEventAction } from "./actions";
+import { retryMetaEventAction, retryRejectedMetaEventAction } from "./actions";
+import { RETRY_REJECTED_WARNING } from "./retry-rejected-events";
 
 type AuditTab = "summary" | "source" | "request" | "response";
 
@@ -278,6 +279,7 @@ export function EventAuditDetails({
         ? {
             ...current,
             canRetry: false,
+            canRetryRejected: false,
             deliveryState: "queued",
             status: "ready_to_send",
             statusLabel: "Aguardando",
@@ -465,6 +467,36 @@ export function EventAuditDetails({
                           <RetrySubmitButton
                             blocked={detail.deliveryState === "blocked"}
                           />
+                        </BackofficeActionForm>
+                      </div>
+                    ) : null}
+
+                    {detail.canRetryRejected ? (
+                      <div
+                        className="event-audit-retry"
+                        data-retry-rejected="true"
+                      >
+                        <span>
+                          <strong>Recusado pela Meta</strong>
+                          <small>{RETRY_REJECTED_WARNING}</small>
+                          <small>
+                            O reenvio usa o mesmo identificador do evento e
+                            recalcula rota, pixel e página com a configuração
+                            atual.
+                          </small>
+                        </span>
+                        <BackofficeActionForm
+                          action={retryRejectedMetaEventAction}
+                          onSuccess={handleRetrySuccess}
+                        >
+                          <input name="eventId" type="hidden" value={eventId} />
+                          <button
+                            className="button ghost audit-retry-button"
+                            type="submit"
+                          >
+                            <RefreshCw aria-hidden="true" size={16} />
+                            Reenviar recusado
+                          </button>
                         </BackofficeActionForm>
                       </div>
                     ) : null}

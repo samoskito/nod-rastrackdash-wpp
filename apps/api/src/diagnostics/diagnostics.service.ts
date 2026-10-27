@@ -30,7 +30,10 @@ import type {
   DiagnosticSummaryDto,
   DiagnosticSummaryQueryDto
 } from "@wpptrack/shared";
+import { authorizedCtwaDestinationSchema } from "@wpptrack/shared";
 import { safeErrorName } from "../common/errors/safe-error-name";
+import { isCrmCtwaContext } from "../crm-channels/crm-ctwa-context";
+import { resolveCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { DiagnosticsQueueService } from "../common/queue/diagnostics-queue.service";
@@ -40,6 +43,7 @@ import {
   BLOCKED_CONVERSION_RETRY_LIMIT,
   canRetryConversionEvent,
   isConfigurationBlockedConversionEvent,
+  isFixableMetaRejectionConversionEvent,
   isMetaAuthFailureConversionEvent,
   isOutsideMetaEventTimeWindow
 } from "../conversion-events/conversion-event-retry";
@@ -169,6 +173,8 @@ type ConversionEventLogRecord = {
   eventName: string;
   status: string;
   pixelId: string | null;
+  pageId?: string | null;
+  sourcePayload?: unknown;
   metaAccountId: string | null;
   campaignId: string | null;
   adSetId: string | null;
@@ -197,6 +203,16 @@ export type ConversionEventRetryContext = {
   transientOnly?: boolean;
   allowConfigurationBlocked?: boolean;
   requesterLabel?: string;
+};
+
+export type BulkConversionRetryResult = {
+  claimed: number;
+  enqueued: number;
+  /** Not resent; includes `expired`. */
+  skipped: number;
+  /** Skipped because the event is older than Meta's 7-day window. */
+  expired: number;
+  failed: number;
 };
 
 export type WebhookLogInput = {
@@ -1373,19 +1389,57 @@ export class DiagnosticsService {
     return this.performConversionEventRetry(id, input, context);
   }
 
+  /**
+   * "Reenviar recusados" de um evento (1.3.1): recusa da Meta com causa
+   * corrigível, dentro dos 7 dias. Mesmo event_id; rota e destino
+   * recalculados no envio (o pixel e a página da tentativa recusada são
+   * apagados antes). A troca error -> ready_to_send é condicional: clique
+   * duplo ou envio concorrente responde 409 e nada sai duas vezes.
+   */
+  async retryRejectedConversionEvent(
+    id: string,
+    input: DiagnosticRetryInputDto,
+    context: ConversionEventRetryContext & { workspaceId: string }
+  ): Promise<DiagnosticRetryResultDto> {
+    return this.performConversionEventRetry(id, input, context, {
+      fixableRejectionOnly: true
+    });
+  }
+
+  /** "Reenviar recusados" em lote: até 500 por clique, como os bloqueados. */
+  async retryRejectedConversionEvents(
+    eventIds: string[],
+    input: DiagnosticRetryInputDto,
+    context: ConversionEventRetryContext & { workspaceId: string }
+  ): Promise<BulkConversionRetryResult> {
+    return this.retryConversionEventsInBulk(eventIds, input, context, {
+      fixableRejectionOnly: true
+    });
+  }
+
   async retryBlockedConversionEvents(
     eventIds: string[],
     input: DiagnosticRetryInputDto,
     context: ConversionEventRetryContext & { workspaceId: string }
-  ): Promise<{
-    claimed: number;
-    enqueued: number;
-    /** Not resent; includes `expired`. */
-    skipped: number;
-    /** Skipped because the event is older than Meta's 7-day window. */
-    expired: number;
-    failed: number;
-  }> {
+  ): Promise<BulkConversionRetryResult> {
+    return this.retryConversionEventsInBulk(
+      eventIds,
+      input,
+      {
+        ...context,
+        transientOnly: true,
+        allowConfigurationBlocked: true
+      },
+      { configurationBlockedOnly: true }
+    );
+  }
+
+  private async retryConversionEventsInBulk(
+    eventIds: string[],
+    input: DiagnosticRetryInputDto,
+    context: ConversionEventRetryContext & { workspaceId: string },
+    mode: { configurationBlockedOnly?: boolean; fixableRejectionOnly?: boolean }
+  ): Promise<BulkConversionRetryResult> {
     const result = {
       claimed: 0,
       enqueued: 0,
@@ -1403,13 +1457,9 @@ export class DiagnosticsService {
         await this.performConversionEventRetry(
           id,
           input,
+          context,
           {
-            ...context,
-            transientOnly: true,
-            allowConfigurationBlocked: true
-          },
-          {
-            configurationBlockedOnly: true,
+            ...mode,
             // Count completed steps even if queueing or audit persistence later fails.
             onClaimed: () => {
               claimed = true;
@@ -1445,6 +1495,8 @@ export class DiagnosticsService {
     context: ConversionEventRetryContext,
     progress: {
       configurationBlockedOnly?: boolean;
+      /** 1.3.1: só recusas corrigíveis; rota recalculada no envio. */
+      fixableRejectionOnly?: boolean;
       onClaimed?: () => void;
       onEnqueued?: () => void;
     } = {}
@@ -1462,6 +1514,19 @@ export class DiagnosticsService {
     }
 
     const metaAuthFailure = isMetaAuthFailureConversionEvent(conversionEvent);
+    const fixableRejection = progress.fixableRejectionOnly === true;
+
+    if (fixableRejection) {
+      if (!isFixableMetaRejectionConversionEvent(conversionEvent)) {
+        throw new BadRequestException(
+          "Evento não foi recusado pela Meta por uma causa que dá para corrigir no painel"
+        );
+      }
+      // O reenvio mantém o event_time original; a Meta recusa depois de 7 dias.
+      if (isOutsideMetaEventTimeWindow(conversionEvent)) {
+        throw new MetaEventTimeExpiredRetryError();
+      }
+    }
 
     if (
       progress.configurationBlockedOnly &&
@@ -1524,6 +1589,13 @@ export class DiagnosticsService {
       throw new Error("ConversionEventsQueueService is required for retries");
     }
 
+    // Recusado e enviado pelo destino CTWA (página + pixel autorizados do
+    // número): o destino gravado no evento é refeito com a configuração
+    // atual do número, ou o envio recusaria a mesma rota de novo.
+    const refreshedSourcePayload = fixableRejection
+      ? await this.refreshedCtwaSourcePayload(conversionEvent)
+      : undefined;
+
     const claimed = await this.prisma.conversionEventLog.updateMany({
       where: {
         id: conversionEvent.id,
@@ -1535,7 +1607,14 @@ export class DiagnosticsService {
         status: "ready_to_send",
         sentAt: null,
         errorCode: null,
-        errorMessage: null
+        errorMessage: null,
+        // Recusado: o pixel e a página gravados podem ser a causa (ex.: pixel
+        // ligado a outra página). O envio resolve rota e destino de novo com
+        // a configuração atual e grava os novos.
+        ...(fixableRejection ? { pixelId: null, pageId: null } : {}),
+        ...(refreshedSourcePayload
+          ? { sourcePayload: refreshedSourcePayload as Prisma.InputJsonValue }
+          : {})
       }
     });
 
@@ -1566,7 +1645,19 @@ export class DiagnosticsService {
           sentAt: conversionEvent.sentAt,
           jobId: conversionEvent.jobId,
           errorCode: conversionEvent.errorCode,
-          errorMessage: conversionEvent.errorMessage
+          errorMessage: conversionEvent.errorMessage,
+          ...(fixableRejection
+            ? {
+                pixelId: conversionEvent.pixelId,
+                pageId: conversionEvent.pageId ?? null
+              }
+            : {}),
+          ...(refreshedSourcePayload
+            ? {
+                sourcePayload:
+                  conversionEvent.sourcePayload as Prisma.InputJsonValue
+              }
+            : {})
         }
       });
       throw error;
@@ -1577,7 +1668,9 @@ export class DiagnosticsService {
         workspaceId: conversionEvent.workspaceId,
         actorUserId: context.actorUserId ?? null,
         actorType: context.actorType ?? "platform",
-        action: "diagnostic.conversion_retry_requested",
+        action: fixableRejection
+          ? "diagnostic.conversion_rejected_retry_requested"
+          : "diagnostic.conversion_retry_requested",
         targetType: "ConversionEventLog",
         targetId: conversionEvent.id,
         reason: input.reason,
@@ -1673,6 +1766,50 @@ export class DiagnosticsService {
       auditLogId: auditLog.id,
       jobAttemptId: jobAttempt.id
     };
+  }
+
+  /**
+   * Evento CTWA enviado pela página + pixel autorizados do número: refaz o
+   * destino com a configuração atual do número. Sem rota pronta, o reenvio é
+   * recusado com o motivo (o evento continua Falhou). Outros eventos: null
+   * (a rota é resolvida no envio, pelo destino atual).
+   */
+  private async refreshedCtwaSourcePayload(
+    conversionEvent: ConversionEventLogRecord
+  ): Promise<Record<string, unknown> | null> {
+    const source = conversionEvent.sourcePayload;
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      return null;
+    const payload = source as Record<string, unknown>;
+    const intent = authorizedCtwaDestinationSchema.safeParse(
+      payload.ctwaDestination
+    );
+    if (!intent.success) return null;
+
+    const channel = await this.prisma.inboundWebhookChannel.findFirst({
+      where: {
+        id: intent.data.channelId,
+        workspaceId: intent.data.workspaceId
+      },
+      include: { connection: true, routes: true }
+    });
+    if (!channel) {
+      throw new BadRequestException(
+        "O número deste evento não existe mais; o evento não pode ser reenviado"
+      );
+    }
+    const resolved = await resolveCtwaDestination(
+      this.prisma as never,
+      channel as never,
+      { crmAnyProvider: isCrmCtwaContext(source) }
+    );
+    if (resolved.kind !== "authorized_ctwa_destination") {
+      throw new BadRequestException(
+        "A rota Meta do número ainda não está pronta (página e pixel). Corrija em Integrações e reenvie"
+      );
+    }
+
+    return { ...payload, ctwaDestination: resolved };
   }
 
   private toDto(event: DiagnosticEventRecord): DiagnosticEventDto {

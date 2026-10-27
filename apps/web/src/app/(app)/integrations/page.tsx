@@ -1732,8 +1732,8 @@ export default async function IntegrationsPage({
           <span className="eyebrow">Instância por variável de ambiente</span>
           <h2>Instância Uazapi (BYO)</h2>
           <p className="muted">
-            Esta edição também le uma instância Uazapi configurada por variável
-            de ambiente (UAZAPI_BASE_URL/UAZAPI_TOKEN). Não há marketplace de
+            Esta edição também lê uma instância Uazapi configurada pelo
+            administrador na configuração da API. Não há marketplace de
             instâncias nem cobrança dentro do painel.
           </p>
           <div className="metric-grid compact">

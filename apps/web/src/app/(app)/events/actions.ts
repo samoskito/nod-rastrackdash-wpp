@@ -125,3 +125,117 @@ export async function retryBlockedMetaEventsAction(
     };
   }
 }
+
+/**
+ * "Reenviar recusados" (1.3.1), um evento: recusa da Meta cuja causa o aluno
+ * corrigiu. Mesmo identificador do evento; rota e destino recalculados.
+ */
+export async function retryRejectedMetaEventAction(
+  _previousState: BackofficeActionState,
+  formData: FormData
+): Promise<BackofficeActionState> {
+  const eventId = String(formData.get("eventId") ?? "").trim();
+
+  if (!eventId) {
+    return {
+      status: "error",
+      message: "Evento Meta não identificado.",
+      nonce: Date.now()
+    };
+  }
+
+  try {
+    await serverApiFetch(
+      `/reports/conversions/audit/${encodeURIComponent(eventId)}/retry-rejected`,
+      { method: "POST" }
+    );
+    revalidatePath("/events");
+
+    return {
+      status: "success",
+      message:
+        "Evento enfileirado com a configuração atual. Se a Meta recusar de novo, ele volta a Falhou com o novo motivo.",
+      nonce: Date.now()
+    };
+  } catch {
+    return {
+      status: "error",
+      message:
+        "O evento não pode ser reenviado (já foi reenviado, tem mais de 7 dias ou a recusa não é corrigível). Atualize a página.",
+      nonce: Date.now()
+    };
+  }
+}
+
+function retryRejectedMessage(result: RetryBlockedResult): string {
+  const parts: string[] = [];
+
+  if (result.enqueued > 0) {
+    parts.push(
+      `${result.enqueued} ${plural(result.enqueued, "evento recusado enfileirado", "eventos recusados enfileirados")} com a configuração atual.`
+    );
+  }
+
+  const expired = Math.min(result.expired ?? 0, result.skipped);
+  const otherSkipped = result.skipped - expired;
+
+  if (otherSkipped > 0) {
+    parts.push(
+      `${otherSkipped} ${plural(otherSkipped, "já tinha sido reenviado e ficou", "já tinham sido reenviados e ficaram")} de fora.`
+    );
+  }
+
+  if (expired > 0) {
+    parts.push(
+      `${expired} ${plural(expired, "evento ficou", "eventos ficaram")} de fora por ter mais de 7 dias: a Meta não aceita mais.`
+    );
+  }
+
+  if (result.failed > 0) {
+    parts.push(
+      `${result.failed} ${plural(result.failed, "não pode ser enfileirado", "não puderam ser enfileirados")} agora; tente de novo em instantes.`
+    );
+  }
+
+  return parts.length
+    ? parts.join(" ")
+    : "Nenhum evento recusado para reenviar neste período.";
+}
+
+export async function retryRejectedMetaEventsAction(
+  _previousState: BackofficeActionState,
+  formData: FormData
+): Promise<BackofficeActionState> {
+  // Mesmos filtros da lista: o reenvio nunca alcanca eventos fora da tela atual.
+  const params = new URLSearchParams();
+
+  for (const key of ["since", "until", "eventName", "status", "source"]) {
+    const value = String(formData.get(key) ?? "").trim();
+
+    if (value) {
+      params.set(key, value);
+    }
+  }
+
+  try {
+    const result = await serverApiFetch<RetryBlockedResult>(
+      `/reports/conversions/audit/retry-rejected?${params.toString()}`,
+      { method: "POST" }
+    );
+    revalidatePath("/events");
+
+    return {
+      status:
+        result.failed > 0 && result.enqueued === 0 ? "error" : "success",
+      message: retryRejectedMessage(result),
+      nonce: Date.now()
+    };
+  } catch {
+    return {
+      status: "error",
+      message:
+        "Não foi possível reenviar os eventos recusados. Atualize a página e tente de novo.",
+      nonce: Date.now()
+    };
+  }
+}

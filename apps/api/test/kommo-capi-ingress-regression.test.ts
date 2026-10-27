@@ -511,8 +511,10 @@ describe("Inbound -> persisted lead -> LeadSubmitted -> same lead Kommo -> real 
     expect(await h.send(leadEvent)).toMatchObject({ status: "sent" });
     vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
     const webhook = await h.receive();
+    // 1.3.1: o evento espera o envio ser religado (não é encerrado).
     expect(await h.kommo.process(webhook.id, "workspace-a")).toMatchObject({
-      status: "blocked",
+      status: "accepted",
+      errorCode: "conversion_production_disabled",
     });
     expect(
       h.state.conversionEventLog.filter(

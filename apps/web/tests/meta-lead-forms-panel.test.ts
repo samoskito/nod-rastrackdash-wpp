@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../src/app/(app)/integrations/meta-lead-form-actions", () => ({
   createMetaLeadFormConnectionAction: vi.fn(),
   deleteMetaLeadFormConnectionAction: vi.fn(),
+  refetchMetaLeadFormLeadsAction: vi.fn(),
   setMetaLeadFormConnectionActiveAction: vi.fn(),
   subscribeMetaLeadFormPageAction: vi.fn(),
   updateMetaLeadFormConnectionAction: vi.fn(),
@@ -149,5 +150,31 @@ describe("Formulários Meta: remover só sem envios (decisão de 27/10/2026)", (
       "utf8",
     );
     expect(actions).toContain('"reactivate" : "deactivate"');
+  });
+
+  it("1.3.1: leads sem leitura mostram a contagem e o botão Ler de novo", () => {
+    const html = render({
+      connections: [{ ...connection, pendingFetchCount: 2, fetchProblem: "reconnect" }],
+    });
+    expect(html).toContain('data-lead-form-pending-fetch="2"');
+    expect(html).toContain("Ler de novo");
+    expect(html).toContain("são lidos de novo na hora");
+    // Sem pendência, ou conexão desativada: sem o botão.
+    expect(render()).not.toContain("Ler de novo");
+    expect(
+      render({ connections: [{ ...connection, pendingFetchCount: 2, active: false }] }),
+    ).not.toContain(">Ler de novo<");
+    // Licença bloqueada: nenhuma escrita na tela.
+    expect(
+      render({ connections: [{ ...connection, pendingFetchCount: 2 }], licenseLocked: true }),
+    ).not.toContain("Ler de novo");
+  });
+
+  it("1.3.1: a ação chama a rota de releitura", () => {
+    const actions = readFileSync(
+      resolve(__dirname, "../src/app/(app)/integrations/meta-lead-form-actions.ts"),
+      "utf8",
+    );
+    expect(actions).toContain("/refetch");
   });
 });

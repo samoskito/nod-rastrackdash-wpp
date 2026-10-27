@@ -418,7 +418,22 @@ export type SendReadyEventResult = {
 type SendReadyEventOptions = {
   workspaceId?: string;
   testEventCode?: string;
+  /**
+   * 1.3.1: nova tentativa do BullMQ (job.attemptsMade > 0). Um envio comum
+   * que falhou de forma passageira (MetaCapiNetworkError: rede ou limite de
+   * uso da Meta) volta a ready_to_send para ser enviado de novo com o mesmo
+   * event_id. Os envios com trava de envio único nunca gravam esse código
+   * (viram MetaCapiDeliveryUnknown) e ficam de fora.
+   */
+  queueRetry?: boolean;
 };
+
+/** Origens com registro de envio único: a fila nunca as rearma. */
+const QUEUE_RETRY_EXCLUDED_TRIGGERS = [
+  "kommo_stage",
+  "pipedrive_stage",
+  "inbound_webhook:meta_cloud",
+];
 
 @Injectable()
 export class ConversionEventsService {
@@ -1785,6 +1800,29 @@ export class ConversionEventsService {
 
     if (!log && options.workspaceId !== undefined) {
       throw new NotFoundException("Evento de conversão não encontrado");
+    }
+
+    if (
+      options.queueRetry &&
+      log?.status === "error" &&
+      log.errorCode === "MetaCapiNetworkError" &&
+      !QUEUE_RETRY_EXCLUDED_TRIGGERS.includes(log.sourceTrigger ?? "")
+    ) {
+      // Troca condicional: só um worker rearma; o envio continua protegido
+      // pela troca ready_to_send -> envio de sempre.
+      const rearmed = await this.prisma.conversionEventLog.updateMany({
+        where: {
+          id: log.id,
+          status: "error",
+          errorCode: "MetaCapiNetworkError",
+        },
+        data: { status: "ready_to_send", errorCode: null, errorMessage: null },
+      });
+      if (rearmed.count === 1) {
+        log = (await this.prisma.conversionEventLog.findUnique({
+          where: { id: log.id },
+        })) as ConversionEventLogRecord | null;
+      }
     }
 
     if (

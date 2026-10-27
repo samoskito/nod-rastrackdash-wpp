@@ -39,7 +39,7 @@ describe("student built-in Meta Cloud production", () => {
         seats: h.seats,
         env: {},
       }),
-    ).rejects.toThrow("META_APP_SECRET");
+    ).rejects.toThrow("App Secret");
   });
   it.each(["v2", "custom", "UNKNOWN"])(
     "rejects an unregistered version %s even marked certified",

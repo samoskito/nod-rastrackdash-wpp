@@ -1072,7 +1072,7 @@ export class WhatsappConnectionsService {
     const apiPublicUrl = this.env.API_PUBLIC_URL?.trim();
     if (!apiPublicUrl) {
       throw new BadRequestException(
-        "API_PUBLIC_URL precisa estar configurada para gerar o webhook",
+        "A URL pública da API precisa estar configurada para gerar o webhook",
       );
     }
 
@@ -1084,7 +1084,7 @@ export class WhatsappConnectionsService {
     }
 
     if (base.protocol !== "http:" && base.protocol !== "https:") {
-      throw new BadRequestException("API_PUBLIC_URL deve usar http ou https");
+      throw new BadRequestException("A URL pública da API deve usar http ou https");
     }
 
     return new URL(

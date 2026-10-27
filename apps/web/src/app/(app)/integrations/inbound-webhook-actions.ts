@@ -31,7 +31,7 @@ export type InboundWebhookActionResult = {
 const integrationsPath = "/integrations";
 const invalidFormMessage = "Revise os dados informados e tente novamente.";
 const connectionStatusOperationalErrors = new Set([
-  "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
+  "Configure o segredo do seu próprio app Meta (App Secret) na configuração da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
   "Certifique o parser antes de ativar o envio automático. Esta versão da integração não é nativa validada ou foi retirada.",
   "Ative ao menos um canal validado antes da produção",
   "Certifique o parser antes de ativar o envio automático",

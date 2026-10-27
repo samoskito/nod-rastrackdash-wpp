@@ -23,6 +23,35 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** confirme que `DATABASE_URL` aponta para o banco certo; se uma migration ficou parcialmente aplicada, resolva manualmente antes de tentar de novo (não rode comandos destrutivos como reset em um banco com dados reais sem ter certeza absoluta).
 - **Verificação:** `prisma migrate status` mostra "Database schema is up to date".
 
+### Aviso de migration alterada: `20261027125000_production_direct_validated_integrations`
+
+- **Quem é afetado:** só um banco de **homologação/teste** que rodou a versão
+  **antiga** dessa migration, antes do merge da 1.3.0 (ela foi corrigida no
+  mesmo PR, antes de ser publicada). Quem atualiza da 1.2.0 ou anterior para a
+  1.3.0/1.3.1 **não** é afetado: recebe só a versão final. A instalação em uso
+  real também não, se nunca rodou código de branch.
+- **Sintoma:** `prisma migrate dev` acusa que a migration foi modificada depois
+  de aplicada (checksum diferente) e propõe recriar o banco. **Não aceite** em
+  banco com dados. `prisma migrate deploy` (o que roda no boot da API) e
+  `prisma migrate status` não falham: a API sobe normalmente.
+- **Correção (não edite a migration):** `prisma migrate resolve --applied` não
+  serve, porque a migration já está registrada como aplicada. Atualize só o
+  checksum registrado, com o backup feito antes:
+  1. Calcule o SHA-256 do arquivo **no mesmo checkout que a API usa** (no
+     container da API ou no servidor). O checksum do Prisma é o SHA-256 do
+     arquivo como está no disco: fins de linha CRLF (Windows) e LF dão valores
+     diferentes.
+     `sha256sum apps/api/prisma/migrations/20261027125000_production_direct_validated_integrations/migration.sql`
+  2. No banco de homologação, com psql:
+     `UPDATE "_prisma_migrations" SET checksum = '<valor do passo 1>' WHERE migration_name = '20261027125000_production_direct_validated_integrations';`
+  3. Rode `prisma migrate status` e, se usar, `prisma migrate dev`: o aviso some.
+- **Diferença de dados:** a versão antiga promovia também a regra "Lead
+  recebido", não respeitava o número pausado pela outra identidade do mesmo
+  telefone e não gravava a auditoria das regras da Kommo (que o
+  `desfazer-producao-direta-6-1c.sql` usa). Nesse banco, revise Conversões
+  (pause o que não quer enviando). Se a homologação não tem nada a preservar,
+  o mais simples é recriá-la a partir de uma cópia do backup.
+
 ## API não inicia / erro de DI (dependency injection) do Nest
 
 - **Diagnóstico:** leia o stack trace completo no log de start — o Nest normalmente aponta o módulo/provider que falhou ao resolver.

@@ -40,6 +40,8 @@ describe("formulários Meta com a licença bloqueada", () => {
     ["POST", "/integrations/meta-lead-forms"],
     ["PATCH", "/integrations/meta-lead-forms/conexao_sintetica"],
     ["POST", "/integrations/meta-lead-forms/conexao_sintetica/subscribe"],
+    // 1.3.1: "Ler de novo".
+    ["POST", "/integrations/meta-lead-forms/conexao_sintetica/refetch"],
     ["POST", "/integrations/meta-lead-forms/conexao_sintetica/deactivate"],
     ["POST", "/integrations/meta-lead-forms/conexao_sintetica/reactivate"],
     ["DELETE", "/integrations/meta-lead-forms/conexao_sintetica"],

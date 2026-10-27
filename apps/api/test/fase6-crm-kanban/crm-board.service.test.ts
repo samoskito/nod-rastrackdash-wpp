@@ -192,10 +192,10 @@ describe("CRM board service", () => {
       await testDb.lead({
         id: `novo_${String(index).padStart(2, "0")}`,
         name: `Lead ${index}`,
-        phoneDisplay: "+55 11 98765-4321",
+        phoneDisplay: "+55 11 99999-0125",
         firstMessageAt: daysAgo(5 - index * 0.1),
       });
-    await testDb.lead({ id: "buyer", name: "Mariana Costa", phoneDisplay: "+55 21 99876-1234" });
+    await testDb.lead({ id: "buyer", name: "Lead Exemplo Compra", phoneDisplay: "+55 11 99999-0123" });
     await testDb.log({
       leadId: "buyer",
       eventName: "Purchase",
@@ -228,8 +228,8 @@ describe("CRM board service", () => {
     expect(purchase).toMatchObject({ total: 1, nextCursor: null });
     expect(purchase!.cards[0]).toMatchObject({
       leadId: "buyer",
-      name: "Mariana Costa",
-      phoneDisplay: "+55 21 99876-1234",
+      name: "Lead Exemplo Compra",
+      phoneDisplay: "+55 11 99999-0123",
       origin: "ctwa",
       campaignName: "Black Friday",
       adName: "Criativo carrossel",
@@ -439,7 +439,7 @@ describe("CRM performance mitigation: 180-day cap, 15 s cache, query log", () =>
   });
 
   it("logs duration and lead count without PII; warns past 2 s", async () => {
-    await testDb.lead({ id: "a", name: "Mariana Alves", phoneDisplay: "+55 11 99876-1020" });
+    await testDb.lead({ id: "a", name: "Lead Exemplo Log", phoneDisplay: "+55 11 99999-0124" });
     const { service } = harness();
     const logger = (service as any).logger;
     const log = vi.spyOn(logger, "log").mockImplementation(() => undefined);
@@ -449,7 +449,7 @@ describe("CRM performance mitigation: 180-day cap, 15 s cache, query log", () =>
     const entry = JSON.parse(String(log.mock.calls[0]![0]));
     expect(entry).toMatchObject({ event: "crm_board_query", workspaceId: WS, leadCount: 1 });
     expect(typeof entry.durationMs).toBe("number");
-    expect(String(log.mock.calls[0]![0])).not.toMatch(/Mariana|99876/u);
+    expect(String(log.mock.calls[0]![0])).not.toMatch(/Exemplo|99999|0124/u);
     expect(warn).not.toHaveBeenCalled();
     const clock = vi.spyOn(Date, "now");
     // Every clock read advances 2.5 s: the measured query takes > 2 s.

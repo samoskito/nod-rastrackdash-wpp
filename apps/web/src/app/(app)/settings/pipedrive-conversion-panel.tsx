@@ -370,6 +370,8 @@ const errorCodeText: Record<string, string> = {
     "Destino Meta do anúncio diferente do canal autorizado; nada foi enviado.",
   pipedrive_production_disabled:
     "Envio automático desativado neste ambiente; registrado sem envio.",
+  conversion_production_disabled:
+    "Envio de conversões desligado na configuração da API: o movimento espera e sai sozinho em até 15 minutos depois que o envio for religado, se tiver até 7 dias.",
   ordering_ambiguous: "Movimentos conflitantes no mesmo instante.",
   rule_value_invalid: "Valor da regra inválido.",
   event_price_missing_or_nonpositive:

@@ -176,14 +176,14 @@ describe("student historical recovery safety", () => {
     expect(await h.preview()).toMatchObject({
       previewToken: null,
       unavailableReason: expect.stringContaining(
-        "INBOUND_WEBHOOK_REPLAY_ENABLED",
+        "ligar o recebimento de webhooks e a recuperação",
       ),
     });
     h.env.INBOUND_WEBHOOK_REPLAY_ENABLED = "true";
     h.env.META_APP_SECRET = "";
     expect(await h.preview()).toMatchObject({
       previewToken: null,
-      unavailableReason: expect.stringContaining("META_APP_SECRET"),
+      unavailableReason: expect.stringContaining("App Secret"),
     });
   });
 

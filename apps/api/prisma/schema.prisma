@@ -2835,6 +2835,10 @@ model MetaLeadFormConnection {
   graphTokenIv        String
   graphTokenTag       String
   graphTokenLast4     String
+  /// Quando o token Graph foi salvo (criação ou troca). O aviso "Reconecte a
+  /// Página" some só quando o token é trocado depois da falha, não em
+  /// qualquer edição. Nulo em conexões antigas: vale createdAt.
+  graphTokenUpdatedAt DateTime?
   capiTokenEncrypted  String?
   capiTokenIv         String?
   capiTokenTag        String?

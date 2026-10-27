@@ -94,10 +94,18 @@ respondem 423 (o webhook da Meta também é recusado até a licença voltar).
     fazer a Meta desligar a assinatura do app que recebe todo o `/webhooks/meta`). Com token vencido
     ou inválido (190/102) a conexão mostra **Reconecte a Página**; com falta de permissão
     (10/200-299), **Falta permissão**. Gere um token novo (ou ajuste as permissões do Usuário do
-    Sistema) e salve em **Editar**: o aviso some ao salvar e volta no próximo lead se o token
-    continuar recusado. Outro erro 4xx (por exemplo, um lead que a Meta não deixa mais ler) fica só
-    no envio, como `fetch_failed`, sem aviso na conexão. Os leads desse intervalo não entram
-    sozinhos: ficam na Central de Leads da Meta (PENDENTE: não há botão "Ler de novo").
+    Sistema) e salve em **Editar**. Desde a 1.3.1 o aviso só some quando o **token** é trocado
+    (editar o nome ou reativar não apaga o aviso) ou quando um lead novo é lido; volta se o token
+    novo também for recusado. Outro erro 4xx (por exemplo, um lead que a Meta não deixa mais ler)
+    fica só no envio, como `fetch_failed`, sem aviso na conexão.
+- **Releitura (1.3.1):** ao salvar um token novo em **Editar** ou clicar em **Assinar Página de
+  novo**, os leads da conexão que ficaram sem leitura nos **últimos 7 dias** são lidos de novo pelo
+  `leadgen_id` (até 25 por vez, os menos tentados primeiro). A conexão mostra "Sem leitura (7
+  dias)" com a contagem e o botão **Ler de novo**, que faz o mesmo a cada clique. Ler de novo nunca
+  cria outro lead nem outro envio: grava no mesmo recebimento e junta ao lead pelo telefone. Para
+  no primeiro erro que vale para todos (token, permissão, limite de uso, rede). Com a conexão
+  desativada, não lê. Com a licença bloqueada, responde 423. Leads com mais de 7 dias continuam só
+  na Central de Leads da Meta.
 - Os dados que a pessoa preencheu no formulário (nome, e-mail, telefone e respostas) ficam guardados
   no banco da sua instalação, como os leads do WhatsApp; trate-os como dados pessoais do cliente.
 - Uma Página **sem** conexão continua no comportamento anterior do webhook Meta (só log de

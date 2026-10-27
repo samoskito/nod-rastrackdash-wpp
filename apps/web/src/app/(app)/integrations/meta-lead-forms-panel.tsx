@@ -8,6 +8,7 @@ import { formatDateTime } from "../../../lib/date-time";
 import {
   createMetaLeadFormConnectionAction,
   deleteMetaLeadFormConnectionAction,
+  refetchMetaLeadFormLeadsAction,
   setMetaLeadFormConnectionActiveAction,
   subscribeMetaLeadFormPageAction,
   updateMetaLeadFormConnectionAction,
@@ -31,11 +32,11 @@ function when(value: string | null) {
 export const leadFormFetchProblemCopy = {
   reconnect: {
     title: "Reconecte a Página",
-    body: "A Meta recusou o token desta conexão (vencido ou inválido), então os leads novos chegam mas não dá para ler os dados deles. Gere um token novo do Usuário do Sistema e salve em Editar. Os leads que chegaram nesse intervalo ficam na Central de Leads da Meta.",
+    body: "A Meta recusou o token desta conexão (vencido ou inválido), então os leads novos chegam mas não dá para ler os dados deles. Gere um token novo do Usuário do Sistema e salve em Editar: os leads dos últimos 7 dias que não foram lidos são lidos de novo na hora. Os mais antigos ficam na Central de Leads da Meta.",
   },
   permission: {
     title: "Falta permissão",
-    body: "O token desta conexão não tem permissão para ler os leads da Página (leads_retrieval e acesso à Página). Ajuste as permissões do Usuário do Sistema na Meta e salve o token em Editar. Os leads que chegaram nesse intervalo ficam na Central de Leads da Meta.",
+    body: "O token desta conexão não tem permissão para ler os leads da Página (leads_retrieval e acesso à Página). Ajuste as permissões do Usuário do Sistema na Meta e salve o token em Editar (ou clique em Ler de novo): os leads dos últimos 7 dias que não foram lidos são lidos de novo. Os mais antigos ficam na Central de Leads da Meta.",
   },
 } as const;
 
@@ -49,6 +50,7 @@ function ConnectionCard({
   // Decisão de 27/10/2026: com envios a conexão só desativa (a API responde
   // 409 ao remover), para não apagar o histórico de formulários.
   const hasSubmissions = connection.submissionCount > 0;
+  const pendingFetch = connection.pendingFetchCount ?? 0;
 
   return (
     <article className="meta-lead-form-card">
@@ -115,6 +117,15 @@ function ConnectionCard({
             {when(connection.lastSubmissionAt)})
           </dd>
         </div>
+        {pendingFetch > 0 ? (
+          <div data-lead-form-pending-fetch={pendingFetch}>
+            <dt>Sem leitura (7 dias)</dt>
+            <dd>
+              {pendingFetch} lead(s) chegaram, mas os dados não foram lidos na
+              Meta
+            </dd>
+          </div>
+        ) : null}
       </dl>
       {canManage ? (
         <div className="meta-lead-form-actions">
@@ -142,6 +153,12 @@ function ConnectionCard({
               pendingLabel="Salvando..."
             />
           </BackofficeActionForm>
+          {pendingFetch > 0 && connection.active ? (
+            <BackofficeActionForm action={refetchMetaLeadFormLeadsAction}>
+              <input type="hidden" name="connectionId" value={connection.id} />
+              <PendingSubmitButton label="Ler de novo" pendingLabel="Lendo..." />
+            </BackofficeActionForm>
+          ) : null}
           {hasSubmissions ? null : (
             <BackofficeActionForm action={deleteMetaLeadFormConnectionAction}>
               <input type="hidden" name="connectionId" value={connection.id} />

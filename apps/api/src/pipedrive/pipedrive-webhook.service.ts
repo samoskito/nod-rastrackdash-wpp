@@ -1,6 +1,8 @@
 import {
   CONVERSION_PRODUCTION_DISABLED_CODE,
+  CONVERSION_SENDING_OFF_RECHECK_MS,
   conversionSendingSwitchedOff,
+  waitsForConversionSending,
 } from "../config/deployment-config";
 import {
   BadRequestException,
@@ -734,6 +736,38 @@ export class PipedriveWebhookService {
         connection.id,
       );
       const code = await this.triggerFailure(tx, event, live);
+      // 1.3.1: envio desligado no servidor com regra enviando. O evento não
+      // é encerrado: espera (sem gastar tentativas) e sai sozinho quando o
+      // envio for religado, até 7 dias. Depois disso segue como antes.
+      if (
+        (!code || code === "catalog_stale") &&
+        waitsForConversionSending(event.occurredAt, this.now()) &&
+        (await tx.pipedriveConversionRule.findFirst({
+          where: {
+            ...this.ruleWhere(event, live.id),
+            mode: "production",
+            // Só uma regra que enviaria este movimento (mesma cerca de
+            // ativação de productionFailure) segura a espera.
+            productionActivatedAt: { lte: event.occurredAt },
+          },
+          select: { id: true },
+        }))
+      ) {
+        await tx.pipedriveWebhookEvent.updateMany({
+          where: this.leaseWhere(event),
+          data: {
+            status: "retry",
+            errorCode: CONVERSION_PRODUCTION_DISABLED_CODE,
+            attempts: 0,
+            nextAttemptAt: new Date(
+              +this.now() + CONVERSION_SENDING_OFF_RECHECK_MS,
+            ),
+            leaseToken: null,
+            leaseExpiresAt: null,
+          },
+        });
+        return { waitingForSending: true as const };
+      }
       if (code === "catalog_stale") {
         const rule = await tx.pipedriveConversionRule.findFirst({
           where: {
@@ -751,6 +785,11 @@ export class PipedriveWebhookService {
       return { refreshCatalog: false };
     });
     if (!context) return { status: "ignored" };
+    if ("waitingForSending" in context)
+      return {
+        status: "retry",
+        errorCode: CONVERSION_PRODUCTION_DISABLED_CODE,
+      };
     try {
       // Reuse the credential/account/generation-fenced catalog service. A
       // transient refresh failure follows the existing durable inbox retry.
@@ -1715,7 +1754,16 @@ export class PipedriveWebhookService {
       changeKind: { in: family },
     };
     const newer = await tx.pipedriveWebhookEvent.findFirst({
-      where: { ...scope, occurredAt: { gt: event.occurredAt } },
+      where: {
+        ...scope,
+        occurredAt: { gt: event.occurredAt },
+        // 1.3.1: um movimento que esperava o envio ser religado chegou na
+        // ordem certa; só um movimento mais novo recebido ANTES dele o
+        // torna fora de ordem (o que chegou depois é só o negócio andando).
+        ...(event.errorCode === CONVERSION_PRODUCTION_DISABLED_CODE
+          ? { createdAt: { lte: event.createdAt } }
+          : {}),
+      },
     });
     if (newer) return "out_of_order";
     const tied = await tx.pipedriveWebhookEvent.findFirst({

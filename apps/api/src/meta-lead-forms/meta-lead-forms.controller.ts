@@ -76,6 +76,18 @@ export class MetaLeadFormsController {
     return this.metaLeadForms.subscribePage(workspaceId, id);
   }
 
+  /**
+   * "Ler de novo" (1.3.1): relê os leads da conexão que falharam na leitura
+   * nos últimos 7 dias. Escrita: com a licença bloqueada, 423 pelo guard.
+   */
+  @Post(":id/refetch")
+  @HttpCode(200)
+  async refetch(@AuthToken() refreshToken: string, @Param("id") id: string) {
+    const { workspaceId } = await this.requireIntegrationManager(refreshToken);
+
+    return this.metaLeadForms.refetchFailedSubmissions(workspaceId, id);
+  }
+
   /** Stops receiving the Page's leads; every submission stays. */
   @Post(":id/deactivate")
   @HttpCode(200)

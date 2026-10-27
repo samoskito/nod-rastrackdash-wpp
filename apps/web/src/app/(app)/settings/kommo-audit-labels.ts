@@ -68,6 +68,8 @@ const notEvaluatedCodes = new Set([
 const errorCodeLabels: Record<string, string> = {
   stage_not_configured:
     "Este estágio não tem regra ativa. Registrado só para auditoria; nada foi criado nem enviado.",
+  conversion_production_disabled:
+    "O envio de conversões está desligado na configuração da API. O evento espera e sai sozinho em até 15 minutos depois que o envio for religado, se tiver até 7 dias; depois disso não é enviado.",
   connection_blocked:
     "A conexão está pausada ou com credencial inválida. O evento não foi avaliado.",
   credential_generation_mismatch:

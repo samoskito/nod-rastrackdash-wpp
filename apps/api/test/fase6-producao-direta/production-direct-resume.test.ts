@@ -130,6 +130,6 @@ describe("produção direta: retomar conexão pausada", () => {
         productionDirectResume: true,
         env: {},
       }),
-    ).rejects.toThrow("META_APP_SECRET");
+    ).rejects.toThrow("App Secret");
   });
 });

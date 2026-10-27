@@ -447,7 +447,7 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
     const h = await fixture({ env });
     const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
     expect(res.body.code).toBe("meta_app_not_configured");
-    expect(res.body.message).toContain("META_APP_ID e META_APP_SECRET");
+    expect(res.body.message).toContain("App ID e App Secret");
     expect(h.fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -599,7 +599,7 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
     h.state.debugTopLevelError = { code: 100 };
     const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
     expect(res.body.code).toBe("meta_app_not_configured");
-    expect(res.body.message).toContain("META_APP_ID e META_APP_SECRET");
+    expect(res.body.message).toContain("App ID e App Secret");
   });
 
   it("prazo total da operação: 504 sugerindo Consultar de novo", async () => {

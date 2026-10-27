@@ -283,6 +283,48 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     const h = await selected();
     vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
     const event = await h.receive();
+    // 1.3.1: o movimento espera (retry), sem gastar tentativas.
+    expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
+      status: "retry",
+      errorCode: "conversion_production_disabled",
+    });
+    expect(h.state.pipedriveWebhookEvent![0]).toMatchObject({
+      status: "retry",
+      errorCode: "conversion_production_disabled",
+      attempts: 0,
+    });
+    expect(h.state.conversionEventLog ?? []).toHaveLength(0);
+    expect(h.fetcher).not.toHaveBeenCalled();
+  });
+  it("1.3.1: religado o envio, o movimento que esperava sai uma vez só", async () => {
+    const h = await selected();
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
+    const event = await h.receive();
+    await h.webhooks.process(event.id, "workspace-a");
+    // Ainda desligado na reavaliação: continua esperando.
+    h.setNow(new Date(+h.now + 16 * 60_000));
+    await h.webhooks.sweep();
+    expect(h.state.pipedriveWebhookEvent![0]!.status).toBe("retry");
+    expect(h.state.conversionEventLog ?? []).toHaveLength(0);
+    // Religado: a próxima reavaliação materializa e envia.
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "true");
+    h.setNow(new Date(+h.now + 32 * 60_000));
+    await h.webhooks.sweep();
+    expect(h.state.conversionEventLog).toHaveLength(1);
+    expect(h.state.pipedriveConversionDedupe).toHaveLength(1);
+    // Rodar de novo não cria outra conversão.
+    h.setNow(new Date(+h.now + 48 * 60_000));
+    await h.webhooks.sweep();
+    expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
+      status: "missing_or_complete",
+    });
+    expect(h.state.conversionEventLog).toHaveLength(1);
+  });
+  it("1.3.1: passados 7 dias, o movimento com envio desligado é encerrado como antes", async () => {
+    const h = await selected();
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
+    const event = await h.receive();
+    h.setNow(new Date(+h.now + 8 * 24 * 60 * 60_000));
     expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
       status: "ignored",
     });
@@ -291,6 +333,43 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     );
     expect(h.state.conversionEventLog ?? []).toHaveLength(0);
     expect(h.fetcher).not.toHaveBeenCalled();
+  });
+  it("1.3.1: o negócio andou de etapa durante a espera: o movimento que esperava ainda sai", async () => {
+    const h = await selected();
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
+    const first = await h.receive();
+    await h.webhooks.process(first.id, "workspace-a");
+    // Mais tarde o negócio vai para outra etapa (sem regra).
+    h.setNow(new Date(+h.now + 60_000));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const later = await h.receive({
+      meta: {
+        action: "change",
+        entity: "deal",
+        version: "2.0",
+        company_id: 1,
+        host: "synthetic.pipedrive.com",
+        id: "synthetic-event-2",
+        timestamp: h.now.toISOString(),
+      },
+      data: {
+        id: 1,
+        pipeline_id: 1,
+        stage_id: 12,
+        person_id: 1,
+        value: 12.5,
+        currency: "BRL",
+      },
+      previous: { stage_id: 11 },
+    });
+    expect(later.id).not.toBe(first.id);
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "true");
+    h.setNow(new Date(+h.now + 20 * 60_000));
+    await h.webhooks.process(first.id, "workspace-a");
+    expect(
+      h.state.pipedriveWebhookEvent!.find((event: any) => event.id === first.id),
+    ).toMatchObject({ status: "materialized" });
+    expect(h.state.conversionEventLog).toHaveLength(1);
   });
   it("does not backfill receipts predating production activation", async () => {
     const h = await productionHarness();

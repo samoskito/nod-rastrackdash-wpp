@@ -77,9 +77,9 @@ export class MetaCloudWabaError extends HttpException {
 
 const messages = {
   appNotConfigured:
-    "Esta instalação ainda não tem META_APP_ID e META_APP_SECRET configurados na API. Configure as duas variáveis do seu próprio app Meta (o mesmo que entrega os webhooks) e reinicie a API antes de consultar ou inscrever a WABA.",
+    "Esta instalação ainda não tem o ID e o segredo do app Meta (App ID e App Secret) configurados na API. Configure os dois, do seu próprio app Meta (o mesmo que entrega os webhooks), e reinicie a API antes de consultar ou inscrever a WABA.",
   appCredentialsRejected:
-    "A Meta recusou as credenciais do app desta instalação ao validar o token. Confira META_APP_ID e META_APP_SECRET na API (do seu próprio app Meta).",
+    "A Meta recusou as credenciais do app desta instalação ao validar o token. Confira o ID e o segredo do app Meta (App ID e App Secret) configurados na API (do seu próprio app Meta).",
   connectionNotMetaCloud:
     "A inscrição na WABA só existe para conexões Meta WhatsApp (Cloud API).",
   tokenInvalid:
@@ -87,7 +87,7 @@ const messages = {
   tokenType:
     "Este tipo de token não serve. Use o token temporário do painel do app (WhatsApp → Configuração da API), um token do Graph API Explorer ou um token de system user — sempre do app configurado nesta instalação.",
   tokenAppMismatch:
-    "Este token foi gerado para outro app Meta. Gere o token no mesmo app configurado nesta instalação (META_APP_ID): é com o segredo dele que a assinatura dos webhooks é conferida.",
+    "Este token foi gerado para outro app Meta. Gere o token no mesmo app configurado nesta instalação (o App ID configurado na API): é com o segredo dele que a assinatura dos webhooks é conferida.",
   tokenMissingScope:
     "O token não tem a permissão whatsapp_business_management. Gere um novo token marcando essa permissão.",
   tokenWabaNotGranted:

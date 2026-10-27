@@ -19,7 +19,7 @@ export const observationDetailCopy: Record<
   production_sending_disabled: {
     label: "Envio de conversões desligado no servidor",
     reprocess:
-      "Defina INBOUND_CONVERSION_PRODUCTION_ENABLED=true na API (ou remova a variável) e faça o redeploy; depois reprocessar envia à Meta.",
+      "Quem administra a instalação precisa religar o envio de conversões na configuração da API; depois, reprocessar envia à Meta.",
   },
   lead_number_legacy_engine: {
     label: "Número do lead ainda no motor antigo de conversões",

@@ -1131,8 +1131,9 @@ export function MetaManualConnectionPanel({
             Conectar Meta (PalmUP)
           </button>
           <p className="action-note">
-            Login social PalmUP não configurado neste servidor. Defina
-            PALMUP_META_BROKER_URL na API ou use o token permanente abaixo.
+            Login social PalmUP não configurado neste servidor. Peça a quem
+            administra a instalação para configurá-lo na API ou use o token
+            permanente abaixo.
           </p>
         </div>
       );

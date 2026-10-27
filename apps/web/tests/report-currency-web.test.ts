@@ -345,7 +345,7 @@ describe("relatório com duas moedas", () => {
 });
 
 describe("sem cotação", () => {
-  it("Relatórios: ROAS vira 'sem cotação', a receita de fora aparece na moeda original e a dica cita a PTAX_SYNC_ENABLED", async () => {
+  it("Relatórios: ROAS vira 'sem cotação', a receita de fora aparece na moeda original e a dica cita a cotação PTAX (sem nome de variável, 1.3.1)", async () => {
     mockApi(
       brlCampaignReport({
         currency: "BRL",
@@ -367,7 +367,7 @@ describe("sem cotação", () => {
     expect(html).toContain(
       `Fora da receita por falta de cotação: US$${NBSP}50,00`,
     );
-    expect(html).toContain("PTAX_SYNC_ENABLED");
+    expect(html).toContain("cotação do Banco Central (PTAX)");
     // O ROAS parcial (3x) não aparece como se fosse completo.
     expect(html).not.toMatch(/data-label="ROAS de aquisição">3x</);
   });
@@ -390,7 +390,7 @@ describe("sem cotação", () => {
 
     expect(dolar).toContain("sem cotação");
     expect(dolar).toContain(`€${NBSP}123,45`);
-    expect(dolar).toContain("PTAX_SYNC_ENABLED");
+    expect(dolar).toContain("cotação do Banco Central (PTAX)");
     expect(
       html.slice(
         html.indexOf('data-currency="BRL"'),
@@ -412,7 +412,7 @@ describe("sem cotação", () => {
 
     expect(html).toContain("ROAS sem cotação");
     expect(html).toContain(`US$${NBSP}70,00`);
-    expect(html).toContain("PTAX_SYNC_ENABLED");
+    expect(html).toContain("cotação do Banco Central (PTAX)");
     expect(html).not.toContain("ROAS 3.00x");
   });
 });

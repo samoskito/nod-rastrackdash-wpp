@@ -281,12 +281,15 @@ describe("observationDetailOf e a mensagem do Reprocessar", () => {
       /ative o envio neste número/u,
     );
     // Fase 6.1c (produção direta): sem "observação" na tela do aluno, e o
-    // envio desligado no servidor diz exatamente o que configurar.
+    // envio desligado no servidor diz o que fazer, sem nome de variável (1.3.1).
     expect(observedReprocessMessage(null)).toBe(
       "A regra continua sem envio; retome o envio dela e reprocesse",
     );
     expect(observedReprocessMessage("production_sending_disabled")).toMatch(
-      /INBOUND_CONVERSION_PRODUCTION_ENABLED=true/u,
+      /religá-lo/u,
+    );
+    expect(observedReprocessMessage("production_sending_disabled")).not.toMatch(
+      /INBOUND_|_ENABLED/u,
     );
     for (const detail of [
       "lead_number_legacy_engine",

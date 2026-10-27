@@ -382,6 +382,27 @@ export function conversionSendingSwitchedOff(
 export const CONVERSION_PRODUCTION_DISABLED_CODE =
   "conversion_production_disabled";
 
+/**
+ * Kommo e Pipedrive (1.3.1): com o interruptor desligado, o evento com regra
+ * enviando não é encerrado. Ele espera e é reavaliado a cada 15 minutos;
+ * religado o envio, sai na reavaliação seguinte (o registro único de cada
+ * negócio e evento impede envio duplicado). Passados 7 dias (prazo da Meta
+ * para event_time), é encerrado como antes, com o mesmo código.
+ */
+export const CONVERSION_SENDING_OFF_RECHECK_MS = 15 * 60_000;
+export const CONVERSION_SENDING_OFF_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+
+export function waitsForConversionSending(
+  occurredAt: Date,
+  now: Date,
+  env: Environment = process.env,
+): boolean {
+  return (
+    conversionSendingSwitchedOff(env) &&
+    now.getTime() - occurredAt.getTime() <= CONVERSION_SENDING_OFF_MAX_AGE_MS
+  );
+}
+
 export function parseInboundWebhooksConfig(
   env: Environment,
 ): InboundWebhooksConfig {

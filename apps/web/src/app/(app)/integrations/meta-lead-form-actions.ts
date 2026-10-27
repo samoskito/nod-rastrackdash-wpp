@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { MetaLeadFormRefetchResultDto } from "@wpptrack/shared";
 import type { BackofficeActionState } from "../../../components/backoffice-action-form";
 import { isApiRequestError, serverApiFetch } from "../../../lib/server-api";
 
@@ -78,7 +79,10 @@ export async function subscribeMetaLeadFormPageAction(
     );
     revalidatePath("/integrations");
 
-    return state("success", "Página assinada: os novos leads chegam pelo webhook.");
+    return state(
+      "success",
+      "Página assinada: os novos leads chegam pelo webhook. Se havia leads sem leitura nos últimos 7 dias, eles foram tentados de novo: confira \"Sem leitura (7 dias)\" na conexão.",
+    );
   } catch (error) {
     return errorState(error, "A Meta não respondeu. Tente de novo.");
   }
@@ -169,9 +173,48 @@ export async function updateMetaLeadFormConnectionAction(
 
     return state(
       "success",
-      "Conexão alterada. Etapas bloqueadas voltam por Reenviar bloqueados, em Eventos Meta.",
+      patch.graphToken
+        ? "Conexão alterada. Com o token novo, os leads sem leitura dos últimos 7 dias foram tentados de novo: confira \"Sem leitura (7 dias)\" na conexão. Etapas bloqueadas voltam por Reenviar bloqueados, em Eventos Meta."
+        : "Conexão alterada. Etapas bloqueadas voltam por Reenviar bloqueados, em Eventos Meta.",
     );
   } catch (error) {
     return errorState(error, "Não foi possível alterar a conexão.");
   }
+}
+
+/**
+ * "Ler de novo" (1.3.1): relê pelo leadgen_id os leads da conexão que
+ * falharam na leitura nos últimos 7 dias (até 25 por clique). Salvar um token
+ * novo ou assinar a Página de novo faz o mesmo sozinho.
+ */
+export async function refetchMetaLeadFormLeadsAction(
+  _previousState: BackofficeActionState,
+  formData: FormData,
+): Promise<BackofficeActionState> {
+  const id = text(formData, "connectionId");
+
+  try {
+    const result = await serverApiFetch<MetaLeadFormRefetchResultDto>(
+      `/integrations/meta-lead-forms/${encodeURIComponent(id)}/refetch`,
+      { method: "POST" },
+    );
+    revalidatePath("/integrations");
+
+    return refetchState(result);
+  } catch (error) {
+    return errorState(error, "A Meta não respondeu. Tente de novo.");
+  }
+}
+
+function refetchState(
+  result: MetaLeadFormRefetchResultDto,
+): BackofficeActionState {
+  if (result.attempted === 0)
+    return state("success", "Nenhum lead com falha de leitura nos últimos 7 dias.");
+  const read = `${result.recovered} de ${result.attempted} lead(s) lido(s) agora.`;
+  if (result.remaining === 0) return state("success", read);
+  return state(
+    result.recovered > 0 ? "success" : "error",
+    `${read} Ainda faltam ${result.remaining}: confira o aviso da conexão (token ou permissão) e clique em Ler de novo.`,
+  );
 }

@@ -168,7 +168,11 @@ describe("MetaLeadFormsService: falha de leitura passageira x permanente", () =>
 });
 
 describe("aviso na tela da conexão (fetchProblem)", () => {
-  const connection = { updatedAt: new Date("2026-10-27T10:00:00Z") };
+  // 1.3.1: a referência é a data do token salvo, não a última edição.
+  const connection = {
+    graphTokenUpdatedAt: new Date("2026-10-27T10:00:00Z"),
+    createdAt: new Date("2026-10-20T10:00:00Z"),
+  };
   const at = (iso: string) => new Date(iso);
 
   it("último lead falhou de vez depois da última gravação da conexão: avisa", () => {
@@ -211,6 +215,35 @@ describe("aviso na tela da conexão (fetchProblem)", () => {
       }),
     ).toBeNull();
     expect(metaLeadFormFetchProblem(connection, undefined)).toBeNull();
+  });
+
+  it("1.3.1: editar rótulo ou reativar (updatedAt) não apaga o aviso; só o token novo", () => {
+    const failed = {
+      fetchStatus: "fetch_failed",
+      fetchError: "[reconnect] token",
+      updatedAt: at("2026-10-27T11:00:00Z"),
+    };
+    // Conexão editada depois da falha, com o mesmo token: o aviso continua.
+    expect(
+      metaLeadFormFetchProblem(
+        { ...connection, updatedAt: at("2026-10-27T12:00:00Z") } as never,
+        failed,
+      ),
+    ).toBe("reconnect");
+    // Token trocado depois da falha: some.
+    expect(
+      metaLeadFormFetchProblem(
+        { ...connection, graphTokenUpdatedAt: at("2026-10-27T12:00:00Z") },
+        failed,
+      ),
+    ).toBeNull();
+    // Conexão antiga sem a data do token: vale a criação.
+    expect(
+      metaLeadFormFetchProblem(
+        { graphTokenUpdatedAt: null, createdAt: at("2026-10-20T10:00:00Z") },
+        failed,
+      ),
+    ).toBe("reconnect");
   });
 });
 

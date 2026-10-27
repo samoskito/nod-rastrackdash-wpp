@@ -63,6 +63,10 @@ import { isSupportedConversionEventName } from "../conversion-events/conversion-
 import {
   BLOCKED_CONVERSION_RETRY_LIMIT,
   canRetryConversionEvent,
+  canRetryFixableMetaRejectionConversionEvent,
+  fixableMetaRejectionCandidateWhere,
+  isFixableMetaRejectionResponse,
+  REJECTED_RETRY_CANDIDATE_LIMIT,
   retryableMetaAuthFailureConversionEventWhere,
   retryBlockedConversionEventWhere,
 } from "../conversion-events/conversion-event-retry";
@@ -3204,7 +3208,7 @@ export class MetaReportingService {
     pageSize: number;
   }): Promise<ConversionAuditOverviewDto> {
     const where = this.conversionAuditWhere(input);
-    const [events, statusGroups, funnelStages, metaAuthRetryable] =
+    const [events, statusGroups, funnelStages, metaAuthRetryable, rejected] =
       await Promise.all([
       this.prisma.conversionEventLog.findMany({
         where,
@@ -3246,6 +3250,8 @@ export class MetaReportingService {
       this.prisma.conversionEventLog.count({
         where: { AND: [where, retryableMetaAuthFailureConversionEventWhere()] },
       }),
+      // "Reenviar recusados" (1.3.1): recusas corrigíveis dentro dos 7 dias.
+      this.fixableRejectedConversionEventIds(where),
     ]);
     const eventLabels = new Map<string, string>(
       funnelStages.map((stage) => [stage.eventName, stage.label]),
@@ -3272,6 +3278,7 @@ export class MetaReportingService {
       historical: this.conversionAuditStateCount(statusCounts, "historical"),
       discarded: this.conversionAuditStateCount(statusCounts, "discarded"),
       metaAuthRetryable,
+      metaRejectedRetryable: rejected.length,
     };
 
     return {
@@ -3312,6 +3319,39 @@ export class MetaReportingService {
     });
 
     return events.map((event) => event.id);
+  }
+
+  /** Ids do "Reenviar recusados" (até 500), com os filtros da tela. */
+  async getRejectedConversionEventRetryIds(
+    input: ConversionAuditFilters,
+  ): Promise<string[]> {
+    return (
+      await this.fixableRejectedConversionEventIds(
+        this.conversionAuditWhere(input),
+      )
+    ).slice(0, BLOCKED_CONVERSION_RETRY_LIMIT);
+  }
+
+  /**
+   * Recusas corrigíveis (código 100, 10, 200-299 ou recusa antiga sem
+   * código) dentro dos 7 dias: o filtro do código é em JS, sobre os
+   * candidatos da janela.
+   */
+  private async fixableRejectedConversionEventIds(
+    where: Prisma.ConversionEventLogWhereInput,
+  ): Promise<string[]> {
+    const candidates = await this.prisma.conversionEventLog.findMany({
+      where: { AND: [where, fixableMetaRejectionCandidateWhere()] },
+      orderBy: [{ eventOccurredAt: "desc" }, { id: "desc" }],
+      take: REJECTED_RETRY_CANDIDATE_LIMIT,
+      select: { id: true, providerResponseSummary: true },
+    });
+
+    return candidates
+      .filter((event) =>
+        isFixableMetaRejectionResponse(event.providerResponseSummary),
+      )
+      .map((event) => event.id);
   }
 
   async getConversionEventAuditDetail(input: {
@@ -6527,6 +6567,7 @@ export class MetaReportingService {
       sentAt: event.sentAt?.toISOString() ?? null,
       status: event.status,
       canRetry: canRetryConversionEvent(event),
+      canRetryRejected: canRetryFixableMetaRejectionConversionEvent(event),
       providerResponseSummary:
         event.status === "sent" && event.providerResponseSummary != null
           ? "Meta confirmou o recebimento"

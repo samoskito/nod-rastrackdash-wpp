@@ -416,7 +416,7 @@ const knownApiMessages: Record<string, string> = {
   credential_decrypt_failed:
     "A credencial salva não pode ser lida. Substitua o token da conexão.",
   pipedrive_public_url_invalid:
-    "A URL pública da API não está configurada no servidor (API_PUBLIC_URL). Acione o operador do ambiente.",
+    "A URL pública da API não está configurada no servidor. Acione quem administra a instalação.",
   pipedrive_production_disabled:
     "O envio automático está desativado nesta instalação; a regra não foi ativada.",
   pipedrive_production_context_invalid:

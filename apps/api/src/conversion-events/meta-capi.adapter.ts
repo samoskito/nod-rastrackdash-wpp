@@ -107,7 +107,8 @@ function graphErrorCode(summary: Record<string, unknown> | null): number | null 
 }
 
 /**
- * Batch path only: a usage-limit refusal is resent later. errorCode
+ * Batch path and the default single POST (1.3.1): a usage-limit refusal is
+ * resent later. errorCode
  * MetaCapiNetworkError is the retryable class of the queue processor (the
  * job throws and BullMQ retries); the stored response keeps the Graph code,
  * and the message says it was a usage limit.
@@ -206,6 +207,16 @@ export class MetaCapiAdapter {
         requestPayload,
         ctwaDestination,
       });
+    }
+
+    // Envio unitário padrão (fila de conversões, sem trava de envio único):
+    // limite de uso volta para a fila, como no lote (1.3.1). Os envios com
+    // trava (Kommo, Pipedrive, regras de entrada, CTWA) não reenviam sozinhos:
+    // para eles continua MetaCapiRejected.
+    if (!dispatch.signal && !dispatch.beforeDispatch) {
+      return retryableRateLimit(
+        await this.postEvents(url.toString(), requestPayload, ctwaDestination),
+      );
     }
 
     return this.postEvents(

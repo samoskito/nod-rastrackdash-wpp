@@ -53,7 +53,9 @@ export class ConversionEventProcessor extends WorkerHost {
       workspaceId = await this.resolveWorkspaceId(job);
       result = await this.conversionEventsService.sendReadyEvent(
         job.data.conversionEventLogId,
-        { workspaceId }
+        // 1.3.1: numa nova tentativa, uma falha passageira (rede ou limite
+        // de uso da Meta) volta a ser enviada.
+        { workspaceId, queueRetry: (job.attemptsMade ?? 0) > 0 }
       );
     } catch (error) {
       await this.recordAttempt(

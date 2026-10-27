@@ -293,6 +293,14 @@ WhatsApp que já existe no workspace. **Sem `ctwa_clid` nada é enviado.**
 Com a licença bloqueada, os dois CRMs ficam só leitura (gravações respondem 423)
 e nada é processado ou enviado em segundo plano.
 
+**Envio desligado no servidor (1.3.1):** se a API estiver com o envio de
+conversões desligado (`INBOUND_CONVERSION_PRODUCTION_ENABLED=false`), um
+movimento da Kommo ou do Pipedrive com regra enviando não se perde: ele espera
+(a lista de eventos mostra o motivo) e sai sozinho em até 15 minutos depois que
+o envio é religado e a API reiniciada, uma vez só, mesmo que o negócio já
+esteja em outra etapa. Movimentos com mais de 7 dias (o prazo da Meta) ficam
+sem envio, como antes.
+
 ### 10.5 "Lead recebido" pela regra e conversão manual no lead
 
 - **Lead recebido pela regra (ligado por padrão).** Sem nenhuma regra de
@@ -365,6 +373,38 @@ Nada para configurar; vale logo depois da atualização.
   o mesmo.
 
 Tudo isso é leitura: funciona também com a licença bloqueada.
+
+**Reenviar recusados (1.3.1).** Em **Eventos Meta**, um evento "Falhou" porque
+a Meta recusou por uma causa que você corrige no painel pode ser enviado de
+novo depois de corrigir. Exemplo real: o pixel estava ligado a uma página
+diferente da do anúncio e a Meta recusou o Lead recebido; depois de corrigir o
+vínculo, reenvie.
+
+- **Quais entram:** recusas por configuração, parâmetro ou permissão (códigos
+  da Meta 100, com qualquer subcódigo, 10 e 200 a 299) e recusas antigas,
+  gravadas antes da 1.3.0 sem o código. Ficam de fora: falha de login (190/102,
+  que usa o **Reenviar bloqueados e falhas de login da Meta**), limite de uso
+  (volta para a fila sozinho) e bloqueio por política (368). Também ficam de
+  fora os eventos da Kommo, do Pipedrive e do Meta Cloud, que só podem ser
+  enviados uma vez (a mesma regra do Reenviar bloqueados), e a etapa de CRM
+  dos Formulários Meta, que volta pelo Reenviar bloqueados.
+- **Como:** corrija a causa mostrada no motivo da recusa (aba Resumo do
+  **Inspecionar**). Depois use **Reenviar recusados** (em lote, com os filtros
+  da tela, até 500 por clique) ou **Reenviar recusado** no Inspecionar do
+  evento. O aviso antes do botão lembra: se a Meta recusar de novo, o evento
+  volta a Falhou com o novo motivo.
+- **O que acontece:** o evento sai com o **mesmo identificador** (a Meta não
+  conta dois) e com a rota **recalculada com a configuração atual**; o pixel e
+  a página da tentativa recusada não são reaproveitados. Num lead de anúncio
+  sem o identificador do anúncio (página e pixel autorizados do número), o
+  destino é refeito com a configuração atual do número; se a rota do número
+  não estiver pronta, o reenvio é recusado com o motivo. Nos demais, vale o
+  destino atual do anúncio e, sem ele, o destino escolhido quando o evento
+  chegou, sempre com a página e o pixel atuais desse destino. Só eventos dos
+  últimos 7 dias (o prazo da Meta); um evento já enviado nunca é reenviado;
+  clicar duas vezes não envia duas vezes.
+- **Quem pode:** owner ou administrador do workspace. Cada reenvio fica
+  registrado na auditoria. Com a licença bloqueada, responde 423.
 ### 10.7 CRM Kanban (quadro dos leads por etapa da Jornada)
 
 O item **CRM** do menu (seção Operação, logo depois de Leads) é um quadro
@@ -527,6 +567,12 @@ já existem. Guia completo: `docs/setup/meta-lead-forms.md`.
   workspace.
 - **Falhas:** configuração faltando (dataset, conexão desativada) e falha de login
   da Meta aparecem em Eventos Meta e voltam com **Reenviar bloqueados**.
+- **Lead que chegou sem leitura (1.3.1):** se o token da Página venceu, os
+  leads chegam mas os dados não são lidos (a conexão mostra "Reconecte a
+  Página" e "Sem leitura (7 dias)"). Salve um token novo em **Editar** (ou
+  clique em **Assinar Página de novo**): os leads dos últimos 7 dias são lidos
+  de novo na hora, sem duplicar. O botão **Ler de novo** faz o mesmo. O aviso
+  só some quando o token é trocado, não ao editar o nome ou reativar.
 - **Dashboard Leads:** quem migra daquela ferramenta pode importar o histórico
   com o comando `dashboard-leads:import` (simula por padrão; o que já foi
   enviado à Meta não é reenviado). Passo a passo:

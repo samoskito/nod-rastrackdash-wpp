@@ -36,7 +36,7 @@ type ReportCurrencyFields = {
 
 /** Texto de apoio quando faltou cotação (a variável é da API, não da tela). */
 export const exchangeRateMissingHint =
-  "Para converter vendas em outra moeda, ligue PTAX_SYNC_ENABLED na API (cotação do Banco Central).";
+  "Para converter vendas em outra moeda, quem administra a instalação precisa ligar a cotação do Banco Central (PTAX) na configuração da API.";
 
 export const exchangeRateMissingLabel = "sem cotação";
 

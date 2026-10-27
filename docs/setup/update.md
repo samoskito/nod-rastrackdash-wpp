@@ -71,6 +71,8 @@ O que acontece, sem você rodar nada à mão:
   ```
   Ambos `200`, dependências `ok`.
 
+Banco de homologação que rodou uma versão antiga da migration `20261027125000` (antes do merge da 1.3.0): o `migrate deploy` não falha, mas o `migrate dev` acusa checksum. Veja [Aviso de migration alterada](troubleshooting.md#aviso-de-migration-alterada-20261027125000_production_direct_validated_integrations). Quem vem da 1.2.0 não é afetado.
+
 Se o container entrar em crash-loop logo após as migrations, **não** reinstale e **não** apague o banco: vá para [Erro de migration](troubleshooting.md#erro-de-migration-prisma-migrate-deploydev) e [Dokploy: crash-loop](troubleshooting.md#dokploy-crash-loop-no-deploy-da-api).
 
 ## Passo 4 — Novo deploy do web (Vercel)

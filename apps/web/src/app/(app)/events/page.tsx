@@ -25,6 +25,7 @@ import { serverApiFetch } from "../../../lib/server-api";
 import { EventAuditDetails } from "./event-audit-details";
 import { EventFilters } from "./event-filters";
 import { RetryBlockedEvents } from "./retry-blocked-events";
+import { RetryRejectedEvents } from "./retry-rejected-events";
 
 type EventsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -55,6 +56,7 @@ const emptySummary = {
   historical: 0,
   discarded: 0,
   metaAuthRetryable: 0,
+  metaRejectedRetryable: 0,
 };
 
 function asStringParam(
@@ -176,6 +178,24 @@ async function canRetryMetaEvents(): Promise<boolean> {
     }
 
     return workspace.role === "owner";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * "Reenviar recusados" (1.3.1): owner ou admin do workspace, ou o
+ * platform_owner em modo suporte (mesma regra da API).
+ */
+async function canRetryRejectedMetaEvents(): Promise<boolean> {
+  try {
+    const workspace = await getCurrentWorkspace();
+
+    if (workspace.accessMode === "platform_support") {
+      return workspace.platformRole === "platform_owner";
+    }
+
+    return workspace.role === "owner" || workspace.role === "admin";
   } catch {
     return false;
   }
@@ -383,9 +403,10 @@ export default async function EventsPage({
     page,
     pageSize,
   };
-  const [result, canRetryBlocked] = await Promise.all([
+  const [result, canRetryBlocked, canRetryRejected] = await Promise.all([
     getAudit(filters),
     canRetryMetaEvents(),
+    canRetryRejectedMetaEvents(),
   ]);
   const report = result.report;
   const summary = report?.summary ?? emptySummary;
@@ -590,6 +611,18 @@ export default async function EventsPage({
                 são reenviados; os com mais de 7 dias ficam de fora.
               </span>
             </>
+          ) : null}
+          {canRetryRejected && result.state !== "error" ? (
+            <RetryRejectedEvents
+              rejectedCount={summary.metaRejectedRetryable ?? 0}
+              filters={{
+                since,
+                until,
+                eventName: eventName ?? "",
+                status: status ?? "",
+                source: source ?? "",
+              }}
+            />
           ) : null}
         </div>
       </div>

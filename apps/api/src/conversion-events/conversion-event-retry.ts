@@ -188,3 +188,80 @@ export function canRetryConversionEvent(
     canRetryMetaAuthFailureConversionEvent(event, now)
   );
 }
+
+/**
+ * "Reenviar recusados" (1.3.1): recusas da Meta cuja causa o aluno corrige no
+ * painel (configuração, parâmetro ou permissão): 100 (com qualquer
+ * subcódigo), 10 e 200-299 (inclui 294). Ficam de fora 190/102 (falha de
+ * login, já no "Reenviar bloqueados"), os limites de uso (voltam para a fila
+ * sozinhos) e 368 (bloqueio por política da Meta). Recusas antigas, gravadas
+ * antes do código da Meta (só { httpStatus }), também entram.
+ */
+export function isFixableMetaRejectionCode(code: number): boolean {
+  return code === 100 || code === 10 || (code >= 200 && code <= 299);
+}
+
+export function isFixableMetaRejectionResponse(summary: unknown): boolean {
+  const code = metaGraphErrorCodeFromResponse(summary);
+  if (code !== null) return isFixableMetaRejectionCode(code);
+  // 1.2.0 e anteriores: a recusa guardava só o status HTTP, sem "error".
+  return (
+    !!summary &&
+    typeof summary === "object" &&
+    !Array.isArray(summary) &&
+    !("error" in summary) &&
+    typeof (summary as { httpStatus?: unknown }).httpStatus === "number"
+  );
+}
+
+/**
+ * Fora do "Reenviar recusados": Kommo e Pipedrive (registro de envio único,
+ * a mesma regra do "Reenviar bloqueados" para recusas), Meta Cloud (trava
+ * permanente de um envio por evento: o reenvio ficaria parado na fila) e a
+ * etapa de CRM dos Formulários Meta (envio próprio ao dataset do CRM, que
+ * volta pelo "Reenviar bloqueados" e guarda a recusa sem o código da Meta).
+ */
+export const rejectedRetryExcludedSourceTriggers = [
+  ...singleDispatchLedgerSourceTriggers,
+  "inbound_webhook:meta_cloud",
+  "meta_lead_form_crm",
+];
+
+export function isFixableMetaRejectionConversionEvent(
+  event: ConversionEventRetryState,
+): boolean {
+  return (
+    event.status === "error" &&
+    event.errorCode === "MetaCapiRejected" &&
+    !rejectedRetryExcludedSourceTriggers.includes(event.sourceTrigger ?? "") &&
+    isFixableMetaRejectionResponse(event.providerResponseSummary)
+  );
+}
+
+export function canRetryFixableMetaRejectionConversionEvent(
+  event: ConversionEventRetryState,
+  now = Date.now(),
+): boolean {
+  return (
+    isFixableMetaRejectionConversionEvent(event) &&
+    !isOutsideMetaEventTimeWindow(event, now)
+  );
+}
+
+/**
+ * SQL side (candidates): recusas dentro dos 7 dias, fora das origens
+ * excluídas. O código é conferido em JS (isFixableMetaRejectionResponse).
+ */
+export function fixableMetaRejectionCandidateWhere(
+  now = Date.now(),
+): Prisma.ConversionEventLogWhereInput {
+  return {
+    status: "error",
+    errorCode: "MetaCapiRejected",
+    sourceTrigger: { notIn: rejectedRetryExcludedSourceTriggers },
+    eventOccurredAt: { gte: new Date(now - META_EVENT_TIME_WINDOW_MS) },
+  };
+}
+
+/** Candidatos lidos por clique antes do filtro de código (janela de 7 dias). */
+export const REJECTED_RETRY_CANDIDATE_LIMIT = 1_000;

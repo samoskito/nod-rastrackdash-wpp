@@ -200,7 +200,7 @@ export class InboundWebhookReplayService {
       select: { id: true },
     });
     const unavailableReason = !this.replayEnabled()
-      ? "Recuperação indisponível. O operador precisa habilitar INBOUND_WEBHOOKS_ENABLED e INBOUND_WEBHOOK_REPLAY_ENABLED na API e reiniciar o serviço."
+      ? "Recuperação indisponível. Quem administra a instalação precisa ligar o recebimento de webhooks e a recuperação na configuração da API e reiniciar o serviço."
       : !this.env.META_APP_SECRET?.trim()
         ? missingMetaSigningSecretMessage
         : !context

@@ -22,6 +22,17 @@
 -- Para voltar a usar depois de atualizar de novo, rode
 -- scripts/rollback/reativar-depois-de-atualizar.sql (só com o código novo).
 --
+-- 1.3.1: os valores novos (roichat, braip, yampi) saem também dos
+-- recebimentos (InboundWebhookDelivery, InboundWebhookEvent), dos recebimentos
+-- das URLs únicas (IntegrationEndpointEvent), dos leitores
+-- (InboundWebhookParserRelease) e das próprias conexões e URLs já removidas.
+-- A 1.2.0 lê essas tabelas sem filtrar o provedor (por exemplo "Vendas sem
+-- atribuição" sem filtro de plataforma respondia 500). O valor original fica
+-- na tabela de apoio "rollback_1_2_provider"; na 1.2.0 o registro aparece
+-- como Payt (Braip e Yampi) ou Meta Cloud (ROI Chat), sempre ligado a uma
+-- conexão ou URL removida. Os leitores dessas plataformas ficam "retirados".
+-- reativar-depois-de-atualizar.sql devolve tudo.
+--
 -- Idempotente: rodar de novo não muda nada. Tudo numa transação.
 
 BEGIN;
@@ -123,5 +134,77 @@ WHERE x."source"::text IN ('roichat', 'braip', 'yampi')
 ON CONFLICT DO NOTHING;
 UPDATE "DiagnosticEvent" SET "source" = 'internal'
 WHERE "source"::text IN ('roichat', 'braip', 'yampi');
+
+-- 1.3.1: provedor das linhas que a 1.2.0 lê sem filtrar. O original fica em
+-- "rollback_1_2_provider"; Braip e Yampi viram payt e ROI Chat vira
+-- meta_cloud (valores que a 1.2.0 conhece), sempre de conexão ou URL removida.
+CREATE TABLE IF NOT EXISTS "rollback_1_2_provider" (
+  "tableName" text NOT NULL,
+  "rowId" text NOT NULL,
+  "provider" text NOT NULL,
+  "version" text,
+  "status" text,
+  PRIMARY KEY ("tableName", "rowId")
+);
+
+INSERT INTO "rollback_1_2_provider" ("tableName", "rowId", "provider")
+SELECT 'IntegrationEndpointEvent', x."id", x."provider"::text
+FROM "IntegrationEndpointEvent" AS x
+WHERE x."provider"::text IN ('roichat', 'braip', 'yampi')
+ON CONFLICT DO NOTHING;
+UPDATE "IntegrationEndpointEvent"
+SET "provider" = (CASE WHEN "provider"::text = 'roichat' THEN 'meta_cloud' ELSE 'payt' END)::"InboundWebhookProvider"
+WHERE "provider"::text IN ('roichat', 'braip', 'yampi');
+
+INSERT INTO "rollback_1_2_provider" ("tableName", "rowId", "provider")
+SELECT 'InboundWebhookDelivery', x."id", x."provider"::text
+FROM "InboundWebhookDelivery" AS x
+WHERE x."provider"::text IN ('roichat', 'braip', 'yampi')
+ON CONFLICT DO NOTHING;
+UPDATE "InboundWebhookDelivery"
+SET "provider" = (CASE WHEN "provider"::text = 'roichat' THEN 'meta_cloud' ELSE 'payt' END)::"InboundWebhookProvider"
+WHERE "provider"::text IN ('roichat', 'braip', 'yampi');
+
+INSERT INTO "rollback_1_2_provider" ("tableName", "rowId", "provider")
+SELECT 'InboundWebhookEvent', x."id", x."provider"::text
+FROM "InboundWebhookEvent" AS x
+WHERE x."provider"::text IN ('roichat', 'braip', 'yampi')
+ON CONFLICT DO NOTHING;
+UPDATE "InboundWebhookEvent"
+SET "provider" = (CASE WHEN "provider"::text = 'roichat' THEN 'meta_cloud' ELSE 'payt' END)::"InboundWebhookProvider"
+WHERE "provider"::text IN ('roichat', 'braip', 'yampi');
+
+INSERT INTO "rollback_1_2_provider" ("tableName", "rowId", "provider")
+SELECT 'IntegrationEndpoint', x."id", x."provider"::text
+FROM "IntegrationEndpoint" AS x
+WHERE x."provider"::text IN ('roichat', 'braip', 'yampi')
+ON CONFLICT DO NOTHING;
+UPDATE "IntegrationEndpoint"
+SET "provider" = (CASE WHEN "provider"::text = 'roichat' THEN 'meta_cloud' ELSE 'payt' END)::"InboundWebhookProvider"
+WHERE "provider"::text IN ('roichat', 'braip', 'yampi');
+
+INSERT INTO "rollback_1_2_provider" ("tableName", "rowId", "provider")
+SELECT 'InboundWebhookConnection', x."id", x."provider"::text
+FROM "InboundWebhookConnection" AS x
+WHERE x."provider"::text IN ('roichat', 'braip', 'yampi')
+ON CONFLICT DO NOTHING;
+UPDATE "InboundWebhookConnection"
+SET "provider" = (CASE WHEN "provider"::text = 'roichat' THEN 'meta_cloud' ELSE 'payt' END)::"InboundWebhookProvider"
+WHERE "provider"::text IN ('roichat', 'braip', 'yampi');
+
+-- Leitores: além do provedor, a versão vira única (o par provedor+versão é
+-- único) e o status vira "retired", para a 1.2.0 nunca usá-los como leitor
+-- da Payt ou do Meta Cloud.
+INSERT INTO "rollback_1_2_provider" ("tableName", "rowId", "provider", "version", "status")
+SELECT 'InboundWebhookParserRelease', x."id", x."provider"::text, x."version", x."status"::text
+FROM "InboundWebhookParserRelease" AS x
+WHERE x."provider"::text IN ('roichat', 'braip', 'yampi')
+ON CONFLICT DO NOTHING;
+UPDATE "InboundWebhookParserRelease"
+SET "provider" = (CASE WHEN "provider"::text = 'roichat' THEN 'meta_cloud' ELSE 'payt' END)::"InboundWebhookProvider",
+    "version" = 'rollback_1_2:' || "id",
+    "status" = 'retired',
+    "updatedAt" = now()
+WHERE "provider"::text IN ('roichat', 'braip', 'yampi');
 
 COMMIT;

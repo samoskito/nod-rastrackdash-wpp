@@ -384,6 +384,9 @@ export class ReportingController {
       events: report.events.map((event) => ({
         ...event,
         canRetry: event.canRetry && this.canRetryMetaEvent(workspace),
+        canRetryRejected:
+          event.canRetryRejected &&
+          this.canRetryRejectedMetaEvent(workspace),
       })),
     };
   }
@@ -408,6 +411,8 @@ export class ReportingController {
     return {
       ...detail,
       canRetry: detail.canRetry && this.canRetryMetaEvent(workspace),
+      canRetryRejected:
+        detail.canRetryRejected && this.canRetryRejectedMetaEvent(workspace),
       // "Valor corrigido (antes R$ X)" is an operator detail (backoffice).
       valueCorrection:
         workspace.accessMode === "platform_support"
@@ -444,6 +449,74 @@ export class ReportingController {
         allowConfigurationBlocked: true,
         requesterLabel: "pelo owner do workspace",
       },
+    );
+  }
+
+  /**
+   * "Reenviar recusados" (1.3.1), um evento: recusa da Meta com causa
+   * corrigível (100, 10, 200-299 ou recusa antiga sem código), dentro dos 7
+   * dias. Owner ou admin. Escrita: 423 com a licença bloqueada (guard).
+   */
+  @Post("conversions/audit/:eventId/retry-rejected")
+  async retryRejectedConversionEventAudit(
+    @AuthToken() refreshToken: string,
+    @Param("eventId") eventId: string,
+  ) {
+    const { authenticated, workspace } =
+      await this.getCurrentWorkspaceContext(refreshToken);
+
+    if (!this.canRetryRejectedMetaEvent(workspace)) {
+      throw new ForbiddenException(
+        "Somente o owner ou um administrador pode reenviar eventos recusados",
+      );
+    }
+
+    return this.diagnosticsService.retryRejectedConversionEvent(
+      eventId,
+      { reason: "Reenvio manual de evento recusado pela Meta" },
+      this.rejectedRetryContext(workspace, authenticated.user.id),
+    );
+  }
+
+  /** "Reenviar recusados" em lote, com os filtros da tela (até 500). */
+  @Post("conversions/audit/retry-rejected")
+  async retryRejectedConversionEventsAudit(
+    @AuthToken() refreshToken: string,
+    @Query("since") since?: string,
+    @Query("until") until?: string,
+    @Query("eventName") eventName?: string | string[],
+    @Query("status") status?: string | string[],
+    @Query("source") source?: string | string[],
+  ) {
+    const { authenticated, workspace } =
+      await this.getCurrentWorkspaceContext(refreshToken);
+
+    if (!this.canRetryRejectedMetaEvent(workspace)) {
+      throw new ForbiddenException(
+        "Somente o owner ou um administrador pode reenviar eventos recusados",
+      );
+    }
+
+    const period = this.parseReportPeriod(since, until);
+    const eventNameFilter = this.trimOptional(eventName);
+    const deliveryState = this.parseConversionAuditStatus(status);
+    const sourceFilter = this.parseConversionAuditSource(source);
+    const eventIds =
+      await this.metaReportingService.getRejectedConversionEventRetryIds({
+        workspaceId: workspace.id,
+        ...period,
+        ...(eventNameFilter ? { eventName: eventNameFilter } : {}),
+        ...(deliveryState ? { deliveryState } : {}),
+        ...(sourceFilter ? { source: sourceFilter } : {}),
+      });
+
+    return this.diagnosticsService.retryRejectedConversionEvents(
+      eventIds,
+      {
+        reason:
+          "Reenvio manual de eventos recusados pela Meta depois de corrigir a causa",
+      },
+      this.rejectedRetryContext(workspace, authenticated.user.id),
     );
   }
 
@@ -637,6 +710,35 @@ export class ReportingController {
     const workspace = this.workspacesService.getCurrentWorkspace(authenticated);
 
     return { authenticated, workspace };
+  }
+
+  /** "Reenviar recusados": owner ou admin (e o platform_owner em suporte). */
+  private canRetryRejectedMetaEvent(
+    workspace: ReturnType<WorkspacesService["getCurrentWorkspace"]>,
+  ): boolean {
+    if (workspace.accessMode === "platform_support") {
+      return workspace.platformRole === "platform_owner";
+    }
+
+    return workspace.role === "owner" || workspace.role === "admin";
+  }
+
+  private rejectedRetryContext(
+    workspace: ReturnType<WorkspacesService["getCurrentWorkspace"]>,
+    actorUserId: string,
+  ) {
+    return {
+      workspaceId: workspace.id,
+      actorUserId,
+      actorType:
+        workspace.accessMode === "platform_support"
+          ? "platform_owner"
+          : workspace.role === "owner"
+            ? "workspace_owner"
+            : "workspace_admin",
+      requesterLabel:
+        workspace.role === "owner" ? "pelo owner do workspace" : "por um administrador do workspace",
+    };
   }
 
   private canRetryMetaEvent(

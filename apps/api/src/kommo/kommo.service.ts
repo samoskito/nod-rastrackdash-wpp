@@ -1,6 +1,8 @@
 import {
   CONVERSION_PRODUCTION_DISABLED_CODE,
+  CONVERSION_SENDING_OFF_RECHECK_MS,
   conversionSendingSwitchedOff,
+  waitsForConversionSending,
 } from "../config/deployment-config";
 import {
   BadRequestException,
@@ -1075,6 +1077,14 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       });
       if (!rules.length)
         return this.complete(event, "observed", "stage_not_configured");
+      // 1.3.1: envio desligado no servidor com regra enviando. O evento não é
+      // encerrado: espera e sai sozinho quando o envio for religado (até 7
+      // dias). Depois disso segue abaixo e fica "blocked" como antes.
+      if (
+        rules.some((rule: any) => rule.mode === "production") &&
+        waitsForConversionSending(event.eventOccurredAt, this.now())
+      )
+        return this.waitForConversionSending(event);
       // "Moeda das conversões": regra sem moeda (ou com código fora da
       // lista, gravado antes da Fase 5.1) herda a do workspace.
       const workspaceCurrency = await loadWorkspaceConversionCurrency(
@@ -1205,6 +1215,32 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
       await this.retryEvent(event, code);
       throw error;
     }
+  }
+
+  /**
+   * Devolve o evento à fila sem gastar tentativas: a reconciliação o reavalia
+   * em 15 minutos. Nada foi materializado (nenhuma intenção de envio existe
+   * para ele), então reavaliar nunca duplica.
+   */
+  private async waitForConversionSending(event: any) {
+    const changed = await this.prisma.kommoWebhookEvent.updateMany({
+      where: this.leaseWhere(event),
+      data: {
+        status: "accepted",
+        errorCode: CONVERSION_PRODUCTION_DISABLED_CODE,
+        attempts: 0,
+        nextAttemptAt: new Date(
+          this.now().getTime() + CONVERSION_SENDING_OFF_RECHECK_MS,
+        ),
+        leaseToken: null,
+        leaseExpiresAt: null,
+        revision: { increment: 1 },
+      },
+    });
+    return {
+      status: changed.count ? "accepted" : "lease_lost",
+      errorCode: CONVERSION_PRODUCTION_DISABLED_CODE,
+    };
   }
 
   private async releaseProcessingForLicense(event: any, priorStatus: string) {

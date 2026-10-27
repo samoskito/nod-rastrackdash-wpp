@@ -60,6 +60,11 @@ export const metaLeadFormConnectionSchema = z.object({
    * Opcional: APIs anteriores não enviam.
    */
   fetchProblem: z.enum(["reconnect", "permission"]).nullable().optional(),
+  /**
+   * Leads com falha de leitura nos últimos 7 dias (1.3.1): saem com o token
+   * novo ou com "Ler de novo". Opcional: APIs anteriores não enviam.
+   */
+  pendingFetchCount: z.number().int().nonnegative().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -67,6 +72,18 @@ export const metaLeadFormConnectionSchema = z.object({
 export const metaLeadFormConnectionListSchema = z.array(
   metaLeadFormConnectionSchema,
 );
+
+/** Resposta de "Ler de novo" (POST /integrations/meta-lead-forms/:id/refetch). */
+export const metaLeadFormRefetchResultSchema = z.object({
+  attempted: z.number().int().nonnegative(),
+  recovered: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  remaining: z.number().int().nonnegative(),
+});
+
+export type MetaLeadFormRefetchResultDto = z.infer<
+  typeof metaLeadFormRefetchResultSchema
+>;
 
 export type MetaLeadFormConnectionCreateInputDto = z.infer<
   typeof metaLeadFormConnectionCreateInputSchema

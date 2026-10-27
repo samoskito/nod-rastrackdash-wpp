@@ -63,6 +63,30 @@ export type LeadgenIngestResult = {
 /** Aviso da tela da conexão depois de uma leitura que falhou de vez. */
 export type MetaLeadFormFetchProblem = "reconnect" | "permission";
 
+/**
+ * Releitura dos leads que falharam (1.3.1): a Meta não reenvia um lead
+ * respondido com 200, então depois de trocar o token (ou assinar a Página de
+ * novo) os fetch_failed recentes da conexão são lidos de novo pelo leadgen_id.
+ * A Meta guarda os leads por 90 dias; 7 dias acompanham o prazo do envio à
+ * Meta e o aviso da tela.
+ */
+export const LEAD_REFETCH_WINDOW_DAYS = 7;
+/** Leads por rodada: cada leitura leva até 8 s na Graph. */
+export const LEAD_REFETCH_BATCH = 25;
+/** Tempo máximo de uma rodada (a tela espera a resposta). */
+const LEAD_REFETCH_BUDGET_MS = 25_000;
+
+export type MetaLeadFormRefetchResult = {
+  /** Leituras tentadas nesta rodada. */
+  attempted: number;
+  /** Leads lidos e gravados (o lead aparece em Leads). */
+  recovered: number;
+  /** Continuam sem leitura (o motivo fica no recebimento). */
+  failed: number;
+  /** Ainda com falha de leitura nos últimos 7 dias, depois desta rodada. */
+  remaining: number;
+};
+
 function last4(token: string): string {
   return token.slice(-4);
 }
@@ -116,12 +140,27 @@ export class MetaLeadFormsService {
         })
       : [];
     const latestById = new Map(latest.map((item) => [item.connectionId, item]));
+    const pending = connections.length
+      ? await this.prisma.metaLeadSubmission.groupBy({
+          by: ["connectionId"],
+          where: {
+            workspaceId,
+            fetchStatus: "fetch_failed",
+            createdAt: { gte: refetchWindowStart() },
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const pendingById = new Map(
+      pending.map((item) => [item.connectionId, item._count._all]),
+    );
 
     return connections.map((connection) =>
       this.toDto(
         connection,
         statsById.get(connection.id),
         metaLeadFormFetchProblem(connection, latestById.get(connection.id)),
+        pendingById.get(connection.id) ?? 0,
       ),
     );
   }
@@ -158,6 +197,7 @@ export class MetaLeadFormsService {
           graphTokenIv: graph.tokenIv,
           graphTokenTag: graph.tokenTag,
           graphTokenLast4: last4(input.graphToken),
+          graphTokenUpdatedAt: new Date(),
           capiTokenEncrypted: capi?.encryptedAccessToken ?? null,
           capiTokenIv: capi?.tokenIv ?? null,
           capiTokenTag: capi?.tokenTag ?? null,
@@ -211,6 +251,7 @@ export class MetaLeadFormsService {
               graphTokenIv: graph.tokenIv,
               graphTokenTag: graph.tokenTag,
               graphTokenLast4: last4(input.graphToken),
+              graphTokenUpdatedAt: new Date(),
             }
           : {}),
         ...(input.capiToken === null
@@ -230,6 +271,10 @@ export class MetaLeadFormsService {
             : {}),
       },
     });
+
+    // Token novo: os leads que falharam por token morto ficam presos (a Meta
+    // não reenvia), então são lidos de novo agora.
+    if (graph) await this.refetchAfterTokenChange(connection);
 
     return this.toDto(connection);
   }
@@ -299,8 +344,116 @@ export class MetaLeadFormsService {
       where: { id: connection.id },
       data: { pageSubscribedAt: new Date() },
     });
+    // A assinatura confirmou que o token abre a Página: relê os leads que
+    // ficaram sem leitura.
+    await this.refetchAfterTokenChange(updated);
 
     return this.toDto(updated);
+  }
+
+  /**
+   * "Ler de novo": relê pelo leadgen_id os leads desta conexão que falharam
+   * na leitura nos últimos 7 dias (até 25 por clique). Idempotente: grava no
+   * mesmo recebimento (metaLeadId único) e junta ao mesmo lead pelo telefone.
+   */
+  async refetchFailedSubmissions(
+    workspaceId: string,
+    connectionId: string,
+  ): Promise<MetaLeadFormRefetchResult> {
+    const connection = await this.requireConnection(workspaceId, connectionId);
+    if (!connection.active) {
+      throw new ConflictException(
+        "Conexão desativada: reative para ler os leads de novo",
+      );
+    }
+    return this.retryFailedReads(connection);
+  }
+
+  /** Nunca derruba o salvamento: a falha fica no log e o botão continua. */
+  private async refetchAfterTokenChange(connection: ConnectionRecord) {
+    if (!connection.active) return;
+    try {
+      const result = await this.retryFailedReads(connection);
+      if (result.attempted > 0) {
+        this.logger.log(
+          `releitura de formulários conexao=${connection.id} tentados=${result.attempted} lidos=${result.recovered} faltam=${result.remaining}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `releitura de formulários conexao=${connection.id} falhou: ${
+          error instanceof Error ? error.constructor.name : typeof error
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Relê os fetch_failed recentes da conexão, os menos tentados primeiro
+   * (updatedAt), para um lead ilegível não segurar os outros. Para no
+   * primeiro erro que vale para todos (token, permissão, limite, rede).
+   */
+  private async retryFailedReads(
+    connection: ConnectionRecord,
+  ): Promise<MetaLeadFormRefetchResult> {
+    const where = {
+      workspaceId: connection.workspaceId,
+      connectionId: connection.id,
+      fetchStatus: "fetch_failed",
+      createdAt: { gte: refetchWindowStart() },
+    } satisfies Prisma.MetaLeadSubmissionWhereInput;
+    const pending = await this.prisma.metaLeadSubmission.findMany({
+      where,
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+      take: LEAD_REFETCH_BATCH,
+      select: {
+        metaLeadId: true,
+        pageId: true,
+        formId: true,
+        adId: true,
+        adSetId: true,
+        metaCreatedAt: true,
+      },
+    });
+    const result: MetaLeadFormRefetchResult = {
+      attempted: 0,
+      recovered: 0,
+      failed: 0,
+      remaining: 0,
+    };
+    const startedAt = Date.now();
+
+    for (const item of pending) {
+      if (Date.now() - startedAt > LEAD_REFETCH_BUDGET_MS) break;
+      // Lido no meio do caminho (outro clique): não lê de novo.
+      const current = await this.prisma.metaLeadSubmission.findUnique({
+        where: { metaLeadId: item.metaLeadId },
+        select: { fetchStatus: true },
+      });
+      if (current?.fetchStatus !== "fetch_failed") continue;
+
+      result.attempted++;
+      const outcome = await this.saveSubmission(connection, {
+        leadgen_id: item.metaLeadId,
+        page_id: item.pageId,
+        ...(item.formId ? { form_id: item.formId } : {}),
+        ...(item.adId ? { ad_id: item.adId } : {}),
+        ...(item.adSetId ? { adgroup_id: item.adSetId } : {}),
+        ...(item.metaCreatedAt
+          ? { created_time: Math.floor(item.metaCreatedAt.getTime() / 1000) }
+          : {}),
+      });
+      if (outcome === "saved") {
+        result.recovered++;
+        continue;
+      }
+      result.failed++;
+      // Só "permanent" é do próprio lead; o resto falharia igual nos outros.
+      if (outcome !== "permanent") break;
+    }
+
+    result.remaining = await this.prisma.metaLeadSubmission.count({ where });
+    return result;
   }
 
   /** True when an active connection exists for one of these Pages. */
@@ -475,6 +628,23 @@ export class MetaLeadFormsService {
       fetchError,
     };
 
+    if (!lead) {
+      // Uma falha nunca apaga uma leitura que deu certo em paralelo (dois
+      // "Ler de novo", token novo junto com o webhook): só regrava quem
+      // ainda está fetch_failed.
+      const current = await this.prisma.metaLeadSubmission.findUnique({
+        where: { metaLeadId: change.leadgen_id },
+        select: { fetchStatus: true },
+      });
+      if (current) {
+        await this.prisma.metaLeadSubmission.updateMany({
+          where: { metaLeadId: change.leadgen_id, fetchStatus: "fetch_failed" },
+          data,
+        });
+        return failure ?? "transient";
+      }
+    }
+
     await this.prisma.metaLeadSubmission.upsert({
       where: { metaLeadId: change.leadgen_id },
       create: { metaLeadId: change.leadgen_id, ...data },
@@ -560,16 +730,18 @@ export class MetaLeadFormsService {
 
   private webhookUrl(): string {
     const base = (this.env.API_PUBLIC_URL ?? "").trim().replace(/\/+$/, "");
-    return `${base || "<API_PUBLIC_URL>"}/webhooks/meta`;
+    return `${base || "<URL pública da API>"}/webhooks/meta`;
   }
 
   private toDto(
     connection: ConnectionRecord,
     stats?: { _count: { _all: number }; _max: { createdAt: Date | null } },
     fetchProblem: MetaLeadFormFetchProblem | null = null,
+    pendingFetchCount?: number,
   ): MetaLeadFormConnectionDto {
     return {
       fetchProblem,
+      ...(pendingFetchCount !== undefined ? { pendingFetchCount } : {}),
       id: connection.id,
       label: connection.label,
       pageId: connection.pageId,
@@ -589,20 +761,27 @@ export class MetaLeadFormsService {
   }
 }
 
+/** Início da janela de releitura (7 dias). */
+export function refetchWindowStart(now = new Date()): Date {
+  return new Date(now.getTime() - LEAD_REFETCH_WINDOW_DAYS * 24 * 60 * 60_000);
+}
+
 /**
  * The latest submission of the Page failed for good (dead token or missing
- * permission) after the connection was last saved: the screen asks to
- * reconnect the Page or grant the permission. Saving the connection again
- * (new token) or a later lead read successfully clears it.
+ * permission) after the Graph token was last saved: the screen asks to
+ * reconnect the Page or grant the permission. Saving a new token or a later
+ * lead read successfully clears it; editing the label or reactivating does
+ * not (1.3.1: compared with graphTokenUpdatedAt, not updatedAt).
  */
 export function metaLeadFormFetchProblem(
-  connection: { updatedAt: Date },
+  connection: { graphTokenUpdatedAt?: Date | null; createdAt: Date },
   latest:
     | { fetchStatus: string; fetchError: string | null; updatedAt: Date }
     | undefined,
 ): MetaLeadFormFetchProblem | null {
   if (!latest || latest.fetchStatus !== "fetch_failed") return null;
-  if (latest.updatedAt < connection.updatedAt) return null;
+  const tokenSavedAt = connection.graphTokenUpdatedAt ?? connection.createdAt;
+  if (latest.updatedAt < tokenSavedAt) return null;
   const kind = storedLeadFetchFailureKind(latest.fetchError);
   return kind === "reconnect" || kind === "permission" ? kind : null;
 }

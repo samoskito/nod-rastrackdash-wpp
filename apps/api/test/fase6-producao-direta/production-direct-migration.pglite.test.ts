@@ -237,7 +237,41 @@ describe("scripts/rollback/antes-de-voltar-para-1.2.sql (PGlite, schema atual)",
        ('wl_umbler','w1','umbler','umbler.webhook','received');
       INSERT INTO "DiagnosticEvent" (id,"workspaceId",source,"eventType",severity,status,title,message) VALUES
        ('de_braip','w1','braip','x','info','received','t','m');
+      -- 1.3.1: recebimentos com os valores novos (a 1.2.0 lê sem filtrar).
+      INSERT INTO "InboundWebhookChannel" (id,"workspaceId","connectionId","organizationId","providerChannelId","connectedPhone",status,"lastSeenAt","updatedAt") VALUES
+       ('ch_roi','w1','c_roi','org','pc_roi','5511999990201','active',now(),now());
+      INSERT INTO "InboundWebhookDelivery" (id,"workspaceId","connectionId",provider,"ingressKey","parserVersion","payloadExpiresAt","updatedAt") VALUES
+       ('d_roi','w1','c_roi','roichat','k1','v1',now(),now()),
+       ('d_umbler','w1','c1','umbler','k2','v1',now(),now());
+      INSERT INTO "InboundWebhookEvent" (id,"workspaceId","connectionId","deliveryId","channelId",provider,"dedupeKey","occurredAt",classification,"normalizedSummary","updatedAt") VALUES
+       ('ev_roi','w1','c_roi','d_roi','ch_roi','roichat','dk1',now(),'eligible_route_resolved','{}',now());
+      INSERT INTO "IntegrationEndpointEvent" (id,"workspaceId","integrationEndpointId",provider,"ingressKey",status,"payloadExpiresAt","updatedAt") VALUES
+       ('iee_braip','w1','e_braip','braip','i1','unattributed',now(),now()),
+       ('iee_yampi','w1','e_yampi','yampi','i2','pending',now(),now()),
+       ('iee_payt','w1','e_payt','payt','i3','unattributed',now(),now());
     `);
+    const providers = async () =>
+      Object.fromEntries(
+        (
+          await rows(
+            db,
+            `SELECT id, provider::text AS provider FROM "InboundWebhookDelivery"
+             UNION ALL SELECT id, provider::text FROM "InboundWebhookEvent"
+             UNION ALL SELECT id, provider::text FROM "IntegrationEndpointEvent"
+             UNION ALL SELECT id, provider::text FROM "IntegrationEndpoint"
+             UNION ALL SELECT id, provider::text FROM "InboundWebhookConnection"
+             ORDER BY 1`,
+          )
+        ).map((row) => [row.id, row.provider]),
+      );
+    const releases = async () =>
+      rows(
+        db,
+        `SELECT id, provider::text AS provider, version, status::text AS status
+         FROM "InboundWebhookParserRelease" ORDER BY id`,
+      );
+    const providersBefore = await providers();
+    const releasesBefore = await releases();
     const removed = async () => ({
       endpoints: await byIdRemoved(db, "IntegrationEndpoint"),
       connections: await byIdRemoved(db, "InboundWebhookConnection"),
@@ -269,8 +303,45 @@ describe("scripts/rollback/antes-de-voltar-para-1.2.sql (PGlite, schema atual)",
         ["roichat", "braip", "yampi"].includes(String(p)),
       ),
     ).toEqual([]);
+    // 1.3.1: nenhuma linha fica com roichat, braip ou yampi.
+    const newValues = await rows(
+      db,
+      `SELECT provider::text AS provider FROM "InboundWebhookDelivery"
+       UNION ALL SELECT provider::text FROM "InboundWebhookEvent"
+       UNION ALL SELECT provider::text FROM "IntegrationEndpointEvent"
+       UNION ALL SELECT provider::text FROM "IntegrationEndpoint"
+       UNION ALL SELECT provider::text FROM "InboundWebhookConnection"
+       UNION ALL SELECT provider::text FROM "InboundWebhookParserRelease"`,
+    );
+    expect(
+      newValues.filter((row) =>
+        ["roichat", "braip", "yampi"].includes(String(row.provider)),
+      ),
+    ).toEqual([]);
+    expect(await providers()).toMatchObject({
+      d_roi: "meta_cloud",
+      d_umbler: "umbler",
+      ev_roi: "meta_cloud",
+      iee_braip: "payt",
+      iee_yampi: "payt",
+      iee_payt: "payt",
+      e_braip: "payt",
+      c_roi: "meta_cloud",
+    });
+    const swapped = (await releases()).filter((row) =>
+      String(row.version).startsWith("rollback_1_2:"),
+    );
+    expect(swapped.length).toBeGreaterThan(0);
+    for (const row of swapped) expect(row.status).toBe("retired");
+    const snapshotAfterCleanup = {
+      providers: await providers(),
+      releases: await releases(),
+    };
     await db.exec(cleanup);
     expect(await removed()).toEqual(after);
+    expect({ providers: await providers(), releases: await releases() }).toEqual(
+      snapshotAfterCleanup,
+    );
     // Diagnóstico: a 1.2.0 lê essas tabelas sem filtrar a origem.
     const sources = async () =>
       Object.fromEntries(
@@ -307,6 +378,28 @@ describe("scripts/rollback/antes-de-voltar-para-1.2.sql (PGlite, schema atual)",
       `SELECT to_regclass('rollback_1_2_diagnostic_source') AS name`,
     );
     expect(backup?.name).toBeNull();
+    // 1.3.1: provedores, versões e status dos leitores voltam ao original.
+    expect(await providers()).toEqual(providersBefore);
+    expect(
+      (await releases()).map(({ id, provider, version, status }) => ({
+        id,
+        provider,
+        version,
+        status,
+      })),
+    ).toEqual(
+      releasesBefore.map(({ id, provider, version, status }) => ({
+        id,
+        provider,
+        version,
+        status,
+      })),
+    );
+    const [providerBackup] = await rows(
+      db,
+      `SELECT to_regclass('rollback_1_2_provider') AS name`,
+    );
+    expect(providerBackup?.name).toBeNull();
   }, 120_000);
 });
 

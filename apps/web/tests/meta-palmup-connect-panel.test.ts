@@ -245,7 +245,8 @@ describe("Conectar Meta (PalmUP)", () => {
         ).disabled,
       ).toBe(true);
     });
-    expect(screen.getByText(/PALMUP_META_BROKER_URL/)).toBeTruthy();
+    expect(screen.getAllByText(/Login social PalmUP não configurado/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/PALMUP_META_BROKER_URL/)).toBeNull();
     expect(document.querySelector('input[name="accessToken"]')).toBeTruthy();
   });
 

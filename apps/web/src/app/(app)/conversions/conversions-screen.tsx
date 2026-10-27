@@ -380,7 +380,7 @@ export function ConversionsScreen({
           </strong>
           <span>
             {rulesState === "disabled"
-              ? "Ligue INBOUND_WEBHOOKS_ENABLED e INBOUND_CONVERSION_RULES_ENABLED no .env da API (veja docs/setup/environment.md); depois as regras aparecem aqui."
+              ? "Quem administra a instalação precisa ligar o recebimento de webhooks e as regras de conversão na configuração da API; depois, as regras aparecem aqui."
               : "Atualize a página em alguns instantes. Nenhuma regra foi alterada."}
           </span>
         </div>

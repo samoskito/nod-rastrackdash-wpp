@@ -21,7 +21,7 @@ const safeErrors = new Set([
   "Nenhum evento possui rota completa e payload disponível",
   "Digite exatamente o nome da conexão para autorizar",
   "Não foi possível iniciar o replay; tente novamente",
-  "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
+  "Configure o segredo do seu próprio app Meta (App Secret) na configuração da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
   "Replay de webhooks ainda não está habilitado",
   // Fase 6.1c (porte do SaaS #91): reenviar os que falharam.
   "Esta recuperação não tem itens com falha para reenviar",

@@ -427,6 +427,12 @@ export const conversionAuditEventSchema = z.object({
   sentAt: z.string().min(1).nullable(),
   status: conversionEventLogStatusSchema,
   canRetry: z.boolean().default(false),
+  /**
+   * 1.3.1: recusado pela Meta por uma causa que o aluno corrige (código 100,
+   * 10, 200-299 ou recusa antiga sem código), dentro dos 7 dias: "Reenviar
+   * recusados". Default false: APIs anteriores não enviam.
+   */
+  canRetryRejected: z.boolean().default(false),
   providerResponseSummary: z.string().min(1).nullable(),
   errorCode: z.string().min(1).nullable(),
   errorMessage: z.string().min(1).nullable(),
@@ -488,6 +494,8 @@ export const conversionAuditSummarySchema = z.object({
    * so an older API keeps validating.
    */
   metaAuthRetryable: z.number().int().nonnegative().optional(),
+  /** 1.3.1: recusas corrigíveis dentro dos 7 dias ("Reenviar recusados"). */
+  metaRejectedRetryable: z.number().int().nonnegative().optional(),
 });
 
 export const conversionAuditEventOptionSchema = z.object({
