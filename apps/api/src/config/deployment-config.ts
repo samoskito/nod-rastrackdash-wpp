@@ -364,6 +364,24 @@ function parseInboundWebhookEncryptionKey(env: Environment): Buffer {
   return key;
 }
 
+/**
+ * Interruptor do servidor (Fase 6.1c): INBOUND_CONVERSION_PRODUCTION_ENABLED
+ * com "false" explícito desliga o envio de TODAS as regras de conversão,
+ * inclusive as do Kommo e do Pipedrive (que não dependem dos webhooks de
+ * entrada). Sem valor, nada é desligado. Lido a cada chamada.
+ */
+export function conversionSendingSwitchedOff(
+  env: Environment = process.env,
+): boolean {
+  return (
+    env.INBOUND_CONVERSION_PRODUCTION_ENABLED?.trim().toLowerCase() === "false"
+  );
+}
+
+/** errorCode de uma conversão de regra não enviada por causa do interruptor. */
+export const CONVERSION_PRODUCTION_DISABLED_CODE =
+  "conversion_production_disabled";
+
 export function parseInboundWebhooksConfig(
   env: Environment,
 ): InboundWebhooksConfig {

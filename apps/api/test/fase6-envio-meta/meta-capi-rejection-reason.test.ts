@@ -233,7 +233,9 @@ describe("MetaCapiAdapter em lote: o que a recusa guarda", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     for (const result of results) {
-      expect(result.errorCode).toBe("MetaCapiRejected");
+      // Revisão do #121: limite de uso no lote volta para a fila (classe
+      // retentável); a resposta guardada continua só com os campos seguros.
+      expect(result.errorCode).toBe("MetaCapiNetworkError");
       expect(result.responseSummary).toEqual({
         httpStatus: 400,
         error: {

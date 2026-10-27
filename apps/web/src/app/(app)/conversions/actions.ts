@@ -691,7 +691,7 @@ function createdRuleMessage(
   const base =
     mode === "production"
       ? "Regra criada e enviando: cada conversão reconhecida vai para a Meta pelo destino de cada número."
-      : "Regra criada com o envio desligado: o servidor está com o envio de regras desligado (INBOUND_CONVERSION_PRODUCTION_ENABLED=false) ou esta integração ainda não foi validada.";
+      : "Regra criada sem envio: o envio de conversões está desligado na configuração da API, ou esta integração ainda não pode enviar. Depois de resolver, use “Ativar envio” nesta regra.";
   return hasWebhookUrl
     ? `${base} Copie o endereço agora: ele não é exibido de novo.`
     : base;

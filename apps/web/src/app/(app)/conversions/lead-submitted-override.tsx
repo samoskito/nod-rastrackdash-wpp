@@ -96,3 +96,44 @@ export function LeadSubmittedOverrideBadge() {
     </span>
   );
 }
+
+/**
+ * Botão de ligar uma regra que está com o envio desligado. Decisão do Samuel
+ * (D1, 27/10/2026): a regra "Lead recebido" que estava em observação não é
+ * ligada pela atualização; o aluno liga quando quiser, sabendo que, ligada,
+ * ela passa a ser a única a enviar o Lead recebido dos números que cobre.
+ */
+export function activateRuleCopy(input: {
+  name: string;
+  eventName: ConversionEventNameDto | string;
+  leadSubmittedOverrideEnabled: boolean;
+}): {
+  label: string;
+  ariaLabel: string;
+  title: string;
+  body: string;
+  confirmLabel: string;
+} {
+  if (input.eventName === "LeadSubmitted" && input.leadSubmittedOverrideEnabled) {
+    return {
+      label: "Ligar esta regra",
+      ariaLabel: `Ligar a regra ${input.name}`,
+      title: "Ligar esta regra",
+      body: "Depois de ligada, o Lead recebido dos números desta regra deixa de ir para a Meta na entrada da conversa e passa a ir só quando a regra for acionada. Você pode pausar a regra quando quiser; pausada, o Lead recebido volta a sair na entrada.",
+      confirmLabel: "Ligar esta regra",
+    };
+  }
+  return {
+    label: "Ativar envio",
+    ariaLabel: `Ativar envio automático de ${input.name}`,
+    title: "Ativar envio automático",
+    body: "Cada conversão reconhecida por esta regra passa a ser enviada para a Meta, pelo destino de cada número.",
+    confirmLabel: "Ativar envio",
+  };
+}
+
+/** Aviso da tela Conversões quando o envio está desligado na API. */
+export const conversionSendingOffCopy = {
+  title: "Envio desligado no servidor",
+  body: "Nenhuma regra está mandando conversões para a Meta agora, nem as que aparecem como enviando (Kommo e Pipedrive também). O envio foi desligado na configuração da API. Para voltar a enviar, peça à sua IA ou a quem cuida do servidor para ligar o envio de conversões (guia: docs/setup/environment.md) e refazer o deploy da API.",
+} as const;

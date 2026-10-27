@@ -12,7 +12,8 @@ import { parseInboundWebhooksConfig } from "../../src/config/deployment-config";
  * Fase 6.1c — promoção, uma única vez, do que ficou em observação nas
  * instalações que já existem. Validado sem PostgreSQL (o porte roda sem
  * banco): o texto da migration é conferido por partes.
- * PENDENTE: rodar a migration num PostgreSQL descartável antes do release.
+ * A execução de verdade (PostgreSQL em processo, com dados) está em
+ * production-direct-migration.pglite.test.ts.
  */
 const migrationsDir = resolve(__dirname, "../../prisma/migrations");
 const name = "20261027125000_production_direct_validated_integrations";
@@ -82,7 +83,9 @@ describe("migration produção direta (Fase 6.1c)", () => {
     expect(channels).toContain(`ch."status" = 'discovered'`);
     expect(channels).toContain(`c."status" = 'production'`);
     expect(channels).toContain(`w."status" = 'active'`);
-    expect(channels).toContain(`sibling."status" = 'active'`);
+    // A1: um número ativo OU pausado bloqueia a identidade irmã do mesmo
+    // telefone (o pausado continua pausado por qualquer identidade).
+    expect(channels).toContain(`sibling."status" IN ('active', 'paused')`);
     expect(channels).toContain(`sibling."connectedPhone" = ch."connectedPhone"`);
     // Duas identidades descobertas do mesmo número: só a vista por último.
     expect(channels).toContain(`sibling."status" = 'discovered'`);
@@ -108,11 +111,13 @@ describe("migration produção direta (Fase 6.1c)", () => {
     // Regra presa a conexão que ficou fora de produção não é promovida.
     expect(rules).toContain(`c."status" IN ('production', 'paused')`);
     expect(rules).toContain(`a."resultStatus" = 'production'`);
+    // D1: a regra "Lead recebido" em observação não é promovida.
+    expect(rules).toContain(`cr."eventName" <> 'LeadSubmitted'`);
     expect(rules).toContain(`"productionActivatedAt" = CURRENT_TIMESTAMP`);
   });
 
-  it("promove regras de CRM ativas (Kommo e Pipedrive) e dá ao Pipedrive a cerca de ativação", () => {
-    const crm = step(6);
+  it("promove regras de CRM ativas (Kommo e Pipedrive) com auditoria e dá ao Pipedrive a cerca de ativação", () => {
+    const crm = step(6) + step(7);
     expect(crm).toMatch(/UPDATE "KommoConversionRule"[\s\S]+"active" = true/u);
     // A Kommo não tem cerca de ativação: com evento ainda na fila na conexão,
     // a regra fica para "Ativar envio" (nada recebido antes é enviado).
@@ -123,13 +128,28 @@ describe("migration produção direta (Fase 6.1c)", () => {
     expect(crm).toMatch(
       /UPDATE "PipedriveConversionRule"[\s\S]+"productionActivatedAt" = CURRENT_TIMESTAMP[\s\S]+"active" = true/u,
     );
+    // D2: ligar com registro.
+    expect(crm).toContain("'production_direct_6_1c:kommo:'");
+    expect(crm).toContain("'production_direct_6_1c:pipedrive:'");
+    // MÉDIA (c): as mesmas checagens da criação (requireProduction).
+    for (const check of [
+      `pc."status" = 'active'`,
+      `pc."credentialHealthy" = true`,
+      `pc."webhookSecretHash" IS NOT NULL`,
+      `cardinality(pc."allowedChannelRouteIds") > 0`,
+      `rt."validationStatus" = 'valid'`,
+      `md."status" = 'configured'`,
+    ])
+      expect(crm).toContain(check);
   });
 
   it("é idempotente: só toca o que ainda está em observação e as auditorias têm id fixo", () => {
-    expect(sql.match(/ON CONFLICT \("id"\) DO NOTHING/gu)).toHaveLength(3);
+    expect(sql.match(/ON CONFLICT \("id"\) DO NOTHING/gu)).toHaveLength(5);
     expect(sql).toContain("'production_direct_6_1c:connection:'");
     expect(sql).toContain("'production_direct_6_1c:channel:'");
     expect(sql).toContain("'production_direct_6_1c:rule:'");
+    expect(sql).toContain("'production_direct_6_1c:kommo:'");
+    expect(sql).toContain("'production_direct_6_1c:pipedrive:'");
   });
 });
 

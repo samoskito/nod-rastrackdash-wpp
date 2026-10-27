@@ -179,7 +179,7 @@ describe("meta capi adapter batching (Fase 6.4)", () => {
     });
   });
 
-  it.each([190, 102, 4, 17, 613])(
+  it.each([190, 102, 4, 17, 613, 80004])(
     "does not resend one by one when the whole batch fails with code %i",
     async (code) => {
       const fetchMock: FetchMock = vi.fn(
@@ -202,23 +202,57 @@ describe("meta capi adapter batching (Fase 6.4)", () => {
       const results = await pending;
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(results.map((result) => result.errorCode)).toEqual([
-        "MetaCapiRejected",
-        "MetaCapiRejected",
-        "MetaCapiRejected",
-      ]);
+      // Revisão do #121: limite de uso (4/17/613/800xx) volta para a fila e
+      // é reenviado depois (classe retentável); token morto continua recusado.
+      const rateLimited = ![190, 102].includes(code);
+      expect(results.map((result) => result.errorCode)).toEqual(
+        Array(3).fill(rateLimited ? "MetaCapiNetworkError" : "MetaCapiRejected"),
+      );
       expect(results[0].responseSummary).toEqual({
         httpStatus: 400,
         error: { code },
       });
       expect(results[0].errorMessage).toBe(
-        code === 190 || code === 102
-          ? "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend"
-          : "Meta CAPI request failed",
+        rateLimited
+          ? `Meta CAPI usage limit (code ${code}): will retry`
+          : "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend",
       );
       expect(JSON.stringify(results)).not.toContain("synthetic private");
     },
   );
+
+  it("a single event of the batch path rate-limited (80004) is retryable too", async () => {
+    const fetchMock: FetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 80004 } }), {
+          status: 400,
+        }),
+    );
+    const adapter = new MetaCapiAdapter(batchEnv, fetchMock);
+    const pending = adapter.sendEvent(event(1));
+    await adapter.flushAllBatches();
+    expect(await pending).toMatchObject({
+      status: "error",
+      errorCode: "MetaCapiNetworkError",
+    });
+  });
+
+  it("the batch POST has a timeout (never hangs the jobs of the group)", async () => {
+    const fetchMock: FetchMock = vi.fn(async (_url, init) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    });
+    const adapter = new MetaCapiAdapter(batchEnv, fetchMock);
+    const pending = Promise.all([
+      adapter.sendEvent(event(1)),
+      adapter.sendEvent(event(2)),
+    ]);
+    await adapter.flushAllBatches();
+    expect((await pending).map((result) => result.errorCode)).toEqual([
+      "MetaCapiNetworkError",
+      "MetaCapiNetworkError",
+    ]);
+  });
 
   it("retries individually when Meta confirms fewer events than sent", async () => {
     const fetchMock: FetchMock = vi.fn(async () => ack(1));

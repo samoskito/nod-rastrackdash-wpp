@@ -326,6 +326,7 @@ Nesse caso, é possível informar o commit exato no build: `--build-arg GIT_SHA=
 - **Fail-closed:** pare no primeiro passo que falhar e diagnostique em [`troubleshooting.md`](troubleshooting.md) antes de seguir. Não avance "torcendo para dar certo".
 - **Não reinstale para corrigir.** Reinstalar = banco novo, admin novo, segredos novos → você perde clientes, conexões e históricos.
 - **Não volte para uma versão antiga por conta própria** depois que as migrations rodaram: o banco já está no formato novo. Leve o log (sem segredos — troque valores sensíveis por `***`) para o suporte/comunidade e restaure o backup só com orientação.
+- **Se for mesmo voltar** (com orientação e backup): siga a recuperação de [`docs/releases/unreleased.json`](../releases/unreleased.json). Voltar para a 1.2.0 ou anterior depois de usar ROI Chat, Braip ou Yampi exige rodar `scripts/rollback/antes-de-voltar-para-1.2.sql` **antes** de voltar o código (sem isso a 1.2.0 não lista Integrações nem Conversões). Para desfazer o que a produção direta ligou na atualização, há `scripts/rollback/desfazer-producao-direta-6-1c.sql`. Os dois rodam com `psql` no servidor, e nada é apagado.
 
 ## Instalação local (Docker Compose)
 

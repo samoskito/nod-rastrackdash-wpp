@@ -23,8 +23,12 @@ import { INTEGRATION_ENV } from "../integrations/integration.types";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 import { LeadsService } from "../leads/leads.service";
 import {
+  leadFetchErrorText,
+  leadFetchFailureKind,
   MetaLeadFormGraphClient,
   MetaLeadFormGraphError,
+  storedLeadFetchFailureKind,
+  type LeadFetchFailureKind,
 } from "./meta-lead-form-graph.client";
 import {
   leadContact,
@@ -47,8 +51,17 @@ export type LeadgenIngestResult = {
   saved: number;
   duplicates: number;
   unrouted: number;
+  /** Passageiras (rede, 5xx, limite de uso): o webhook responde 503. */
   fetchFailed: number;
+  /**
+   * Permanentes (token morto, falta de permissão, lead ilegível): gravadas
+   * como fetch_failed, o webhook responde 200 e a tela da conexão avisa.
+   */
+  fetchFailedPermanent?: number;
 };
+
+/** Aviso da tela da conexão depois de uma leitura que falhou de vez. */
+export type MetaLeadFormFetchProblem = "reconnect" | "permission";
 
 function last4(token: string): string {
   return token.slice(-4);
@@ -86,9 +99,30 @@ export class MetaLeadFormsService {
         })
       : [];
     const statsById = new Map(stats.map((item) => [item.connectionId, item]));
+    const latest = connections.length
+      ? await this.prisma.metaLeadSubmission.findMany({
+          where: {
+            workspaceId,
+            connectionId: { in: connections.map((item) => item.id) },
+          },
+          distinct: ["connectionId"],
+          orderBy: [{ connectionId: "asc" }, { updatedAt: "desc" }],
+          select: {
+            connectionId: true,
+            fetchStatus: true,
+            fetchError: true,
+            updatedAt: true,
+          },
+        })
+      : [];
+    const latestById = new Map(latest.map((item) => [item.connectionId, item]));
 
     return connections.map((connection) =>
-      this.toDto(connection, statsById.get(connection.id)),
+      this.toDto(
+        connection,
+        statsById.get(connection.id),
+        metaLeadFormFetchProblem(connection, latestById.get(connection.id)),
+      ),
     );
   }
 
@@ -311,8 +345,11 @@ export class MetaLeadFormsService {
   /**
    * Saves each announced submission (signature already verified). A Graph
    * read failure is kept as fetch_failed and retried on the next delivery of
-   * the same lead (the webhook answers 503 so Meta redelivers); a database
-   * failure throws so Meta redelivers the batch.
+   * the same lead. Only a transient one (network, 5xx, usage limit) counts in
+   * fetchFailed, so the webhook answers 503 and Meta redelivers; a permanent
+   * one (dead token, missing permission) counts in fetchFailedPermanent: the
+   * webhook answers 200 and the connection screen asks to reconnect. A
+   * database failure throws so Meta redelivers the batch.
    */
   async ingestLeadgen(
     changes: LeadgenChange[],
@@ -324,6 +361,7 @@ export class MetaLeadFormsService {
       duplicates: 0,
       unrouted: 0,
       fetchFailed: 0,
+      fetchFailedPermanent: 0,
     };
     const pageIds = Array.from(new Set(changes.map((change) => change.page_id)));
     const connections = await this.prisma.metaLeadFormConnection.findMany({
@@ -354,8 +392,9 @@ export class MetaLeadFormsService {
       }
 
       const outcome = await this.saveSubmission(route.connection, change);
-      if (outcome === "fetch_failed") result.fetchFailed++;
-      else result.saved++;
+      if (outcome === "saved") result.saved++;
+      else if (outcome === "transient") result.fetchFailed++;
+      else result.fetchFailedPermanent = (result.fetchFailedPermanent ?? 0) + 1;
     }
 
     return result;
@@ -364,18 +403,32 @@ export class MetaLeadFormsService {
   private async saveSubmission(
     connection: ConnectionRecord,
     change: LeadgenChange,
-  ): Promise<"saved" | "fetch_failed"> {
+  ): Promise<"saved" | LeadFetchFailureKind> {
     let lead: GraphLead | null = null;
     let fetchError: string | null = null;
+    let failure: LeadFetchFailureKind | null = null;
 
+    let token: string | null = null;
     try {
-      lead = await this.graph.fetchLead(
-        change.leadgen_id,
-        this.graphToken(connection),
-      );
-    } catch (error) {
-      fetchError =
-        error instanceof Error ? error.message.slice(0, 300) : "Falha na Graph API";
+      token = this.graphToken(connection);
+    } catch {
+      // The stored token no longer opens (encryption key changed): only
+      // saving the token again fixes it, redelivering never does.
+      failure = "reconnect";
+      fetchError = leadFetchErrorText(failure, "Token salvo ilegível");
+    }
+    if (token !== null) {
+      try {
+        lead = await this.graph.fetchLead(change.leadgen_id, token);
+      } catch (error) {
+        failure = leadFetchFailureKind(error);
+        fetchError = leadFetchErrorText(
+          failure,
+          error instanceof Error ? error.message : "Falha na Graph API",
+        );
+      }
+    }
+    if (failure) {
       this.logger.error(
         `leadgen ${change.leadgen_id}: leitura na Graph API falhou: ${fetchError}`,
       );
@@ -428,7 +481,7 @@ export class MetaLeadFormsService {
       update: data,
     });
 
-    return lead ? "saved" : "fetch_failed";
+    return lead ? "saved" : (failure ?? "transient");
   }
 
   /**
@@ -513,8 +566,10 @@ export class MetaLeadFormsService {
   private toDto(
     connection: ConnectionRecord,
     stats?: { _count: { _all: number }; _max: { createdAt: Date | null } },
+    fetchProblem: MetaLeadFormFetchProblem | null = null,
   ): MetaLeadFormConnectionDto {
     return {
+      fetchProblem,
       id: connection.id,
       label: connection.label,
       pageId: connection.pageId,
@@ -532,4 +587,22 @@ export class MetaLeadFormsService {
       updatedAt: connection.updatedAt.toISOString(),
     };
   }
+}
+
+/**
+ * The latest submission of the Page failed for good (dead token or missing
+ * permission) after the connection was last saved: the screen asks to
+ * reconnect the Page or grant the permission. Saving the connection again
+ * (new token) or a later lead read successfully clears it.
+ */
+export function metaLeadFormFetchProblem(
+  connection: { updatedAt: Date },
+  latest:
+    | { fetchStatus: string; fetchError: string | null; updatedAt: Date }
+    | undefined,
+): MetaLeadFormFetchProblem | null {
+  if (!latest || latest.fetchStatus !== "fetch_failed") return null;
+  if (latest.updatedAt < connection.updatedAt) return null;
+  const kind = storedLeadFetchFailureKind(latest.fetchError);
+  return kind === "reconnect" || kind === "permission" ? kind : null;
 }

@@ -378,7 +378,12 @@ export class WebhooksController {
     // path below.
     // Only the leadgen changes of those Pages are ingested; whatever else the
     // delivery carries (other Pages, other fields) still goes to the
-    // diagnostic path. A Graph read failure answers 503 so Meta redelivers.
+    // diagnostic path. Only a TRANSIENT Graph read failure (network, 5xx,
+    // usage limit) answers 503 so Meta redelivers; a permanent one (dead
+    // token, missing permission) is saved as fetch_failed and answered 2xx:
+    // redelivering cannot fix it, and hours of 503 may make Meta disable the
+    // app subscription that feeds this whole endpoint. The connection screen
+    // asks to reconnect the Page or grant the permission.
     // A Page whose connection was deactivated (it already received forms, so
     // it can only be deactivated, not removed) is answered 2xx and ignored:
     // nothing is read or saved and Meta does not redeliver.

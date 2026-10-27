@@ -24,6 +24,21 @@ function when(value: string | null) {
     : "-";
 }
 
+/**
+ * A leitura do último lead na Meta falhou de vez (o webhook respondeu 200 e a
+ * Meta não reenvia): o aluno precisa agir na conexão.
+ */
+export const leadFormFetchProblemCopy = {
+  reconnect: {
+    title: "Reconecte a Página",
+    body: "A Meta recusou o token desta conexão (vencido ou inválido), então os leads novos chegam mas não dá para ler os dados deles. Gere um token novo do Usuário do Sistema e salve em Editar. Os leads que chegaram nesse intervalo ficam na Central de Leads da Meta.",
+  },
+  permission: {
+    title: "Falta permissão",
+    body: "O token desta conexão não tem permissão para ler os leads da Página (leads_retrieval e acesso à Página). Ajuste as permissões do Usuário do Sistema na Meta e salve o token em Editar. Os leads que chegaram nesse intervalo ficam na Central de Leads da Meta.",
+  },
+} as const;
+
 function ConnectionCard({
   connection,
   canManage,
@@ -48,6 +63,16 @@ function ConnectionCard({
           {connection.pageSubscribedAt ? "Página assinada" : "Página não assinada"}
         </span>
       </header>
+      {connection.fetchProblem ? (
+        <div
+          className="feedback-banner warn"
+          role="alert"
+          data-lead-form-fetch-problem={connection.fetchProblem}
+        >
+          <strong>{leadFormFetchProblemCopy[connection.fetchProblem].title}</strong>
+          <span>{leadFormFetchProblemCopy[connection.fetchProblem].body}</span>
+        </div>
+      ) : null}
       <dl className="lead-facts">
         <div>
           <dt>Página</dt>

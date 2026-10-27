@@ -72,7 +72,7 @@ conversão, estas variáveis são **obrigatórias**, não opcionais:
 | `INBOUND_WEBHOOK_ENCRYPTION_KEY` | **Sim** | Você gera (comando abaixo) — Base64 de 32 bytes, string de 44 caracteres terminando em `=` | `.env` da API / env do serviço | **Sim** |
 | `INBOUND_CONVERSION_RULES_ENABLED` | **Sim** — defina `true` | Fixo | `.env` da API / env do serviço | Não |
 | `INBOUND_WEBHOOK_PRODUCTION_ENABLED` | **Sim em produção** (Dokploy/deploy do aluno) | Fixo | `.env` da API / env do serviço | Não |
-| `INBOUND_CONVERSION_PRODUCTION_ENABLED` | Não — deixe **sem valor** (produção direta, Fase 6.1c): sem valor, o envio das regras acompanha `INBOUND_CONVERSION_RULES_ENABLED`. `false` explícito desliga o envio de todas as regras (interruptor do servidor). Se a sua API tem `false` copiado do `.env.example` antigo, troque para `true` ou apague a variável | Fixo | `.env` da API | Não |
+| `INBOUND_CONVERSION_PRODUCTION_ENABLED` | Não — deixe **sem valor** (produção direta, Fase 6.1c): sem valor, o envio das regras acompanha `INBOUND_CONVERSION_RULES_ENABLED`. `false` explícito desliga o envio de todas as regras (interruptor do servidor), inclusive as da Kommo e do Pipedrive, e a tela Conversões mostra "Envio desligado no servidor". Se a sua API tem `false` copiado do `.env.example` antigo, troque para `true` ou apague a variável | Fixo | `.env` da API | Não |
 | `INBOUND_WEBHOOK_REPLAY_ENABLED` | Não — mantenha `false` a menos que precise reprocessar webhooks | Fixo | `.env` da API | Não |
 | `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED` | Não — deixe **sem valor** (padrão **ligado**, Fase 6.2a, produção direta). Ligada: uma regra de conversão "Lead recebido" ativa e enviando (frase, catálogo ou automação) passa a enviar o Lead recebido dos números que ela cobre quando for acionada, e a entrada da conversa só registra a origem (nunca os dois; uma vez por lead e pixel). Sem regra assim, nada muda: o Lead recebido sai na entrada, como antes. `false` (ou `0`, `off`, `no`) explícito desliga: o Lead recebido volta a sair sempre na entrada. Só a API lê; mudar exige reiniciar a API | Fixo | `.env` da API / env do serviço (Dokploy: variáveis do serviço da API) | Não |
 
@@ -422,8 +422,10 @@ depois de mudar.
     sincronização **daquela conta** pausa e Relatórios mostra "Reconecte a
     conta Meta". Com 190/102 confirmado por uma leitura barata de `/me`,
     pausam também as outras contas do mesmo token. O envio de conversões
-    (CAPI) continua normal. Reconectar, revalidar ou "Testar" a conexão em
-    Integrações libera de novo;
+    (CAPI) continua normal. O bloqueio sai sozinho, sem passo manual, quando
+    o aluno reconecta (OAuth, troca do token, nova conexão de negócio) ou usa
+    "Testar" a conexão em Integrações; a sincronização volta na rodada
+    seguinte;
   - pausa por uso: com o uso do app Meta acima de
     `WPPTRACK_META_USAGE_PAUSE_PERCENT` (ou com erro de limite da Meta), a
     sincronização em segundo plano espera e retoma sozinha. O login e o
@@ -507,8 +509,8 @@ e o que ainda não, está em
 | `API_PUBLIC_URL` | **Sim, para gerar receiver** | URL pública da sua API (já obrigatória na seção Core) | `.env` da API / env do serviço | Não |
 | `DISCONNECT_ALERTS_ENABLED`, `DISCONNECT_ALERT_STREAK`, `DISCONNECT_ALERT_INTERVAL_MS` | Não (opcional) | Decisão sua | `.env` da API | Não |
 | `OPS_ALERT_WEBHOOK_URL` | Só se `DISCONNECT_ALERTS_ENABLED=true` | Webhook do seu Slack/Discord/etc. | `.env` local / env do serviço | **Sim** (trate a URL como sensível — permite postar no seu canal) |
-| `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` | Não (opcional) — só para a mensagem dos Alertas WhatsApp sair por WhatsApp. Sem elas o aviso de desconexão aparece só em Integrações | URL do servidor e token de uma instância Uazapi sua que envia o aviso | `.env` da API / env do serviço | `OPS_ALERT_UAZAPI_TOKEN` **sim** |
-| `OPS_ALERT_SCAN_INTERVAL_MS` | Não (padrão 15 minutos; mínimo 60000) | Decisão sua | `.env` da API | Não |
+| `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` (novas na Fase 6.1c) | Não (opcional) — só para a mensagem dos Alertas WhatsApp sair por WhatsApp. Sem elas o aviso de desconexão aparece só em Integrações | URL do servidor e token de uma instância Uazapi sua que envia o aviso | `.env` da API / env do serviço | `OPS_ALERT_UAZAPI_TOKEN` **sim** |
+| `OPS_ALERT_SCAN_INTERVAL_MS` (nova na Fase 6.1c) | Não (padrão 15 minutos; mínimo 60000): intervalo em que a API confere cada conexão Uazapi BYO e WAHA para o aviso de WhatsApp desconectado | Decisão sua | `.env` da API | Não |
 | `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS` | Não (padrão 2000) | Decisão sua: tempo máximo, em milissegundos, de cada leitura de status ou de atividade das conexões em Integrações | env do serviço da **WEB** | Não |
 
 **Alerta de desconexão por conexão (Fase 6.1c):** a API confere cada conexão

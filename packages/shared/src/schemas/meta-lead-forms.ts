@@ -54,6 +54,12 @@ export const metaLeadFormConnectionSchema = z.object({
   webhookUrl: z.string().min(1),
   submissionCount: z.number().int().nonnegative(),
   lastSubmissionAt: z.string().datetime().nullable(),
+  /**
+   * A leitura do último lead falhou de vez: "reconnect" (token vencido ou
+   * inválido: reconecte a Página) ou "permission" (falta permissão no token).
+   * Opcional: APIs anteriores não enviam.
+   */
+  fetchProblem: z.enum(["reconnect", "permission"]).nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

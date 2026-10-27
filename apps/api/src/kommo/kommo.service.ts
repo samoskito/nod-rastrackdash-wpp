@@ -1,4 +1,8 @@
 import {
+  CONVERSION_PRODUCTION_DISABLED_CODE,
+  conversionSendingSwitchedOff,
+} from "../config/deployment-config";
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -1115,7 +1119,12 @@ export class KommoService implements OnModuleInit, OnModuleDestroy {
             errorCode: null,
             evaluationComplete: true,
           };
-          if (rule.mode === "production") {
+          if (rule.mode === "production" && conversionSendingSwitchedOff()) {
+            // Interruptor do servidor: INBOUND_CONVERSION_PRODUCTION_ENABLED=false
+            // desliga o envio de todas as regras, também as da Kommo.
+            result.status = "blocked";
+            result.errorCode = CONVERSION_PRODUCTION_DISABLED_CODE;
+          } else if (rule.mode === "production") {
             const value = this.valueFor(rule, event, workspaceCurrency);
             if ("error" in value) {
               result.status = "blocked";

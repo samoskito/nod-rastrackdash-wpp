@@ -764,14 +764,14 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
   // Unnichat creates one connection per number: 5159, 5520 and a 3rd number
   // connected after the rule was created.
   const channels: Channel[] = [
-    { id: "ch_5159", connectionId: "conn_5159", provider: "unnichat", phone: "555195405159" },
-    { id: "ch_5520", connectionId: "conn_5520", provider: "unnichat", phone: "555195365520" },
-    { id: "ch_third", connectionId: "conn_third", provider: "unnichat", phone: "555199990003" },
+    { id: "ch_5159", connectionId: "conn_5159", provider: "unnichat", phone: "5511999990159" },
+    { id: "ch_5520", connectionId: "conn_5520", provider: "unnichat", phone: "5511999990520" },
+    { id: "ch_third", connectionId: "conn_third", provider: "unnichat", phone: "5511999990003" },
   ];
   const leads: Lead[] = [
-    { id: "lead_5159", phone: "5551987650001", entryChannelId: "ch_5159", ctwaClid: "click-5159" },
-    { id: "lead_5520", phone: "5551987650002", entryChannelId: "ch_5520", ctwaClid: "click-5520" },
-    { id: "lead_third", phone: "5551987650003", entryChannelId: "ch_third", ctwaClid: "click-third" },
+    { id: "lead_5159", phone: "5511999990801", entryChannelId: "ch_5159", ctwaClid: "click-5159" },
+    { id: "lead_5520", phone: "5511999990802", entryChannelId: "ch_5520", ctwaClid: "click-5520" },
+    { id: "lead_third", phone: "5511999990803", entryChannelId: "ch_third", ctwaClid: "click-third" },
   ];
   const unified: Rule = { id: "qualified_all", provider: "unnichat", eventName: "QualifiedLead", scope: "all_numbers", connectionId: "conn_5159", channelIds: [], crossConnectionScope: true };
 
@@ -803,11 +803,11 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
     const w = world({ channels, rules: [legacy, unified], leads });
     const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
     await expect(
-      w.post(endpoint.id, token, unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" })),
+      w.post(endpoint.id, token, unnichatMovement({ phone: "5511999990802", ctwaClid: "click-5520" })),
     ).resolves.toMatchObject({ routing: "unattributed", reasonCode: "multiple_rules_for_event" });
     // The legacy rule only covers its own connection: 5159 is unambiguous.
     await expect(
-      w.post(endpoint.id, token, unnichatMovement({ phone: "5551987650001", ctwaClid: "click-5159" })),
+      w.post(endpoint.id, token, unnichatMovement({ phone: "5511999990801", ctwaClid: "click-5159" })),
     ).resolves.toMatchObject({ routing: "routed" });
     expect(w.observed.map((call) => call.providerRuleId)).toEqual(["qualified_all"]);
   });
@@ -818,7 +818,7 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
     const specifics = world({ channels, rules: [newerSpecific, olderSpecific], leads });
     const first = await specifics.connect("unnichat", "QualifiedLead");
     await expect(
-      specifics.post(first.endpoint.id, first.token, unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" })),
+      specifics.post(first.endpoint.id, first.token, unnichatMovement({ phone: "5511999990802", ctwaClid: "click-5520" })),
     ).resolves.toMatchObject({ routing: "routed" });
     expect(specifics.observed.map((call) => call.providerRuleId)).toEqual(["old_5520"]);
 
@@ -827,14 +827,14 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
     const globals = world({ channels, rules: [newerAll, olderAll], leads });
     const second = await globals.connect("unnichat", "QualifiedLead");
     await expect(
-      globals.post(second.endpoint.id, second.token, unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" })),
+      globals.post(second.endpoint.id, second.token, unnichatMovement({ phone: "5511999990802", ctwaClid: "click-5520" })),
     ).resolves.toMatchObject({ routing: "routed" });
     expect(globals.observed.map((call) => call.providerRuleId)).toEqual(["old_all"]);
   });
 
   it("passes the called URL's connection as the callback origin (own URL of the rule)", async () => {
     const w = world({ channels, rules: [unified], leads });
-    await w.postOldUrl("qualified_all", unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" }));
+    await w.postOldUrl("qualified_all", unnichatMovement({ phone: "5511999990802", ctwaClid: "click-5520" }));
     expect(w.observed[0]!.origin).toEqual({ connectionId: "conn_5159", channelId: null });
   });
 
@@ -863,7 +863,7 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
       unifiedIntoProviderRuleId: "qualified_all",
     };
     const w = world({ channels, rules: [unified, merged], leads });
-    const body = unnichatMovement({ phone: "5551987650002", ctwaClid: "click-5520" });
+    const body = unnichatMovement({ phone: "5511999990802", ctwaClid: "click-5520" });
     await expect(w.postOldUrl("qualified_5520_old", body)).resolves.toMatchObject({
       status: "accepted",
       duplicate: false,
@@ -889,7 +889,7 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
     const paused: Rule = { ...unified, id: "paused_rule", scope: "specific_numbers", channelIds: ["ch_5159"], active: false };
     const w = world({ channels, rules: [unified, paused], leads });
     await expect(
-      w.postOldUrl("paused_rule", unnichatMovement({ phone: "5551987650001", ctwaClid: "click-5159" })),
+      w.postOldUrl("paused_rule", unnichatMovement({ phone: "5511999990801", ctwaClid: "click-5159" })),
     ).rejects.toMatchObject({ status: 404 });
   });
 
@@ -902,7 +902,7 @@ describe("Unnichat: ONE rule and ONE URL per event for every number of every con
       removedConnectionIds: ["conn_removed"],
     });
     const { endpoint, token } = await w.connect("unnichat", "QualifiedLead");
-    await w.post(endpoint.id, token, unnichatMovement({ phone: "5551987650003", ctwaClid: "click-third" }));
+    await w.post(endpoint.id, token, unnichatMovement({ phone: "5511999990803", ctwaClid: "click-third" }));
     expect(w.observed.map((call) => call.providerRuleId)).toEqual(["qualified_all"]);
   });
 });

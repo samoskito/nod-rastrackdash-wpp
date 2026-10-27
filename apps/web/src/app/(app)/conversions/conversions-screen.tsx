@@ -67,6 +67,8 @@ import {
 } from "./rule-manage";
 import { RuleLogo } from "./rule-logo";
 import {
+  activateRuleCopy,
+  conversionSendingOffCopy,
   LeadSubmittedOverrideBadge,
   replacesEntryLeadSubmitted,
 } from "./lead-submitted-override";
@@ -381,6 +383,17 @@ export function ConversionsScreen({
               ? "Ligue INBOUND_WEBHOOKS_ENABLED e INBOUND_CONVERSION_RULES_ENABLED no .env da API (veja docs/setup/environment.md); depois as regras aparecem aqui."
               : "Atualize a página em alguns instantes. Nenhuma regra foi alterada."}
           </span>
+        </div>
+      ) : null}
+
+      {rulesState === "real" && capabilities?.conversionSendingOff === true ? (
+        <div
+          className="feedback-banner warn"
+          role="alert"
+          data-conversion-sending-off="true"
+        >
+          <strong>{conversionSendingOffCopy.title}</strong>
+          <span>{conversionSendingOffCopy.body}</span>
         </div>
       ) : null}
 
@@ -1067,7 +1080,12 @@ function RuleRow({
           </button>
         ) : null}
         {row.kind === "provider" && canManage ? (
-          <RuleStateButtons row={row} onConfirm={onConfirm} disabled={licenseLocked} />
+          <RuleStateButtons
+            row={row}
+            onConfirm={onConfirm}
+            disabled={licenseLocked}
+            leadSubmittedOverrideEnabled={leadSubmittedOverrideEnabled}
+          />
         ) : null}
       </div>
 
@@ -1115,11 +1133,18 @@ function RuleStateButtons({
   row,
   onConfirm,
   disabled,
+  leadSubmittedOverrideEnabled = false,
 }: {
   row: ConversionRuleRow;
   onConfirm: (confirm: PendingConfirm) => void;
   disabled: boolean;
+  leadSubmittedOverrideEnabled?: boolean;
 }) {
+  const activate = activateRuleCopy({
+    name: row.name,
+    eventName: row.eventName,
+    leadSubmittedOverrideEnabled,
+  });
   if (!row.active) {
     return (
       <button
@@ -1182,19 +1207,19 @@ function RuleStateButtons({
           className="button ghost compact-button"
           type="button"
           disabled={disabled}
-          aria-label={`Ativar envio automático de ${row.name}`}
+          aria-label={activate.ariaLabel}
           onClick={() =>
             onConfirm({
               row,
-              title: "Ativar envio automático",
-              body: "Cada conversão reconhecida por esta regra passa a ser enviada para a Meta, pelo destino de cada número.",
-              confirmLabel: "Ativar envio",
+              title: activate.title,
+              body: activate.body,
+              confirmLabel: activate.confirmLabel,
               patch: { mode: "production" },
             })
           }
         >
           <Send size={14} aria-hidden="true" />
-          Ativar envio
+          {activate.label}
         </button>
       )}
       <button

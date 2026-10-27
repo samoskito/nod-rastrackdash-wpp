@@ -105,3 +105,56 @@ export class MetaLeadFormGraphClient {
     return body;
   }
 }
+
+/**
+ * What a failed lead read means for the webhook answer:
+ *  - transient: network, timeout, Graph 5xx or usage limits (4, 17, 32, 613,
+ *    80001-80014, and 1/2/341 that Meta marks as temporary). The webhook
+ *    answers 503 so Meta redelivers later.
+ *  - reconnect: the token/session died (190, 102). Redelivering cannot fix it.
+ *  - permission: the token lacks a permission (10, 200-299).
+ *  - permanent: any other Graph refusal (e.g. 100, lead no longer readable).
+ * Only "transient" asks Meta to redeliver. Answering 503 to a permanent error
+ * makes Meta retry for hours and may disable the app subscription that feeds
+ * the whole /webhooks/meta.
+ */
+export type LeadFetchFailureKind =
+  | "transient"
+  | "reconnect"
+  | "permission"
+  | "permanent";
+
+const TRANSIENT_GRAPH_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
+
+export function leadFetchFailureKind(error: unknown): LeadFetchFailureKind {
+  if (!(error instanceof MetaLeadFormGraphError)) return "transient";
+  const code = error.code;
+  if (code === 190 || code === 102) return "reconnect";
+  if (code === 10 || (code !== undefined && code >= 200 && code <= 299))
+    return "permission";
+  if (
+    code !== undefined &&
+    (TRANSIENT_GRAPH_CODES.has(code) || (code >= 80001 && code <= 80014))
+  )
+    return "transient";
+  if (error.status >= 500 || error.status === 429) return "transient";
+  return "permanent";
+}
+
+/** fetchError of a stored failure: "[kind] message". */
+export function leadFetchErrorText(
+  kind: LeadFetchFailureKind,
+  message: string,
+): string {
+  return `[${kind}] ${message}`.slice(0, 300);
+}
+
+/** Kind recorded in a stored fetchError ("[kind] ..."), when there is one. */
+export function storedLeadFetchFailureKind(
+  fetchError: string | null | undefined,
+): LeadFetchFailureKind | null {
+  const match = /^\[(transient|reconnect|permission|permanent)\]/u.exec(
+    fetchError ?? "",
+  );
+  return match ? (match[1] as LeadFetchFailureKind) : null;
+}
