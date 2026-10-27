@@ -44,6 +44,8 @@ Tudo isto já existe e continua valendo depois da atualização. Recriar qualque
 
 ## Passo 2 — Variáveis novas (só se o CHANGELOG pedir)
 
+> **ATENÇÃO — conferir primeiro (1.3.0 ou superior):** se a tela **Conversões** mostra "Envio desligado no servidor", as conversões estão paradas (inclusive Kommo e Pipedrive), porque o `.env.example` da 1.2.0 trazia `INBOUND_CONVERSION_PRODUCTION_ENABLED=false`. No Dokploy, serviço da API → **Environment**, deixe `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_CONVERSION_RULES_ENABLED=true`, `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` e `INBOUND_CONVERSION_PRODUCTION_ENABLED` vazia (linha apagada) ou `true`; salve e faça o **Deploy** da API. Com `INBOUND_WEBHOOKS_ENABLED` ou `INBOUND_CONVERSION_RULES_ENABLED` em `false` nada envia; com `INBOUND_WEBHOOK_PRODUCTION_ENABLED` em `false` os envios ficam fora de produção; com `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` o envio fica desligado em tudo. O aviso some em Conversões e tudo o que estiver ativo passa a enviar. Detalhe em [Troubleshooting](troubleshooting.md).
+
 Se o passo "Antes de começar" apontou env nova, preencha **direto no painel de env do serviço da API no Dokploy** — nunca em arquivo commitado, nunca colando segredo em chat. Detalhe de cada variável em [`environment.md`](environment.md).
 
 Não apague nem regenere as envs que já existem (veja [O que você NÃO recria](#o-que-você-não-recria-nunca)).
