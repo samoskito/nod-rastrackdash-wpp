@@ -1661,7 +1661,16 @@ export class DiagnosticsService {
         ? await this.refreshedRejectedRoute(conversionEvent)
         : undefined;
     // O destino mudou: confere de novo a regra de uma conversão por lead e
-    // pixel (o guard só roda na criação do evento).
+    // pixel (o guard só roda na criação do evento). Vale também para o CTWA,
+    // cujo destino refeito vem no sourcePayload.
+    const refreshedCtwaDestination = authorizedCtwaDestinationSchema.safeParse(
+      refreshedSourcePayload?.ctwaDestination
+    );
+    if (refreshedCtwaDestination.success)
+      await this.assertLeadNotConvertedElsewhere(
+        conversionEvent,
+        refreshedCtwaDestination.data.destinationId
+      );
     if (refreshedRoute?.metaConversionDestinationId)
       await this.assertLeadNotConvertedElsewhere(
         conversionEvent,

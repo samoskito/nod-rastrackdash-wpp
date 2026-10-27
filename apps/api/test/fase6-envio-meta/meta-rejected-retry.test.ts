@@ -712,6 +712,64 @@ describe("uma conversão por lead e pixel no reenvio", () => {
       }),
     );
   });
+
+  it("CTWA: a rota do número trocou para B, que já recebeu o evento do lead: não reenvia", async () => {
+    const ctwaIntent = (destinationId: string, pixelId: string) => ({
+      kind: "authorized_ctwa_destination",
+      workspaceId: "workspace_1",
+      channelId: "canal_1",
+      connectionId: "conexao_1",
+      organizationId: "org_1",
+      providerChannelId: "numero_1",
+      destinationId,
+      businessConnectionId: "bm_1",
+      credentialId: "credencial_1",
+      credentialFingerprint: "fp_1",
+      deliveryKind: "page_pixel",
+      pixelId,
+      pageId: "pagina_1",
+    });
+    ctwaResolution.current = ctwaIntent("destino_b", "pixel_b");
+    const h = diagnosticsHarness([
+      rejected({
+        sourceTrigger: "inbound_webhook:waha",
+        leadId: "lead_1",
+        sourcePayload: {
+          processingMode: "ctwa",
+          ctwaDestination: ctwaIntent("destino_a", "pixel_a"),
+        },
+      }),
+    ]);
+    Object.assign(h.prisma, {
+      lead: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({
+          id: where.id,
+          phoneHash: `hash_${where.id}`,
+          phoneDisplay: null,
+        })),
+        findMany: vi.fn(async () => []),
+      },
+    });
+    // Conversão manual de Lead recebido já enviada ao destino B.
+    (h.prisma.conversionEventLog as any).findMany = vi.fn(async () => [
+      {
+        id: "manual_b",
+        leadId: "lead_1",
+        eventName: "LeadSubmitted",
+        dedupeKey: "dedupe_manual",
+        sourceTrigger: "manual_conversion",
+        sourcePayload: {},
+        metaConversionDestinationId: "destino_b",
+        status: "sent",
+      },
+    ]);
+
+    await expect(
+      h.service.retryRejectedConversionEvent("rejected_1", input, context),
+    ).rejects.toThrow();
+    expect(h.events[0]!.status).toBe("error");
+    expect(h.queue.retrySend).not.toHaveBeenCalled();
+  });
 });
 
 describe("Reenviar bloqueados e falhas de login: Meta Cloud fica de fora", () => {
