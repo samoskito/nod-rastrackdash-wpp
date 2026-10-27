@@ -586,6 +586,38 @@ export async function firstContactScopeWhere(
   value: string,
   options: CohortOptions = {},
 ) {
+  const { movedAway, movedIn } = await firstContactScopeCorrections(
+    client,
+    workspaceId,
+    field,
+    value,
+    options,
+  );
+
+  return {
+    OR: [
+      {
+        [field]: value,
+        ...(movedAway.length ? { id: { notIn: movedAway } } : {}),
+      },
+      ...(movedIn.length ? [{ id: { in: movedIn } }] : []),
+    ],
+  };
+}
+
+/**
+ * The two corrections of `firstContactScopeWhere`: leads whose row names
+ * `value` but whose first contact was another one (movedAway), and leads
+ * whose first contact named `value` but whose row moved on (movedIn). Also
+ * used by the CRM board query (SQL), so both select the same leads.
+ */
+export async function firstContactScopeCorrections(
+  client: FindManyClient,
+  workspaceId: string,
+  field: LeadAttributionField,
+  value: string,
+  options: CohortOptions = {},
+): Promise<{ movedAway: string[]; movedIn: string[] }> {
   const select = { id: true, campaignId: true, adSetId: true, adId: true };
   const rowLeads = (await client.lead.findMany({
     where: { workspaceId, [field]: value },
@@ -639,15 +671,7 @@ export async function firstContactScopeWhere(
     .filter((lead) => attributions.get(lead.id)?.[field] === value)
     .map((lead) => lead.id);
 
-  return {
-    OR: [
-      {
-        [field]: value,
-        ...(movedAway.length ? { id: { notIn: movedAway } } : {}),
-      },
-      ...(movedIn.length ? [{ id: { in: movedIn } }] : []),
-    ],
-  };
+  return { movedAway, movedIn };
 }
 
 /** A paid conversation reference: the lead it belongs to, or its phone. */

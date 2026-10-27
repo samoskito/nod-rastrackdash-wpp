@@ -7,7 +7,7 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit.
 
 ### Added
 
@@ -44,6 +44,45 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
   - Not ported here: #175 (number-filter conversations with deferred
     entries) only applies to the WhatsApp number filter of the reports,
     which the nod gets in Fase 6.3b (#106); it moves there.
+
+- **Fase 6.2b — CRM Kanban of the Jornada (API, shared and web; no
+  migration)**. Ported from the SaaS (`f5c2b47b` #176). No later CRM fix in
+  the SaaS up to `origin/main` (#189) needed porting (the later edits of
+  `manual-conversion.service.ts` are Hotmart/Yampi/ROI Chat, Fases 6.6–6.8).
+  - New "CRM" item in the menu (Operação, right after Leads; every member
+    sees it): columns are the visible stages of the Jornada ("Leads novos"
+    first; "Conversas iniciadas" first, read-only, when "Lead recebido pela
+    regra" is in use), real totals per column, 20 cards per column with
+    "Carregar mais", the stage of each lead computed in one aggregated SQL
+    query (`apps/api/src/crm/crm-board-query.ts`, existing indexes, no
+    migration) and a 15 s server cache; `GET /crm/board` and
+    `GET /crm/board/columns/:stageKey`.
+  - Dragging a card forward (owners/admins; pointer and keyboard; "Mover
+    para…" on phones) opens the same manual conversion confirmation with the
+    column event locked and the Jornada default value; it is a manual
+    conversion with `source: "kanban"` ("Manual (Kanban) por <nome>" in the
+    audit). The API refuses moving back or to the same stage (409
+    `crm_backward_move`/`crm_same_stage`).
+  - Lead detail extracted to `lead-detail-view.tsx` and reused in the board
+    modal; filters in the URL (arrival period, default 30 days, up to 180;
+    number; campaign); light refresh every 60 s.
+  - nod adaptations: with the license locked the board stays readable (GET)
+    but moving a card is a write (423), so cards are not draggable and a
+    notice says why; numbers come from the active WhatsApp connections (no
+    paid seat); campaigns from the synced Meta structure (native select; the
+    searchable, period-scoped campaign filter arrives with Fase 6.3b); card
+    thumbnails use the CTWA/ad URL (stored creative thumbnails are Fase 6.4).
+  - nod fixes on top of the SaaS port: `/crm` is in the session middleware
+    (redirects to the login like the other app routes); the board height
+    leaves room for the residual footer on phones ("RastrackDash · powered by
+    PalmUP" stays in view); dropping a card with Enter in the keyboard drag no
+    longer also opens the lead modal; a retried kanban move with the same
+    idempotency key replays the registered conversion instead of answering
+    409 "O lead já está nesta etapa"; an empty campaign/ad name never breaks
+    the board.
+  - New dependencies: `@dnd-kit/core` 6.3.1 and `@dnd-kit/utilities` 3.2.2
+    (web), `@electric-sql/pglite` 0.2.17 (API dev/tests only: runs the board
+    SQL in-process in the tests).
 
 - **Fase 6.2a — "Lead recebido" sent by the rule and manual conversion on the
   lead (API, shared and web; no migration)**. Ported from the SaaS (`4d74d303`

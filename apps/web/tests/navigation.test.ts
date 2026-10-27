@@ -45,6 +45,7 @@ describe("navigation", () => {
     expect(clientNavigation.map((item) => item.id)).toEqual([
       "overview",
       "leads",
+      "crm",
       "reports",
       "events",
       "integrations",
@@ -102,6 +103,8 @@ describe("navigation", () => {
 
     expect(analystHtml).toContain('href="/overview"');
     expect(analystHtml).toContain('href="/leads"');
+    // CRM Kanban: every member sees the board (moving cards is owner/admin).
+    expect(analystHtml).toContain('href="/crm"');
     expect(analystHtml).toContain('href="/reports"');
     expect(analystHtml).toContain('href="/events"');
     expect(analystHtml).not.toContain('href="/integrations"');
@@ -461,6 +464,7 @@ describe("navigation", () => {
     for (const route of [
       "/overview",
       "/leads",
+      "/crm",
       "/reports",
       "/events",
       "/integrations",
@@ -472,6 +476,8 @@ describe("navigation", () => {
     }
 
     expect(middleware).toContain('"/conversions/:path*"');
+    // nod: the CRM board (Fase 6.2b) redirects to the login without a session.
+    expect(middleware).toContain('"/crm/:path*"');
     expect(middleware).toContain("wpptrack_session");
     expect(middleware).toContain("/login");
   });

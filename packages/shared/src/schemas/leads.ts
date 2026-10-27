@@ -120,6 +120,8 @@ export const leadDetailConversionEventSchema = z.object({
       note: z.string().min(1).nullable(),
       orderRef: z.string().min(1).nullable(),
       canCancel: z.boolean(),
+      /** Onde foi registrada: detalhe do lead ou CRM Kanban. */
+      origin: z.enum(["lead_detail", "kanban"]).optional(),
     })
     .nullable()
     .optional(),

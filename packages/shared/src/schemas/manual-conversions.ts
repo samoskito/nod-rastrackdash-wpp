@@ -103,6 +103,13 @@ export function normalizeManualOrderRef(orderRef: string): string {
     .toUpperCase();
 }
 
+/** Origem do registro manual (auditoria / "Conversao manual (Kanban)"). */
+export const manualConversionSources = ["lead_detail", "kanban"] as const;
+export const manualConversionSourceSchema = z.enum(manualConversionSources);
+export type ManualConversionSourceDto = z.infer<
+  typeof manualConversionSourceSchema
+>;
+
 const optionalTrimmed = (max: number) =>
   z
     .string()
@@ -135,6 +142,12 @@ export const manualConversionInputSchema = z
      * mesmo evento nas +-24h (aviso recentDuplicate do preview).
      */
     confirmDuplicate: z.boolean().optional().default(false),
+    /**
+     * Onde o registro foi feito: detalhe do lead (padrao) ou o CRM Kanban
+     * (card arrastado). "kanban" so aceita etapa posterior a atual do lead.
+     * Mesmo caminho de envio; muda so a origem na auditoria.
+     */
+    source: manualConversionSourceSchema.optional(),
   })
   .superRefine((input, context) => {
     if (input.orderRef !== null && !normalizeManualOrderRef(input.orderRef))

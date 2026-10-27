@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { CSSProperties, ReactNode } from "react";
 import "../styles/globals.css";
 import "../styles/layout-system.css";
+import "../styles/crm.css";
 import { getBrandConfig } from "../lib/brand";
 
 const presentationModeBootstrap = `

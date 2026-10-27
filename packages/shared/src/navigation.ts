@@ -3,6 +3,7 @@ import type { WorkspacePermissionsDto } from "./schemas/workspace";
 export const clientNavigation = [
   { id: "overview", label: "Visão geral" },
   { id: "leads", label: "Leads" },
+  { id: "crm", label: "CRM" },
   { id: "reports", label: "Relatórios" },
   { id: "events", label: "Eventos Meta" },
   { id: "integrations", label: "Integrações" },

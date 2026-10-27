@@ -5835,8 +5835,11 @@ export class MetaReportingService {
     sourcePayload?: unknown,
   ): string {
     if (source === "manual") {
-      const author = readManualSourcePayload(sourcePayload)?.createdByName;
-      return author ? `Manual por ${author}` : "Manual";
+      const payload = readManualSourcePayload(sourcePayload);
+      const title = payload?.origin === "kanban" ? "Manual (Kanban)" : "Manual";
+      return payload?.createdByName
+        ? `${title} por ${payload.createdByName}`
+        : title;
     }
     const labels: Record<ConversionAuditSourceDto, string> = {
       external_integration: "Integração externa",

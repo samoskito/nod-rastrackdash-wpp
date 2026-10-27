@@ -368,6 +368,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 
 ### 6.2b — CRM Kanban da Jornada
 
+- **Status (26/10/2026): IMPLEMENTADA**, branch `feat/fase-6.2b-crm-kanban` (a partir de `origin/integracao/fase-6`), aguardando revisão. Sem migration e sem variável nova; sem feature flag (produção direta). Nenhuma correção posterior de CRM no SaaS até `origin/main` (#189). Adaptações: licença bloqueada = quadro legível e cards sem arrastar (423 ao mover); números = conexões WhatsApp ativas; campanhas = estrutura Meta sincronizada (o filtro pesquisável por período vem na 6.3b); miniatura pela URL do CTWA/anúncio (miniatura guardada vem na 6.4).
 - **Itens:** #176 (`f5c2b47b`).
 - **Dependências npm novas:** `@dnd-kit/core` 6.3.1, `@dnd-kit/utilities` 3.2.2 e `@electric-sql/pglite` 0.2.17 (dev/testes), fixadas no `pnpm-lock.yaml`.
 - **Arquivos:**

@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module";
 import { PrismaModule } from "../common/prisma/prisma.module";
 import { QueueModule } from "../common/queue/queue.module";
 import { RuntimeModule } from "../common/runtime/runtime.module";
+import { CrmModule } from "../crm/crm.module";
 import { ConversionEventsModule } from "../conversion-events/conversion-events.module";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
@@ -20,6 +21,7 @@ import { ManualConversionsController } from "./manual-conversions.controller";
   imports: [
     AuthModule,
     ConversionEventsModule,
+    CrmModule,
     PrismaModule,
     QueueModule,
     RuntimeModule,

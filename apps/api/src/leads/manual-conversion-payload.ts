@@ -52,6 +52,8 @@ export type ManualConversionSourcePayload = {
   orderKey: string | null;
   idempotencyKey: string;
   channelId: string | null;
+  /** Where it was registered: absent/"lead_detail" or "kanban" (CRM). */
+  origin?: "lead_detail" | "kanban";
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -84,6 +86,7 @@ export function readManualSourcePayload(
     orderKey: optionalString(payload.orderKey),
     idempotencyKey: payload.idempotencyKey,
     channelId: optionalString(payload.channelId),
+    ...(payload.origin === "kanban" ? { origin: "kanban" as const } : {}),
   };
 }
 
@@ -136,6 +139,7 @@ export function manualConversionSummary(log: {
   note: string | null;
   orderRef: string | null;
   canCancel: boolean;
+  origin: "lead_detail" | "kanban";
 } | null {
   if (log.sourceTrigger !== MANUAL_CONVERSION_TRIGGER) return null;
   const payload = readManualSourcePayload(log.sourcePayload);
@@ -144,5 +148,6 @@ export function manualConversionSummary(log: {
     note: payload?.note ?? null,
     orderRef: payload?.orderRef ?? null,
     canCancel: isManualCancelableStatus(log.status ?? ""),
+    origin: payload?.origin ?? "lead_detail",
   };
 }

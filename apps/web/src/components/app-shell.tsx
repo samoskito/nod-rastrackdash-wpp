@@ -20,6 +20,7 @@ import {
   Send,
   Settings2,
   ShieldCheck,
+  SquareKanban,
   UsersRound,
   X,
   type LucideIcon,
@@ -47,6 +48,7 @@ type ClientNavigationId = (typeof clientNavigation)[number]["id"];
 const navigationIconById: Record<ClientNavigationId, LucideIcon> = {
   overview: LayoutDashboard,
   leads: UsersRound,
+  crm: SquareKanban,
   reports: BarChart3,
   events: Send,
   integrations: Plug,
@@ -57,7 +59,7 @@ const navigationIconById: Record<ClientNavigationId, LucideIcon> = {
 const navigationGroupDefinitions = [
   {
     label: "Operação",
-    ids: ["overview", "leads", "reports", "events"],
+    ids: ["overview", "leads", "crm", "reports", "events"],
   },
   {
     label: "Gestão",
@@ -538,7 +540,10 @@ export function AppShell({
             </form>
           </div>
         ) : null}
-        {workspace ? <DataAutoRefresh source={dataSource ?? null} /> : null}
+        {/* The CRM board refreshes itself (counts + first pages only). */}
+        {workspace && !pathname.startsWith("/crm") ? (
+          <DataAutoRefresh source={dataSource ?? null} />
+        ) : null}
         {children}
         <BrandFooter brand={brand} className="content-footer" />
       </main>

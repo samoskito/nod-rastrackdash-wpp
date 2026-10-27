@@ -24,6 +24,7 @@ export type ManualConversionActionFailure = {
   state:
     | "already_converted"
     | "needs_confirmation"
+    | "move_refused"
     | "forbidden"
     | "rate_limited"
     | "license_locked"
@@ -38,6 +39,9 @@ function leadPath(leadId: string): string {
 
 function failure(error: unknown): ManualConversionActionFailure {
   if (isApiRequestError(error)) {
+    // CRM Kanban: the API refused the move (backward / same stage).
+    if (error.status === 409 && error.code?.startsWith("crm_"))
+      return { ok: false, state: "move_refused", message: error.message };
     if (error.status === 409)
       return {
         ok: false,

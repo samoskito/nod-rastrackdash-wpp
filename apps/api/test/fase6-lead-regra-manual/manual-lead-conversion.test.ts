@@ -1263,7 +1263,15 @@ describe("manual conversion in reports and lead detail", () => {
       note: "Fechou por telefone",
       orderRef: "PED-1",
       canCancel: true,
+      origin: "lead_detail",
     });
+    expect(
+      manualConversionSummary({
+        sourceTrigger: "manual_conversion",
+        status: "ready_to_send",
+        sourcePayload: { ...payload, origin: "kanban" },
+      })?.origin,
+    ).toBe("kanban");
     expect(
       manualConversionSummary({
         sourceTrigger: "manual_conversion",
@@ -1274,5 +1282,108 @@ describe("manual conversion in reports and lead detail", () => {
     expect(
       manualConversionSummary({ sourceTrigger: "keyword", status: "sent" }),
     ).toBeNull();
+  });
+});
+
+describe("CRM Kanban source (same manual path, forward only)", () => {
+  it("a kanban move is the same manual conversion, with origin kanban in payload and audit", async () => {
+    const h = harness();
+    const assertKanbanMove = vi.fn(async () => ({ fromRank: 1, toRank: 2, skipped: 0 }));
+    (h.service as any).crm = { assertKanbanMove };
+    await h.service.preview(WS, "lead_1", input({ source: "kanban" }));
+    const result = await h.service.create(
+      WS,
+      "lead_1",
+      input({ source: "kanban" }),
+      actor,
+    );
+    expect(result).toMatchObject({ outcome: "queued" });
+    expect(assertKanbanMove).toHaveBeenCalledTimes(2);
+    expect(assertKanbanMove).toHaveBeenCalledWith(WS, "lead_1", "QualifiedLead");
+    expect(h.state.logs[0]).toMatchObject({
+      sourceTrigger: "manual_conversion",
+      sourcePayload: expect.objectContaining({ origin: "kanban" }),
+    });
+    expect(h.state.audits[0].afterSummary).toMatchObject({ origin: "kanban" });
+    expect(h.queue.enqueueSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("any manual conversion (lead detail or kanban) and a cancel invalidate the CRM board cache", async () => {
+    const h = harness();
+    const invalidateWorkspace = vi.fn();
+    (h.service as any).crm = {
+      assertKanbanMove: vi.fn(async () => ({ fromRank: 1, toRank: 2, skipped: 0 })),
+      invalidateWorkspace,
+    };
+    const result = await h.service.create(WS, "lead_1", input(), actor);
+    expect(invalidateWorkspace).toHaveBeenCalledWith(WS);
+    await h.service.cancel(WS, "lead_1", result.conversionEventLogId, actor);
+    expect(invalidateWorkspace).toHaveBeenCalledTimes(2);
+    // A refused registration changes nothing: no invalidation.
+    await expect(
+      h.service.create(WS, "lead_1", input({ occurredAt: new Date(Date.now() + 86_400_000).toISOString() }), actor),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(invalidateWorkspace).toHaveBeenCalledTimes(2);
+  });
+
+  it("nod: a retried kanban move (same idempotencyKey) replays instead of failing same stage", async () => {
+    const h = harness();
+    let moved = false;
+    const assertKanbanMove = vi.fn(async () => {
+      // After the first registration the lead sits in the target column.
+      if (moved)
+        throw new ConflictException({
+          message: "O lead já está nesta etapa.",
+          code: "crm_same_stage",
+        });
+      return { fromRank: 1, toRank: 2, skipped: 0 };
+    });
+    (h.service as any).crm = { assertKanbanMove };
+    const request = input({ source: "kanban" });
+    const first = await h.service.create(WS, "lead_1", request, actor);
+    moved = true;
+    const retry = await h.service.create(WS, "lead_1", request, actor);
+    expect(retry.conversionEventLogId).toBe(first.conversionEventLogId);
+    expect(assertKanbanMove).toHaveBeenCalledTimes(1);
+    expect(h.state.logs).toHaveLength(1);
+    expect(h.queue.enqueueSend).toHaveBeenCalledTimes(1);
+    // A new click (new key) is still checked: same stage is refused.
+    await expect(
+      h.service.create(WS, "lead_1", input({ source: "kanban" }), actor),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("a backward kanban move is refused before anything is recorded", async () => {
+    const h = harness();
+    (h.service as any).crm = {
+      assertKanbanMove: vi.fn(async () => {
+        throw new ConflictException({
+          message: "Não é possível voltar etapa: a conversão já foi enviada à Meta",
+          code: "crm_backward_move",
+        });
+      }),
+    };
+    await expect(
+      h.service.create(WS, "lead_1", input({ source: "kanban" }), actor),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      h.service.preview(WS, "lead_1", input({ source: "kanban" })),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(h.state.logs).toHaveLength(0);
+    expect(h.state.audits).toHaveLength(0);
+  });
+
+  it("without the board service a kanban source fails closed; the lead detail is unaffected", async () => {
+    const h = harness();
+    await expect(
+      h.service.create(WS, "lead_1", input({ source: "kanban" }), actor),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      h.service.create(WS, "lead_1", input(), actor),
+    ).resolves.toMatchObject({ outcome: "queued" });
+    expect(h.state.logs[0].sourcePayload.origin).toBeUndefined();
+    expect(h.state.audits[0].afterSummary).toMatchObject({
+      origin: "lead_detail",
+    });
   });
 });

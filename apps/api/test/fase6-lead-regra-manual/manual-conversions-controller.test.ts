@@ -90,6 +90,23 @@ describe("manual conversions controller", () => {
       .set("Authorization", "Bearer token")
       .send(body)
       .expect(200);
+    // The CRM Kanban sends source "kanban" through the same route.
+    await request(server)
+      .post("/leads/lead_1/manual-conversions")
+      .set("Authorization", "Bearer token")
+      .send({ ...body, source: "kanban" })
+      .expect(201);
+    expect(manual.create).toHaveBeenLastCalledWith(
+      "workspace_1",
+      "lead_1",
+      expect.objectContaining({ source: "kanban" }),
+      { userId: "user_1", name: "Ana" },
+    );
+    await request(server)
+      .post("/leads/lead_1/manual-conversions")
+      .set("Authorization", "Bearer token")
+      .send({ ...body, source: "crm_v2" })
+      .expect(400);
     // Purchase without value/currency/order number.
     await request(server)
       .post("/leads/lead_1/manual-conversions")
@@ -124,6 +141,16 @@ describe("Eventos Meta audit origin of a manual conversion", () => {
       }),
     ).toBe("Manual por Ana Dona");
     expect(service.conversionAuditSourceLabel("manual", null)).toBe("Manual");
+    // CRM Kanban: same manual origin, labeled by where it was registered.
+    expect(
+      service.conversionAuditSourceLabel("manual", {
+        processingMode: "manual_conversion",
+        createdByUserId: "user_1",
+        createdByName: "Ana Dona",
+        idempotencyKey: "key",
+        origin: "kanban",
+      }),
+    ).toBe("Manual (Kanban) por Ana Dona");
     expect(service.conversionAuditSourceWhere("manual")).toEqual({
       sourceTrigger: "manual_conversion",
     });

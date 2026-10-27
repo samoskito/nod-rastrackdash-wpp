@@ -84,7 +84,10 @@ export function Modal({
       if (
         event.key !== "Escape" ||
         event.defaultPrevented ||
-        dialogRef.current?.querySelector("dialog[open]")
+        dialogRef.current?.querySelector("dialog[open]") ||
+        // A modal opened inside this one (e.g. the manual conversion inside
+        // the CRM lead modal) closes first, alone.
+        dialogRef.current?.querySelector(".app-modal-layer[data-state='open']")
       ) {
         return;
       }

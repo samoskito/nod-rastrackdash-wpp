@@ -319,6 +319,43 @@ Nada para configurar; vale logo depois da atualização.
   o mesmo.
 
 Tudo isso é leitura: funciona também com a licença bloqueada.
+### 10.7 CRM Kanban (quadro dos leads por etapa da Jornada)
+
+O item **CRM** do menu (seção Operação, logo depois de Leads) é um quadro
+Kanban dos leads de anúncio (CTWA). Não confunda com a aba **CRM** de
+Integrações (Kommo e Pipedrive): o quadro não depende de nenhuma delas.
+
+- **Colunas.** São as etapas visíveis da Jornada (Configurações → Jornada),
+  começando por **Leads novos**. Se o "Lead recebido pela regra" (10.5) estiver
+  em uso, aparece antes a coluna **Conversas iniciadas**, só de leitura. Sem
+  nenhuma etapa visível, o quadro mostra "Configure a Jornada".
+- **Onde cada lead fica.** Cada lead aparece uma vez, na etapa mais avançada
+  com conversão válida (enviada ou a caminho da Meta, ou uma conversão manual
+  só no painel). Canceladas, bloqueadas, duplicadas e com falha não contam. O
+  topo mostra o total real de cada coluna; cada coluna mostra 20 cards e
+  "Carregar mais (N restantes)".
+- **Card.** Nome, telefone, campanha e anúncio (com miniatura quando a Meta a
+  fornece), há quantos dias está na etapa, o valor nas colunas de compra e o
+  número de WhatsApp quando há mais de uma conexão ativa. O modo apresentação
+  esconde os dados sensíveis. Clicar no card abre o detalhe do lead numa
+  janela; ao fechar, o quadro continua onde estava.
+- **Mover um lead (donos e administradores).** Arraste o card para uma etapa
+  **seguinte** (mouse, ou teclado: Espaço para pegar, setas, Espaço/Enter para
+  soltar, Esc cancela; no celular, uma coluna por vez e o botão "Mover
+  para…"). Abre a mesma confirmação da conversão manual (10.5), com o evento da
+  coluna travado e o valor padrão da Jornada. Confirmando, é registrada uma
+  conversão manual que aparece como **"Manual (Kanban)"**, com as mesmas
+  proteções (uma vez por lead, pedido repetido, janela de 7 dias da Meta).
+  Pular etapas é permitido, mas só a etapa de destino é enviada. Voltar etapa
+  ou soltar na mesma etapa é recusado. Cancelar devolve o card ao lugar.
+- **Membros analistas** veem o quadro e abrem os leads, mas não movem cards.
+- **Filtros** (ficam na URL): período de chegada do lead (padrão: últimos 30
+  dias; até 180 dias), número de WhatsApp (conexões ativas) e campanha. O
+  quadro se atualiza sozinho a cada 60 segundos e pelo botão **Atualizar**.
+- **Licença bloqueada:** o quadro continua visível, mas os cards não arrastam
+  e aparece o aviso de licença bloqueada; a API responde 423 a qualquer
+  movimento, porque mover é registrar uma conversão.
+- Não há variável de ambiente nem migration para o quadro.
 
 ## 11. Marca (whitelabel) — opcional
 

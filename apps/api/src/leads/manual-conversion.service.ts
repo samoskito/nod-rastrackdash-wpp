@@ -12,6 +12,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import {
+  CRM_INVALID_TARGET_MESSAGE,
+  CRM_MOVE_ERROR_CODES,
   conversionEventCarriesValue,
   conversionEventMetaEventIdPrefix,
   MANUAL_CONVERSION_ERROR_CODES,
@@ -30,6 +32,7 @@ import {
   type ManualConversionResultDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { CrmBoardService } from "../crm/crm-board.service";
 import { ConversionEventsQueueService } from "../common/queue/conversion-events-queue.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { ConversionEventsService } from "../conversion-events/conversion-events.service";
@@ -208,7 +211,56 @@ export class ManualConversionService {
     @Optional()
     @Inject(InboundWebhookPayloadEncryptionService)
     private readonly payloadEncryption: InboundWebhookPayloadEncryptionService | null = null,
+    @Optional()
+    @Inject(CrmBoardService)
+    private readonly crm:
+      | (Pick<CrmBoardService, "assertKanbanMove"> &
+          Partial<Pick<CrmBoardService, "invalidateWorkspace">>)
+      | null = null,
   ) {}
+
+  /**
+   * CRM Kanban (source "kanban"): only a stage after the lead's current
+   * column (forward only, design §9), checked on preview and create. Fails
+   * closed when the board service is not wired.
+   */
+  private async assertKanbanSource(
+    workspaceId: string,
+    leadId: string,
+    input: ManualConversionInputDto,
+  ): Promise<void> {
+    if (input.source !== "kanban") return;
+    if (!this.crm)
+      throw new ConflictException({
+        message: CRM_INVALID_TARGET_MESSAGE,
+        code: CRM_MOVE_ERROR_CODES.invalidTarget,
+      });
+    // nod: a retry of a move that already registered (same idempotencyKey)
+    // must replay the original result, not fail "O lead já está nesta etapa":
+    // the card is already in the target column. create() replays it.
+    if (await this.hasManualLogForKey(workspaceId, leadId, input.idempotencyKey))
+      return;
+    await this.crm.assertKanbanMove(workspaceId, leadId, input.eventName);
+  }
+
+  /** A manual log of this lead was already written by this click. */
+  private async hasManualLogForKey(
+    workspaceId: string,
+    leadId: string,
+    idempotencyKey: string,
+  ): Promise<boolean> {
+    const existing = await this.prisma.conversionEventLog.findFirst({
+      where: {
+        workspaceId,
+        leadId,
+        externalConnectorId: null,
+        sourceTrigger: MANUAL_CONVERSION_TRIGGER,
+        sourceEventId: `manual:${idempotencyKey}`,
+      },
+      select: { id: true },
+    });
+    return Boolean(existing);
+  }
 
   /** Read-only: what create() would do, shown on the confirmation step. */
   async preview(
@@ -216,6 +268,7 @@ export class ManualConversionService {
     leadId: string,
     input: ManualConversionInputDto,
   ): Promise<ManualConversionPreviewDto> {
+    await this.assertKanbanSource(workspaceId, leadId, input);
     const client = this.prisma as unknown as Prisma.TransactionClient;
     const plan = await this.plan(client, workspaceId, leadId, input);
     const identity = await resolveLeadConversionIdentity(
@@ -294,6 +347,7 @@ export class ManualConversionService {
     input: ManualConversionInputDto,
     actor: ManualConversionActor,
   ): Promise<ManualConversionResultDto> {
+    await this.assertKanbanSource(workspaceId, leadId, input);
     const result = await this.prisma.$transaction(async (transaction) => {
       const tx = transaction as Prisma.TransactionClient;
       // Per-user lock first: concurrent clicks of the same user serialize on
@@ -402,6 +456,7 @@ export class ManualConversionService {
             currency: input.currency,
             orderRef: input.orderRef,
             confirmedDuplicateOf: recent?.conversionEventLogId ?? null,
+            origin: input.source ?? "lead_detail",
           },
         },
       });
@@ -421,6 +476,8 @@ export class ManualConversionService {
 
     if (result.replay) return this.resultOf(result.replay, true);
     const created = result.created!;
+    // CRM board cache (any source): the card moves on the next refresh.
+    this.crm?.invalidateWorkspace?.(workspaceId);
     if (created.status === "ready_to_send") {
       try {
         await this.queue.enqueueSend(created.id, workspaceId);
@@ -443,7 +500,7 @@ export class ManualConversionService {
     logId: string,
     actor: ManualConversionActor,
   ): Promise<ManualConversionCancelResultDto> {
-    return this.prisma.$transaction(async (transaction) => {
+    const canceled = await this.prisma.$transaction(async (transaction) => {
       const tx = transaction as Prisma.TransactionClient;
       const log = await tx.conversionEventLog.findFirst({
         where: {
@@ -499,6 +556,8 @@ export class ManualConversionService {
       });
       return { conversionEventLogId: log.id, status: "skipped" as const };
     });
+    this.crm?.invalidateWorkspace?.(workspaceId);
+    return canceled;
   }
 
   /**
@@ -989,6 +1048,7 @@ export class ManualConversionService {
       orderKey: plan.orderKey,
       idempotencyKey: input.idempotencyKey,
       channelId: route.channelId,
+      ...(input.source === "kanban" ? { origin: "kanban" as const } : {}),
     };
     const eventId = plan.orderKey
       ? manualPurchaseEventId(plan.orderKey)

@@ -7,6 +7,7 @@ import {
   type ManualConversionInputDto,
   type ManualConversionPreviewDto,
   type ManualConversionResultDto,
+  type ManualConversionSourceDto,
 } from "@wpptrack/shared";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -114,49 +115,124 @@ export function ManualConversionButton({
   leadId,
   defaultCurrency = "BRL",
   licenseLocked = false,
+  onRecorded,
 }: {
   leadId: string;
   defaultCurrency?: CurrencyCode;
   /** Licença bloqueada: a API recusa o registro (423); o botão fica desabilitado. */
   licenseLocked?: boolean;
+  /** Replaces the page refresh (CRM Kanban lead modal). */
+  onRecorded?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [fields, setFields] = useState(() => initialFields(defaultCurrency));
+  // A fresh dialog (fields + idempotency key) on every opening.
+  const [session, setSession] = useState(0);
+
+  return (
+    <>
+      <button
+        className="button primary"
+        type="button"
+        disabled={licenseLocked}
+        title={
+          licenseLocked
+            ? "Licença bloqueada: ative a licença em Backoffice → Licença para registrar conversões."
+            : undefined
+        }
+        onClick={() => {
+          setSession((value) => value + 1);
+          setOpen(true);
+        }}
+      >
+        <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+        Registrar conversão manual
+      </button>
+      <ManualConversionDialog
+        key={session}
+        open={open}
+        leadId={leadId}
+        defaultCurrency={defaultCurrency}
+        onRecorded={() => (onRecorded ? onRecorded() : router.refresh())}
+        onClose={() => setOpen(false)}
+      />
+    </>
+  );
+}
+
+/**
+ * The manual conversion dialog itself, shared by the lead detail button and
+ * the CRM Kanban drop (design §10): same form, same server preview, same
+ * protections and the same create route. The Kanban opens it with the event
+ * of the destination column locked, the Jornada default value prefilled and
+ * source "kanban". Mount it with a new `key` for every new registration.
+ */
+export function ManualConversionDialog({
+  open,
+  leadId,
+  defaultCurrency = "BRL",
+  initial,
+  lockEvent = false,
+  source,
+  notice,
+  title = "Registrar conversão manual",
+  onRecorded,
+  onClose,
+}: {
+  open: boolean;
+  leadId: string;
+  defaultCurrency?: CurrencyCode;
+  /** Prefilled fields (Kanban: event, Jornada default value/currency). */
+  initial?: Partial<ManualConversionFields>;
+  /** The event comes from the destination column and cannot change. */
+  lockEvent?: boolean;
+  source?: ManualConversionSourceDto;
+  /** Shown on the form and confirmation (e.g. skipped stages). */
+  notice?: string | null;
+  title?: string;
+  onRecorded?: (result: ManualConversionResultDto) => void;
+  /** `result` = the registration that happened in this dialog, if any. */
+  onClose: (result: ManualConversionResultDto | null) => void;
+}) {
+  const [fields, setFields] = useState<ManualConversionFields>(() => ({
+    ...initialFields(defaultCurrency),
+    ...initial,
+  }));
   const [errors, setErrors] = useState<ManualConversionFieldErrors>({});
   const [step, setStep] = useState<Step>({ kind: "form" });
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   // One key per filled form: a double click on "Confirmar" never duplicates.
   const idempotencyKey = useRef<string>("");
+  if (!idempotencyKey.current) idempotencyKey.current = newIdempotencyKey();
   const inFlight = useRef(false);
+  const recorded = useRef<ManualConversionResultDto | null>(null);
 
   const policy = manualConversionValuePolicy(fields.eventName);
   const old = isOutsideMetaWindow(fields.occurredAtLocal);
   const maxLocal = toDatetimeLocal(new Date());
 
   function update(patch: Partial<ManualConversionFields>) {
-    setFields((current) => ({ ...current, ...patch }));
+    setFields((current) => ({
+      ...current,
+      ...patch,
+      ...(lockEvent ? { eventName: current.eventName } : {}),
+    }));
     setErrors({});
     setMessage(null);
-  }
-
-  function openDialog() {
-    setFields(initialFields(defaultCurrency));
-    setErrors({});
-    setMessage(null);
-    setStep({ kind: "form" });
-    idempotencyKey.current = newIdempotencyKey();
-    setOpen(true);
   }
 
   function close() {
     if (pending) return;
-    setOpen(false);
+    onClose(recorded.current);
   }
 
   function review() {
-    const built = buildManualConversionInput(fields, idempotencyKey.current);
+    const built = buildManualConversionInput(
+      fields,
+      idempotencyKey.current,
+      source,
+    );
     if (!built.ok) {
       setErrors(built.errors);
       return;
@@ -219,8 +295,9 @@ export function ManualConversionButton({
           setMessage(response.message);
           return;
         }
+        recorded.current = response.result;
         setStep({ kind: "done", result: response.result });
-        router.refresh();
+        onRecorded?.(response.result);
       } finally {
         inFlight.current = false;
       }
@@ -228,57 +305,45 @@ export function ManualConversionButton({
   }
 
   return (
-    <>
-      <button
-        className="button primary"
-        type="button"
-        onClick={openDialog}
-        disabled={licenseLocked}
-        title={
-          licenseLocked
-            ? "Licença bloqueada: ative a licença em Backoffice → Licença para registrar conversões."
-            : undefined
-        }
-      >
-        <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-        Registrar conversão manual
-      </button>
-      <Modal
-        open={open}
-        onClose={close}
-        title="Registrar conversão manual"
-        description="O destino Meta é o mesmo das automações deste lead; você não escolhe o pixel."
-        size="wide"
-        className="manual-conversion-modal"
-      >
-        {step.kind === "form" ? (
-          <ManualConversionForm
-            fields={fields}
-            errors={errors}
-            policy={policy}
-            old={old}
-            maxLocal={maxLocal}
-            pending={pending}
-            message={message}
-            onChange={update}
-            onCancel={close}
-            onSubmit={review}
-          />
-        ) : null}
-        {step.kind === "confirm" ? (
-          <ManualConversionConfirm
-            preview={step.preview}
-            pending={pending}
-            message={message}
-            onBack={() => {
-              setStep({ kind: "form" });
-              setMessage(null);
-            }}
-            onConfirm={(confirmDuplicate) =>
-              confirm(step.input, confirmDuplicate)
-            }
-          />
-        ) : null}
+    <Modal
+      open={open}
+      onClose={close}
+      title={title}
+      description="O destino Meta é o mesmo das automações deste lead; você não escolhe o pixel."
+      size="wide"
+      className="manual-conversion-modal"
+    >
+      {step.kind === "form" ? (
+        <ManualConversionForm
+          fields={fields}
+          errors={errors}
+          policy={policy}
+          old={old}
+          maxLocal={maxLocal}
+          pending={pending}
+          message={message}
+          lockEvent={lockEvent}
+          notice={notice}
+          onChange={update}
+          onCancel={close}
+          onSubmit={review}
+        />
+      ) : null}
+      {step.kind === "confirm" ? (
+        <ManualConversionConfirm
+          preview={step.preview}
+          pending={pending}
+          message={message}
+          notice={notice}
+          onBack={() => {
+            setStep({ kind: "form" });
+            setMessage(null);
+          }}
+          onConfirm={(confirmDuplicate) =>
+            confirm(step.input, confirmDuplicate)
+          }
+        />
+      ) : null}
         {step.kind === "done" ? (
           <ManualConversionOutcome
             tone={
@@ -301,8 +366,7 @@ export function ManualConversionButton({
             onClose={close}
           />
         ) : null}
-      </Modal>
-    </>
+    </Modal>
   );
 }
 
@@ -314,6 +378,8 @@ export function ManualConversionForm({
   maxLocal,
   pending,
   message,
+  lockEvent = false,
+  notice,
   onChange,
   onCancel,
   onSubmit,
@@ -325,6 +391,9 @@ export function ManualConversionForm({
   maxLocal: string;
   pending: boolean;
   message: string | null;
+  /** CRM Kanban: the event of the destination column, not editable. */
+  lockEvent?: boolean;
+  notice?: string | null;
   onChange: (patch: Partial<ManualConversionFields>) => void;
   onCancel: () => void;
   onSubmit: () => void;
@@ -344,6 +413,10 @@ export function ManualConversionForm({
           <span className="field-label">Evento</span>
           <select
             name="eventName"
+            disabled={lockEvent}
+            title={
+              lockEvent ? "Evento da coluna de destino do Kanban" : undefined
+            }
             value={fields.eventName}
             onChange={(event) =>
               onChange({
@@ -376,6 +449,7 @@ export function ManualConversionForm({
           ) : null}
         </label>
       </div>
+      {notice ? <ManualConversionWarning title={notice} /> : null}
       {old && !errors.occurredAtLocal ? (
         <ManualConversionWarning title={MANUAL_CONVERSION_OLD_WARNING} />
       ) : null}
@@ -517,10 +591,13 @@ export function ManualConversionConfirm({
   onBack,
   onConfirm,
   initialConfirmDuplicate = false,
+  notice,
 }: {
   preview: ManualConversionPreviewDto;
   pending: boolean;
   message: string | null;
+  /** CRM Kanban: e.g. "as etapas intermediárias não são enviadas". */
+  notice?: string | null;
   onBack: () => void;
   onConfirm: (confirmDuplicate: boolean) => void;
   /** Tests/screenshots: render the confirm-anyway box already checked. */
@@ -576,6 +653,7 @@ export function ManualConversionConfirm({
           </dd>
         </div>
       </dl>
+      {notice ? <ManualConversionWarning title={notice} /> : null}
       {preview.mayExpireBeforeSend ? (
         <ManualConversionWarning
           title="Pode expirar antes do envio"
@@ -681,9 +759,12 @@ export function ManualConversionOutcome({
 export function CancelManualConversionButton({
   leadId,
   conversionEventLogId,
+  onCanceled,
 }: {
   leadId: string;
   conversionEventLogId: string;
+  /** Replaces the page refresh (CRM Kanban lead modal). */
+  onCanceled?: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -705,7 +786,8 @@ export function CancelManualConversionButton({
         setMessage(response?.message ?? "Não foi possível cancelar agora.");
         return;
       }
-      router.refresh();
+      if (onCanceled) onCanceled();
+      else router.refresh();
     });
   }
 

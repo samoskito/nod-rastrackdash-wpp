@@ -7,6 +7,7 @@ import {
   type ConversionEventNameDto,
   type CurrencyCode,
   type ManualConversionInputDto,
+  type ManualConversionSourceDto,
 } from "@wpptrack/shared";
 
 /**
@@ -78,6 +79,8 @@ export function isOutsideMetaWindow(
 export function buildManualConversionInput(
   fields: ManualConversionFields,
   idempotencyKey: string,
+  /** "kanban" when the CRM board opened the dialog (audit origin). */
+  source?: ManualConversionSourceDto,
 ):
   | { ok: true; input: ManualConversionInputDto }
   | { ok: false; errors: ManualConversionFieldErrors } {
@@ -106,6 +109,7 @@ export function buildManualConversionInput(
     note: fields.note,
     sendToMeta: !fields.localOnly,
     idempotencyKey,
+    ...(source ? { source } : {}),
   });
   if (parsed.success) return { ok: true, input: parsed.data };
 
