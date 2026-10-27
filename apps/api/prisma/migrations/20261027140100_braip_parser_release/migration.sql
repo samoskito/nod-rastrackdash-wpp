@@ -3,7 +3,9 @@
 -- Produção direta (regra fixa do nod): o que foi validado no SaaS chega ao
 -- aluno em produção. O aluno não retesta, não certifica e não libera nada.
 -- Evidência da validação no SaaS (dash-com-ia):
---  - #168 (8af225f4): o leitor foi conferido com o exemplo OFICIAL do
+--  - venda REAL da Braip no SaaS, confirmada pelo Samuel em 27/10/2026
+--    (é a validação que certifica o leitor);
+--  - #168 (8af225f4): o leitor também foi conferido com o exemplo OFICIAL do
 --    postback da Braip (área de membros: aguardando pagamento, aprovado,
 --    aprovado com order bump, cancelada e afiliado), com fixtures sanitizados
 --    e o teste braip-official-sample;

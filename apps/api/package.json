@@ -11,6 +11,7 @@
     "start:prod": "node dist/src/main.js",
     "gupshup:ctwa-audit": "node dist/apps/api/src/scripts/audit-gupshup-ctwa.js",
     "payt:value-backfill": "node dist/src/scripts/backfill-payt-sale-value.js",
+    "dashboard-leads:import": "node dist/src/scripts/import-dashboard-leads.js",
     "platform-admin:create": "node dist/src/scripts/create-platform-admin.js",
     "platform-owner:promote": "node dist/apps/api/src/scripts/promote-platform-owner.js",
     "create-user": "ts-node --project tsconfig.json src/scripts/create-user.ts",

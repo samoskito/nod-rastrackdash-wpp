@@ -263,6 +263,13 @@ export const manualConversionDuplicateSchema = z.object({
   originLabel: z.string().min(1).nullable().optional(),
 });
 
+/** Fase 6.9: etapa do CRM do formulario Meta mostrada na confirmacao. */
+export const manualConversionCrmStagePreviewSchema = z.object({
+  eventName: z.string().min(1),
+  willSend: z.boolean(),
+  reason: z.string().min(1).nullable(),
+});
+
 export const manualConversionPreviewSchema = z.object({
   eventName: conversionEventNameSchema,
   eventLabel: z.string().min(1),
@@ -286,6 +293,11 @@ export const manualConversionPreviewSchema = z.object({
   recentDuplicate: manualConversionDuplicateSchema.nullable(),
   /** Perto do limite de 7 dias: pode expirar antes do envio. */
   mayExpireBeforeSend: z.boolean(),
+  /**
+   * Fase 6.9: etapa do CRM do formulario Meta (Lead Ads) do lead, enviada
+   * junto com um QualifiedLead; null/ausente quando o lead nao tem formulario.
+   */
+  crmStage: manualConversionCrmStagePreviewSchema.nullable().optional(),
 });
 export type ManualConversionPreviewDto = z.infer<
   typeof manualConversionPreviewSchema
@@ -301,6 +313,25 @@ export const manualConversionOutcomes = [
   "local_only",
   "expired",
 ] as const;
+/**
+ * Fase 6.9: etapa do CRM do formulario Meta (dataset proprio) registrada
+ * junto com um QualifiedLead manual ou do Kanban.
+ */
+export const manualConversionCrmStageOutcomes = [
+  "queued",
+  "already_recorded",
+  "not_eligible",
+] as const;
+export const manualConversionCrmStageResultSchema = z.object({
+  outcome: z.enum(manualConversionCrmStageOutcomes),
+  eventName: z.string().min(1),
+  conversionEventLogId: z.string().min(1),
+  message: z.string().min(1),
+});
+export type ManualConversionCrmStageResultDto = z.infer<
+  typeof manualConversionCrmStageResultSchema
+>;
+
 export const manualConversionResultSchema = z.object({
   outcome: z.enum(manualConversionOutcomes),
   conversionEventLogId: z.string().min(1),
@@ -308,6 +339,8 @@ export const manualConversionResultSchema = z.object({
   message: z.string().min(1),
   /** true quando o mesmo pedido (idempotencyKey) ja tinha sido registrado. */
   replayed: z.boolean(),
+  /** Fase 6.9: etapa do CRM do formulario Meta registrada junto. */
+  crmStage: manualConversionCrmStageResultSchema.nullable().optional(),
 });
 export type ManualConversionResultDto = z.infer<
   typeof manualConversionResultSchema

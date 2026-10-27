@@ -464,6 +464,38 @@ aditivas: faça o backup do PostgreSQL antes, como em toda migration).
 - **Licença bloqueada:** ver relatórios e miniaturas continua funcionando;
   "Sincronizar Meta" é escrita e responde 423, como antes.
 
+### 10.10 Formulários Meta (Lead Ads) e importação do Dashboard Leads
+
+Opcional: só para quem anuncia com **formulário instantâneo** da Meta. A
+atualização tem uma migration aditiva (`20261027145000_meta_lead_forms`): faça
+o backup do PostgreSQL antes, como em toda migration. Não há variável nova; os
+formulários usam `META_APP_SECRET` (sem ela nenhum lead de formulário entra),
+`META_WEBHOOK_VERIFY_TOKEN`, `META_TOKEN_ENCRYPTION_KEY` e `API_PUBLIC_URL`, que
+já existem. Guia completo: `docs/setup/meta-lead-forms.md`.
+
+- **Configurar:** no app Meta, assine o campo `leadgen` do objeto Page com a
+  URL `{API_PUBLIC_URL}/webhooks/meta`. Em Integrações → Anúncios → card
+  **Meta** → **Formulários Meta**, cadastre a Página (token de System User e o
+  dataset do CRM) e clique em **Assinar Página**. A conexão já nasce ativa: não
+  há nada para liberar.
+- **Leads:** cada formulário enviado vira um lead com a origem "Formulário
+  Meta". Se a pessoa já conversava no WhatsApp, é o mesmo lead, com a mesma
+  atribuição.
+- **Etapa do CRM:** ao registrar **Lead qualificado** no lead (conversão
+  manual, 10.5) ou arrastar o card para essa coluna no **CRM** (10.7), a etapa
+  vai para o dataset do CRM da Meta, uma vez por formulário. A confirmação da
+  conversão manual mostra se ela será enviada. Um lead com formulário e
+  WhatsApp manda os dois eventos, cada um ao seu destino.
+- **Falhas:** configuração faltando (dataset, conexão pausada) e falha de login
+  da Meta aparecem em Eventos Meta e voltam com **Reenviar bloqueados**.
+- **Dashboard Leads:** quem migra daquela ferramenta pode importar o histórico
+  com o comando `dashboard-leads:import` (simula por padrão; o que já foi
+  enviado à Meta não é reenviado). Passo a passo:
+  `docs/setup/dashboard-leads-import.md`. As credenciais do Supabase vão só na
+  linha do comando, nunca no `.env`.
+- **Licença bloqueada:** a seção mostra as conexões, mas criar, alterar,
+  assinar e remover respondem 423; a importação com `--apply` é recusada.
+
 ## 11. Marca (whitelabel) — opcional
 
 Defina `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR` para personalizar sua agência (veja [`../docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)). O rodapé residual **`RastrackDash · powered by PalmUP`** é fixo e não pode ser removido nem escondido, com ou sem essas variáveis.

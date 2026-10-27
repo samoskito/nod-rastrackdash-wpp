@@ -68,6 +68,9 @@ const order = [
   "conversionEventLog",
   "conversionRule",
   "funnelStageConfiguration",
+  // Fase 6.9: envios de formulario Meta (dados pessoais) e as conexoes
+  "metaLeadSubmission",
+  "metaLeadFormConnection",
   "lead",
   "webhookLog",
   "integrationLog",

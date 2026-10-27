@@ -67,6 +67,11 @@ const NON_CONVERTING_LOG_STATUSES = [
   "not_eligible",
   "skipped",
 ];
+/**
+ * Status of a manual conversion imported from Dashboard Leads (Fase 6.9): it
+ * was already sent there, so it counts as converting (see below).
+ */
+export const IMPORTED_MANUAL_CONVERSION_STATUS = "imported";
 /** Bound of sibling leads (phone variants) and of prior logs inspected. */
 const IDENTITY_LEAD_LIMIT = 20;
 const PRIOR_LOG_SCAN_LIMIT = 50;
@@ -299,6 +304,15 @@ export const COVERED_CONVERTING_LOG_CONDITIONS = [
   {
     sourceTrigger: MANUAL_CONVERSION_TRIGGER,
     status: { notIn: NON_CONVERTING_LOG_STATUSES },
+  },
+  // Fase 6.9 (PR #92 do nod): a once-per-lead event Dashboard Leads already
+  // sent, imported as a manual conversion with status "imported". It never
+  // goes to Meta again, but the lead IS converted: an automation or a new
+  // manual registration must not send it a second time. Its destination is
+  // unknown (null), so it counts for every pixel (the safe side).
+  {
+    sourceTrigger: MANUAL_CONVERSION_TRIGGER,
+    status: IMPORTED_MANUAL_CONVERSION_STATUS,
   },
 ];
 export const COVERED_CONVERTING_LOG_WHERE = {

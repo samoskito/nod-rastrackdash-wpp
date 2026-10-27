@@ -99,6 +99,15 @@ import type {
 import { PrismaService } from "../common/prisma/prisma.service";
 import { loadWorkspaceConversionCurrency } from "../currency/workspace-currency";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
+import { META_LEAD_FORM_CRM_TRIGGER } from "../meta-lead-forms/meta-crm-capi";
+import {
+  findLatestLeadFormSubmission,
+  previewLeadFormCrmStage,
+  recordLeadFormCrmConversion,
+  sendLeadFormCrmEvent,
+  type LeadFormCrmPreview,
+  type RecordLeadFormCrmResult,
+} from "../meta-lead-forms/meta-lead-form-crm-events";
 import {
   MetaConnectionResolverService,
   type ResolvedMetaCapiRoute,
@@ -1706,6 +1715,52 @@ export class ConversionEventsService {
     };
   }
 
+  /**
+   * Fase 6.9 (PR #91 do nod): CRM stage of the lead's latest Meta instant-form
+   * submission, recorded when the lead is qualified by the manual conversion
+   * (#158) or the CRM Kanban (#176). Null when the lead (or another Lead row
+   * of the same phone) has no form submission read on the Graph.
+   */
+  async recordLeadFormCrmStage(input: {
+    workspaceId: string;
+    leadId: string;
+    leadIds?: string[];
+    phoneHash: string;
+    actorUserId: string;
+    qualifiedAt?: Date;
+    originConversionEventLogId?: string | null;
+  }): Promise<RecordLeadFormCrmResult | null> {
+    const submission = await findLatestLeadFormSubmission(
+      this.prisma,
+      input.workspaceId,
+      input.leadIds?.length ? input.leadIds : [input.leadId],
+    );
+    if (!submission) return null;
+    return recordLeadFormCrmConversion(this.prisma, {
+      workspaceId: input.workspaceId,
+      leadId: input.leadId,
+      phoneHash: input.phoneHash,
+      customerIdentityKey: this.resolveCustomerIdentityKey(input.phoneHash),
+      submission,
+      actorUserId: input.actorUserId,
+      qualifiedAt: input.qualifiedAt ?? new Date(),
+      originConversionEventLogId: input.originConversionEventLogId ?? null,
+    });
+  }
+
+  /** Read-only side of recordLeadFormCrmStage (confirmation step). */
+  async previewLeadFormCrmStage(
+    workspaceId: string,
+    leadIds: string[],
+  ): Promise<LeadFormCrmPreview | null> {
+    const submission = await findLatestLeadFormSubmission(
+      this.prisma,
+      workspaceId,
+      leadIds,
+    );
+    return submission ? previewLeadFormCrmStage(this.prisma, submission) : null;
+  }
+
   async sendReadyEvent(
     logId: string,
     options: SendReadyEventOptions = {},
@@ -1767,6 +1822,20 @@ export class ConversionEventsService {
         status: "skipped",
       };
     }
+
+    // Fase 6.9 (PR #91 do nod): CRM stage of a Meta instant form. Its own
+    // dataset and token, never the messaging route nor the CAPI batch.
+    if (log.sourceTrigger === META_LEAD_FORM_CRM_TRIGGER)
+      return sendLeadFormCrmEvent(
+        {
+          prisma: this.prisma,
+          decrypt: (token) => this.metaTokenEncryption.decrypt(token),
+          graphVersion: this.env.META_GRAPH_API_VERSION ?? "v21.0",
+        },
+        log,
+        eventId,
+        { testEventCode: options.testEventCode ?? null },
+      );
 
     if (!(await this.externalCapiDeliveryOwnedByWppTrack(log))) {
       await this.prisma.conversionEventLog.updateMany({

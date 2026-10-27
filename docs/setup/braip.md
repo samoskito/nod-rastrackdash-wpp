@@ -4,8 +4,8 @@ Fase 6.5. A Braip entra na mesma base da Payt: **uma URL única por workspace**.
 venda nessa URL, o sistema descobre por qual número de WhatsApp o comprador chegou e entrega a venda
 à regra desse número, que manda o evento para a Meta.
 
-O leitor do postback da Braip já vem **em uso** com a atualização: ele foi conferido no SaaS com o
-exemplo oficial de postback da Braip. Você **não** precisa liberar, certificar nem testar nada: a
+O leitor do postback da Braip já vem **em uso** com a atualização: ele foi validado no SaaS com uma
+**venda real** (confirmado pelo Samuel em 27/10/2026). Você **não** precisa liberar, certificar nem testar nada: a
 URL e as regras já começam enviando. Continuam valendo as travas de sempre: licença ativa, rota da
 Meta (página e pixel) no número do comprador e um lead que chegou por anúncio (com `ctwa_clid`).
 
@@ -110,9 +110,8 @@ Recebimentos do Backoffice.
 
 ## Pendências conhecidas
 
-- PENDENTE: o exemplo oficial da Braip tem números fictícios. Falta confirmar com uma compra real se
-  `trans_value` já vem sem os juros do parcelamento e sem o frete (produto físico), e o fuso horário
-  das datas.
+- PENDENTE: confirmar se `trans_value` já vem sem os juros do parcelamento e sem o frete (produto físico), e o
+  fuso horário das datas.
 - PENDENTE: o nome exato do aviso de abandono de checkout na Braip e se ele traz a transação; sem a
   transação, o aviso fica como inválido (nunca é adivinhado).
 - PENDENTE: renovações de assinatura (cada cobrança aprovada vira uma compra) ainda não foram vistas

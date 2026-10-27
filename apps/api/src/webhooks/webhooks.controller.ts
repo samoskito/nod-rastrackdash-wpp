@@ -15,6 +15,7 @@ import {
   Post,
   Query,
   RawBody,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { safeErrorName } from "../common/errors/safe-error-name";
@@ -50,6 +51,8 @@ import { parseZapiV1Webhook } from "../inbound-webhooks/providers/zapi/zapi-v1.p
 import { mapWahaSessionStatus } from "../integrations/whatsapp-providers/waha-session-status";
 import { UazapiProviderConversionService } from "../inbound-webhooks/uazapi-provider-conversion.service";
 import { LeadsService } from "../leads/leads.service";
+import { parseLeadgenPayload } from "../meta-lead-forms/meta-leadgen";
+import { MetaLeadFormsService } from "../meta-lead-forms/meta-lead-forms.service";
 import {
   parseUazapiWebhook,
   type ParsedUazapiWebhook,
@@ -137,6 +140,9 @@ export class WebhooksController {
     @Optional()
     @Inject(RUNTIME_ENV)
     private readonly env: RuntimeEnv = process.env,
+    @Optional()
+    @Inject(MetaLeadFormsService)
+    private readonly metaLeadForms?: MetaLeadFormsService,
   ) {}
 
   @Get("meta")
@@ -366,6 +372,46 @@ export class WebhooksController {
     @Headers("x-workspace-id") workspaceId?: string,
   ) {
     this.assertMetaWebhookSignature(rawBody, signature);
+
+    // Fase 6.9 (PR #91 do nod): instant-form leads of a Page with an active
+    // lead form connection become leads. Other Pages keep the diagnostic-only
+    // path below.
+    // Only the leadgen changes of those Pages are ingested; whatever else the
+    // delivery carries (other Pages, other fields) still goes to the
+    // diagnostic path. A Graph read failure answers 503 so Meta redelivers.
+    const leadgen = parseLeadgenPayload(body);
+    if (leadgen && leadgen.changes.length > 0 && this.metaLeadForms) {
+      const pages = await this.metaLeadForms.activeConnectionPages(
+        leadgen.changes.map((change) => change.page_id),
+        workspaceId,
+      );
+      const routable = leadgen.changes.filter((change) =>
+        pages.has(change.page_id),
+      );
+      if (routable.length > 0) {
+        const result = await this.metaLeadForms.ingestLeadgen(routable, {
+          workspaceId,
+        });
+        if (routable.length < leadgen.total) {
+          try {
+            const context = await this.resolveMetaContext(body);
+            await this.recordMetaWebhook(body, context);
+          } catch (error) {
+            this.logger.warn(
+              `meta webhook: parte sem conexão de formulário não registrada (${
+                error instanceof Error ? error.message : "erro"
+              })`,
+            );
+          }
+        }
+        if (result.fetchFailed > 0)
+          throw new ServiceUnavailableException(
+            "Leitura do lead na Graph API falhou; a Meta vai reenviar",
+          );
+        return result;
+      }
+    }
+
     const context = await this.resolveMetaContext(body);
 
     if (workspaceId && workspaceId !== context.workspaceId) {

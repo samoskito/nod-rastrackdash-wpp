@@ -251,7 +251,7 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
 | `KOMMO_CRM_ENCRYPTION_KEY` | Sim, antes de criar uma conexão Kommo | Base64 canônico de 32 bytes, gerado pelo aluno | env efetiva do container da API | **Sim** |
 | `PIPEDRIVE_CRM_ENCRYPTION_KEY` | Sim, antes de criar uma conexão Pipedrive | Base64 canônico de 32 bytes, gerado pelo aluno (`openssl rand -base64 32`); **diferente** da chave do Kommo | env efetiva do container da API | **Sim** |
-| `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`) | Você define | `.env` local / env do serviço | **Sim** |
+| `META_WEBHOOK_VERIFY_TOKEN` | Só para o webhook de **Meta Ads** (`/webhooks/meta`), que também recebe os **Formulários Meta** (Lead Ads, Fase 6.9) | Você define | `.env` local / env do serviço | **Sim** |
 | `WPPTRACK_META_AUTO_SYNC_*` | Não (têm padrão) | Tuning do sync automático | `.env` da API | Não |
 | `META_VIDEO_THUMBNAILS_ENABLED` | Não (padrão desligado) | Só `true` liga a busca extra de miniaturas de vídeo (`/{video}/thumbnails`). Deixe desligado ao usar o login social PalmUP: o limite de chamadas do app Meta é compartilhado | `.env` da API | Não |
 | `WPPTRACK_META_USAGE_PAUSE_PERCENT` | Não (padrão `75`) | Uso do app Meta (%) a partir do qual a sincronização de relatórios em segundo plano cede a vez e é retomada sozinha depois. O limite vale **por app**: o app da PalmUP (botão **Conectar Meta (PalmUP)**) e o seu app próprio são contados separados — veja [Limite de uso da Meta](#limite-de-uso-da-meta-fase-64-opcional) | `.env` da API / env do serviço da API | Não |
@@ -330,6 +330,25 @@ passo completo (token de API, webhook v2 de negócio alterado, regras de etapa)
 em [`pipedrive.md`](pipedrive.md).
 
 Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a API depois de alterar a env. No MVP do aluno não há o OAuth antigo (app Meta próprio) como caminho alternativo. A credencial Meta entra por workspace na UI de **Integrações**, nunca em variável pública: pelo botão **Conectar Meta (PalmUP)** (exige `PALMUP_META_BROKER_URL`, veja acima) ou colando o token do usuário do sistema — veja [`meta-manual.md`](meta-manual.md).
+
+### Formulários Meta (Lead Ads) e importação do Dashboard Leads (Fase 6.9)
+
+Nenhuma variável nova no `.env` da API ou da web. Os **Formulários Meta** ([guia](meta-lead-forms.md)) usam variáveis que já existem:
+
+| Variável | Para que serve nos Formulários Meta | Obrigatória | Sem valor |
+|---|---|---|---|
+| `META_APP_SECRET` | Confere a assinatura `X-Hub-Signature-256` do webhook `leadgen` em `/webhooks/meta` e gera o `appsecret_proof` da leitura do lead na Graph API | **Sim** para receber leads de formulário | Toda entrega do webhook da Meta é recusada (401) e nenhum lead de formulário entra |
+| `META_WEBHOOK_VERIFY_TOKEN` | Token de verificação ao salvar a URL de callback (objeto Page, campo `leadgen`) no app Meta | **Sim** para salvar o webhook no app Meta | A Meta não aceita a URL de callback |
+| `META_TOKEN_ENCRYPTION_KEY` | Cifra o token Graph e o token do dataset de cada conexão | **Sim** (já é obrigatória para a Meta) | Não dá para salvar a conexão |
+| `API_PUBLIC_URL` | Monta a URL do webhook mostrada no painel (`{API_PUBLIC_URL}/webhooks/meta`) | Já obrigatória | O painel mostra `<API_PUBLIC_URL>/webhooks/meta` no lugar da URL |
+| `META_GRAPH_API_VERSION` | Versão da Graph API da leitura do lead e do envio ao dataset do CRM | Não (padrão `v21.0` no código; o `.env.example` traz `v25.0`) | Usa o padrão |
+
+O comando **opcional** de importação do Dashboard Leads ([guia](dashboard-leads-import.md)) lê duas variáveis **só na linha de comando** de quem roda a importação. Elas **não** vão no `.env`, no Dokploy, na Vercel nem em arquivo do repositório, e a API não as usa:
+
+| Variável | Para que serve | Obrigatória | Valor | Onde definir | Sem valor |
+|---|---|---|---|---|---|
+| `SUPABASE_URL` | Endereço do projeto Supabase do Dashboard Leads, lido pela importação | Só para rodar `dashboard-leads:import` | `https://<projeto>.supabase.co` | Na mesma linha do comando, no terminal de quem importa | O comando para com "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente." e não grava nada |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave de serviço do Supabase (segredo) para ler projetos e leads pela REST | Só para rodar `dashboard-leads:import` | A chave do painel do Supabase | Na mesma linha do comando; nunca em chat, `.env` ou arquivo versionado | Igual à linha acima |
 
 ### `META_APP_SECRET` e o webhook do Meta WhatsApp (Cloud API)
 

@@ -4,6 +4,7 @@ import {
   CRM_VALID_CONVERSION_STATUSES,
   MANUAL_CONVERSION_TRIGGER,
 } from "@wpptrack/shared";
+import { IMPORTED_MANUAL_CONVERSION_STATUS } from "../conversion-events/lead-lifetime-conversion-guard";
 import { DEFERRED_ENTRY_ERROR_CODE } from "../leads/lead-cohort";
 
 /**
@@ -59,14 +60,19 @@ export type CrmPlacedRow = {
 
 const ts = (date: Date) => Prisma.sql`CAST(${date.toISOString()} AS timestamp(3))`;
 
-/** Valid conversion (design §2): sent or on its way, or a panel-only manual. */
+/**
+ * Valid conversion (design §2): sent or on its way, or a panel-only manual,
+ * or (Fase 6.9, PR #92 do nod) a manual conversion imported from Dashboard
+ * Leads, which that tool already sent to Meta.
+ */
 export function crmValidConversionSql(alias = "c"): Prisma.Sql {
   const column = (name: string) => Prisma.raw(`${alias}."${name}"`);
   return Prisma.sql`(${column("status")} IN (${Prisma.join([
     ...CRM_VALID_CONVERSION_STATUSES,
-  ])}) OR (${column("status")} = ${CRM_PANEL_ONLY_MANUAL_STATUS} AND ${column(
-    "sourceTrigger",
-  )} = ${MANUAL_CONVERSION_TRIGGER}))`;
+  ])}) OR (${column("status")} IN (${Prisma.join([
+    CRM_PANEL_ONLY_MANUAL_STATUS,
+    IMPORTED_MANUAL_CONVERSION_STATUS,
+  ])}) AND ${column("sourceTrigger")} = ${MANUAL_CONVERSION_TRIGGER}))`;
 }
 
 function periodLeadsSql(input: CrmPlacementInput): Prisma.Sql {

@@ -471,7 +471,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
   - 7570fe14 (parcial, achado da auditoria): revalidar `/integrations` depois das ações do Kommo (e do Pipedrive); a parte do Guimo não se aplica.
 - **Migrations:**
   - `20261027140000_braip_provider` (enum, aditiva);
-  - `20261027140100_braip_parser_release`: **certificada** (produção direta, §0), citando a validação do SaaS (#168, postback oficial). Sem validação no SaaS, a Braip não é portada.
+  - `20261027140100_braip_parser_release`: **certificada** (produção direta, §0), citando a validação do SaaS (venda real no SaaS, confirmada pelo Samuel em 27/10/2026; o #168 também conferiu o postback oficial). Sem validação no SaaS, a Braip não é portada.
 - **Produção direta (§0, substitui a decisão (a)/(b) do Gate 1):** o leitor entra certificado; a conexão (quando houver) e a regra nascem em produção. "Liberar plataforma" (#166/#169) **não** vira passo do aluno: no máximo, uma ação de suporte/diagnóstico sem efeito no envio.
 - **Adaptações:**
   - o card aparece sempre no hub, sem gate;
@@ -488,6 +488,7 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
   - **backup obrigatório**;
   - passo a passo para configurar a Braip e liberar a plataforma.
 - **Estimativa:** ~10 a 12 dias.
+- **Correção (27/10/2026, na 6.9):** a Braip foi validada com **venda real** no SaaS, confirmado pelo Samuel em 27/10/2026. O comentário da migration `20261027140100_braip_parser_release` (só o comentário; o SQL não mudou), o `docs/setup/braip.md`, o `CHANGELOG.md` e o `unreleased.json` foram corrigidos. Continuam PENDENTE só os pontos técnicos: `trans_value` (juros e frete), fuso das datas, nome do aviso de abandono e renovações de assinatura. Pela regra de 27/10/2026 (abaixo), não há PENDENTE de "venda real numa instalação de aluno".
 - **Execução (27/10/2026, branch `feat/fase-6.5-plataformas-venda-braip`):** validação conferida no SaaS: #168 (`8af225f4`) conferiu o leitor com o exemplo **oficial** do postback da Braip (área de membros; fixtures sanitizados e `braip-official-sample`); a release do SaaS ainda nasce `observation_only`, e no nod nasce **certificada** (`20261027140100_braip_parser_release`, separada da `20261027140000_braip_provider` por causa do P3009). Portados: 09d7303a, f83522af, 072bb61a, 25a7cd76, b3124d65 (logo), #168, #164 (contagens reais da URL; a parte web do `useServerEndpoint` já existia no nod pelo `mergeEndpoints`), #169 só a leitura ("Ver dados recebidos" mascarado e auditado; `integration-event-inspection.ts` com o mascaramento de tokens em URL do SaaS final), #170 (Recebimentos das URLs únicas no backoffice do aluno, recibos `rejected`, retry só para sem atribuição/pendente, retenção de 60 dias), #184 (CSS), o hunk de compra do #158 pelo ponto de extensão `manual-conversion-sales-platforms.ts` (pedido = `trans_key`) e 7570fe14 parcial (Kommo; o Pipedrive já revalidava). Adaptações: `sales-platform-sale.ts` só com Payt e Braip (sem `saleCapiCustomData`/`informedSaleValue`, que são da Yampi/Brink Park), datas da Braip pelo `sao-paulo-timestamp.ts` da 6.0 com o teto do recebimento; a URL própria da regra Braip nasce sempre desativada também na API; card sempre no hub; sem `package-billing.policy`, sem filtro privado e sem a checagem de acesso da conta na URL (licença bloqueada = 423 no guard global). b4d71afc/#166/#169 (certificar/"Liberar plataforma") **não** viraram passo do aluno: só a tela "Leitores de webhook", somente leitura, com "Em uso". Sem variável nova.
 
 ### 6.6 — Hotmart (migrations)
@@ -540,6 +541,70 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 
 - Plano próprio depois da 6.8: rebase sem o #90, migration renomeada e chaves de dedupe do #158/#153.
 - Estimativa à parte (~5 a 7 dias).
+- **Ordem real (27/10/2026):** a 6.9 vem **antes** da 6.6, 6.7 e 6.8, que esperam validação no SaaS. Ela não depende delas.
+
+```text
+Status: IMPLEMENTADA (27/10/2026), aguardando revisão; sem push nem PR
+Branch: feat/fase-6.9-absorver-91-92 (a partir de origin/integracao/fase-6 @ ca3485fa)
+Executor: Claude Code
+Modelo/reasoning: Claude Opus 5.5
+Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.9
+Escopo: PR #91 (formulários Meta / Lead Ads + etapa via CAPI for CRM) e PR #92 (importação do Dashboard Leads), sem o #90
+Migrations: 20261027145000_meta_lead_forms (aditiva, idempotente; > 20261027140100_braip_parser_release e < 20261027150000 reservado à 6.6)
+Testes: meta-lead-forms (parser, roteamento, payload CRM, ingestão, envio), conversão manual + etapa CRM, import do Dashboard Leads,
+        delete-workspace-order, migration; licensing-client + brand-footer/app-layout/navigation
+```
+
+**O #90 é dependência dos dois e não entra.** O #91 e o #92 foram empilhados sobre ele (`lead-status.service`, `PATCH /leads/:id/status`, `manual_status`, `Lead.statusChangedAt`/`statusChangedByUserId`, migration `20261017090000_lead_manual_status`). O #90 já está fechado no GitHub; nada dele é trazido.
+
+**O que entra do #91 (portado):**
+- tabelas `MetaLeadFormConnection` e `MetaLeadSubmission` (tokens cifrados com `META_TOKEN_ENCRYPTION_KEY`);
+- `apps/api/src/meta-lead-forms/*`: leitor do webhook `leadgen`, roteamento por Página/formulário com catch-all, cliente Graph (`appsecret_proof` com `META_APP_SECRET`), payload CAPI for CRM (`system_generated`, `lead_id` como literal numérico, `em`/`ph` com hash, janela de 28 dias, `event_time` de no máximo 6 dias), CRUD `/integrations/meta-lead-forms` (só quem gerencia integrações) e "Assinar Página";
+- `POST /webhooks/meta`: depois da assinatura conferida, um `leadgen` de Página com conexão ativa vira lead (uma pessoa por telefone, variantes do nono dígito, atribuição do WhatsApp preservada) e envio de formulário; Página sem conexão segue o caminho antigo de diagnóstico;
+- `ConversionEventsService.recordLeadFormCrmConversion` e o desvio no `sendReadyEvent` para o dataset do CRM (`sendLeadFormCrmEvent`);
+- web: seção "Formulários Meta" no card Meta de Integrações, origem "Formulário Meta" no lead, gatilho "Formulário Meta (CRM)" nos eventos;
+- guia `docs/setup/meta-lead-forms.md`.
+
+**O que é adaptado no #91:**
+- **"Qualificado" ligado ao #158/#176:** não existe mais botão de status. A etapa de CRM sai quando um QualifiedLead é registrado pela **conversão manual** (#158) ou pelo **arraste no Kanban** (#176, que usa a mesma conversão manual): se o lead tem envio de formulário lido, grava também o evento `meta_lead_form_crm` (evento da conexão, padrão `LeadQualificado`) e o enfileira. "Não enviar à Meta" na conversão manual também não envia a etapa. Se a conversão manual responder "Lead já convertido" (o lead já tinha QualifiedLead por regra), a etapa do CRM ainda é registrada uma vez, porque é outro dataset.
+- **Dedupe (#153/#158):** o evento de CRM fica **fora** do guard de uma conversão por lead por pixel: é outro dataset (CRM), com `event_id` próprio `{lead_id da Meta}:{evento}` (o mesmo do Dashboard Leads, para a Meta descartar duplicatas) e chave `{ws}:meta_lead_form_crm:{event_id}`. O QualifiedLead do WhatsApp continua com o `event_id` e a chave do #158/#153; um lead com formulário e WhatsApp manda os dois, cada um ao seu destino.
+- **"Reenviar bloqueados" (#181):** entra. Configuração faltando (dataset, conexão pausada, token ilegível) fica `not_configured`/`MissingMetaDestination` e é reenviada pelo botão; falha de login da Meta (190/102) passa a guardar `error.code` na resposta e entra na janela de 7 dias do #181. Recusa comum (código 100…) não é reenviada.
+- **Produção direta:** a conexão nasce **ativa** e envia sem passo de liberação; a única ação é "Assinar Página" (é a inscrição do app na Página, não uma liberação). Textos sem "observação", "teste" ou "liberar".
+- **Licença:** criar, editar, assinar, pausar e remover conexão são escritas (423 pelo guard global); o webhook também é POST e segue a mesma regra de todos os webhooks.
+- **Excluir workspace:** `delete-workspace.js` apaga `metaLeadSubmission` e `metaLeadFormConnection` antes de `lead`.
+- Textos com acentuação; nenhum dado de cliente nos testes (fixtures sanitizados, telefones e nomes fictícios).
+
+**O que entra do #92 (portado com adaptação):**
+- script `pnpm --filter @wpptrack/api dashboard-leads:import` (`--map`, `--create-workspaces --owner-email --actor-email`, dry-run por padrão, `--apply`, idempotente), leitor PostgREST do Supabase sem dependência nova, guia `docs/setup/dashboard-leads-import.md`.
+- **Chaves de dedupe adaptadas:** o que o Dashboard Leads já enviou vira evento `imported` com a chave que o nod usaria:
+  - formulário com conexão: a mesma chave e o mesmo `event_id` do `meta_lead_form_crm` acima (a etapa não é reenviada);
+  - WhatsApp: `manual_conversion` com o `event_id` do #153 (`leadLifetimeMetaEventId`) e chave `manual:{ws}:dashboard-leads:{id}`; só para `QualifiedLead` e `LeadSubmitted` (eventos "uma vez por lead" do catálogo). Outro nome de evento não é importado e o relatório conta (`eventsNotImported`).
+  - o guard do #153 passa a contar a conversão manual `imported` (o Dashboard Leads já enviou), e o Kanban a põe na coluna da etapa; assim nem a automação nem um novo registro manual reenviam.
+- Status do lead mapeado e só para frente (`Lead.status`); sem `statusChangedAt` (era do #90).
+- `--create-workspaces` com as mesmas travas da tela do backoffice (`acquirePlatformWorkspaceWriteLocks`, responsável cliente ativado, autor `platform_owner`).
+- **Licença:** com a licença bloqueada, `--apply` recusa (equivalente ao 423 das escritas); o dry-run continua.
+- **"Só em teste" (decisão 5 do Gate 1):** a importação do #92 só rodou numa instalação de teste, nunca em aluno real. Não há dados a reconciliar nem migration de correção de chaves; o script entra como comando manual opcional, sem variável de ambiente.
+
+**O que fica fora e por quê:**
+- todo o #90 (substituído pelo #158 e pelo #176; fechado);
+- a migration `20261017090000_lead_manual_status` e as colunas `Lead.statusChangedAt`/`statusChangedByUserId` (auditoria do #90; a conversão manual já audita quem registrou);
+- o "status travado" do #90 (concorre com o Kanban);
+- a fonte `web` e o campo `notes` do Dashboard Leads (como no #92);
+- billing, servidor de licença, integrações privadas e Brink Park (regra fixa do nod).
+
+**Migrations:** só `20261027145000_meta_lead_forms` (renomeada de `20261017100000_meta_lead_forms`): `CREATE TABLE IF NOT EXISTS`, `CREATE [UNIQUE] INDEX IF NOT EXISTS` e as FKs dentro de blocos `DO` que conferem `pg_constraint`. Aditiva, sem tocar em dados existentes. Timestamp maior que `20261027140100_braip_parser_release` (a maior da integração) e menor que os reservados da 6.6 em diante, que continuam válidos.
+
+**Conflitos com as fases 6.x já mescladas e como ficaram:**
+- **#153 (guard) / #158 (conversão manual):** CRM fora do guard (outro dataset); `imported` manual conta como convertido; a etapa sai da conversão manual (ver acima).
+- **#159 (regra única por provedor):** sem relação: o formulário não é provedor de regra.
+- **#176 (CRM Kanban):** arrastar para QualifiedLead usa a conversão manual, logo envia a etapa; o quadro aceita a conversão manual `imported`.
+- **#181 (Reenviar bloqueados):** ver acima.
+- **Produção direta (6.1c):** conexão nasce ativa; nada a liberar.
+- **6.4 (CAPI em lote):** o evento de CRM sai antes do roteamento e nunca entra no lote (outro dataset e outro token).
+
+**Riscos:** o envio real do `leadgen`, a leitura real na Graph e o envio real ao dataset do CRM não foram feitos no nod (**PENDENTE:** validação com uma Página real); a importação contra o Supabase real só rodou em teste.
+
+**Execução (27/10/2026):** implementada como planejado. Ajustes vindos da revisão independente: etapa sem dataset nasce `not_configured`/`MissingMetaDestination` (sai por "Reenviar bloqueados" depois de corrigir); "Editar" no painel (dataset, evento e tokens; o PATCH já existia no #91); envio ao dataset com trava `ready_to_send → dispatching` e coberto pela recuperação de envio interrompido da conversão manual; cópia de auditoria com `lead_id` em texto; o webhook ingere só os `leadgen` das Páginas conectadas e manda o resto ao caminho de diagnóstico, respeita `x-workspace-id` e responde 503 quando a leitura na Graph falha (a Meta reentrega); uma Página só pode ser conectada em um workspace da instalação; lead já qualificado por regra ganha "Enviar só a etapa do formulário" na confirmação; etapa importada do formulário com o nome de evento que o Dashboard Leads realmente enviou. Migration validada num PostgreSQL 16 descartável (deploy sobre a integração e num banco vazio, SQL reaplicado sem efeito, sem drift novo). Correção da Braip (venda real no SaaS, Samuel, 27/10/2026) aplicada no comentário da migration `20261027140100` (o checksum dessa migration muda; `migrate deploy` e `migrate status` aceitaram no Docker), no guia, no CHANGELOG e nas notas. Fica PENDENTE: botão "Ler de novo" para envios `fetch_failed`; rodar o import dentro do container do Dokploy.
 
 ### Totais
 
@@ -643,6 +708,10 @@ A auditoria de 26/10 releu o histórico do SaaS anterior ao #152 e achou itens q
 ## Regra fixa: produção direta (26/10/2026)
 
 Registrada a pedido do Samuel, que já a repetiu muitas vezes; vale para todas as fases seguintes (6.5 a 6.8b) e está detalhada na §0. Resumo: o que foi validado no SaaS chega ao aluno **em produção**. Os leitores entram **certificados**; conexões e regras nascem **em produção**; o aluno não retesta, não certifica e não libera nada. Observação só para o que não foi validado (e isso não é portado). As travas reais (licença, rota Meta, pixel e página, `META_APP_SECRET` no Meta Cloud) continuam, e a tela diz o que configurar. No nod **não existe QR**: Uazapi BYO e WAHA conectam por URL do servidor + token, uma conexão por número.
+
+## Regra fixa: o que conta como validado (27/10/2026)
+
+Ajuste do Samuel: **payload real recebido e lido corretamente pelo leitor = validado**. Não se escreve PENDENTE de "venda real" (no SaaS nem numa instalação de aluno) para nenhuma plataforma, nem nas notas, nem nos guias, nem neste plano. Continuam valendo os PENDENTEs técnicos genuínos (por exemplo, na Braip: `trans_value`, fuso, abandono e renovações).
 
 ## Regra fixa: documentar para a IA do aluno (26/10/2026)
 

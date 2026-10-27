@@ -160,6 +160,7 @@ function triggerLabel(trigger: string) {
     whatsapp_label: "Etiqueta do WhatsApp",
     manual_conversion: "Registro manual",
     auto_lead: "Entrada do WhatsApp",
+    meta_lead_form_crm: "Formulário Meta (CRM)",
   };
 
   return labels[trigger] ?? trigger;
@@ -168,6 +169,8 @@ function triggerLabel(trigger: string) {
 function sourceLabel(source: string | null) {
   const labels: Record<string, string> = {
     external_mysql: "Integração externa",
+    meta_lead_form: "Formulário Meta",
+    dashboard_leads: "Dashboard Leads (importado)",
     umbler_talk: "Umbler Talk",
     uazapi: "NOD API",
   };
