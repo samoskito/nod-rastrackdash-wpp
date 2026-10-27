@@ -120,6 +120,9 @@ export type ConversionsSingleUrl = {
   /** Fase 6.5: produtos e vendas sem atribuição da Braip. */
   braipProducts?: IntegrationDetectedProductDto[];
   braipUnattributed?: IntegrationUnattributedEventListDto | null;
+  /** Fase 6.7: produtos e vendas sem atribuição da Yampi. */
+  yampiProducts?: IntegrationDetectedProductDto[];
+  yampiUnattributed?: IntegrationUnattributedEventListDto | null;
   actions: SingleUrlActions;
 };
 
@@ -638,7 +641,10 @@ export function ConversionsScreen({
           aria-labelledby="conversions-unattributed-title"
         >
           <h2 id="conversions-unattributed-title">
-            {singleUrl.braipUnattributed && singleUrl.braipUnattributed.total > 0
+            {(singleUrl.braipUnattributed &&
+              singleUrl.braipUnattributed.total > 0) ||
+            (singleUrl.yampiUnattributed &&
+              singleUrl.yampiUnattributed.total > 0)
               ? "Vendas sem atribuição (Payt)"
               : "Vendas sem atribuição"}
           </h2>
@@ -664,6 +670,26 @@ export function ConversionsScreen({
           </h2>
           <UnattributedSalesList
             list={singleUrl.braipUnattributed}
+            canManage={canManage}
+            licenseLocked={licenseLocked}
+            retry={singleUrl.actions.retry}
+            loadPayload={singleUrl.actions.loadPayload}
+          />
+        </section>
+      ) : null}
+
+      {singleUrl &&
+      singleUrl.yampiUnattributed &&
+      singleUrl.yampiUnattributed.total > 0 ? (
+        <section
+          className="conversions-list-section conversions-unattributed"
+          aria-labelledby="conversions-unattributed-yampi-title"
+        >
+          <h2 id="conversions-unattributed-yampi-title">
+            Vendas sem atribuição (Yampi)
+          </h2>
+          <UnattributedSalesList
+            list={singleUrl.yampiUnattributed}
             canManage={canManage}
             licenseLocked={licenseLocked}
             retry={singleUrl.actions.retry}
@@ -712,6 +738,7 @@ export function ConversionsScreen({
             confirmAction={confirmCreateAction}
             paytProducts={singleUrl?.paytProducts}
             braipProducts={singleUrl?.braipProducts}
+            yampiProducts={singleUrl?.yampiProducts}
             integrationEndpoints={singleUrl?.endpoints}
             singleUrlActions={singleUrl?.actions}
             numbersUnavailable={numbersPartial}
@@ -822,6 +849,7 @@ export function ConversionsScreen({
             integrationEndpoints={singleUrl?.endpoints}
             paytProducts={singleUrl?.paytProducts}
             braipProducts={singleUrl?.braipProducts}
+            yampiProducts={singleUrl?.yampiProducts}
             singleUrlActions={singleUrl?.actions}
             numbersUnavailable={numbersPartial}
             initialTab={manage.tab}

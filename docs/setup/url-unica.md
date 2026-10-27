@@ -13,8 +13,10 @@ A Fase 5.3 traz um endereço do **workspace**:
 | Umbler | **Uma URL por evento** (Lead qualificado ou Compra), válida para todos os números | Da URL |
 
 A **Braip** entrou na Fase 6.5 com a mesma base da Payt (uma URL única; o evento vem do status de
-cada postback; filtro de produto pelo produto principal): veja [`braip.md`](braip.md). Guimoo não
-faz parte da edição do aluno.
+cada postback; filtro de produto pelo produto principal): veja [`braip.md`](braip.md). A **Yampi**
+entrou na Fase 6.7 com a mesma base (uma URL única cadastrada no webhook da loja; o evento vem do
+campo `event` de cada aviso; filtro por produto ou SKU de qualquer item do pedido; liberada para
+todos os workspaces): veja [`yampi.md`](yampi.md). Guimoo não faz parte da edição do aluno.
 
 ## Como o destino é escolhido
 

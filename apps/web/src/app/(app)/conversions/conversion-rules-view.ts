@@ -259,6 +259,7 @@ export function providerRuleOrigin(
   if (rule.automationSource === "payt") return "automation_payt";
   if (rule.automationSource === "braip") return "automation_braip";
   if (rule.automationSource === "roichat") return "automation_roichat";
+  if (rule.automationSource === "yampi") return "automation_yampi";
 
   switch (rule.conversionRule.triggerType) {
     case "message_phrase":
@@ -429,6 +430,9 @@ function triggerDetailForProviderRule(
       return rule.conversionRule.defaultValueCents
         ? `Valor de cada compra do ROI Chat (reserva: ${formatMoney(rule.conversionRule.defaultValueCents, rule.conversionRule.defaultCurrency ?? "BRL")})`
         : "Valor de cada compra vem do ROI Chat";
+    case "automation_yampi":
+      // Só pela URL única da Yampi (uma para a conta toda).
+      return "URL única da Yampi";
   }
 }
 
@@ -1000,7 +1004,7 @@ export function offeredRuleOrigins(input: OriginOfferInput): RuleOriginId[] {
         );
       }
       if (definition.connection === "any") {
-        // Plataformas de venda (Payt, Braip; porte do SaaS #164): precisam de
+        // Plataformas de venda (Payt, Braip, Yampi; porte do SaaS #164): precisam de
         // um número de WhatsApp de qualquer provedor para atribuir a venda.
         // Um número lido prova; uma conexão de WhatsApp ou uma leitura
         // incompleta também: um /channels que falhou nunca esconde a origem.
@@ -1078,13 +1082,16 @@ export function ineligibleNumbers(
 ): ConversionNumber[] {
   if (!capabilities) return [];
   const supported = new Set(
-    origin === "automation_payt" || origin === "automation_braip"
+    origin === "automation_payt" ||
+      origin === "automation_braip" ||
+      origin === "automation_yampi"
       ? originChannelProviders(origin, capabilities)
       : capabilities.origins
           .filter(
             (item) =>
               item.origin !== "automation_payt" &&
-              item.origin !== "automation_braip",
+              item.origin !== "automation_braip" &&
+              item.origin !== "automation_yampi",
           )
           .flatMap((item) => item.channelProviders),
   );

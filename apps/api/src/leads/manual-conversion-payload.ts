@@ -93,7 +93,7 @@ export function readManualSourcePayload(
 /**
  * Order identity of a manual sale: the workspace plus the order/sale number
  * normalized by normalizeManualOrderRef (trim, case-insensitive, no inner
- * spaces/hyphens, no leading "#"). Payt/Braip compute the same key from the
+ * spaces/hyphens, no leading "#"). Payt, Braip and Yampi compute the same key from the
  * transaction id of their callback, so either side sees the other.
  */
 export function manualOrderKey(workspaceId: string, orderRef: string): string {

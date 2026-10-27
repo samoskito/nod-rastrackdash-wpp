@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { providerConversionDecisionSchema } from "@wpptrack/shared";
 import { pagePixelHarness } from "./helpers/ctwa-harness";
@@ -58,8 +59,8 @@ async function paytNoAdScenario(
     withoutProof?: boolean;
     /** Decision frozen before the CTWA fallback: no proof in the decision. */
     decisionWithoutProof?: boolean;
-    /** Sales platform of the postback (Braip uses the same pipeline, 6.5). */
-    platform?: "payt" | "braip";
+    /** Sales platform of the postback (Braip 6.5 and Yampi 6.7 use the same pipeline). */
+    platform?: "payt" | "braip" | "yampi";
   } = {},
 ) {
   const platform = options.platform ?? "payt";
@@ -123,10 +124,36 @@ async function paytNoAdScenario(
     product_name: sale.product.name,
     client_cel: h.payload.phone,
   };
+  // Fase 6.7: Yampi order (order bump listed first; 34,90 + 162,10 = 197,00
+  // = value_products). Fictitious values only.
+  const utcNow = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const yampiSale = {
+    event: saleEvent === "Purchase" ? "order.paid" : "order.created",
+    time: utcNow,
+    merchant: { id: 900001, alias: "loja-ficticia" },
+    resource: {
+      id: sale.transaction_id,
+      status: {
+        data: { alias: saleEvent === "Purchase" ? "paid" : "waiting_payment" },
+      },
+      value_products: sale.transaction.total_price / 100,
+      value_total: sale.transaction.total_price / 100 + 29.9,
+      created_at: { date: utcNow, timezone: "UTC" },
+      updated_at: { date: utcNow, timezone: "UTC" },
+      customer: { data: { phone: { full_number: h.payload.phone } } },
+      items: {
+        data: [
+          { product_id: 3000010, sku_id: 4000010, item_sku: "BUMP-FICT-01", quantity: 1, price: 34.9, sku: { data: { title: "Frete Expresso Ficticio" } } },
+          { product_id: 3000011, sku_id: 4000011, item_sku: "SKU-FICT-A", quantity: 1, price: 162.1, sku: { data: { title: "Kit Ficticio A" } } },
+        ],
+      },
+    },
+  };
   const purchaseKey = buildProviderPurchaseIdentity({
     workspaceId: "w",
     provider: platform,
-    accountRef: platform === "braip" ? "braip" : sale.seller_id,
+    accountRef:
+      platform === "braip" || platform === "yampi" ? platform : sale.seller_id,
     orderRef: sale.transaction_id,
     eventName: saleEvent,
   });
@@ -313,7 +340,15 @@ async function paytNoAdScenario(
     h.prisma,
     {
       decrypt: () =>
-        Buffer.from(JSON.stringify(platform === "braip" ? braipSale : sale)),
+        Buffer.from(
+          JSON.stringify(
+            platform === "braip"
+              ? braipSale
+              : platform === "yampi"
+                ? yampiSale
+                : sale,
+          ),
+        ),
     } as any,
     new InboundWebhookParserRegistry(),
     {} as any,
@@ -405,6 +440,95 @@ describe("Braip sale through the same production pipeline as Payt (Fase 6.5)", (
     expect(
       s.h.logs.find((log: any) => log.eventName === "InitiateCheckout"),
     ).toMatchObject({ valueCents: 19700, dedupeKey: s.purchaseKey });
+  });
+});
+
+describe("Yampi sale through the same production pipeline, with the real order lines (Fase 6.7, SaaS #188)", () => {
+  const expectedCustomData = {
+    contents: [
+      { id: "BUMP-FICT-01", quantity: 1, item_price: 34.9 },
+      { id: "SKU-FICT-A", quantity: 1, item_price: 162.1 },
+    ],
+    num_items: 2,
+    content_type: "product",
+    // Highest price x quantity, never the bump listed first.
+    content_name: "Kit Ficticio A",
+    order_id: "SYNTH-ORDER-1",
+  };
+
+  it("records and sends the Purchase with contents (order bump included), num_items and the Yampi order id", async () => {
+    const s = await paytNoAdScenario({ platform: "yampi" });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "yampi_delivery_1",
+    });
+    await expect(
+      s.service.processExecution({
+        workspaceId: "w",
+        providerConversionExecutionId: execution.id,
+      }),
+    ).resolves.toEqual({ status: "materialized" });
+    const purchase = s.h.logs.find((log: any) => log.eventName === "Purchase");
+    expect(purchase).toMatchObject({
+      valueCents: 19700,
+      currency: "BRL",
+      dedupeKey: s.purchaseKey,
+      customData: expectedCustomData,
+    });
+    expect(purchase.sourcePayload).toMatchObject({ provider: "yampi" });
+    // event_id and dedupe identity are untouched by the order lines.
+    expect(purchase.eventId).not.toBe("SYNTH-ORDER-1");
+    await s.h.processor.process(s.h.jobs.at(-1));
+    const sent = s.h.calls.at(-1)!;
+    expect(sent.body.data[0]).toMatchObject({
+      event_name: "Purchase",
+      event_id: purchase.eventId,
+      custom_data: {
+        ...expectedCustomData,
+        value: 197,
+        currency: "BRL",
+      },
+    });
+    // Only code, quantity and price travel in contents (no buyer data).
+    expect(JSON.stringify(sent.body.data[0].custom_data.contents)).not.toContain(
+      s.h.payload.phone,
+    );
+  });
+
+  it("also carries the order lines on InitiateCheckout (boleto/Pix generated)", async () => {
+    const s = await paytNoAdScenario({ platform: "yampi", eventName: "InitiateCheckout" });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "yampi_delivery_1",
+    });
+    await expect(
+      s.service.processExecution({
+        workspaceId: "w",
+        providerConversionExecutionId: execution.id,
+      }),
+    ).resolves.toEqual({ status: "materialized" });
+    expect(
+      s.h.logs.find((log: any) => log.eventName === "InitiateCheckout"),
+    ).toMatchObject({ valueCents: 19700, customData: expectedCustomData });
+  });
+
+  it("regression: Payt and Braip purchases keep the generic item (no customData)", async () => {
+    for (const platform of ["payt", "braip"] as const) {
+      const s = await paytNoAdScenario({ platform });
+      const execution = s.paytExecution({
+        id: "execution_a",
+        ruleId: "rule_a",
+        deliveryId: `${platform}_delivery_1`,
+      });
+      await s.service.processExecution({
+        workspaceId: "w",
+        providerConversionExecutionId: execution.id,
+      });
+      const purchase = s.h.logs.find((log: any) => log.eventName === "Purchase");
+      expect(purchase.customData).toBe(Prisma.JsonNull);
+    }
   });
 });
 

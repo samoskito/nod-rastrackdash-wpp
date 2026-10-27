@@ -160,6 +160,7 @@ function formatDateTime(date: Date): string {
 const PROVIDER_NAMES: Record<string, string> = {
   payt: "Payt",
   braip: "Braip",
+  yampi: "Yampi",
   umbler: "Umbler",
   unnichat: "Unnichat",
   roichat: "ROI Chat",
@@ -183,7 +184,8 @@ export function manualConversionOriginLabel(sourceTrigger: string): string {
     const [, provider = "", trigger] = sourceTrigger.split(":");
     const name = PROVIDER_NAMES[provider] ?? provider;
     if (!trigger) return "entrada do anúncio";
-    if (provider === "payt" || provider === "braip") return name;
+    if (provider === "payt" || provider === "braip" || provider === "yampi")
+      return name;
     if (trigger === "message_phrase") return "regra de frase";
     if (trigger === "structured_catalog") return "regra de catálogo";
     if (trigger === "provider_automation") return `automação ${name}`;
@@ -1021,7 +1023,7 @@ export class ManualConversionService {
 
   /**
    * Order number of a sales-platform execution's preserved callback (nod:
-   * Payt and Braip; Hotmart/Yampi join through manual-conversion-sales-platforms).
+   * Payt, Braip and Yampi; Hotmart joins through manual-conversion-sales-platforms).
    */
   private readonly readProviderOrderRef: ProviderOrderRefReader = async ({
     workspaceId,

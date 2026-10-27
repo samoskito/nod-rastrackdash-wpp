@@ -86,6 +86,17 @@ export type IntegrationHubSnapshot = {
     activeRuleCount: number;
     integrationUrl?: boolean;
   };
+  /**
+   * Fase 6.7: Yampi, same shape as Braip. Open to every workspace in the
+   * student edition (no private-integration gate). Absent = no rule read yet
+   * (the card is still offered).
+   */
+  yampi?: {
+    loaded: boolean;
+    ruleCount: number;
+    activeRuleCount: number;
+    integrationUrl?: boolean;
+  };
   crm: {
     kommo: CrmSnapshot;
     pipedrive: CrmSnapshot;
@@ -236,6 +247,13 @@ function braipDecision(snapshot: IntegrationHubSnapshot): CardDecision {
   );
 }
 
+/** Yampi (6.7): always offered (no gate); state from its rules and single URL. */
+function yampiDecision(snapshot: IntegrationHubSnapshot): CardDecision {
+  return salesPlatformDecision(
+    snapshot.yampi ?? { loaded: true, ruleCount: 0, activeRuleCount: 0 },
+  );
+}
+
 function salesPlatformDecision(platform: {
   loaded: boolean;
   ruleCount: number;
@@ -361,6 +379,8 @@ function decide(
       return paytDecision(snapshot);
     case "braip_rules":
       return braipDecision(snapshot);
+    case "yampi_rules":
+      return yampiDecision(snapshot);
     case "always":
       return definition.id === "meta" ? metaDecision(snapshot) : available;
   }

@@ -121,7 +121,7 @@ export type ProviderOrderRefReader = (input: {
 
 const LEGACY_LOOKBACK_MS = 90 * 24 * 60 * 60_000;
 const LEGACY_SCAN_LIMIT = 50;
-// nod: Payt today; Braip/Hotmart/Yampi join via manual-conversion-sales-platforms.
+// nod: Payt, Braip (6.5) and Yampi (6.7); Hotmart joins via manual-conversion-sales-platforms.
 const SALES_PLATFORM_TRIGGERS = manualPurchaseSalesPlatformTriggers();
 
 /**

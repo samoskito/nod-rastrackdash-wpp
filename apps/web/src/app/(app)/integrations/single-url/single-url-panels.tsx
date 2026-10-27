@@ -443,6 +443,7 @@ function SetupSteps({
 const unattributedTitles: Record<IntegrationEndpointProviderDto, string> = {
   payt: "Vendas sem atribuição",
   braip: "Vendas sem atribuição",
+  yampi: "Vendas sem atribuição",
   unnichat: "Eventos sem atribuição",
   umbler: "Eventos sem atribuição",
 };
@@ -467,7 +468,7 @@ export function UnattributedSalesList({
   retry: Action;
   limit?: number;
   /**
-   * Fase 6.5: "Ver dados recebidos" das vendas (Payt, Braip). Só leitura:
+   * Fase 6.5: "Ver dados recebidos" das vendas (Payt, Braip, Yampi). Só leitura:
    * continua disponível com a licença bloqueada.
    */
   loadPayload?: Action;
@@ -793,7 +794,8 @@ export function PaytSingleUrlPanel(props: SalesPlatformPanelProps) {
 }
 
 /**
- * Conteúdo do modal de uma plataforma de venda (Payt; Braip desde a 6.5):
+ * Conteúdo do modal de uma plataforma de venda (Payt; Braip desde a 6.5;
+ * Yampi desde a 6.7):
  * URL única, eventos suportados, produtos detectados, vendas sem atribuição
  * (com "Ver dados recebidos") e URLs antigas.
  */
@@ -818,6 +820,9 @@ export function SalesPlatformSingleUrlPanel({
   )[0] ?? null;
   const platform = singleUrlPlatformNames[provider];
   const braip = provider === "braip";
+  const yampi = provider === "yampi";
+  /** Braip e Yampi nascem só com a URL única (sem URL antiga por regra). */
+  const singleUrlOnly = braip || yampi;
 
   return (
     <div className="integration-modal-stack single-url-panel">
@@ -838,7 +843,9 @@ export function SalesPlatformSingleUrlPanel({
             label={
               braip
                 ? "URL única (cole na Braip, em Ferramentas → Postback)"
-                : "URL única (cole na Payt, em Postback)"
+                : yampi
+                  ? "URL única (cadastre no webhook da loja na Yampi)"
+                  : "URL única (cole na Payt, em Postback)"
             }
             canManage={canManage}
             licenseLocked={licenseLocked}
@@ -895,7 +902,9 @@ export function SalesPlatformSingleUrlPanel({
           Conversões.
           {braip
             ? " Reembolso, chargeback e cancelamento são recebidos e ignorados (não viram evento)."
-            : ""}
+            : yampi
+              ? " Cancelamento, reembolso e pagamento recusado são recebidos e ignorados (não viram evento). O valor é só o dos produtos (sem frete e sem juros), em reais, e os itens do pedido (com order bump) vão junto para a Meta."
+              : ""}
         </p>
       </section>
 
@@ -924,8 +933,8 @@ export function SalesPlatformSingleUrlPanel({
         />
       </section>
 
-      {/* A Braip nasce só com a URL única: não há URL antiga para migrar. */}
-      {!braip || legacyUrls.length > 0 ? (
+      {/* Braip e Yampi nascem só com a URL única: não há URL antiga para migrar. */}
+      {!singleUrlOnly || legacyUrls.length > 0 ? (
         <section
           className="integration-modal-note"
           aria-labelledby={`${provider}-legacy-title`}
@@ -1184,7 +1193,13 @@ export function ProductFilterPicker({
                 addManual();
               }
             }}
-            placeholder={provider === "braip" ? "Ex.: pro1abc" : "Ex.: 4O9J39"}
+            placeholder={
+              provider === "braip"
+                ? "Ex.: pro1abc"
+                : provider === "yampi"
+                  ? "Ex.: 3000001 ou SKU-AZUL-01"
+                  : "Ex.: 4O9J39"
+            }
             maxLength={80}
           />
         </label>

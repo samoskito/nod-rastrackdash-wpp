@@ -180,6 +180,12 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Postback da Braip incompleto (telefone, valor ou data)",
     braip_automation_v1_not_purchase: "Status da Braip não gera conversão",
     braip_automation_v1_event_not_in_rule: "Evento da Braip fora desta regra",
+    // Venda da Yampi (Fase 6.7, porte do SaaS #186).
+    yampi_purchase_identity_missing: "Venda da Yampi sem número do pedido",
+    yampi_automation_v1_invalid_payload:
+      "Aviso da Yampi incompleto (telefone, valor ou data)",
+    yampi_automation_v1_not_purchase: "Não é um pedido pago da Yampi",
+    yampi_automation_v1_event_not_in_rule: "Evento da Yampi fora desta regra",
     // Unnichat (Fase 4b).
     ctwa_missing: "Sem clique do anúncio (ctwa_clid): nada é enviado à Meta",
     ctwa_ad_unavailable:

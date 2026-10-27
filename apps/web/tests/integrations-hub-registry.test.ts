@@ -85,6 +85,8 @@ describe("integration registry", () => {
         "braip",
         // Fase 6.8: ROI Chat (WhatsApp API Oficial, one URL per number).
         "roichat",
+        // Fase 6.7: Yampi (same base as Braip, open to every workspace).
+        "yampi",
         "kommo",
         "pipedrive",
         "meta",
@@ -170,6 +172,7 @@ describe("integration registry", () => {
       "unnichat",
       "payt",
       "braip",
+      "yampi",
     ]);
     expect(inTab("ads")).toEqual(["meta"]);
     expect(inTab("crm")).toEqual(["kommo", "pipedrive"]);
@@ -330,7 +333,12 @@ describe("buildIntegrationCards", () => {
 
     const conversions = cardsForTab(cards, "attendance");
     expect(ids(conversions.active)).toEqual(["umbler"]);
-    expect(ids(conversions.available)).toEqual(["gupshup", "payt", "braip"]);
+    expect(ids(conversions.available)).toEqual([
+      "gupshup",
+      "payt",
+      "braip",
+      "yampi",
+    ]);
     expect(ids(cardsForTab(cards, "ads").active)).toEqual(["meta"]);
     expect(
       conversions.active.find((card) => card.id === "umbler")?.status.label,

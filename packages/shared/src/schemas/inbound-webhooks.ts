@@ -25,6 +25,9 @@ export const inboundWebhookProviders = [
   // Fase 6.8: ROI Chat (WhatsApp API Oficial). Uma conexao = um numero = uma
   // URL; a mesma URL recebe a entrada (CTWA) e a compra do lead.
   "roichat",
+  // Fase 6.7: Yampi, plataforma de venda como a Braip (yampi automation-v1,
+  // certificada por migration). Liberada para todos os workspaces.
+  "yampi",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",

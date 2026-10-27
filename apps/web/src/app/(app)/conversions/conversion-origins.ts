@@ -170,6 +170,31 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     betaEvents: ["CartAbandoned"],
   },
   {
+    // Fase 6.7 (porte do SaaS #186): mesma base da Braip (só pela URL única
+    // da Yampi). No nod é liberada para todos os workspaces.
+    id: "automation_yampi",
+    kind: "provider",
+    label: "Venda na Yampi",
+    description:
+      "Quando a Yampi avisa um pedido pago, um pedido aguardando pagamento (boleto/Pix) ou um carrinho abandonado de alguém que chegou pelo WhatsApp.",
+    logoProvider: "yampi",
+    fallbackChannelProviders: [
+      "umbler",
+      "gupshup",
+      "uazapi",
+      "meta_cloud",
+      "data_crazy",
+      "unnichat",
+      "waha",
+      "roichat",
+    ],
+    connection: "any",
+    // O evento vem do campo `event` de cada aviso; o valor (só os produtos)
+    // vem da própria venda.
+    allowedEvents: ["Purchase", "InitiateCheckout", "CartAbandoned"],
+    betaEvents: ["CartAbandoned"],
+  },
+  {
     id: "kommo",
     kind: "crm",
     label: "Etapa no Kommo",

@@ -18,7 +18,8 @@ import {
  * nod (porte do SaaS #158): vale para leads de Uazapi BYO, WAHA, Meta Cloud e
  * das demais conexoes por webhook (destino pelo anuncio do lead) e para a
  * entrada CTWA da Unnichat (destino pagina/pixel). Compra manual com pedido
- * deduplica contra a Payt; Braip, Hotmart e Yampi entram nas fases 6.5 a 6.7.
+ * deduplica contra a Payt, a Braip (6.5) e a Yampi (6.7, id do pedido); a
+ * Hotmart entra na 6.6.
  */
 
 /** sourceTrigger / processingMode gravados no ConversionEventLog. */

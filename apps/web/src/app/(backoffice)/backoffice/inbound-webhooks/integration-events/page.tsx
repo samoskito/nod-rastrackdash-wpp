@@ -59,7 +59,7 @@ function Notice({ title, body }: { title: string; body: string }) {
 
 /**
  * Backoffice "Recebimentos das URLs únicas" (porte do SaaS #170, fase 6.5):
- * tudo o que chegou pelas URLs únicas (Payt, Braip) e pelas URLs por evento
+ * tudo o que chegou pelas URLs únicas (Payt, Braip, Yampi) e pelas URLs por evento
  * (Unnichat, Umbler), de todos os workspaces da instalação. Só leitura.
  */
 export default async function IntegrationEventsPage({
@@ -80,7 +80,7 @@ export default async function IntegrationEventsPage({
           <span className="eyebrow">Auditoria das integrações</span>
           <h1>{integrationEventsTitle}</h1>
           <p>
-            Tudo o que chegou pelas URLs únicas (Payt, Braip) e pelas URLs por
+            Tudo o que chegou pelas URLs únicas (Payt, Braip, Yampi) e pelas URLs por
             evento (Unnichat, Umbler), de todos os workspaces: entregue a uma
             regra, sem atribuição, ignorado, inválido ou recusado.
           </p>

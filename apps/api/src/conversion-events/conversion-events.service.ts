@@ -229,6 +229,13 @@ export type RecordExternalConversionInput = {
   valueSource?: ConversionValueSourceDto | null;
   currency?: string | null;
   contentName?: string | null;
+  /**
+   * Meta custom_data stored on the log (contents, num_items, order_id...).
+   * Only the Yampi sale passes it (real order lines, fase 6.7 / SaaS #188);
+   * every other writer keeps null and the payload builder adds the generic
+   * default item.
+   */
+  customData?: ConversionEventCustomDataDto | null;
   eventOccurredAt: Date;
   sourcePayload?: Record<string, unknown> | null;
   deliveryStatus?: "imported" | "not_eligible" | "shadow_observed";
@@ -1086,7 +1093,9 @@ export class ConversionEventsService {
             : sourcePayload
               ? (sourcePayload as Prisma.InputJsonValue)
               : Prisma.JsonNull,
-          customData: Prisma.JsonNull,
+          customData: input.customData
+            ? (input.customData as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
           errorCode: initialStatus.errorCode,
           errorMessage: initialStatus.errorMessage,
         },

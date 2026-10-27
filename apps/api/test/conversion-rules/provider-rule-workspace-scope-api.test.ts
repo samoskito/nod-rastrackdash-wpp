@@ -1712,6 +1712,18 @@ describe("provider rules API: Conversões screen support", () => {
       ],
       // Fase 6.8: the ROI Chat purchase runs on the ROI Chat numbers.
       automation_roichat: ["roichat"],
+      // Fase 6.7: the Yampi sale, same base as Braip (any WhatsApp number,
+      // ROI Chat numbers included since Fase 6.8).
+      automation_yampi: [
+        "umbler",
+        "gupshup",
+        "uazapi",
+        "meta_cloud",
+        "data_crazy",
+        "unnichat",
+        "waha",
+        "roichat",
+      ],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
@@ -1744,6 +1756,7 @@ describe("provider rules API: Conversões screen support", () => {
       automation_unnichat: [true, true],
       automation_roichat: [true, true],
       automation_braip: [false, true],
+      automation_yampi: [false, true],
     });
     // Unnichat: any catalog event (the rule chooses it), never unified.
     expect(

@@ -1535,7 +1535,7 @@ export class ProviderConversionObservationService {
     // Payt is only sent by the canonical engine; legacy/shadow channels keep
     // its sales audit-only. Canonical production still requires every live
     // certification, activation and feature gate below.
-    // Sales platforms of the student edition: Payt and Braip (6.5).
+    // Sales platforms of the student edition: Payt, Braip (6.5) and Yampi (6.7).
     const salesPlatform = isSalesPlatformProvider(
       input.rule.parserRelease?.provider,
     );

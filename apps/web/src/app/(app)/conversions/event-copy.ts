@@ -93,16 +93,40 @@ export function braipEventLabel(eventName: string): string {
   return braipEventLabels[eventName] ?? ruleEventLabel(eventName);
 }
 
-/** Rótulos de venda de uma origem de plataforma de venda (Payt, Braip). */
+/**
+ * Fase 6.7 (porte do SaaS #186): eventos de venda da Yampi (mesma base da
+ * Braip). O evento vem do campo `event` de cada aviso da Yampi.
+ */
+export const yampiEventLabels: Readonly<Record<string, string>> = {
+  Purchase: "Pedido pago",
+  InitiateCheckout: "Pedido aguardando pagamento (boleto/Pix)",
+  CartAbandoned: "Carrinho abandonado",
+};
+
+export const yampiEventExplanations: Readonly<Record<string, string>> = {
+  Purchase:
+    "Evento “Pedido pago” (order.paid). A mudança de status para pago é a mesma venda: nunca vira duas compras. O valor é só o dos produtos, sem frete e sem juros.",
+  InitiateCheckout:
+    "Evento “Pedido criado” (order.created) ainda aguardando pagamento (boleto ou Pix gerado). Pedido criado já pago vai direto para pedido pago.",
+  CartAbandoned:
+    "Evento “Carrinho abandonado” (cart.reminder), em beta, com o subtotal dos produtos.",
+};
+
+export function yampiEventLabel(eventName: string): string {
+  return yampiEventLabels[eventName] ?? ruleEventLabel(eventName);
+}
+
+/** Rótulos de venda de uma origem de plataforma de venda (Payt, Braip, Yampi). */
 export function saleEventLabelsForOrigin(
   origin: string,
 ): Readonly<Record<string, string>> | null {
   if (origin === "automation_payt") return paytEventLabels;
   if (origin === "automation_braip") return braipEventLabels;
+  if (origin === "automation_yampi") return yampiEventLabels;
   return null;
 }
 
-/** Rótulo do evento de uma regra, conforme a origem (Payt/Braip têm rótulos próprios). */
+/** Rótulo do evento de uma regra, conforme a origem (Payt/Braip/Yampi têm rótulos próprios). */
 export function ruleEventLabelForOrigin(
   origin: string,
   eventName: string,
@@ -111,7 +135,9 @@ export function ruleEventLabelForOrigin(
     ? paytEventLabel(eventName)
     : origin === "automation_braip"
       ? braipEventLabel(eventName)
-      : ruleEventLabel(eventName);
+      : origin === "automation_yampi"
+        ? yampiEventLabel(eventName)
+        : ruleEventLabel(eventName);
 }
 
 /**

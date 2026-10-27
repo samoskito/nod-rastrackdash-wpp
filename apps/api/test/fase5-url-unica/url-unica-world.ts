@@ -32,7 +32,7 @@ function env(production = false) {
   };
 }
 
-export type Provider = "payt" | "braip" | "unnichat" | "umbler";
+export type Provider = "payt" | "braip" | "yampi" | "unnichat" | "umbler";
 export type Channel = {
   id: string;
   connectionId: string;

@@ -1,0 +1,59 @@
+{
+  "event": "cart.reminder",
+  "time": "2026-10-22 10:15:00",
+  "merchant": { "id": 900001, "alias": "loja-ficticia" },
+  "resource": {
+    "id": 20000001,
+    "token": "carttoken-ficticio-0002",
+    "totalizers": {
+      "subtotal": 297,
+      "discount": 0,
+      "shipment": 29.9,
+      "total": 326.9
+    },
+    "created_at": {
+      "date": "2026-10-22 09:40:00.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "updated_at": {
+      "date": "2026-10-22 09:45:00.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "utm_source": "facebook",
+    "utm_campaign": "campanha-ficticia",
+    "utm_content": "anuncio-ficticio",
+    "utm_term": "termo-ficticio",
+    "utm_medium": "cpc",
+    "customer": {
+      "data": {
+        "id": 500002,
+        "name": "Beltrano de Teste",
+        "email": "beltrano.teste@example.com",
+        "phone": {
+          "full_number": "5521900000002",
+          "area_code": "21",
+          "number": "900000002",
+          "formated_number": "(21) 90000-0002"
+        }
+      }
+    },
+    "items": {
+      "data": [
+        {
+          "product_id": 3000002,
+          "sku_id": 4000002,
+          "item_sku": "SKU-FICT-02",
+          "quantity": 1,
+          "price": 297,
+          "sku": { "data": { "title": "Produto Ficticio Verde" } }
+        }
+      ]
+    },
+    "tracking_data": {
+      "name": "Beltrano de Teste",
+      "email": "beltrano.teste@example.com"
+    }
+  }
+}
