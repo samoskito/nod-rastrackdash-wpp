@@ -119,6 +119,7 @@ import {
   syncMetaManualHistoryAction,
 } from "./meta-manual-actions";
 import { MetaLeadFormsPanel } from "./meta-lead-forms-panel";
+import { metaLeadFormsVisible } from "./meta-lead-forms-visibility";
 import { MetaManualConnectionPanel } from "./meta-manual-connection-panel";
 import {
   metaAssetsRefreshSucceeded,
@@ -281,6 +282,7 @@ async function getLegacyWhatsappInstances(): Promise<
 async function getMetaLeadFormConnections(): Promise<
   ResourceResult<MetaLeadFormConnectionDto[]>
 > {
+  if (!metaLeadFormsVisible()) return { data: [], state: "empty" };
   try {
     return {
       data: await serverApiFetch<MetaLeadFormConnectionDto[]>(
@@ -2072,12 +2074,14 @@ export default async function IntegrationsPage({
               ) : null}
             </>
           ) : null}
-          <MetaLeadFormsPanel
-            connections={metaLeadFormsResult.data}
-            canManage={canManageIntegrations}
-            licenseLocked={licenseLocked}
-            loadFailed={metaLeadFormsResult.state === "error"}
-          />
+          {metaLeadFormsVisible() ? (
+            <MetaLeadFormsPanel
+              connections={metaLeadFormsResult.data}
+              canManage={canManageIntegrations}
+              licenseLocked={licenseLocked}
+              loadFailed={metaLeadFormsResult.state === "error"}
+            />
+          ) : null}
           <p className="muted integration-domain-note">
             {oauthAdvancedEnabled
               ? "A conexão Meta fica protegida no backend. Cada conta ativa usa o Pixel e a Página vinculados a sua BM."

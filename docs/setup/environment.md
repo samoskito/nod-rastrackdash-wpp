@@ -512,6 +512,7 @@ e o que ainda não, está em
 | `OPS_ALERT_UAZAPI_BASE_URL`, `OPS_ALERT_UAZAPI_TOKEN` (novas na Fase 6.1c) | Não (opcional) — só para a mensagem dos Alertas WhatsApp sair por WhatsApp. Sem elas o aviso de desconexão aparece só em Integrações | URL do servidor e token de uma instância Uazapi sua que envia o aviso | `.env` da API / env do serviço | `OPS_ALERT_UAZAPI_TOKEN` **sim** |
 | `OPS_ALERT_SCAN_INTERVAL_MS` (nova na Fase 6.1c) | Não (padrão 15 minutos; mínimo 60000): intervalo em que a API confere cada conexão Uazapi BYO e WAHA para o aviso de WhatsApp desconectado | Decisão sua | `.env` da API | Não |
 | `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS` | Não (padrão 2000) | Decisão sua: tempo máximo, em milissegundos, de cada leitura de status ou de atividade das conexões em Integrações | env do serviço da **WEB** | Não |
+| `WPPTRACK_WEB_META_LEAD_FORMS_ENABLED` (nova na 1.3.1) | Não (padrão: desligada). Os Formulários Meta (Lead Ads) ainda não foram validados e ficam ocultos em Integrações. Não ligue sem orientação da PalmUP; sem ela (ou vazia) o card não aparece. A API, o banco e o webhook continuam iguais | Deixe vazia. `true`/`1`/`on`/`yes` mostra o card | env do serviço da **WEB** | Não |
 
 **Alerta de desconexão por conexão (Fase 6.1c):** a API confere cada conexão
 Uazapi BYO e WAHA ativa pela API de status do próprio provedor (a mesma URL do
