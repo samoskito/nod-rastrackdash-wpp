@@ -320,6 +320,31 @@ export class ReportingMetricsEngine {
     return this.countByDay(days);
   }
 
+  /**
+   * Conversas iniciadas reais per day: every paid conversation started (the
+   * ENTRY LeadSubmitted of each CTWA conversation, leads novos and returning
+   * alike), on the day it started. The same rule and events as
+   * `adConversationEvents` ("Conversas por anuncio"), so the days add up to
+   * it. Like Meta's "conversations started", a person who starts two
+   * conversations counts twice. Entry receipts deferred to a provider rule
+   * (not_eligible) count on the day they arrived; the LeadSubmitted the rule
+   * sends later never does.
+   */
+  dailyAdConversationCounts(
+    input: Pick<ReportingMetricsCalculationInput, "events" | "returningEvents">,
+    dateKey: (date: Date) => string,
+  ): Map<string, number> {
+    const dayById = new Map<string, string>();
+
+    for (const event of [...input.events, ...(input.returningEvents ?? [])]) {
+      if (this.isPaidConversation(event) && !dayById.has(event.id)) {
+        dayById.set(event.id, dateKey(event.eventOccurredAt));
+      }
+    }
+
+    return this.countByDay(dayById.values());
+  }
+
   private countByDay(days: Iterable<string>): Map<string, number> {
     const counts = new Map<string, number>();
 

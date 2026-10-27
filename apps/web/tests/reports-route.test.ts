@@ -12,6 +12,7 @@ vi.mock("next/navigation", async (importOriginal) => ({
 }));
 
 import ReportsPage from "../src/app/(app)/reports/page";
+import { logMetaReportingSyncEnqueueFailure } from "../src/app/(app)/reports/reports-error-logging";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -330,6 +331,38 @@ async function renderReports(searchParams: Record<string, string> = {}) {
 }
 
 describe("reports route", () => {
+  it("sanitizes secrets before reporting a Meta sync enqueue failure", () => {
+    const secret = "EAA-secret-access-token";
+    const basicSecret = "basic-user:basic-password";
+    const cookieSecrets = ["session-one", "session-two"];
+    const payloadSecret = "arbitrary-payload-content";
+    const error = new Error(
+      `POST /reports/sync?access_token=${secret} https://graph.facebook.com/sync?access_token=${secret} Authorization: Basic ${basicSecret}; Cookie: first=${cookieSecrets[0]}; second=${cookieSecrets[1]} payload={"anything":"${payloadSecret}","access_token":"${secret}"}`,
+    );
+    error.name = `ApiRequestError-${secret}-${payloadSecret}`;
+    const logger = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    logMetaReportingSyncEnqueueFailure(error);
+
+    expect(logger).toHaveBeenCalledWith("Meta reporting sync enqueue failed", {
+      type: "Error",
+      name: "UnknownError",
+      message: "Error message redacted",
+    });
+    const logged = JSON.stringify(logger.mock.calls);
+
+    for (const value of [secret, basicSecret, ...cookieSecrets, payloadSecret]) {
+      expect(logged).not.toContain(value);
+    }
+    expect(logged).not.toContain("/reports/sync?");
+    expect(logged).not.toContain("https://graph.facebook.com/sync?");
+    expect(logged).not.toContain("Authorization:");
+    expect(logged).not.toContain("Cookie:");
+    expect(logged).not.toContain("payload=");
+  });
+
   it("loads only campaigns in the default report view", async () => {
     const fetchMock = mockReportsApi();
     const html = await renderReports();
@@ -408,6 +441,36 @@ describe("reports route", () => {
     });
 
     expect(html).toContain("Contas Meta com períodos diferentes");
+  });
+
+  it("does not mark matching persisted periods as mixed while account sync jobs are running", async () => {
+    const synchronizedAssets = metaAssetsWithSyncRange(
+      "2026-08-26",
+      "2026-09-01",
+    );
+    mockReportsApi({
+      assets: {
+        ...synchronizedAssets,
+        reportingAccounts: Array.from({ length: 3 }, (_, index) => ({
+          ...synchronizedAssets.reportingAccounts[0],
+          id: `reporting_${index + 1}`,
+          adAccountId: `act_${index + 1}`,
+          adAccountName: `Conta ${index + 1}`,
+          // This is a current queue state. The saved period remains the last
+          // completed import and must still be comparable by Reports.
+          syncStatus: "syncing" as const,
+        })),
+      },
+    });
+
+    const html = await renderReports({
+      since: "2026-08-26",
+      until: "2026-09-01",
+    });
+
+    expect(html).toContain("Meta: 26/08/2026 a 01/09/2026");
+    expect(html).not.toContain("Contas Meta com períodos diferentes");
+    expect(html).not.toContain("Período Meta diferente do relatório");
   });
 
   it("loads only the selected ad set view", async () => {

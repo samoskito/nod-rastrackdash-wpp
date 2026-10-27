@@ -5,6 +5,7 @@ import type {
   ConversionAuditEventDetailDto,
   ConversionAuditPayloadSnapshotDto,
 } from "@wpptrack/shared";
+import { formatMoney } from "@wpptrack/shared";
 import {
   Braces,
   Check,
@@ -381,6 +382,27 @@ export function EventAuditDetails({
                           </PresentationMask>
                         </dd>
                       </div>
+                      {detail.valueCorrection ? (
+                        <div>
+                          <dt>Valor</dt>
+                          <dd>
+                            <PresentationMask placeholder="Valor oculto">
+                              {formatMoney(
+                                detail.valueCorrection.valueCents,
+                                detail.valueCorrection.currency,
+                              )}{" "}
+                              <small>
+                                valor corrigido (antes{" "}
+                                {formatMoney(
+                                  detail.valueCorrection.previousValueCents,
+                                  detail.valueCorrection.currency,
+                                )}
+                                )
+                              </small>
+                            </PresentationMask>
+                          </dd>
+                        </div>
+                      ) : null}
                     </dl>
 
                     {detail.reason ? (

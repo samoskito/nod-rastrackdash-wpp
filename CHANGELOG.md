@@ -7,9 +7,43 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do.
 
 ### Added
+
+- **Fase 6.3a — Reports: correct numbers (API, shared and web; no
+  migration, no new variable)**. Ported from the SaaS (`c95961f0` #61,
+  `45f18c2b` #69, `58d5e51b` #83 partial, `e4139c4c`, `d4420843` #157,
+  `ea8203a7` #167, `f4aa9878` #174).
+  - Canonical funnel order (#61): QualifiedLead (40) before InitiateCheckout
+    (45) in the catalog (`conversionEventCatalogOrder`); a stage not yet
+    saved enters right after the last saved stage that precedes it in the
+    catalog instead of the end of the funnel; Overview/Reports merge funnel
+    steps keeping that order. Eventos Meta lists every event configured in
+    the workspace in its filter (`availableEvents`).
+  - Overview KPI cards by funnel (#69): one card per visible Jornada stage,
+    with its label and cost ("Custo por …" follows a renamed stage);
+    "Compras" and "Receita tráfego" only with a Purchase stage.
+  - Meta coverage notice (#174): `metaSyncCoverage` on campaign, ad set and
+    ad reports (`reporting/meta-sync-coverage.ts`); "Atenção aos dados da
+    Meta" on Visão Geral and Relatórios when the period starts before the
+    first synced day or an active account is stale (> 24 h), in error or
+    never synced. nod: the "blocked" reason needs the
+    `reportingSyncBlockedAt` column of Fase 6.4; until then no account is
+    reported as blocked. The fail-safe warning logs only the error name.
+  - Daily reconciliation "Meta x conversas reais" (#167): every paid
+    conversation started per day (`adConversationsStarted`, same rule as
+    "Conversas por anúncio"; deferred entries included) next to Meta; a
+    third "Leads (evento Lead enviado)" series only in the Lead-recebido
+    rule override mode of the period (`dailyComparisonLeadEventDeferred`).
+    nod: `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED` unset = on, so the Lead
+    series appears whenever the period is in the rule override mode (an active,
+    sending Lead recebido rule).
+  - "valor corrigido (antes R$ X)" in the Eventos Meta detail
+    (`e4139c4c`), only for platform support access (backoffice).
+  - Not ported here: #175 (number-filter conversations with deferred
+    entries) only applies to the WhatsApp number filter of the reports,
+    which the nod gets in Fase 6.3b (#106); it moves there.
 
 - **Fase 6.2a — "Lead recebido" sent by the rule and manual conversion on the
   lead (API, shared and web; no migration)**. Ported from the SaaS (`4d74d303`
@@ -228,6 +262,17 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
 
 ### Fixed
 
+- **Fase 6.3a — Meta spend and conversations follow the chosen period (API)**,
+  ported from the SaaS (`d4420843`, #157): with a period, campaign, ad set and
+  ad Meta numbers come only from the stored daily rows of that period (zero
+  without rows), never from the entity columns (totals of the last sync
+  window); WhatsApp ad sets/ads keep scoping mixed campaigns with their own
+  period rows. Without a period the snapshot stays the source.
+- **Fase 6.3a — Persisted Meta sync periods and safe logs (API and web)**,
+  ported from the SaaS (`58d5e51b`, #83, reports part only): Relatórios also
+  compares the saved period of accounts that are syncing (no false "Contas
+  Meta com períodos diferentes"); the automatic sync and the "Sincronizar Meta"
+  failure logs carry fixed codes, never the error text.
 - **Fase 6.1b — Number listing without loading the whole CTWA history (API
   and web)**, ported from the SaaS (`478f0f9a`, #165): channel readiness of
   `GET /integrations/inbound-webhooks/:id/channels` comes from one aggregate

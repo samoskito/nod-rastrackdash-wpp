@@ -716,6 +716,70 @@ describe("ReportingMetricsEngine leads novos x leads que voltaram", () => {
     expect(Object.fromEntries(returning)).toEqual({ "2026-10-14": 1 });
   });
 
+  it("counts conversas iniciadas reais per day like adConversationEvents", () => {
+    const utcDay = (date: Date) => date.toISOString().slice(0, 10);
+    const events = [
+      leadSubmitted({
+        eventOccurredAt: new Date("2026-10-20T12:00:00.000Z"),
+        id: "entry_sent",
+        leadId: "lead_a",
+      }),
+      // Deferred entry receipt: still a conversation started.
+      leadSubmitted({
+        eventOccurredAt: new Date("2026-10-20T13:00:00.000Z"),
+        id: "entry_deferred",
+        leadId: "lead_b",
+        status: "not_eligible",
+        sourceTrigger: "inbound_webhook:unnichat",
+      }),
+      // The rule's LeadSubmitted is not a new conversation.
+      leadSubmitted({
+        eventOccurredAt: new Date("2026-10-21T13:00:00.000Z"),
+        id: "rule_send",
+        leadId: "lead_b",
+        sourceTrigger: "inbound_webhook:unnichat:provider_automation",
+      }),
+      leadSubmitted({
+        eventOccurredAt: new Date("2026-10-21T13:00:00.000Z"),
+        id: "skipped",
+        leadId: "lead_c",
+        status: "skipped",
+      }),
+      leadSubmitted({
+        businessSource: "organic",
+        campaignId: null,
+        eventOccurredAt: new Date("2026-10-21T13:00:00.000Z"),
+        id: "organic",
+        leadId: "lead_d",
+      }),
+    ];
+    // Same person, second conversation, also present in returningEvents.
+    const back = leadSubmitted({
+      eventOccurredAt: new Date("2026-10-21T15:00:00.000Z"),
+      id: "back",
+      leadId: "lead_a",
+    });
+    const counts = engine.dailyAdConversationCounts(
+      { events: [...events, back], returningEvents: [back] },
+      utcDay,
+    );
+    const metrics = engine.calculate({
+      events: [...events, back],
+      insight,
+      leads: [],
+      returningEvents: [back],
+      scope: {},
+    });
+
+    expect(Object.fromEntries(counts)).toEqual({
+      "2026-10-20": 2,
+      "2026-10-21": 1,
+    });
+    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(
+      metrics.adConversationEvents,
+    );
+  });
+
   it("renames only the old default label of the LeadSubmitted stage", () => {
     const stages = (label: string) => [
       {

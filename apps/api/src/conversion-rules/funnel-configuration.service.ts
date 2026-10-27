@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
+  conversionEventCatalogOrder,
   conversionEventDisplayLabel,
   type ConversionEventNameDto,
   type FunnelConfigurationDto,
@@ -60,9 +61,6 @@ export class FunnelConfigurationService {
         ...activeRules.map((rule) => rule.eventName)
       ])
     ) as ConversionEventNameDto[];
-    const defaultPosition = new Map(
-      eventNames.map((eventName, index) => [eventName, index + 1])
-    );
     const stages = eventNames
       .map((eventName) => {
         const persisted = persistedByEvent.get(eventName);
@@ -70,7 +68,7 @@ export class FunnelConfigurationService {
         return {
           eventName,
           label: persisted?.label ?? conversionEventDisplayLabel(eventName),
-          position: persisted?.position ?? defaultPosition.get(eventName) ?? 1,
+          position: persisted?.position ?? this.canonicalPosition(eventName, persistedStages),
           visible: persisted?.visible ?? true,
           defaultValueCents: persisted?.defaultValueCents ?? null,
           defaultCurrency: persisted?.defaultCurrency ?? null,
@@ -80,11 +78,32 @@ export class FunnelConfigurationService {
       .sort(
         (left, right) =>
           left.position - right.position ||
+          conversionEventCatalogOrder(left.eventName) -
+            conversionEventCatalogOrder(right.eventName) ||
           left.label.localeCompare(right.label, "pt-BR")
       )
       .map((stage, index) => ({ ...stage, position: index + 1 }));
 
     return { stages };
+  }
+
+  /**
+   * Posicao de uma etapa ainda nao persistida. O default nunca pode ser o indice
+   * de insercao: uma regra criada depois (InitiateCheckout em Caxias) ia parar
+   * no fim do funil, atras de Purchase. A etapa entra logo depois da ultima
+   * etapa persistida que a precede na ordem canonica do catalogo; a
+   * renormalizacao final converte a fracao em inteiro.
+   */
+  private canonicalPosition(
+    eventName: string,
+    persistedStages: PersistedFunnelStage[]
+  ): number {
+    const order = conversionEventCatalogOrder(eventName);
+    const anchor = persistedStages
+      .filter((stage) => conversionEventCatalogOrder(stage.eventName) < order)
+      .reduce((highest, stage) => Math.max(highest, stage.position), 0);
+
+    return anchor + 0.5;
   }
 
   async updateConfiguration(

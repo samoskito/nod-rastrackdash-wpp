@@ -155,7 +155,19 @@ function createHarness() {
     metaAd: [],
     conversionEventLog: db.conversionLogs,
     lead: db.leads,
-    metaCampaignDailyInsight: [],
+    // Fase 6.3a (#157): with a period the Meta numbers come only from the
+    // daily rows, so the snapshot spend is stored as one day of the period.
+    metaCampaignDailyInsight: db.campaigns
+      .filter((row) => Number(row.spendCents) > 0)
+      .map((row) => ({
+        workspaceId: row.workspaceId,
+        businessId: row.businessId,
+        adAccountId: row.adAccountId,
+        campaignId: row.campaignId,
+        localDate: "2026-07-01",
+        spendCents: row.spendCents,
+        metaConversationsStarted: row.metaConversationsStarted,
+      })),
     metaAdSetDailyInsight: [],
     metaAdDailyInsight: [],
   });

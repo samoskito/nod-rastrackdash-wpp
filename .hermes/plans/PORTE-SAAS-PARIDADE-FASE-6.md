@@ -401,11 +401,13 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 - **Riscos:** nenhum em licença, onboarding ou rodapé (só leitura).
 - **Notas:** "Migration: não se aplica".
 - **Estimativa:** ~4 dias.
+- **Execução (26/10/2026, branch `feat/fase-6.3a-relatorios-numeros`):** portados #61, #69, #83 (parte de relatórios), #157, #167, #174 e e4139c4c. O #175 foi para a 6.3b: ele só atua com o filtro por número WhatsApp dos relatórios (`whatsappInstanceId`), que o nod ainda não tem. Na #174, o motivo "bloqueada" depende da coluna `reportingSyncBlockedAt` da 6.4; até lá nenhuma conta aparece como bloqueada.
 
 ### 6.3b — Filtros da Visão Geral e Relatórios, aplicados automaticamente (sem migration)
 
 - **Itens:**
   - **primeiro:** #62 (`d2a5f76e`, achado da auditoria): a barra de filtros dos Relatórios agrupada em período / escopo / ações, base dos filtros abaixo;
+  - #175 (`d8cefd91`, vindo da 6.3a): com o filtro por número, as conversas incluem as entradas adiadas para a regra (`metricEventLeadIds`); portar junto com o #106, com os testes "override mode + number filter" do `meta-reporting-service`;
   - #106, #110, #114–#119;
   - #121–#124;
   - #125/#126 adaptados;

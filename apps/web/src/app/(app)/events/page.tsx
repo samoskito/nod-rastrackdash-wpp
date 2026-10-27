@@ -1,8 +1,10 @@
 import type {
   ConversionAuditDeliveryStateDto,
+  ConversionAuditEventOptionDto,
   ConversionAuditOverviewDto,
   ConversionAuditSourceDto,
 } from "@wpptrack/shared";
+import { conversionEventDisplayLabel } from "@wpptrack/shared";
 import {
   AlertTriangle,
   Archive,
@@ -110,6 +112,42 @@ function auditQuery(filters: AuditFilters, page = filters.page): string {
   }
 
   return params.toString();
+}
+
+/**
+ * Qualquer evento configurado no workspace tem que aparecer no filtro. A lista
+ * vem da API (mesma fonte do funil, ja escopada por workspace). Sem ela, cai nos
+ * eventos realmente presentes na pagina — nunca numa lista fabricada.
+ */
+function eventFilterOptions(
+  report: ConversionAuditOverviewDto | null,
+  selectedEventName: string | undefined,
+): ConversionAuditEventOptionDto[] {
+  const labelsByEvent = new Map<string, string>();
+
+  for (const option of report?.availableEvents ?? []) {
+    labelsByEvent.set(option.eventName, option.label);
+  }
+
+  for (const event of report?.events ?? []) {
+    if (!labelsByEvent.has(event.eventName)) {
+      labelsByEvent.set(event.eventName, event.eventLabel);
+    }
+  }
+
+  // O evento selecionado nunca some do select, senao o filtro se auto-limpa ao
+  // trocar de periodo.
+  if (selectedEventName && !labelsByEvent.has(selectedEventName)) {
+    labelsByEvent.set(
+      selectedEventName,
+      conversionEventDisplayLabel(selectedEventName),
+    );
+  }
+
+  return Array.from(labelsByEvent, ([eventName, label]) => ({
+    eventName,
+    label,
+  }));
 }
 
 async function getAudit(filters: AuditFilters): Promise<AuditResult> {
@@ -360,6 +398,7 @@ export default async function EventsPage({
     totalPages: 0,
   };
   const hasAttention = summary.blocked + summary.failed > 0;
+  const eventOptions = eventFilterOptions(report, eventName);
   const activeFilterCount = [eventName, status, source].filter(Boolean).length;
   const clearFiltersHref = `/events?since=${since}&until=${until}&pageSize=${pageSize}`;
   const primaryMetrics = [
@@ -505,9 +544,11 @@ export default async function EventsPage({
                   defaultValue={eventName ?? ""}
                 >
                   <option value="">Todos os eventos</option>
-                  <option value="LeadSubmitted">Conversa iniciada</option>
-                  <option value="QualifiedLead">Lead qualificado</option>
-                  <option value="Purchase">Compra</option>
+                  {eventOptions.map((option) => (
+                    <option key={option.eventName} value={option.eventName}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="filter-field">

@@ -91,10 +91,8 @@ export class MetaReportAutoSyncService
             `Meta auto sync checked ${result.workspacesFound} workspaces; enqueued=${result.enqueued}; failed=${result.failed}; period=${result.since ?? "-"}..${result.until ?? "-"}`,
           );
         })
-        .catch((error) => {
-          this.logger.warn(
-            `Meta auto sync failed before enqueueing workspaces: ${this.errorMessage(error)}`,
-          );
+        .catch(() => {
+          this.logger.warn("META_REPORT_AUTO_SYNC_BOOTSTRAP_FAILED");
         });
     };
 
@@ -182,11 +180,9 @@ export class MetaReportAutoSyncService
             until: period.until,
           });
           enqueued += 1;
-        } catch (error) {
+        } catch {
           failed += 1;
-          this.logger.warn(
-            `Could not enqueue automatic Meta sync for workspace ${workspace.id}: ${this.errorMessage(error)}`,
-          );
+          this.logger.warn("META_REPORT_AUTO_SYNC_ENQUEUE_FAILED");
         }
       }
 
@@ -281,9 +277,5 @@ export class MetaReportAutoSyncService
 
   private dateOnly(date: Date): string {
     return date.toISOString().slice(0, 10);
-  }
-
-  private errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : "erro desconhecido";
   }
 }

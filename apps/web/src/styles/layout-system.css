@@ -927,10 +927,11 @@ body {
   }
 }
 
-.daily-comparison-legend i.returning,
-.daily-bar.returning {
-  fill: var(--cyan);
-  background: var(--cyan);
+/* Leads (evento Lead enviado): only with the Lead deferred to a rule. */
+.daily-comparison-legend i.lead,
+.daily-bar.lead {
+  fill: var(--amber);
+  background: var(--amber);
 }
 
 .conversion-funnel-heading {

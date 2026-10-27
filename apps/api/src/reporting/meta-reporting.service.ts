@@ -27,6 +27,7 @@ import type {
   MetaEntityStatusUpdateInputDto,
   MetaStructureReportDto,
   ReportDailyComparisonPointDto,
+  MetaSyncCoverageDto,
   ReportOverviewDto,
   ReportPaginationDto,
   ReportSortDto,
@@ -120,6 +121,7 @@ import {
   sortReportRowsByCurrency,
   type SortableReportRow,
 } from "./report-row-sort";
+import { buildMetaSyncCoverage, type MetaCoverageAccount } from "./meta-sync-coverage";
 
 export type MetaStructureSyncInput = {
   workspaceId: string;
@@ -1992,7 +1994,9 @@ export class MetaReportingService {
       needsWorkspaceMetrics
         ? this.getLeads(input, summaryScope)
         : Promise.resolve([]),
-      input.includeDaily && input.since && input.until && campaignIds.length
+      // A period always reads the stored daily rows: they are the only Meta
+      // numbers bound to dates (entity columns hold the last sync window).
+      input.since && input.until && campaignIds.length
         ? (this.prisma.metaCampaignDailyInsight.findMany({
             where: {
               workspaceId: input.workspaceId,
@@ -2050,9 +2054,24 @@ export class MetaReportingService {
       returningEvents,
       "campaignId",
     );
+    const periodRequested = Boolean(input.since && input.until);
+    // WhatsApp ad sets/ads keep scoping a mixed campaign's Meta numbers; with
+    // a period their spend comes from that period's daily rows, never from
+    // the entity columns (totals of the last sync window).
+    const [childAdSets, childAds] = !usesWhatsappDefault
+      ? [[], []]
+      : periodRequested
+        ? await this.withPeriodChildMetrics({
+            workspaceId: input.workspaceId,
+            since: input.since!,
+            until: input.until!,
+            adSets: whatsappAdSets,
+            ads: whatsappAds,
+          })
+        : [whatsappAdSets, whatsappAds];
     const childMetricByCampaign = this.campaignMetricOverrides(
-      usesWhatsappDefault ? whatsappAdSets : [],
-      usesWhatsappDefault ? whatsappAds : [],
+      childAdSets,
+      childAds,
     );
     const dailyMetricByCampaign = this.dailyCampaignMetrics(dailyInsights);
     const expectedDailyDates =
@@ -2076,9 +2095,20 @@ export class MetaReportingService {
           dailyDatesByCampaign.get(campaign.campaignId)?.size ===
           expectedDailyDates,
       );
+    // With a period, Meta spend/conversations come only from the stored daily
+    // rows of that period; a campaign without rows there has no confirmed
+    // delivery (0). The entity columns hold the totals of the LAST SYNC
+    // WINDOW, not of the requested period: falling back to them froze the
+    // values (spend shown for days after the ads stopped, "today" equal to
+    // the whole window). Without a period the snapshot stays the source.
     const metricByCampaign = dailyComparisonAvailable
       ? dailyMetricByCampaign
-      : childMetricByCampaign;
+      : periodRequested
+        ? this.periodMetricsWithZeros(
+            filteredCampaigns.map((campaign) => campaign.campaignId),
+            new Map([...dailyMetricByCampaign, ...childMetricByCampaign]),
+          )
+        : childMetricByCampaign;
     const paginated = this.paginateReportRows(
       filteredCampaigns,
       input,
@@ -2246,13 +2276,24 @@ export class MetaReportingService {
       input.includeDaily && input.since && input.until
         ? this.dailyComparison({
             dailyInsights,
+            events: workspaceConversionLogs,
             leads: workspaceLeads,
             returningEvents: workspaceReturningEvents,
             since: input.since,
             until: input.until,
           })
         : undefined;
+    // The separate "Lead event" series only exists when the Lead is sent
+    // later than the entry: the rule override mode of the period (PR #155),
+    // the same mode that dates the leads novos of this report.
+    const dailyComparisonLeadEventDeferred = dailyComparison
+      ? await this.ruleOverrideMode(input)
+      : false;
 
+    const metaSyncCoverage = await this.getMetaSyncCoverage(
+      input.workspaceId,
+      input.since,
+    );
     this.logReportRead("campaigns", startedAt, {
       returned: rows.length,
       total: filteredCampaigns.length,
@@ -2264,6 +2305,7 @@ export class MetaReportingService {
       since: input.since ?? null,
       until: input.until ?? null,
       campaigns: rows,
+      ...(metaSyncCoverage ? { metaSyncCoverage } : {}),
       ...(summary
         ? {
             summary: {
@@ -2289,8 +2331,66 @@ export class MetaReportingService {
       ...(summaryByCurrency ? { summaryByCurrency } : {}),
       ...(dailyComparison ? { dailyComparison } : {}),
       ...(input.includeDaily ? { dailyComparisonAvailable } : {}),
+      ...(dailyComparison ? { dailyComparisonLeadEventDeferred } : {}),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
     };
+  }
+
+  /**
+   * Cobertura dos dados da Meta para os avisos de Visão Geral e Relatórios.
+   * Duas leituras baratas (contas ativas + MIN indexado de localDate por
+   * conta). Nunca derruba o relatório: sem cobertura calculável, devolve
+   * undefined e a tela simplesmente não avisa.
+   *
+   * nod: a coluna `reportingSyncBlockedAt` (bloqueio da sincronização) chega
+   * com a Fase 6.4; até lá nenhuma conta aparece como "bloqueada".
+   */
+  async getMetaSyncCoverage(
+    workspaceId: string,
+    since?: string,
+    now: Date = new Date(),
+  ): Promise<MetaSyncCoverageDto | undefined> {
+    try {
+      const [accounts, mins] = await Promise.all([
+        this.prisma.metaReportingAccount.findMany({
+          where: { workspaceId, active: true },
+          select: {
+            adAccountId: true,
+            adAccountName: true,
+            syncStatus: true,
+            syncError: true,
+            lastSyncedAt: true,
+            createdAt: true,
+          },
+        }),
+        this.prisma.metaCampaignDailyInsight.groupBy({
+          by: ["adAccountId"],
+          where: { workspaceId },
+          _min: { localDate: true },
+        }),
+      ]);
+
+      return buildMetaSyncCoverage({
+        accounts: accounts as MetaCoverageAccount[],
+        minDates: (
+          mins as Array<{
+            adAccountId: string;
+            _min: { localDate: string | null };
+          }>
+        ).map((row) => ({
+          adAccountId: row.adAccountId,
+          localDate: row._min.localDate,
+        })),
+        since,
+        now,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Cobertura da Meta indisponivel (${error instanceof Error ? error.name : typeof error})`,
+      );
+
+      return undefined;
+    }
   }
 
   async getConversionEventAudit(input: {
@@ -2388,6 +2488,12 @@ export class MetaReportingService {
       events: events.map((event) =>
         this.conversionAuditEventDto(event, eventLabels, context),
       ),
+      // Todo evento configurado no workspace precisa aparecer no filtro, na
+      // mesma ordem do funil. Escopo: funnelStages ja vem por workspaceId.
+      availableEvents: funnelStages.map((stage) => ({
+        eventName: stage.eventName,
+        label: stage.label,
+      })),
     };
   }
 
@@ -2502,6 +2608,7 @@ export class MetaReportingService {
           : null,
       missingFields,
       sourceSnapshot,
+      valueCorrection: this.conversionAuditValueCorrection(event),
       metaRequest: storedRequest
         ? {
             mode: "stored",
@@ -3175,7 +3282,7 @@ export class MetaReportingService {
       returningEvents,
       "adSetId",
     );
-    const dailyMetricByAdSet = this.completeDailyEntityMetrics({
+    const dailyMetricByAdSet = this.periodDailyEntityMetrics({
       entityIds: adSetIds,
       entityId: (insight) => insight.adSetId,
       insights: dailyInsights,
@@ -3247,6 +3354,10 @@ export class MetaReportingService {
       leads,
       returningEvents,
     });
+    const metaSyncCoverage = await this.getMetaSyncCoverage(
+      input.workspaceId,
+      input.since,
+    );
 
     this.logReportRead("adsets", startedAt, {
       returned: rows.length,
@@ -3259,6 +3370,7 @@ export class MetaReportingService {
       since: input.since ?? null,
       until: input.until ?? null,
       adSets: rows,
+      ...(metaSyncCoverage ? { metaSyncCoverage } : {}),
       totals,
       ...this.currencyFields(adSetTotalsCurrency),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
@@ -3363,7 +3475,7 @@ export class MetaReportingService {
       returningEvents,
       "adId",
     );
-    const dailyMetricByAd = this.completeDailyEntityMetrics({
+    const dailyMetricByAd = this.periodDailyEntityMetrics({
       entityIds: adIds,
       entityId: (insight) => insight.adId,
       insights: dailyInsights,
@@ -3423,6 +3535,10 @@ export class MetaReportingService {
       leads,
       returningEvents,
     });
+    const metaSyncCoverage = await this.getMetaSyncCoverage(
+      input.workspaceId,
+      input.since,
+    );
 
     this.logReportRead("ads", startedAt, {
       returned: rows.length,
@@ -3435,6 +3551,7 @@ export class MetaReportingService {
       since: input.since ?? null,
       until: input.until ?? null,
       ads: rows,
+      ...(metaSyncCoverage ? { metaSyncCoverage } : {}),
       totals,
       ...this.currencyFields(adTotalsCurrency),
       ...(paginated.pagination ? { pagination: paginated.pagination } : {}),
@@ -4839,7 +4956,104 @@ export class MetaReportingService {
     return metrics;
   }
 
-  private completeDailyEntityMetrics<
+  /**
+   * Ad set/ad records whose Meta columns are replaced by the sums of their
+   * stored daily rows in [since, until] (zero without rows).
+   */
+  private async withPeriodChildMetrics(input: {
+    workspaceId: string;
+    since: string;
+    until: string;
+    adSets: MetaAdSetRecord[];
+    ads: MetaAdRecord[];
+  }): Promise<readonly [MetaAdSetRecord[], MetaAdRecord[]]> {
+    const localDate = { gte: input.since, lte: input.until };
+    const select = {
+      localDate: true,
+      spendCents: true,
+      metaConversationsStarted: true,
+    };
+    const [adSetRows, adRows] = (await Promise.all([
+      input.adSets.length
+        ? this.prisma.metaAdSetDailyInsight.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              adSetId: { in: input.adSets.map((adSet) => adSet.adSetId) },
+              localDate,
+            },
+            select: { adSetId: true, ...select },
+          })
+        : Promise.resolve([]),
+      input.ads.length
+        ? this.prisma.metaAdDailyInsight.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              adId: { in: input.ads.map((ad) => ad.adId) },
+              localDate,
+            },
+            select: { adId: true, ...select },
+          })
+        : Promise.resolve([]),
+    ])) as [MetaAdSetDailyInsightRecord[], MetaAdDailyInsightRecord[]];
+    const byAdSet = this.periodDailyEntityMetrics({
+      entityIds: input.adSets.map((adSet) => adSet.adSetId),
+      entityId: (row: MetaAdSetDailyInsightRecord) => row.adSetId,
+      insights: adSetRows,
+      since: input.since,
+      until: input.until,
+    });
+    const byAd = this.periodDailyEntityMetrics({
+      entityIds: input.ads.map((ad) => ad.adId),
+      entityId: (row: MetaAdDailyInsightRecord) => row.adId,
+      insights: adRows,
+      since: input.since,
+      until: input.until,
+    });
+
+    return [
+      input.adSets.map((adSet) => ({
+        ...adSet,
+        spendCents: byAdSet?.get(adSet.adSetId)?.spendCents ?? 0,
+        metaConversationsStarted:
+          byAdSet?.get(adSet.adSetId)?.metaConversationsStarted ?? 0,
+      })),
+      input.ads.map((ad) => ({
+        ...ad,
+        spendCents: byAd?.get(ad.adId)?.spendCents ?? 0,
+        metaConversationsStarted:
+          byAd?.get(ad.adId)?.metaConversationsStarted ?? 0,
+      })),
+    ] as const;
+  }
+
+  /** Period metrics for every entity: missing daily rows count as zero. */
+  private periodMetricsWithZeros(
+    entityIds: string[],
+    metrics: Map<string, CampaignMetricOverride>,
+  ): Map<string, CampaignMetricOverride> {
+    const result = new Map(metrics);
+
+    for (const entityId of entityIds) {
+      if (!result.has(entityId)) {
+        result.set(entityId, {
+          spendCents: 0,
+          metaConversationsStarted: 0,
+          adSetIds: new Set<string>(),
+          adIds: new Set<string>(),
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Meta metrics of the requested period from the stored daily rows; an
+   * entity without rows in the period counts as zero. `null` (entity
+   * snapshot) only without a period: the snapshot holds the totals of the
+   * last sync window, never of an arbitrary period.
+   */
+  private periodDailyEntityMetrics<
     T extends {
       localDate: string;
       spendCents: number;
@@ -4852,41 +5066,30 @@ export class MetaReportingService {
     since?: string;
     until?: string;
   }): Map<string, EntityMetricOverride> | null {
-    if (
-      !input.since ||
-      !input.until ||
-      input.entityIds.length === 0 ||
-      input.insights.length === 0
-    ) {
+    if (!input.since || !input.until) {
       return null;
     }
 
-    const expectedDates = this.reportDateRange(input.since, input.until).length;
-    const datesByEntity = new Map<string, Set<string>>();
-    const metrics = new Map<string, EntityMetricOverride>();
+    const metrics = new Map<string, EntityMetricOverride>(
+      input.entityIds.map((entityId) => [
+        entityId,
+        { spendCents: 0, metaConversationsStarted: 0 },
+      ]),
+    );
 
     for (const insight of input.insights) {
       const entityId = input.entityId(insight);
-      const dates = datesByEntity.get(entityId) ?? new Set<string>();
       const current = metrics.get(entityId) ?? {
         spendCents: 0,
         metaConversationsStarted: 0,
       };
 
-      dates.add(insight.localDate);
-      datesByEntity.set(entityId, dates);
       current.spendCents += insight.spendCents;
       current.metaConversationsStarted += insight.metaConversationsStarted;
       metrics.set(entityId, current);
     }
 
-    const complete =
-      expectedDates > 0 &&
-      input.entityIds.every(
-        (entityId) => datesByEntity.get(entityId)?.size === expectedDates,
-      );
-
-    return complete ? metrics : null;
+    return metrics;
   }
 
   private summaryMetricScope(
@@ -4900,6 +5103,7 @@ export class MetaReportingService {
 
   private dailyComparison(input: {
     dailyInsights: MetaCampaignDailyInsightRecord[];
+    events: ConversionEventRecord[];
     leads: LeadRecord[];
     returningEvents: ConversionEventRecord[];
     since: string;
@@ -4917,6 +5121,13 @@ export class MetaReportingService {
     }
 
     const dateKey = (date: Date) => dateInTimezone(date, timezone);
+    // Like for like with Meta: conversations started (same events and rule
+    // as "Conversas por anuncio"), apart from the Lead event (leads novos).
+    const adConversationsByDate =
+      this.metricsEngine.dailyAdConversationCounts(
+        { events: input.events, returningEvents: input.returningEvents },
+        dateKey,
+      );
     const realByDate = this.metricsEngine.dailyRealConversationCounts(
       { leads: input.leads },
       dateKey,
@@ -4929,6 +5140,7 @@ export class MetaReportingService {
     return this.reportDateRange(input.since, input.until).map((date) => ({
       date,
       metaConversationsStarted: metaByDate.get(date) ?? 0,
+      adConversationsStarted: adConversationsByDate.get(date) ?? 0,
       realConversations: realByDate.get(date) ?? 0,
       returningLeads: returningByDate.get(date) ?? 0,
     }));
@@ -5078,6 +5290,29 @@ export class MetaReportingService {
         ? this.conversionAuditEventError(event, inferredErrorCode)
         : null,
       valueSource: event.valueSource ?? null,
+    };
+  }
+
+  /** Value corrected after the record (sourcePayload.valueCorrection). */
+  private conversionAuditValueCorrection(
+    event: ConversionAuditEventDetailRecord,
+  ): ConversionAuditEventDetailDto["valueCorrection"] {
+    const correction = this.conversionAuditObject(
+      this.conversionAuditObject(event.sourcePayload)?.valueCorrection,
+    );
+    const previousValueCents = correction?.previousValueCents;
+    if (
+      typeof previousValueCents !== "number" ||
+      !Number.isSafeInteger(previousValueCents) ||
+      previousValueCents <= 0 ||
+      !event.valueCents ||
+      previousValueCents === event.valueCents
+    )
+      return null;
+    return {
+      previousValueCents,
+      valueCents: event.valueCents,
+      currency: event.currency,
     };
   }
 
@@ -5570,13 +5805,13 @@ export class MetaReportingService {
   }
 
   private conversionAuditSource(
-    sourceTrigger: string,
+    sourceTrigger?: string | null,
   ): ConversionAuditSourceDto {
-    if (sourceTrigger.startsWith("external_mysql:")) {
+    if ((sourceTrigger ?? "").startsWith("external_mysql:")) {
       return "external_integration";
     }
 
-    if (["keyword", "whatsapp_label"].includes(sourceTrigger)) {
+    if (["keyword", "whatsapp_label"].includes(sourceTrigger ?? "")) {
       return "whatsapp_automation";
     }
 

@@ -540,6 +540,88 @@ describe("events route", () => {
     expect(html).not.toContain("Mariana Alves");
   });
 
+  it("offers every event configured in the workspace in the filter", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...auditResponse([auditEvent({})]),
+          availableEvents: [
+            { eventName: "LeadSubmitted", label: "Conversas reais iniciadas" },
+            { eventName: "QualifiedLead", label: "Lead qualificado" },
+            { eventName: "InitiateCheckout", label: "Checkout iniciado" },
+            { eventName: "Purchase", label: "Compras" },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({
+        since: "2026-07-06",
+        until: "2026-07-12",
+      }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('value="InitiateCheckout"');
+    expect(html).toContain("Checkout iniciado");
+    // Ordem do funil preservada: checkout antes de compra.
+    expect(html.indexOf('value="InitiateCheckout"')).toBeLessThan(
+      html.indexOf('value="Purchase"'),
+    );
+  });
+
+  it("falls back to the events on the page when the API omits the list", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify(
+          auditResponse([
+            auditEvent({
+              id: "event_checkout",
+              eventName: "InitiateCheckout",
+              eventLabel: "Checkout iniciado",
+            }),
+          ]),
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({
+        since: "2026-07-06",
+        until: "2026-07-12",
+      }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('value="InitiateCheckout"');
+    // Nada inventado: eventos ausentes do periodo nao viram opcao.
+    expect(html).not.toContain('value="QualifiedLead"');
+  });
+
+  it("keeps the selected event in the filter when the API is unavailable", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ message: "unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const element = await EventsPage({
+      searchParams: Promise.resolve({
+        since: "2026-07-06",
+        until: "2026-07-12",
+        eventName: "InitiateCheckout",
+      }),
+    });
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain('value="InitiateCheckout"');
+    expect(html).toContain("Checkout iniciado");
+  });
+
   it("replaces the desktop audit table with readable event cards on mobile", () => {
     const css = readFileSync(
       new URL("../src/styles/layout-system.css", import.meta.url),

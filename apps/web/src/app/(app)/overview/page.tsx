@@ -1,18 +1,20 @@
-import type {
-  CampaignReportRowDto,
-  CurrencyCode,
-  MetaAssetsDto,
-  ReportCurrencyGroupDto,
-  ReportDailyComparisonPointDto,
-  ReportFunnelStepDto,
-  ReportOverviewDto,
+import {
+  funnelMetricLabels,
+  type CampaignReportRowDto,
+  type CurrencyCode,
+  type MetaAssetsDto,
+  type ReportCurrencyGroupDto,
+  type ReportDailyComparisonPointDto,
+  type ReportFunnelStepDto,
+  type ReportOverviewDto,
 } from "@wpptrack/shared";
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import {
   CurrencyKpiGroups,
   ExchangeRateMissingNote,
 } from "../../../components/currency-kpi-groups";
+import { MetaSyncCoverageNotice } from "../../../components/meta-sync-coverage-notice";
 import { PresentationMask } from "../../../components/presentation-mask";
 import {
   joinAdAccountIds,
@@ -34,6 +36,7 @@ import {
 } from "../../../lib/report-currency";
 import { serverApiFetch } from "../../../lib/server-api";
 import { OverviewFilters } from "./overview-filters";
+import { dailyComparisonSeries } from "./daily-comparison-series";
 import {
   OverviewLeadsBlock,
   overviewLeadsCopy,
@@ -231,11 +234,23 @@ function aggregateFunnelSteps(
   const order: string[] = [];
 
   for (const campaign of campaigns) {
+    // Merge estavel: a API ja manda as etapas na ordem do funil, mas linhas sem
+    // compra omitem first_purchase/repurchase. Anexar no fim jogaria uma etapa
+    // do meio do funil para o final; inserimos logo apos a etapa anterior desta
+    // mesma linha.
+    let insertAt = 0;
+
     for (const step of campaign.funnelSteps) {
       const current = steps.get(step.key);
-      if (!current) {
-        order.push(step.key);
+      const known = order.indexOf(step.key);
+
+      if (known >= 0) {
+        insertAt = known + 1;
+      } else {
+        order.splice(insertAt, 0, step.key);
+        insertAt += 1;
       }
+
       steps.set(step.key, {
         key: step.key,
         label: current?.label ?? step.label,
@@ -340,46 +355,118 @@ function purchaseBreakdownLabel(
   return `${firstPurchaseLabel}, ${repurchases} ${repurchases === 1 ? "recompra" : "recompras"}`;
 }
 
-function funnelStageCostLabel(stage: ReportFunnelStepDto): string {
-  const labels: Record<string, string> = {
-    meta_conversations: "Custo por conversa Meta",
-    real_conversations: "Custo por lead novo",
-    qualified_lead: "Custo por lead qualificado",
-    purchase: "Custo por compra",
-    first_purchase: "Custo por primeira compra",
-    repurchase: "Custo por recompra",
-    event_initiate_checkout: "Custo por checkout iniciado",
-    event_add_to_cart: "Custo por adição ao carrinho",
-  };
+/**
+ * Curated cost captions apply only while a stage still carries its catalog
+ * label. Once the workspace renames a stage (QualifiedLead -> "Cliente
+ * potencial", Purchase -> "Vendas"...), the caption follows the configured
+ * label so cards and funnel rows never contradict the stage name.
+ */
+const defaultStageCostCaptions: Record<
+  string,
+  { label: string; caption: string }
+> = {
+  meta_conversations: {
+    label: "Conversas Meta",
+    caption: "Custo por conversa Meta",
+  },
+  real_conversations: {
+    label: funnelMetricLabels.real_conversations,
+    caption: "Custo por lead novo",
+  },
+  qualified_lead: {
+    label: funnelMetricLabels.qualified_lead,
+    caption: "Custo por lead qualificado",
+  },
+  purchase: {
+    label: funnelMetricLabels.purchase,
+    caption: "Custo por compra",
+  },
+  first_purchase: {
+    label: funnelMetricLabels.first_purchase,
+    caption: "Custo por primeira compra",
+  },
+  repurchase: {
+    label: funnelMetricLabels.repurchase,
+    caption: "Custo por recompra",
+  },
+  event_initiate_checkout: {
+    label: "Checkout iniciado",
+    caption: "Custo por checkout iniciado",
+  },
+  event_add_to_cart: {
+    label: "Adicionou ao carrinho",
+    caption: "Custo por adição ao carrinho",
+  },
+};
 
-  if (labels[stage.key]) {
-    return labels[stage.key]!;
+function funnelStageCostLabel(stage: ReportFunnelStepDto): string {
+  const normalized = stage.label.trim().toLocaleLowerCase("pt-BR");
+  const curated = defaultStageCostCaptions[stage.key];
+
+  if (
+    curated &&
+    (normalized.length === 0 ||
+      normalized === curated.label.toLocaleLowerCase("pt-BR"))
+  ) {
+    return curated.caption;
   }
 
-  const normalized = stage.label.trim().toLocaleLowerCase("pt-BR");
   return normalized.length > 0 ? `Custo por ${normalized}` : "Custo por etapa";
 }
 
-/** Primary KPI cards for configured journey events beyond the fixed set. */
-function configuredJourneyMetric(
+/**
+ * Funnel steps that are Purchase breakdowns rather than configurable stages.
+ * They stay inside the "Compras" card delta (first purchase / repurchase).
+ */
+const purchaseBreakdownKeys = new Set(["first_purchase", "repurchase"]);
+
+/**
+ * KPI cards derive from the workspace funnel configuration that the API already
+ * applies to `funnelSteps` (visible stages, custom labels, position). Nothing
+ * here is hardcoded per event:
+ * - `real_conversations` (LeadSubmitted) is skipped because the base card
+ *   "Leads novos" already shows it together with the leads that came back.
+ * - Purchase breakdowns are folded into the "Compras" card.
+ * - Everything else (QualifiedLead, ViewContent, InitiateCheckout, custom
+ *   events...) becomes a count card in funnel order with its configured label.
+ */
+function configuredKpiStages(
   funnelSteps: ReportFunnelStepDto[],
-): ReportFunnelStepDto | null {
-  const preferredKeys = [
-    "event_initiate_checkout",
-    "event_add_to_cart",
-    "event_view_content",
-  ];
-  for (const key of preferredKeys) {
-    const step = funnelSteps.find((item) => item.key === key);
-    if (step) return step;
-  }
-  return (
-    funnelSteps.find(
-      (step) =>
-        step.key.startsWith("event_") &&
-        !["event_purchase", "event_qualified_lead"].includes(step.key),
-    ) ?? null
+): ReportFunnelStepDto[] {
+  return funnelSteps.filter(
+    (step) =>
+      step.key !== "real_conversations" && !purchaseBreakdownKeys.has(step.key),
   );
+}
+
+/**
+ * "Receita tráfego" depends on Purchase: revenue only exists when the workspace
+ * tracks purchases, so the card is rendered right after the "Compras" card and
+ * only when the `purchase` stage is part of the configured funnel. Lead-only
+ * workspaces never see a revenue KPI. Used by the funnel summary sentence.
+ */
+function hasPurchaseStage(funnelSteps: ReportFunnelStepDto[]): boolean {
+  return funnelSteps.some((step) => step.key === "purchase");
+}
+
+function funnelOutcomeSummary(
+  rangeLabel: string,
+  metaConversationsStarted: number,
+  campaign: CampaignReportRowDto,
+): string {
+  const intro = `${rangeLabel}: ${metaConversationsStarted} conversas registradas pela Meta`;
+
+  if (hasPurchaseStage(campaign.funnelSteps)) {
+    return `${intro} chegaram a ${campaign.firstPurchases} ${campaign.firstPurchases === 1 ? "primeira compra" : "primeiras compras"}.`;
+  }
+
+  const lastStage = configuredKpiStages(campaign.funnelSteps).at(-1);
+
+  if (lastStage) {
+    return `${intro} chegaram a ${lastStage.value} em ${lastStage.label}.`;
+  }
+
+  return `${intro} no período.`;
 }
 
 /** Optional API counts: absent on older payloads, shown as "-". */
@@ -477,7 +564,7 @@ export default async function OverviewPage({
     },
     ...campaign.funnelSteps,
   ];
-  const journeyMetric = configuredJourneyMetric(campaign.funnelSteps);
+  const kpiStages = configuredKpiStages(campaign.funnelSteps);
   const selectedBusiness = reportingAccounts.find(
     (account) => account.businessId === filters.businessId,
   );
@@ -534,7 +621,11 @@ export default async function OverviewPage({
     },
   ];
   const funnelSummary = dataAvailable
-    ? `${report.rangeLabel}: ${campaign.metaConversationsStarted} conversas registradas pela Meta chegaram a ${campaign.firstPurchases} ${campaign.firstPurchases === 1 ? "primeira compra" : "primeiras compras"}.`
+    ? funnelOutcomeSummary(
+        report.rangeLabel,
+        campaign.metaConversationsStarted,
+        campaign,
+      )
     : "A jornada será exibida quando a API concluir a inicialização.";
 
   return (
@@ -574,6 +665,10 @@ export default async function OverviewPage({
         since={report.since ?? filters.since}
         until={report.until ?? filters.until}
       />
+
+      {dataAvailable ? (
+        <MetaSyncCoverageNotice coverage={report.metaSyncCoverage} />
+      ) : null}
 
       <div className="metric-grid overview-primary-metrics">
         <Metric
@@ -619,53 +714,59 @@ export default async function OverviewPage({
           }
           unavailable={!dataAvailable}
         />
-        <Metric
-          label="Receita tráfego"
-          value={
-            !dataAvailable
-              ? "-"
-              : mixedCurrency
-                ? "Por moeda"
-                : fmt(campaign.trafficRevenueCents)
-          }
-          delta={
-            !dataAvailable
-              ? "Aguardando resposta da API"
-              : mixedCurrency
-                ? "ROAS em cada moeda, abaixo"
-                : rateGap.exchangeRateMissing
-                  ? `ROAS ${exchangeRateMissingLabel}`
-                  : `ROAS ${ratioLabel(campaign.roasAcquisition)}`
-          }
-          unavailable={!dataAvailable}
-        />
-        {journeyMetric ? (
-          <Metric
-            label={journeyMetric.label}
-            value={dataAvailable ? String(journeyMetric.value) : "-"}
-            delta={
-              !dataAvailable
-                ? "Aguardando resposta da API"
-                : journeyMetric.costCents != null
-                  ? funnelStageCostLabel(journeyMetric)
-                  : report.rangeLabel
-            }
-            unavailable={!dataAvailable}
-          />
-        ) : null}
-        <Metric
-          label="Compras"
-          value={dataAvailable ? String(campaign.purchases) : "-"}
-          delta={
-            dataAvailable
-              ? purchaseBreakdownLabel(
-                  campaign.firstPurchases,
-                  campaign.repurchases,
-                )
-              : "Aguardando resposta da API"
-          }
-          unavailable={!dataAvailable}
-        />
+        {kpiStages.map((stage) =>
+          stage.key === "purchase" ? (
+            <Fragment key={stage.key}>
+              <Metric
+                label={stage.label}
+                value={dataAvailable ? String(stage.value) : "-"}
+                delta={
+                  dataAvailable
+                    ? purchaseBreakdownLabel(
+                        campaign.firstPurchases,
+                        campaign.repurchases,
+                      )
+                    : "Aguardando resposta da API"
+                }
+                unavailable={!dataAvailable}
+              />
+              <Metric
+                label="Receita tráfego"
+                value={
+                  !dataAvailable
+                    ? "-"
+                    : mixedCurrency
+                      ? "Por moeda"
+                      : fmt(campaign.trafficRevenueCents)
+                }
+                delta={
+                  !dataAvailable
+                    ? "Aguardando resposta da API"
+                    : mixedCurrency
+                      ? "ROAS em cada moeda, abaixo"
+                      : rateGap.exchangeRateMissing
+                        ? `ROAS ${exchangeRateMissingLabel}`
+                        : `ROAS ${ratioLabel(campaign.roasAcquisition)}`
+                }
+                unavailable={!dataAvailable}
+              />
+            </Fragment>
+          ) : (
+            <Metric
+              key={stage.key}
+              label={stage.label}
+              value={dataAvailable ? String(stage.value) : "-"}
+              delta={
+                !dataAvailable
+                  ? "Aguardando resposta da API"
+                  : stage.costCents != null
+                    ? `${funnelStageCostLabel(stage)} ${stageCostLabel(stage)}`
+                    : report.rangeLabel
+              }
+              unavailable={!dataAvailable}
+            />
+          ),
+        )}
       </div>
 
       {dataAvailable && mixedCurrency ? (
@@ -719,6 +820,7 @@ export default async function OverviewPage({
       <DailyConversationComparison
         available={report.dailyComparisonAvailable === true}
         detailHref={detailHref}
+        leadEventDeferred={report.dailyComparisonLeadEventDeferred === true}
         points={report.dailyComparison ?? []}
         reportState={reportState}
         scopeLabel={scopeLabel}
@@ -730,38 +832,37 @@ export default async function OverviewPage({
 function DailyConversationComparison({
   available,
   detailHref,
+  leadEventDeferred,
   points,
   reportState,
   scopeLabel,
 }: {
   available: boolean;
   detailHref: string;
+  /** The Lead is sent later than the entry in this period (rule override). */
+  leadEventDeferred: boolean;
   points: ReportDailyComparisonPointDto[];
   reportState: OverviewFetchState;
   scopeLabel: string;
 }) {
-  const metaTotal = points.reduce(
-    (total, point) => total + point.metaConversationsStarted,
-    0,
-  );
-  const realTotal = points.reduce(
-    (total, point) => total + point.realConversations,
-    0,
-  );
-  const returningTotal = points.reduce(
-    (total, point) => total + (point.returningLeads ?? 0),
-    0,
-  );
-  const difference = metaTotal - realTotal;
+  const {
+    rows,
+    showLeads,
+    metaTotal,
+    conversationsTotal,
+    leadsTotal,
+    difference,
+  } = dailyComparisonSeries(points, leadEventDeferred);
+  const barsPerDay = showLeads ? 3 : 2;
   const maximum = Math.max(
     1,
-    ...points.flatMap((point) => [
-      point.metaConversationsStarted,
-      point.realConversations,
-      point.returningLeads ?? 0,
-    ]),
+    ...rows.flatMap((row) =>
+      showLeads
+        ? [row.meta, row.conversations, row.leads]
+        : [row.meta, row.conversations],
+    ),
   );
-  const viewWidth = Math.max(760, points.length * 54 + 92);
+  const viewWidth = Math.max(760, rows.length * 54 + 92);
   const viewHeight = 286;
   const plotTop = 22;
   const plotBottom = 226;
@@ -769,10 +870,13 @@ function DailyConversationComparison({
   const plotLeft = 48;
   const plotRight = viewWidth - 24;
   const plotWidth = plotRight - plotLeft;
-  const groupWidth = plotWidth / Math.max(points.length, 1);
-  const barWidth = Math.min(13, Math.max(5, groupWidth * 0.22));
+  const groupWidth = plotWidth / Math.max(rows.length, 1);
+  const barWidth = Math.min(
+    showLeads ? 13 : 16,
+    Math.max(5, groupWidth * (showLeads ? 0.22 : 0.3)),
+  );
   const barGap = 2;
-  const labelEvery = Math.max(1, Math.ceil(points.length / 10));
+  const labelEvery = Math.max(1, Math.ceil(rows.length / 10));
   const barHeight = (value: number) => (value / maximum) * plotHeight;
   const formatDate = (date: string) => {
     const [, month, day] = date.split("-");
@@ -780,10 +884,13 @@ function DailyConversationComparison({
   };
   const differenceLabel =
     difference === 0
-      ? "Volumes conciliados no período"
+      ? "Conversas conciliadas no período"
       : difference > 0
         ? `${difference} ${difference === 1 ? "conversa" : "conversas"} a mais na Meta`
-        : `${Math.abs(difference)} ${Math.abs(difference) === 1 ? "lead novo" : "leads novos"} a mais`;
+        : `${Math.abs(difference)} ${Math.abs(difference) === 1 ? "conversa real" : "conversas reais"} a mais`;
+  const seriesSummary = showLeads
+    ? `Conversas iniciadas pela Meta ${metaTotal}, conversas iniciadas reais ${conversationsTotal}, leads (evento Lead enviado) ${leadsTotal}`
+    : `Conversas iniciadas pela Meta ${metaTotal}, conversas iniciadas reais ${conversationsTotal}`;
 
   return (
     <section
@@ -793,11 +900,24 @@ function DailyConversationComparison({
       <div className="daily-comparison-header">
         <div>
           <span className="eyebrow">Conciliação diária</span>
-          <h2 id="daily-comparison-title">Meta x leads novos</h2>
+          <h2 id="daily-comparison-title">Meta x conversas reais</h2>
           <p>
-            A Meta conta cada conversa iniciada. Leads novos contam uma vez, no
-            dia do primeiro contato; retornos são leads antigos que voltaram por
-            anúncio naquele dia (quem volta em dois dias conta nos dois).
+            A Meta conta cada conversa iniciada a partir dos anúncios. Conversas
+            iniciadas reais são as conversas de anúncio que chegaram aqui no
+            mesmo dia, contadas do mesmo jeito: cada nova conversa conta,
+            inclusive de quem já era lead (mesma regra de “Conversas por
+            anúncio”).
+            {showLeads ? (
+              <>
+                {" "}
+                Leads (evento Lead enviado) são os leads novos no dia em que o
+                evento Lead foi enviado à Meta. Neste período, parte das
+                conversas tem o Lead enviado depois, pela sua regra; por isso
+                essa barra fica abaixo das conversas, o que é esperado. Nos dias
+                em que o Lead foi enviado na entrada, ela acompanha o primeiro
+                contato.
+              </>
+            ) : null}
           </p>
         </div>
         <div
@@ -831,18 +951,20 @@ function DailyConversationComparison({
       ) : (
         <>
           <div className="daily-comparison-legend" aria-label="Legenda">
-            <span>
+            <span title="Conversas iniciadas informadas pela Meta para os anúncios do filtro.">
               <i className="meta" aria-hidden="true" />
-              Conversas contadas pela Meta <strong>{metaTotal}</strong>
+              Conversas iniciadas pela Meta <strong>{metaTotal}</strong>
             </span>
-            <span>
+            <span title="Cada conversa de anúncio que chegou, no dia em que começou. A soma é igual a “Conversas por anúncio”.">
               <i className="real" aria-hidden="true" />
-              Leads novos <strong>{realTotal}</strong>
+              Conversas iniciadas reais <strong>{conversationsTotal}</strong>
             </span>
-            <span title="Soma dos dias: quem volta em dois dias conta nos dois.">
-              <i className="returning" aria-hidden="true" />
-              Retornos (por dia) <strong>{returningTotal}</strong>
-            </span>
+            {showLeads ? (
+              <span title="Leads novos no dia em que o evento Lead foi enviado à Meta (na entrada ou pela sua regra). Cada pessoa conta uma vez.">
+                <i className="lead" aria-hidden="true" />
+                Leads (evento Lead enviado) <strong>{leadsTotal}</strong>
+              </span>
+            ) : null}
           </div>
           <div className="daily-comparison-scroll">
             <svg
@@ -850,10 +972,12 @@ function DailyConversationComparison({
               viewBox={`0 0 ${viewWidth} ${viewHeight}`}
               style={{ minWidth: `${viewWidth}px` }}
               role="img"
-              aria-label={`Comparação diária. Conversas contadas pela Meta ${metaTotal}, leads novos ${realTotal}, retornos ${returningTotal}.`}
+              aria-label={`Comparação diária. ${seriesSummary}.`}
             >
               <title>
-                Conversas contadas pela Meta, leads novos e retornos por dia
+                {showLeads
+                  ? "Conversas iniciadas pela Meta, conversas iniciadas reais e leads por dia"
+                  : "Conversas iniciadas pela Meta e conversas iniciadas reais por dia"}
               </title>
               {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
                 const y = plotBottom - ratio * plotHeight;
@@ -868,18 +992,19 @@ function DailyConversationComparison({
                   </g>
                 );
               })}
-              {points.map((point, index) => {
+              {rows.map((row, index) => {
                 const center = plotLeft + groupWidth * index + groupWidth / 2;
-                const metaHeight = barHeight(point.metaConversationsStarted);
-                const realHeight = barHeight(point.realConversations);
-                const returning = point.returningLeads ?? 0;
-                const returningHeight = barHeight(returning);
-                const groupStart = center - (barWidth * 3 + barGap * 2) / 2;
+                const metaHeight = barHeight(row.meta);
+                const conversationsHeight = barHeight(row.conversations);
+                const leadsHeight = barHeight(row.leads);
+                const groupStart =
+                  center -
+                  (barWidth * barsPerDay + barGap * (barsPerDay - 1)) / 2;
                 const showLabel =
-                  index % labelEvery === 0 || index === points.length - 1;
+                  index % labelEvery === 0 || index === rows.length - 1;
 
                 return (
-                  <g key={point.date}>
+                  <g key={row.date}>
                     <rect
                       className="daily-bar meta"
                       x={groupStart}
@@ -888,28 +1013,30 @@ function DailyConversationComparison({
                       height={metaHeight}
                       rx="3"
                     >
-                      <title>{`${formatDate(point.date)} - Conversas contadas pela Meta: ${point.metaConversationsStarted}`}</title>
+                      <title>{`${formatDate(row.date)} - Conversas iniciadas pela Meta: ${row.meta}`}</title>
                     </rect>
                     <rect
                       className="daily-bar real"
                       x={groupStart + barWidth + barGap}
-                      y={plotBottom - realHeight}
+                      y={plotBottom - conversationsHeight}
                       width={barWidth}
-                      height={realHeight}
+                      height={conversationsHeight}
                       rx="3"
                     >
-                      <title>{`${formatDate(point.date)} - Leads novos: ${point.realConversations}`}</title>
+                      <title>{`${formatDate(row.date)} - Conversas iniciadas reais: ${row.conversations}`}</title>
                     </rect>
-                    <rect
-                      className="daily-bar returning"
-                      x={groupStart + (barWidth + barGap) * 2}
-                      y={plotBottom - returningHeight}
-                      width={barWidth}
-                      height={returningHeight}
-                      rx="3"
-                    >
-                      <title>{`${formatDate(point.date)} - Retornos: ${returning}`}</title>
-                    </rect>
+                    {showLeads ? (
+                      <rect
+                        className="daily-bar lead"
+                        x={groupStart + (barWidth + barGap) * 2}
+                        y={plotBottom - leadsHeight}
+                        width={barWidth}
+                        height={leadsHeight}
+                        rx="3"
+                      >
+                        <title>{`${formatDate(row.date)} - Leads (evento Lead enviado): ${row.leads}`}</title>
+                      </rect>
+                    ) : null}
                     {showLabel ? (
                       <text
                         className="daily-date-label"
@@ -917,7 +1044,7 @@ function DailyConversationComparison({
                         y={plotBottom + 26}
                         textAnchor="middle"
                       >
-                        {formatDate(point.date)}
+                        {formatDate(row.date)}
                       </text>
                     ) : null}
                   </g>

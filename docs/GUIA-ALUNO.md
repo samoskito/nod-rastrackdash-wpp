@@ -283,6 +283,43 @@ e nada é processado ou enviado em segundo plano.
   fica desabilitado (a API responde 423). A compra manual da Braip, Hotmart e
   Yampi entra quando essas plataformas forem portadas.
 
+### 10.6 Visão Geral, Relatórios e Eventos Meta: números do período
+
+Nada para configurar; vale logo depois da atualização.
+
+- **Investimento e Conversas Meta seguem o período escolhido.** Na Visão Geral
+  e em Relatórios (campanhas, conjuntos e anúncios), esses números vêm só dos
+  dias sincronizados da Meta dentro do período. Um dia sem dado da Meta conta
+  como zero. Antes, um período depois que os anúncios pararam podia repetir o
+  total da última sincronização.
+- **Aviso "Atenção aos dados da Meta".** Ele aparece quando o período começa
+  antes do primeiro dia que a Meta tem sincronizado ("Dados da Meta disponíveis
+  a partir de dd/mm"). Também aparece quando uma conta de anúncios está há mais
+  de 24 horas sem sincronizar ou com erro. Nesse caso, reconecte a Meta em
+  Integrações ou use **Sincronizar Meta** em Relatórios. Uma conta conectada há
+  menos de 24 horas não gera aviso.
+- **Cards da Visão Geral seguem a sua Jornada** (Configurações → Jornada).
+  Cada etapa visível vira um card, na ordem e com o nome que você configurou.
+  "Compras" e "Receita tráfego" só aparecem quando a Jornada tem Compra. A
+  ordem padrão do catálogo passou a ser: Lead qualificado antes de Checkout
+  iniciado e Compra no fim. A ordem que você já salvou não muda. Uma etapa
+  nova entra logo depois da etapa anterior a ela no catálogo, e não mais no
+  fim do funil.
+- **Conciliação diária "Meta x conversas reais".** O gráfico compara as
+  conversas iniciadas que a Meta informa com as conversas de anúncio que
+  chegaram no mesmo dia, contadas como "Conversas por anúncio". Quando parte
+  dos leads tem o Lead recebido enviado depois, pela sua regra (seção 10.5), o
+  gráfico mostra uma terceira barra, "Leads (evento Lead enviado)".
+- **Eventos Meta:** o filtro de evento lista todos os eventos configurados no
+  workspace, na ordem do funil. No acesso de suporte pelo backoffice, o detalhe
+  de uma venda cujo valor foi corrigido depois de registrado (por exemplo a
+  Payt sem os juros do parcelamento) mostra "valor corrigido (antes R$ X)".
+- Quando várias contas Meta estão sincronizando ao mesmo tempo, Relatórios não
+  mostra mais "Contas Meta com períodos diferentes" se o período salvo delas é
+  o mesmo.
+
+Tudo isso é leitura: funciona também com a licença bloqueada.
+
 ## 11. Marca (whitelabel) — opcional
 
 Defina `BRAND_NAME`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY_COLOR` para personalizar sua agência (veja [`../docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)). O rodapé residual **`RastrackDash · powered by PalmUP`** é fixo e não pode ser removido nem escondido, com ou sem essas variáveis.

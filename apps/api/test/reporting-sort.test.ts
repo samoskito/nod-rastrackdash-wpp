@@ -710,8 +710,10 @@ describe("MetaReportingService sort with a large deterministic fixture", () => {
     expect(sorted.calls).toEqual(unsorted.calls);
     // Two of these resolve the first-contact attribution of the leads
     // (paid LeadSubmitted in scope + the leads' first paid conversations);
-    // the count stays constant whatever the number of rows.
-    expect(sorted.calls).toHaveLength(8);
+    // the count stays constant whatever the number of rows. Fase 6.3a: +1 for
+    // the Meta coverage notice (active accounts; its groupBy is not in this
+    // fake and the coverage fails safe).
+    expect(sorted.calls).toHaveLength(9);
   });
 });
 

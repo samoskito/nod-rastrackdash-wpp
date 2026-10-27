@@ -127,7 +127,7 @@ export const conversionEventCatalog: Record<
     description:
       "Link de pagamento enviado ou checkout aberto. Exige valor: fixo ou extraido da mensagem.",
     category: "journey",
-    order: 40,
+    order: 45,
     valuePolicy: "required",
     hasItems: true,
     hasOrderId: true,
@@ -140,7 +140,7 @@ export const conversionEventCatalog: Record<
     description:
       "Lead demonstrou alta intencao de compra. Nao carrega valor e e enviado no maximo uma vez por lead.",
     category: "journey",
-    order: 45,
+    order: 40,
     valuePolicy: "none",
     hasItems: false,
     hasOrderId: false,
@@ -252,6 +252,16 @@ export const conversionEventCatalog: Record<
 
 export const conversionEventCatalogOrdered: ConversionEventMetadataDto[] =
   Object.values(conversionEventCatalog).sort((a, b) => a.order - b.order);
+
+/**
+ * Ordem canonica do funil. Eventos fora do catalogo (dado antigo/sujo vindo do
+ * banco) caem no fim em vez de derrubar a ordenacao.
+ */
+export function conversionEventCatalogOrder(eventName: string): number {
+  return conversionEventNameSchema.safeParse(eventName).success
+    ? conversionEventCatalog[eventName as ConversionEventNameDto].order
+    : Number.MAX_SAFE_INTEGER;
+}
 
 export function conversionEventMetadata(
   eventName: ConversionEventNameDto,

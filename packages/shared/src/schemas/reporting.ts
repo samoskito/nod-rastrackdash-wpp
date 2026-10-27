@@ -186,10 +186,45 @@ const reportCurrencyFields = {
 export const reportDailyComparisonPointSchema = z.object({
   date: reportDateSchema,
   metaConversationsStarted: nonnegativeIntSchema,
-  /** Leads novos whose first contact was on this day. */
+  /**
+   * Conversas iniciadas reais: paid conversations (entry LeadSubmitted of
+   * each CTWA conversation, deferred receipts included) started this day.
+   * Same rule as "Conversas por anuncio" (adConversationEvents).
+   */
+  adConversationsStarted: nonnegativeIntSchema.optional(),
+  /**
+   * Leads novos whose first contact was on this day; with the rule override,
+   * deferred leads on the day the rule sent the Lead event.
+   */
   realConversations: nonnegativeIntSchema,
   /** Leads antigos que voltaram por anuncio neste dia. */
   returningLeads: nonnegativeIntSchema.optional(),
+});
+
+/**
+ * Cobertura dos dados da Meta (investimento e conversas Meta vêm só das linhas
+ * diárias do período). Ausente quando o serviço não conseguiu calcular.
+ */
+export const metaSyncCoverageSchema = z.object({
+  /** Primeiro dia (yyyy-mm-dd) com linha diária sincronizada no workspace. */
+  earliestDailyDate: reportDateSchema.nullable(),
+  earliestDailyAccountName: z.string().min(1).nullable(),
+  /** O período pedido começa antes de earliestDailyDate. */
+  periodStartsBeforeCoverage: z.boolean(),
+  /** Contas ativas com sincronização atrasada, com erro ou bloqueada. */
+  problemAccounts: z
+    .array(
+      z.object({
+        adAccountId: z.string().min(1),
+        name: z.string().min(1),
+        reason: z.enum(["stale", "error", "blocked", "never"]),
+        /** Marco do problema (ISO): última sincronização, bloqueio ou criação. */
+        since: z.string().min(1),
+      }),
+    )
+    .max(50),
+  /** Marco (ISO) mais antigo entre as contas com problema. */
+  staleSince: z.string().min(1).nullable(),
 });
 
 export const reportOverviewSchema = z.object({
@@ -198,6 +233,7 @@ export const reportOverviewSchema = z.object({
   since: reportDateSchema.nullable().optional(),
   until: reportDateSchema.nullable().optional(),
   campaigns: z.array(campaignReportRowSchema),
+  metaSyncCoverage: metaSyncCoverageSchema.optional(),
   summary: campaignReportRowSchema.optional(),
   totals: reportTotalsSchema.optional(),
   ...reportCurrencyFields,
@@ -205,6 +241,12 @@ export const reportOverviewSchema = z.object({
   summaryByCurrency: z.array(reportCurrencyGroupSchema).optional(),
   dailyComparison: z.array(reportDailyComparisonPointSchema).optional(),
   dailyComparisonAvailable: z.boolean().optional(),
+  /**
+   * true when, in this period, the Lead event (LeadSubmitted) is sent later
+   * than the conversation entry for at least part of the leads (rule override
+   * report mode). Only then the daily chart shows the separate Lead series.
+   */
+  dailyComparisonLeadEventDeferred: z.boolean().optional(),
   pagination: reportPaginationSchema.optional(),
 });
 
@@ -233,6 +275,7 @@ export const adSetReportOverviewSchema = z.object({
   since: reportDateSchema.nullable().optional(),
   until: reportDateSchema.nullable().optional(),
   adSets: z.array(adSetReportRowSchema),
+  metaSyncCoverage: metaSyncCoverageSchema.optional(),
   totals: reportTotalsSchema.optional(),
   ...reportCurrencyFields,
   pagination: reportPaginationSchema.optional(),
@@ -258,6 +301,7 @@ export const adReportOverviewSchema = z.object({
   since: reportDateSchema.nullable().optional(),
   until: reportDateSchema.nullable().optional(),
   ads: z.array(adReportRowSchema),
+  metaSyncCoverage: metaSyncCoverageSchema.optional(),
   totals: reportTotalsSchema.optional(),
   ...reportCurrencyFields,
   pagination: reportPaginationSchema.optional(),
@@ -367,6 +411,18 @@ export const conversionAuditEventDetailSchema =
     sourceSnapshot: conversionAuditPayloadSnapshotSchema,
     metaRequest: conversionAuditPayloadSnapshotSchema,
     metaResponse: conversionAuditPayloadSnapshotSchema,
+    /**
+     * Valor corrigido depois do registro (ex.: Payt sem juros do
+     * parcelamento). So enviado ao backoffice (suporte da plataforma).
+     */
+    valueCorrection: z
+      .object({
+        previousValueCents: z.number().int().positive(),
+        valueCents: z.number().int().positive(),
+        currency: z.string().min(1).nullable(),
+      })
+      .nullable()
+      .optional(),
   });
 
 export const conversionAuditSummarySchema = z.object({
@@ -387,12 +443,22 @@ export const conversionAuditSummarySchema = z.object({
   metaAuthRetryable: z.number().int().nonnegative().optional(),
 });
 
+export const conversionAuditEventOptionSchema = z.object({
+  eventName: z.string().min(1),
+  label: z.string().min(1),
+});
+
 export const conversionAuditOverviewSchema = z.object({
   workspaceId: z.string().min(1),
   rangeLabel: z.string().min(1),
   summary: conversionAuditSummarySchema,
   pagination: reportPaginationSchema,
   events: z.array(conversionAuditEventSchema),
+  /**
+   * Eventos configurados no workspace, na ordem do funil. Opcional para o web
+   * continuar funcionando enquanto a API ainda nao subiu.
+   */
+  availableEvents: z.array(conversionAuditEventOptionSchema).optional(),
 });
 
 // Server-side report ordering is limited to existing canonical row metrics.
@@ -439,6 +505,7 @@ export type ReportCurrencyGroupDto = z.infer<typeof reportCurrencyGroupSchema>;
 export type ReportDailyComparisonPointDto = z.infer<
   typeof reportDailyComparisonPointSchema
 >;
+export type MetaSyncCoverageDto = z.infer<typeof metaSyncCoverageSchema>;
 export type ReportOverviewDto = z.infer<typeof reportOverviewSchema>;
 export type AdSetReportRowDto = z.infer<typeof adSetReportRowSchema>;
 export type AdSetReportOverviewDto = z.infer<typeof adSetReportOverviewSchema>;
@@ -458,6 +525,9 @@ export type ConversionAuditEventDto = z.infer<
 >;
 export type ConversionAuditEventDetailDto = z.infer<
   typeof conversionAuditEventDetailSchema
+>;
+export type ConversionAuditEventOptionDto = z.infer<
+  typeof conversionAuditEventOptionSchema
 >;
 export type ConversionAuditPayloadModeDto = z.infer<
   typeof conversionAuditPayloadModeSchema

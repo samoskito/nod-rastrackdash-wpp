@@ -3,6 +3,7 @@ import {
   conversionEventBuilderLabel,
   conversionEventCarriesValue,
   conversionEventCatalog,
+  conversionEventCatalogOrder,
   conversionEventCatalogOrdered,
   conversionEventDedupeMode,
   conversionEventMetaEventIdPrefix,
@@ -95,6 +96,30 @@ describe("conversion event catalog", () => {
     );
     expect(conversionEventBuilderLabel("Purchase")).toBe("Compra realizada");
     expect(conversionEventBuilderLabel("NaoExiste")).toBe("NaoExiste");
+  });
+
+  it("qualifica antes do checkout e fecha a jornada na compra", () => {
+    const journey = conversionEventCatalogOrdered
+      .filter((item) => item.category !== "operational")
+      .map((item) => item.eventName);
+
+    expect(journey).toEqual([
+      "LeadSubmitted",
+      "ViewContent",
+      "AddToCart",
+      "QualifiedLead",
+      "InitiateCheckout",
+      "Purchase",
+    ]);
+    expect(conversionEventCatalogOrder("InitiateCheckout")).toBeLessThan(
+      conversionEventCatalogOrder("Purchase"),
+    );
+  });
+
+  it("joga evento fora do catalogo para o fim da ordem do funil", () => {
+    expect(conversionEventCatalogOrder("NaoExiste")).toBeGreaterThan(
+      conversionEventCatalogOrder("ReviewProvided"),
+    );
   });
 
   it("devolve os metadados por evento", () => {

@@ -26,7 +26,7 @@ export const overviewLeadsHints = {
   repeat:
     "Pessoas que iniciaram 2 ou mais conversas por anúncio no período, sejam leads novos ou antigos.",
   conversations:
-    "Todas as conversas iniciadas por anúncio no período, como foram informadas à Meta. Uma pessoa pode iniciar várias.",
+    "Todas as conversas iniciadas por anúncio no período, como foram informadas à Meta. Uma pessoa pode iniciar várias. É a soma das barras “Conversas iniciadas reais” da conciliação diária.",
 } as const;
 
 /**
@@ -40,7 +40,7 @@ export const leadSubmittedOverrideLeadsCopy = {
     "Leads novos: quando o Lead recebido foi enviado à Meta — na entrada ou pela sua regra. Cada pessoa vinda de anúncio conta uma vez. É a base do custo por lead.",
   newCaption: "Lead recebido enviado no período",
   conversationsHint:
-    "Conversas iniciadas: toda conversa que entrou. Conta toda conversa por anúncio do período, mesmo quando o Lead recebido é enviado depois pela regra. Uma pessoa pode iniciar várias.",
+    "Conversas iniciadas: toda conversa que entrou. Conta toda conversa por anúncio do período, mesmo quando o Lead recebido é enviado depois pela regra. Uma pessoa pode iniciar várias. É a soma das barras “Conversas iniciadas reais” da conciliação diária.",
 } as const;
 
 export function overviewLeadsCopy(leadSubmittedOverrideEnabled: boolean) {

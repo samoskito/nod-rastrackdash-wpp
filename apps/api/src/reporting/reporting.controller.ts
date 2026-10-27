@@ -362,6 +362,11 @@ export class ReportingController {
     return {
       ...detail,
       canRetry: detail.canRetry && this.canRetryMetaEvent(workspace),
+      // "Valor corrigido (antes R$ X)" is an operator detail (backoffice).
+      valueCorrection:
+        workspace.accessMode === "platform_support"
+          ? (detail.valueCorrection ?? null)
+          : null,
     };
   }
 

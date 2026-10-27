@@ -26,6 +26,7 @@ import {
   CurrencyKpiGroups,
   ExchangeRateMissingNote,
 } from "../../../components/currency-kpi-groups";
+import { MetaSyncCoverageNotice } from "../../../components/meta-sync-coverage-notice";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { SubmitButton } from "../../../components/submit-button";
 import {
@@ -53,6 +54,7 @@ import { isApiRequestError, serverApiFetch } from "../../../lib/server-api";
 import { getCurrentWorkspace } from "../../../lib/current-workspace";
 import { MetaEntityControls } from "./meta-entity-controls";
 import { MetaReportFilters } from "./meta-report-filters";
+import { logMetaReportingSyncEnqueueFailure } from "./reports-error-logging";
 import { ReportAdPreview } from "./report-ad-preview";
 import {
   REPORT_INSIGHT_FETCH_SIZE,
@@ -657,7 +659,9 @@ async function syncMetaReports(formData: FormData) {
     );
     revalidatePath("/reports");
     redirectParams.set("notice", "meta-sync-queued");
-  } catch {
+  } catch (error) {
+    // Keep operational context without serializing the error or form values.
+    logMetaReportingSyncEnqueueFailure(error);
     redirectParams.set("notice", "meta-sync-error");
   }
 
@@ -1373,10 +1377,25 @@ function aggregateFunnelSteps(
   spendCents: number,
 ): ReportFunnelStepDto[] {
   const steps = new Map<string, ReportFunnelStepDto>();
+  const order: string[] = [];
 
   for (const row of rows) {
+    // Merge estavel: a API ja manda as etapas na ordem do funil, mas linhas sem
+    // compra omitem first_purchase/repurchase. Anexar no fim jogaria uma etapa
+    // do meio do funil para o final; inserimos logo apos a etapa anterior desta
+    // mesma linha.
+    let insertAt = 0;
+
     for (const step of row.funnelSteps) {
       const current = steps.get(step.key);
+      const known = order.indexOf(step.key);
+
+      if (known >= 0) {
+        insertAt = known + 1;
+      } else {
+        order.splice(insertAt, 0, step.key);
+        insertAt += 1;
+      }
 
       steps.set(step.key, {
         key: step.key,
@@ -1387,10 +1406,14 @@ function aggregateFunnelSteps(
     }
   }
 
-  return Array.from(steps.values()).map((step) => ({
-    ...step,
-    costCents: step.value > 0 ? Math.floor(spendCents / step.value) : null,
-  }));
+  return order.map((key) => {
+    const step = steps.get(key)!;
+
+    return {
+      ...step,
+      costCents: step.value > 0 ? Math.floor(spendCents / step.value) : null,
+    };
+  });
 }
 
 function reportTotals(rows: PerformanceRow[]): ReportTotals {
@@ -1493,7 +1516,9 @@ function metaSyncPeriodState(
 
   const ranges = accounts
     .map((account) =>
-      account.syncStatus === "synced" &&
+      // Only a completed or currently running import can use its persisted
+      // range. Unknown, pending, and error statuses remain fail-closed.
+      (account.syncStatus === "synced" || account.syncStatus === "syncing") &&
       account.lastSyncSince &&
       account.lastSyncUntil
         ? `${account.lastSyncSince}|${account.lastSyncUntil}`
@@ -1535,7 +1560,7 @@ function metaSyncCoversPeriod(
     accounts.length > 0 &&
     accounts.every(
       (account) =>
-        account.syncStatus === "synced" &&
+        (account.syncStatus === "synced" || account.syncStatus === "syncing") &&
         Boolean(account.lastSyncSince) &&
         Boolean(account.lastSyncUntil) &&
         account.lastSyncSince! <= since &&
@@ -3022,6 +3047,13 @@ export default async function ReportsPage({
           <strong>{metaPeriodWarning.title}</strong>
           <span>{metaPeriodWarning.message}</span>
         </div>
+      ) : null}
+
+      {reportState !== "error" ? (
+        <MetaSyncCoverageNotice
+          action={canSyncMetaReports ? "Use Sincronizar Meta acima." : undefined}
+          coverage={loadedReport?.metaSyncCoverage}
+        />
       ) : null}
 
       {hierarchySelection.length > 0 ? (
