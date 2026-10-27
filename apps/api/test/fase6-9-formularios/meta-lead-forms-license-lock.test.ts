@@ -7,7 +7,8 @@ import { licenseWriteAssertion } from "../../src/scripts/import-dashboard-leads"
 
 /**
  * Fase 6.9 (nod): criar, alterar, assinar e remover uma conexão de
- * formulários Meta são escritas. Com a licença bloqueada, o guard global
+ * formulários Meta são escritas, assim como desativar e reativar. Com a
+ * licença bloqueada, o guard global
  * responde 423 e a lista (GET) continua liberada. O import do Dashboard Leads
  * com --apply também recusa.
  */
@@ -39,6 +40,8 @@ describe("formulários Meta com a licença bloqueada", () => {
     ["POST", "/integrations/meta-lead-forms"],
     ["PATCH", "/integrations/meta-lead-forms/conexao_sintetica"],
     ["POST", "/integrations/meta-lead-forms/conexao_sintetica/subscribe"],
+    ["POST", "/integrations/meta-lead-forms/conexao_sintetica/deactivate"],
+    ["POST", "/integrations/meta-lead-forms/conexao_sintetica/reactivate"],
     ["DELETE", "/integrations/meta-lead-forms/conexao_sintetica"],
   ] as const)
     it(`${method} ${path} responde 423`, async () => {

@@ -76,6 +76,24 @@ export class MetaLeadFormsController {
     return this.metaLeadForms.subscribePage(workspaceId, id);
   }
 
+  /** Stops receiving the Page's leads; every submission stays. */
+  @Post(":id/deactivate")
+  @HttpCode(200)
+  async deactivate(@AuthToken() refreshToken: string, @Param("id") id: string) {
+    const { workspaceId } = await this.requireIntegrationManager(refreshToken);
+
+    return this.metaLeadForms.setConnectionActive(workspaceId, id, false);
+  }
+
+  @Post(":id/reactivate")
+  @HttpCode(200)
+  async reactivate(@AuthToken() refreshToken: string, @Param("id") id: string) {
+    const { workspaceId } = await this.requireIntegrationManager(refreshToken);
+
+    return this.metaLeadForms.setConnectionActive(workspaceId, id, true);
+  }
+
+  /** 409 when the Page already received submissions: deactivate instead. */
   @Delete(":id")
   @HttpCode(204)
   async remove(@AuthToken() refreshToken: string, @Param("id") id: string) {

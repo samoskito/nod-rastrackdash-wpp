@@ -91,18 +91,23 @@ export async function setMetaLeadFormConnectionActiveAction(
   const id = text(formData, "connectionId");
   const active = text(formData, "active") === "true";
 
+  // Desativar para de receber os leads da Página e guarda o histórico; é o
+  // caminho quando a Página já recebeu formulários (remover responde 409).
   try {
     await serverApiFetch(
-      `/integrations/meta-lead-forms/${encodeURIComponent(id)}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active }),
-      },
+      `/integrations/meta-lead-forms/${encodeURIComponent(id)}/${
+        active ? "reactivate" : "deactivate"
+      }`,
+      { method: "POST" },
     );
     revalidatePath("/integrations");
 
-    return state("success", active ? "Conexão retomada." : "Conexão pausada.");
+    return state(
+      "success",
+      active
+        ? "Conexão reativada: os novos leads voltam a chegar."
+        : "Conexão desativada: os novos leads são ignorados e o histórico fica guardado.",
+    );
   } catch (error) {
     return errorState(error, "Não foi possível alterar a conexão.");
   }

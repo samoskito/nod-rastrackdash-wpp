@@ -18,11 +18,16 @@ no **CRM**), envia a etapa para a Meta pela **Conversions API for CRM**
 ## Onde fica
 
 `/integrations` → aba **Anúncios** → card **Meta** → seção **Formulários Meta**. Quem pode gerenciar
-integrações (owner ou admin) cadastra, edita (dataset, evento e tokens, em **Editar**), pausa,
-retoma, assina a Página e remove conexões. Uma Página só pode estar conectada em **um** workspace da
-instalação. Remover a conexão apaga os envios de formulário dela e as etapas ainda não enviadas não
-saem mais: para trocar token ou dataset, use **Editar**. Com a
-licença bloqueada, a seção continua mostrando as conexões, mas criar, alterar, assinar e remover
+integrações (owner ou admin) cadastra, edita (dataset, evento e tokens, em **Editar**), desativa,
+reativa, assina a Página e remove conexões. Uma Página só pode estar conectada em **um** workspace da
+instalação (desativada, ela continua reservada para o mesmo workspace). **Remover só vale para uma
+conexão que ainda não recebeu nenhum formulário.** Se a Página já recebeu formulários, o botão
+**Remover** some e a API responde 409: use **Desativar**. Desativada, a Página para de receber leads
+(o webhook responde 2xx e ignora o `leadgen`, então a Meta não reentrega), as etapas do CRM dessa
+conexão ficam bloqueadas, e todo o histórico (envios, leads e etapas) fica guardado; **Reativar** volta
+a receber os novos. Para trocar token ou dataset, use **Editar**. Com a
+licença bloqueada, a seção continua mostrando as conexões, mas criar, alterar, assinar, desativar,
+reativar e remover
 respondem 423 (o webhook da Meta também é recusado até a licença voltar).
 
 ## Antes de começar
@@ -77,7 +82,7 @@ respondem 423 (o webhook da Meta também é recusado até a licença voltar).
 - A Meta só aceita lead com **até 28 dias**. Acima disso, a etapa fica como "não elegível", com o
   motivo.
 - `event_time` é o momento da qualificação. Num reenvio com mais de 6 dias, o envio usa a hora atual.
-- Configuração faltando (dataset, conexão pausada, token ilegível) e falha de login da Meta (código
+- Configuração faltando (dataset, conexão desativada, token ilegível) e falha de login da Meta (código
   190 ou 102, nos últimos 7 dias) aparecem em **Eventos Meta** e são reenviadas por **Reenviar
   bloqueados** depois de corrigir em **Editar**. Outras recusas da Meta não são reenviadas
   automaticamente.
@@ -87,8 +92,8 @@ respondem 423 (o webhook da Meta também é recusado até a licença voltar).
   "Ler de novo").
 - Os dados que a pessoa preencheu no formulário (nome, e-mail, telefone e respostas) ficam guardados
   no banco da sua instalação, como os leads do WhatsApp; trate-os como dados pessoais do cliente.
-- Uma Página **sem** conexão ativa continua no comportamento anterior do webhook Meta (só log de
-  diagnóstico).
+- Uma Página **sem** conexão continua no comportamento anterior do webhook Meta (só log de
+  diagnóstico). Com a conexão **desativada**, o `leadgen` dela é respondido com 2xx e ignorado.
 
 ## Pendências conhecidas
 
@@ -100,5 +105,5 @@ respondem 423 (o webhook da Meta também é recusado até a licença voltar).
 Voltar o código não desfaz a migration: as tabelas `MetaLeadFormConnection` e `MetaLeadSubmission`
 ficam no banco e são ignoradas pela versão anterior (não apague). Na versão anterior, a seção some e
 o webhook `leadgen` volta a ser só um log de diagnóstico; os leads já criados continuam. Para parar de
-receber leads sem voltar o código, clique em **Pausar** na conexão. Só restaure o backup do PostgreSQL
+receber leads sem voltar o código, clique em **Desativar** na conexão (o histórico fica guardado). Só restaure o backup do PostgreSQL
 com orientação.

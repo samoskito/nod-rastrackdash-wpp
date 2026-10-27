@@ -31,12 +31,16 @@ function ConnectionCard({
   connection: MetaLeadFormConnectionDto;
   canManage: boolean;
 }) {
+  // Decisão de 27/10/2026: com envios a conexão só desativa (a API responde
+  // 409 ao remover), para não apagar o histórico de formulários.
+  const hasSubmissions = connection.submissionCount > 0;
+
   return (
     <article className="meta-lead-form-card">
       <header>
         <strong>{connection.label}</strong>
         <span className={`status-chip${connection.active ? "" : " warn"}`}>
-          {connection.active ? "Ativa" : "Pausada"}
+          {connection.active ? "Ativa" : "Desativada"}
         </span>
         <span
           className={`status-chip${connection.pageSubscribedAt ? "" : " warn"}`}
@@ -109,29 +113,37 @@ function ConnectionCard({
               value={connection.active ? "false" : "true"}
             />
             <PendingSubmitButton
-              label={connection.active ? "Pausar" : "Retomar"}
+              label={connection.active ? "Desativar" : "Reativar"}
               pendingLabel="Salvando..."
             />
           </BackofficeActionForm>
-          <BackofficeActionForm action={deleteMetaLeadFormConnectionAction}>
-            <input type="hidden" name="connectionId" value={connection.id} />
-            <button
-              className="button"
-              type="submit"
-              onClick={(event) => {
-                if (
-                  !window.confirm(
-                    "Remover a conexão apaga o histórico de formulários dela e as etapas ainda não enviadas não poderão mais sair. Os leads continuam. Para trocar token ou dataset, use Editar. Continuar?",
-                  )
-                ) {
-                  event.preventDefault();
-                }
-              }}
-            >
-              Remover
-            </button>
-          </BackofficeActionForm>
+          {hasSubmissions ? null : (
+            <BackofficeActionForm action={deleteMetaLeadFormConnectionAction}>
+              <input type="hidden" name="connectionId" value={connection.id} />
+              <button
+                className="button"
+                type="submit"
+                onClick={(event) => {
+                  if (
+                    !window.confirm(
+                      "Remover apaga a configuração desta Página (ela ainda não recebeu formulários). Para trocar token ou dataset, use Editar. Continuar?",
+                    )
+                  ) {
+                    event.preventDefault();
+                  }
+                }}
+              >
+                Remover
+              </button>
+            </BackofficeActionForm>
+          )}
         </div>
+      ) : null}
+      {canManage && hasSubmissions ? (
+        <p className="muted">
+          Esta Página já recebeu formulários: não dá para remover. Desative para
+          parar de receber; o histórico fica guardado.
+        </p>
       ) : null}
       {canManage ? (
         <details className="meta-lead-form-edit">

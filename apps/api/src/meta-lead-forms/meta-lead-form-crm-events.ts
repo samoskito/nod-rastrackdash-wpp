@@ -77,7 +77,7 @@ export async function previewLeadFormCrmStage(
     return {
       eventName,
       willSend: false,
-      reason: "Conexão de formulários pausada em Integrações.",
+      reason: "Conexão de formulários desativada em Integrações.",
     };
   const ineligible = crmIneligibility(
     {
@@ -300,7 +300,7 @@ export async function sendLeadFormCrmEvent(
   if (!submission || !connection)
     return block("Formulário do lead não encontrado");
   if (!connection.active)
-    return block("Conexão de formulários pausada em Integrações");
+    return block("Conexão de formulários desativada em Integrações");
   if (!connection.crmDatasetId)
     return block("Conexão sem dataset do CRM configurado");
 

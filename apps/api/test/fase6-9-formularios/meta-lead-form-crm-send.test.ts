@@ -201,7 +201,7 @@ describe("Fase 6.9: etapa de CRM do formulário Meta", () => {
     const paused = createHarness({ active: false });
     expect(
       await paused.service.previewLeadFormCrmStage("ws1", ["lead1"]),
-    ).toMatchObject({ willSend: false, reason: expect.stringMatching(/pausada/) });
+    ).toMatchObject({ willSend: false, reason: expect.stringMatching(/desativada/) });
   });
 
   it("sends to the dataset with the dataset token and marks it sent", async () => {

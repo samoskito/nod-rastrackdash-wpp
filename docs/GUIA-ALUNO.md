@@ -486,7 +486,15 @@ já existem. Guia completo: `docs/setup/meta-lead-forms.md`.
   vai para o dataset do CRM da Meta, uma vez por formulário. A confirmação da
   conversão manual mostra se ela será enviada. Um lead com formulário e
   WhatsApp manda os dois eventos, cada um ao seu destino.
-- **Falhas:** configuração faltando (dataset, conexão pausada) e falha de login
+- **Remover ou desativar:** uma conexão que **já recebeu formulários** não pode
+  ser removida (o botão some e a API responde 409, para não apagar o
+  histórico): use **Desativar**. Desativada, a Página para de receber leads (o
+  webhook responde 2xx e ignora, então a Meta não reentrega) e as etapas do CRM
+  dela ficam bloqueadas; envios, leads e etapas ficam guardados, e
+  **Reativar** volta a receber. Sem nenhum formulário recebido, **Remover**
+  continua disponível. Desativada, a Página segue reservada para o mesmo
+  workspace.
+- **Falhas:** configuração faltando (dataset, conexão desativada) e falha de login
   da Meta aparecem em Eventos Meta e voltam com **Reenviar bloqueados**.
 - **Dashboard Leads:** quem migra daquela ferramenta pode importar o histórico
   com o comando `dashboard-leads:import` (simula por padrão; o que já foi
@@ -494,7 +502,7 @@ já existem. Guia completo: `docs/setup/meta-lead-forms.md`.
   `docs/setup/dashboard-leads-import.md`. As credenciais do Supabase vão só na
   linha do comando, nunca no `.env`.
 - **Licença bloqueada:** a seção mostra as conexões, mas criar, alterar,
-  assinar e remover respondem 423; a importação com `--apply` é recusada.
+  assinar, desativar, reativar e remover respondem 423; a importação com `--apply` é recusada.
 
 ## 11. Marca (whitelabel) — opcional
 

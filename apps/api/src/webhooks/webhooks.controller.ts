@@ -379,20 +379,35 @@ export class WebhooksController {
     // Only the leadgen changes of those Pages are ingested; whatever else the
     // delivery carries (other Pages, other fields) still goes to the
     // diagnostic path. A Graph read failure answers 503 so Meta redelivers.
+    // A Page whose connection was deactivated (it already received forms, so
+    // it can only be deactivated, not removed) is answered 2xx and ignored:
+    // nothing is read or saved and Meta does not redeliver.
     const leadgen = parseLeadgenPayload(body);
     if (leadgen && leadgen.changes.length > 0 && this.metaLeadForms) {
+      const pageIds = leadgen.changes.map((change) => change.page_id);
       const pages = await this.metaLeadForms.activeConnectionPages(
-        leadgen.changes.map((change) => change.page_id),
+        pageIds,
         workspaceId,
       );
       const routable = leadgen.changes.filter((change) =>
         pages.has(change.page_id),
       );
-      if (routable.length > 0) {
-        const result = await this.metaLeadForms.ingestLeadgen(routable, {
-          workspaceId,
-        });
-        if (routable.length < leadgen.total) {
+      const inactive =
+        routable.length < leadgen.changes.length
+          ? await this.metaLeadForms.inactiveConnectionPages(
+              pageIds.filter((pageId) => !pages.has(pageId)),
+              workspaceId,
+            )
+          : new Set<string>();
+      const ignored = leadgen.changes.filter(
+        (change) => !pages.has(change.page_id) && inactive.has(change.page_id),
+      ).length;
+      if (routable.length > 0 || ignored > 0) {
+        const result =
+          routable.length > 0
+            ? await this.metaLeadForms.ingestLeadgen(routable, { workspaceId })
+            : { received: 0, saved: 0, duplicates: 0, unrouted: 0, fetchFailed: 0 };
+        if (routable.length + ignored < leadgen.total) {
           try {
             const context = await this.resolveMetaContext(body);
             await this.recordMetaWebhook(body, context);
@@ -408,6 +423,12 @@ export class WebhooksController {
           throw new ServiceUnavailableException(
             "Leitura do lead na Graph API falhou; a Meta vai reenviar",
           );
+        if (ignored > 0) {
+          this.logger.log(
+            `meta webhook: ${ignored} leadgen de Página com conexão desativada ignorado(s)`,
+          );
+          return { ...result, ignoredInactive: ignored };
+        }
         return result;
       }
     }
