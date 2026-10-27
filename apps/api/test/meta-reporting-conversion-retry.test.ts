@@ -339,6 +339,94 @@ describe("Meta reporting conversion retries", () => {
     expect(rows.has("foreign")).toBe(false);
   });
 
+  it("explica a recusa da Meta pelo código guardado e o motivo conhecido do destino (lista e Resumo)", async () => {
+    const now = Date.now();
+    const { service } = harness([
+      event({
+        id: "invalid_param",
+        status: "error",
+        errorCode: "MetaCapiRejected",
+        errorMessage: "Meta CAPI request failed",
+        sourceTrigger: "keyword",
+        eventOccurredAt: new Date(now - 60_000),
+        providerResponseSummary: {
+          httpStatus: 400,
+          error: {
+            code: 100,
+            error_subcode: 2804019,
+            type: "OAuthException",
+            fbtrace_id: "AbC_12-xyz",
+            // Linha antiga ou adulterada: texto livre nunca aparece.
+            message: "lead.sintetico@example.com",
+          },
+        },
+      }),
+      event({
+        id: "unknown_code",
+        status: "error",
+        errorCode: "MetaCapiRejected",
+        sourceTrigger: "keyword",
+        eventOccurredAt: new Date(now - 120_000),
+        providerResponseSummary: {
+          httpStatus: 400,
+          error: { code: 12345, error_subcode: 6, fbtrace_id: "T9" },
+        },
+      }),
+      event({
+        id: "old_row",
+        status: "error",
+        errorCode: "MetaCapiRejected",
+        sourceTrigger: "keyword",
+        eventOccurredAt: new Date(now - 180_000),
+        providerResponseSummary: { httpStatus: 400 },
+      }),
+      event({
+        id: "inactive_account",
+        errorCode: "MissingMetaDestination",
+        errorMessage: "Conta Meta inativa",
+        eventOccurredAt: new Date(now - 240_000),
+      }),
+      event({
+        id: "unexpected_destination_error",
+        errorCode: "MissingMetaDestination",
+        errorMessage: "Erro inesperado com lead.sintetico@example.com",
+        eventOccurredAt: new Date(now - 300_000),
+      }),
+    ]);
+    const audit = await service.getConversionEventAudit({
+      workspaceId: "workspace_1",
+      rangeLabel: "tudo",
+      page: 1,
+      pageSize: 25,
+    });
+    const rows = new Map(audit.events.map((row) => [row.id, row]));
+    const readable =
+      "A Meta recusou o evento (código 100, subcódigo 2804019): a Meta considerou um parâmetro do evento inválido.";
+    expect(rows.get("invalid_param")?.errorCode).toBe("MetaCapiRejected");
+    expect(rows.get("invalid_param")?.errorMessage).toContain(readable);
+    expect(rows.get("invalid_param")?.errorMessage).toContain(
+      "Identificador para suporte da Meta: AbC_12-xyz",
+    );
+    expect(rows.get("unknown_code")?.errorMessage).toBe(
+      "A Meta recusou o evento (código 12345, subcódigo 6). Identificador para suporte da Meta: T9",
+    );
+    expect(rows.get("old_row")?.errorMessage).toBe("A Meta recusou o evento");
+    expect(rows.get("inactive_account")?.errorMessage).toBe(
+      "Destino Meta não configurado: Conta Meta inativa",
+    );
+    expect(rows.get("unexpected_destination_error")?.errorMessage).toBe(
+      "Destino Meta não configurado",
+    );
+    expect(JSON.stringify(audit)).not.toContain("lead.sintetico");
+
+    const detail = await service.getConversionEventAuditDetail({
+      workspaceId: "workspace_1",
+      eventId: "invalid_param",
+    });
+    expect(detail.reasonCode).toBe("MetaCapiRejected");
+    expect(detail.reason).toContain(readable);
+  });
+
   it("lets a ready_to_send stuck for more than 10 minutes be retried (7ac17df7)", async () => {
     const now = Date.now();
     const { service } = harness([

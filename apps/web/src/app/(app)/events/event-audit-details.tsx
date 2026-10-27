@@ -67,6 +67,26 @@ export function auditReasonLabel(
   return (reasonCode && auditReasonLabels[reasonCode]) || reason;
 }
 
+/**
+ * Aba "Resposta Meta": o motivo legível da recusa (montado pela API só com
+ * código, subcódigo e identificador da Meta) acima do JSON guardado.
+ */
+export function MetaRejectionReason({
+  reasonCode,
+  reason,
+}: {
+  reasonCode: string | null | undefined;
+  reason: string | null | undefined;
+}) {
+  if (reasonCode !== "MetaCapiRejected" || !reason) return null;
+  return (
+    <div className="event-audit-reason">
+      <span className="micro-label">Motivo da recusa da Meta</span>
+      <strong>{reason}</strong>
+    </div>
+  );
+}
+
 function missingFieldLabel(field: string): string {
   const labels: Record<string, string> = {
     phone_hash: "Telefone identificável",
@@ -475,7 +495,13 @@ export function EventAuditDetails({
                   <JsonSnapshot snapshot={detail.metaRequest} />
                 ) : null}
                 {activeTab === "response" ? (
-                  <JsonSnapshot snapshot={detail.metaResponse} />
+                  <>
+                    <MetaRejectionReason
+                      reasonCode={detail.reasonCode}
+                      reason={detail.reason}
+                    />
+                    <JsonSnapshot snapshot={detail.metaResponse} />
+                  </>
                 ) : null}
               </div>
             </>

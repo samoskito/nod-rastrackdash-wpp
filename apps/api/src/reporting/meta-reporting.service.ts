@@ -63,10 +63,13 @@ import { isSupportedConversionEventName } from "../conversion-events/conversion-
 import {
   BLOCKED_CONVERSION_RETRY_LIMIT,
   canRetryConversionEvent,
-  isMetaAuthFailureConversionEvent,
   retryableMetaAuthFailureConversionEventWhere,
   retryBlockedConversionEventWhere,
 } from "../conversion-events/conversion-event-retry";
+import {
+  conversionEventRejectionText,
+  safeMetaDestinationReason,
+} from "../conversion-events/meta-capi-rejection";
 import { buildMetaCapiPayload } from "../conversion-events/meta-capi-payload.builder";
 import { FunnelConfigurationService } from "../conversion-rules/funnel-configuration.service";
 import { InboundWebhookChannelRoutesService } from "../inbound-webhooks/inbound-webhook-channel-routes.service";
@@ -7098,20 +7101,29 @@ export class MetaReportingService {
 
   /**
    * errorCode stays MetaCapiRejected (filters and reports rely on it); only
-   * the text tells a Meta login failure (code 190/102) apart.
+   * the text tells a Meta login failure (code 190/102) apart and, for other
+   * refusals, explains the stored Graph code/subcode (never Meta's free text).
+   * MissingMetaDestination shows the resolver reason when it is a known one.
    */
   private conversionAuditEventError(
     event: {
       status: string;
       errorCode: string | null;
+      errorMessage?: string | null;
       sourceTrigger?: string | null;
       providerResponseSummary?: unknown;
     },
     errorCode: string,
   ): string {
-    return isMetaAuthFailureConversionEvent(event)
-      ? "A Meta recusou por falha de login da conexão; reconecte a Meta e reenvie"
-      : this.conversionAuditSafeError(errorCode);
+    const label = this.conversionAuditSafeError(errorCode);
+    if (event.errorCode !== errorCode) return label;
+    if (errorCode === "MetaCapiRejected")
+      return conversionEventRejectionText(event) ?? label;
+    if (errorCode === "MissingMetaDestination") {
+      const reason = safeMetaDestinationReason(event.errorMessage);
+      return reason ? `${label}: ${reason}` : label;
+    }
+    return label;
   }
 
   private conversionAuditSafeError(errorCode: string): string {

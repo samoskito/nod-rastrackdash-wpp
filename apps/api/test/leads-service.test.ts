@@ -547,6 +547,53 @@ describe("leads service", () => {
     });
   });
 
+  it("explains a Meta CAPI refusal in the lead's Pixel/CAPI events by the stored code", async () => {
+    const { db, service } = createHarness();
+    const rejected = (
+      id: string,
+      providerResponseSummary: unknown,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      ...db.conversionLogs[0]!,
+      id,
+      status: "error",
+      sentAt: null,
+      errorCode: "MetaCapiRejected",
+      errorMessage: "Meta CAPI request failed",
+      providerResponseSummary,
+      ...overrides,
+    });
+    db.conversionLogs = [
+      rejected("param", {
+        httpStatus: 400,
+        error: { code: 100, error_subcode: 2804019, fbtrace_id: "AbC" },
+      }),
+      rejected("login", { httpStatus: 400, error: { code: 190 } }),
+      rejected("old", { httpStatus: 400 }),
+      rejected("network", null, {
+        errorCode: "MetaCapiNetworkError",
+        errorMessage: "Meta CAPI network request failed",
+      }),
+    ] as never;
+
+    const detail = await service.getLeadDetail("workspace_1", "lead_1");
+    const messages = new Map(
+      detail.conversionEvents.map((event) => [event.id, event.errorMessage]),
+    );
+
+    expect(messages.get("param")).toContain(
+      "A Meta recusou o evento (código 100, subcódigo 2804019): a Meta considerou um parâmetro do evento inválido.",
+    );
+    expect(messages.get("param")).toContain(
+      "Identificador para suporte da Meta: AbC",
+    );
+    expect(messages.get("login")).toBe(
+      "A Meta recusou por falha de login da conexão; reconecte a Meta e reenvie",
+    );
+    expect(messages.get("old")).toBe("A Meta recusou o evento");
+    expect(messages.get("network")).toBe("Meta CAPI network request failed");
+  });
+
   it("does not expose non-http creative URLs in lead detail", async () => {
     const { db, service } = createHarness();
     db.leads[0]!.ctwaSourceUrl = "javascript:alert(1)";

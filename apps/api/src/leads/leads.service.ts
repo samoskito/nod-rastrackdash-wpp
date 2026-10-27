@@ -24,6 +24,7 @@ import {
 } from "../common/phone/phone-identity";
 import { dateRangeInTimezone } from "../external-data/external-event-policy";
 import { liveHttpUrl } from "../integrations/meta/meta-cdn-url";
+import { conversionEventRejectionText } from "../conversion-events/meta-capi-rejection";
 import {
   chunked,
   deferredLeadNovoPeriodWhere,
@@ -90,6 +91,7 @@ type ConversionLogRecord = {
   sentAt?: Date | null;
   createdAt: Date;
   sourcePayload?: unknown;
+  providerResponseSummary?: unknown;
 };
 
 type CampaignRecord = {
@@ -861,6 +863,7 @@ export class LeadsService {
             sentAt: true,
             createdAt: true,
             sourcePayload: true,
+            providerResponseSummary: true,
           },
         }) as Promise<ConversionLogRecord[]>,
         this.prisma.webhookLog.findMany({
@@ -979,7 +982,18 @@ export class LeadsService {
         adSetId: event.adSetId ?? null,
         adId: event.adId ?? null,
         errorCode: event.errorCode ?? null,
-        errorMessage: event.errorMessage ?? null,
+        // Recusa da Meta: motivo legível pelo código guardado (nunca o texto
+        // livre da Meta, que pode trazer dados do lead).
+        errorMessage:
+          conversionEventRejectionText({
+            status: event.status ?? "unknown",
+            errorCode: event.errorCode ?? null,
+            sourceTrigger: event.sourceTrigger ?? null,
+            providerResponseSummary: event.providerResponseSummary,
+          }) ??
+          (event.errorCode === "MetaCapiRejected"
+            ? "A Meta recusou o evento"
+            : (event.errorMessage ?? null)),
         occurredAt: event.eventOccurredAt.toISOString(),
         sentAt: event.sentAt?.toISOString() ?? null,
         createdAt: event.createdAt.toISOString(),

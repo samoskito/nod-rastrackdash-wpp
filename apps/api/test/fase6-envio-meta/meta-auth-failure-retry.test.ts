@@ -18,7 +18,8 @@ import type { LicenseClientService } from "../../src/licensing-client/license-cl
  * Adaptação nod: o adapter da CAPI do nod nunca guardou o corpo de uma
  * recusa (pode ter PII), só { httpStatus }. Para o "Reenviar bloqueados"
  * reconhecer a falha de login da Meta, a recusa passa a guardar também o
- * error.code numérico da Graph, e nada além dele.
+ * error.code numérico da Graph (e, desde o motivo legível, error_subcode,
+ * type e fbtrace_id; nunca message nem error_user_*).
  */
 
 const input = {
@@ -63,12 +64,17 @@ describe("MetaCapiAdapter: recusa por falha de login da Meta (#181)", () => {
         errorMessage:
           "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend",
       });
+      // Motivo legível: também error_subcode, type e fbtrace_id (nunca message).
       expect(result.responseSummary).toEqual({
         httpStatus: 400,
-        error: { code },
+        error: {
+          code,
+          ...(subcode ? { error_subcode: subcode } : {}),
+          type: "OAuthException",
+          fbtrace_id: "synthetic-trace",
+        },
       });
       expect(JSON.stringify(result.responseSummary)).not.toContain("log in");
-      expect(JSON.stringify(result.responseSummary)).not.toContain("trace");
     },
   );
 

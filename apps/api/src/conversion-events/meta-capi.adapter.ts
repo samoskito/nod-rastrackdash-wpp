@@ -4,11 +4,9 @@ import {
   type ConversionEventNameDto,
 } from "@wpptrack/shared";
 import type { AuthorizedPagePixelCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
-import {
-  isMetaAuthFailureResponse,
-  metaGraphErrorCodeFromResponse,
-} from "./conversion-event-retry";
+import { isMetaAuthFailureResponse } from "./conversion-event-retry";
 import { metaCapiFirstNameHash } from "./meta-capi-first-name";
+import { pickMetaCapiRejectionError } from "./meta-capi-rejection";
 import {
   buildMetaCapiPayload,
   type MetaCapiPayload,
@@ -202,21 +200,20 @@ export class MetaCapiAdapter {
       );
       // A received non-2xx is an explicit rejection even if its body is not JSON.
       if (!response.ok) {
-        // nod (#181): keep only the numeric Graph error.code of the body (no
-        // message or other provider text, which may carry PII), so "Reenviar
-        // bloqueados" can tell a dead Meta login/token (190/102) apart.
+        // nod (#181): keep only code, error_subcode, type and fbtrace_id of the
+        // Graph error (never message/error_user_* or other provider text,
+        // which may carry PII), so "Reenviar bloqueados" can tell a dead Meta
+        // login/token (190/102) apart and the screen can explain the refusal.
         let errorBody: unknown = null;
         try {
           errorBody = await bounded(response.json(), dispatch.signal);
         } catch {
           errorBody = null;
         }
-        const graphErrorCode = metaGraphErrorCodeFromResponse(errorBody);
+        const graphError = pickMetaCapiRejectionError(errorBody);
         const responseSummary: Record<string, unknown> = {
           httpStatus: response.status,
-          ...(graphErrorCode !== null
-            ? { error: { code: graphErrorCode } }
-            : {}),
+          ...(graphError ? { error: graphError } : {}),
         };
         return {
           status: "error",
@@ -466,10 +463,12 @@ export class MetaCapiAdapter {
 
       // nod: a dead token (190/102) or a throttle fails every event alike;
       // answer each one with the same rejection instead of 1 POST per event
-      // (only the numeric Graph code is kept, as in the single path).
-      const graphErrorCode = response.ok
+      // (only code, error_subcode, type and fbtrace_id are kept, as in the
+      // single path).
+      const graphError = response.ok
         ? null
-        : metaGraphErrorCodeFromResponse(payload);
+        : pickMetaCapiRejectionError(payload);
+      const graphErrorCode = graphError?.code ?? null;
 
       if (
         graphErrorCode !== null &&
@@ -477,7 +476,7 @@ export class MetaCapiAdapter {
       ) {
         const responseSummary: Record<string, unknown> = {
           httpStatus: response.status,
-          error: { code: graphErrorCode },
+          error: graphError,
         };
 
         items.forEach((item) =>
