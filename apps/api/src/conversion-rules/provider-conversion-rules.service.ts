@@ -24,6 +24,7 @@ import {
   readMessagePhraseConfig,
 } from "@wpptrack/shared";
 import type {
+  SalesPlatformProviderDto,
   MessagePhraseConfigDto,
   MessagePhraseValueModeDto,
   ProviderConversionCatalogDto,
@@ -307,9 +308,20 @@ type GlobalNumberActivation = {
   errorCode?: string;
 };
 
-/** Fase 6.5: a Braip rule has no per-rule URL to reopen or rotate. */
-const braipSingleUrlOnlyMessage =
-  "A Braip recebe só pela URL única da conta: gere, mostre ou gire a URL em Integrações → Braip";
+/**
+ * Fase 6.5/6.7: a Braip or Yampi rule has no per-rule URL to reopen or rotate
+ * (the platform receives only through the workspace single URL).
+ */
+type SingleUrlOnlyPlatform = "braip" | "yampi";
+function isSingleUrlOnlyPlatform(
+  platform: string | null,
+): platform is SingleUrlOnlyPlatform {
+  return platform === "braip" || platform === "yampi";
+}
+function singleUrlOnlyMessage(platform: SingleUrlOnlyPlatform): string {
+  const name = salesPlatformLabels[platform];
+  return `A ${name} recebe só pela URL única da conta: gere, mostre ou gire a URL em Integrações → ${name}`;
+}
 const roichatNumberUrlOnlyMessage =
   "O ROI Chat manda a compra pela URL de cada número: confira em Integrações → ROI Chat";
 
@@ -800,12 +812,13 @@ export class ProviderConversionRulesService {
               "Filtro de produto só existe para plataformas de venda",
             );
           }
-          // Fase 6.5: the Braip receives only through its workspace single
-          // URL: its per-rule URL is always born disabled (internal anchor).
+          // Fase 6.5/6.7: the Braip and the Yampi receive only through their
+          // workspace single URL: the per-rule URL is always born disabled
+          // (internal anchor).
           perRuleUrlDisabled =
             input.triggerType === "provider_automation" &&
             (input.perRuleUrl === false ||
-              salesPlatform === "braip" ||
+              isSingleUrlOnlyPlatform(salesPlatform) ||
               // Fase 6.8: the ROI Chat purchase arrives on each number's own URL.
               roichatRule);
 
@@ -1691,13 +1704,15 @@ export class ProviderConversionRulesService {
         if (!current.endpoint || current.endpoint.removedAt) {
           throw new NotFoundException(endpointNotFoundMessage);
         }
-        // Fase 6.5: the Braip receives only through the workspace single URL;
-        // its per-rule address (internal anchor) is never reopened.
+        // Fase 6.5/6.7: the Braip and the Yampi receive only through the
+        // workspace single URL; the per-rule address (internal anchor) is
+        // never reopened.
+        const currentPlatform = this.salesPlatformOfRule(current);
         if (
           input.publicUrlDisabled === false &&
-          this.salesPlatformOfRule(current) === "braip"
+          isSingleUrlOnlyPlatform(currentPlatform)
         ) {
-          throw new ConflictException(braipSingleUrlOnlyMessage);
+          throw new ConflictException(singleUrlOnlyMessage(currentPlatform));
         }
         // Fase 6.8: the ROI Chat purchase arrives on each number's own URL;
         // the rule's address (internal anchor) is never reopened either.
@@ -1714,7 +1729,7 @@ export class ProviderConversionRulesService {
           const provider = current.parserRelease?.provider;
           const workspaceUrl =
             provider &&
-            ["payt", "braip", "unnichat", "umbler"].includes(provider)
+            ["payt", "braip", "yampi", "unnichat", "umbler"].includes(provider)
               ? await transaction.integrationEndpoint.findFirst({
                   where: {
                     workspaceId,
@@ -1919,10 +1934,11 @@ export class ProviderConversionRulesService {
       ) {
         throw new NotFoundException(endpointNotFoundMessage);
       }
-      // Fase 6.5: no per-rule URL for the Braip (the single URL is rotated
-      // in Integrações).
-      if (this.salesPlatformOfRule(rule) === "braip") {
-        throw new ConflictException(braipSingleUrlOnlyMessage);
+      // Fase 6.5/6.7: no per-rule URL for the Braip or the Yampi (the single
+      // URL is rotated in Integrações).
+      const rulePlatform = this.salesPlatformOfRule(rule);
+      if (isSingleUrlOnlyPlatform(rulePlatform)) {
+        throw new ConflictException(singleUrlOnlyMessage(rulePlatform));
       }
 
       const rotatedAt = new Date();
@@ -2820,11 +2836,12 @@ export class ProviderConversionRulesService {
   private createOrigin(
     input: ProviderConversionRuleCreateInputDto,
     connection: { provider: string } | null,
-    salesPlatform: "payt" | "braip" | null,
+    salesPlatform: SalesPlatformProviderDto | null,
   ): ProviderRuleOrigin {
     if (input.triggerType === "message_phrase") return "message_phrase";
     if (input.triggerType === "structured_catalog") return "structured_catalog";
     if (salesPlatform === "braip") return "automation_braip";
+    if (salesPlatform === "yampi") return "automation_yampi";
     if (salesPlatform === "payt") return "automation_payt";
     // Without a connection, a provider automation can only be a WhatsApp
     // label rule (the Umbler automation always names its connection).
@@ -2894,6 +2911,7 @@ export class ProviderConversionRulesService {
           rule.origin === "automation_umbler" ||
           rule.origin === "automation_payt" ||
           rule.origin === "automation_braip" ||
+          rule.origin === "automation_yampi" ||
           rule.origin === "automation_unnichat"
             ? "provider_automation"
             : rule.origin,
@@ -2906,6 +2924,8 @@ export class ProviderConversionRulesService {
             ? { provider: "payt" }
             : rule.origin === "automation_braip"
               ? { provider: "braip" }
+            : rule.origin === "automation_yampi"
+              ? { provider: "yampi" }
             : rule.origin === "automation_unnichat"
               ? { provider: "unnichat" }
               : null,
@@ -4272,7 +4292,7 @@ export class ProviderConversionRulesService {
 
   private salesPlatformOfRule(
     rule: PersistedProviderRule,
-  ): "payt" | "braip" | null {
+  ): SalesPlatformProviderDto | null {
     const provider = rule.parserRelease?.provider;
     return rule.conversionRule.triggerType === "provider_automation" &&
       isSalesPlatformProvider(provider)

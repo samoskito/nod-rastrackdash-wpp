@@ -29,9 +29,12 @@ import {
 import {
   isSalesPlatformProvider,
   parseSaleEventV1,
+  saleCapiCustomData,
   saleProductFilterMatches,
   salesPlatformOf,
+  type SalesPlatformProvider,
 } from "../inbound-webhooks/providers/sales-platform-sale";
+import { YAMPI_CAPI_VALUE_TOLERANCE_CENTS } from "../inbound-webhooks/providers/yampi/yampi-automation-v1.parser";
 import { Prisma } from "@prisma/client";
 import {
   conversionEventCarriesValue,
@@ -42,6 +45,7 @@ import {
   conversionEventRequiresValue,
   normalizeCurrencyCode,
   providerConversionDecisionSchema,
+  type ConversionEventCustomDataDto,
   type ConversionEventNameDto,
   type ProviderConversionDecisionDto,
   type ProviderConversionTechnicalDeliveryStateDto,
@@ -1316,6 +1320,12 @@ export class ProviderConversionProductionService
           valueSource: valueCents ? this.decisionValueSource(decision) : null,
           currency,
           contentName: carriesValue ? decision.conversion.contentName : null,
+          // Fase 6.7 (SaaS #188): Yampi carries the real order lines (order
+          // bump included) and its order id. Every other sale keeps the
+          // generic default item.
+          ...(purchaseContext?.capiCustomData
+            ? { customData: purchaseContext.capiCustomData }
+            : {}),
           eventOccurredAt: occurredAt,
           sourcePayload: {
             provider: occurrence.provider,
@@ -2151,10 +2161,12 @@ export class ProviderConversionProductionService
     correctedValueCents: number | null;
     /**
      * manualOrderKey of the sale's order (Purchase dedupe vs the manual
-     * conversion on the lead). Payt and Braip (6.5) derive it from their own
-     * order number; Hotmart and Yampi (6.6/6.7) join here.
+     * conversion on the lead). Payt, Braip (6.5) and Yampi (6.7) derive it
+     * from their own order number; Hotmart (6.6) joins here.
      */
     manualOrderKey: string;
+    /** Yampi (6.7): real order lines for the Meta custom_data, else null. */
+    capiCustomData: ConversionEventCustomDataDto | null;
   } | null> {
     if (isSalesPlatformProvider(decision.occurrence.provider))
       return this.assertPaytPurchaseContext(execution, decision);
@@ -2183,6 +2195,12 @@ export class ProviderConversionProductionService
      * conversion on the lead): the platform's own order number.
      */
     manualOrderKey: string;
+    /**
+     * Yampi (6.7, SaaS #188): real order lines for the Meta custom_data
+     * (contents, num_items, order_id, content_name). Null for every other
+     * platform (generic item).
+     */
+    capiCustomData: ConversionEventCustomDataDto | null;
   }> {
     this.assertAutomationProductionContext(execution);
     const salesPlatform = salesPlatformOf(execution.providerRule.parserRelease);
@@ -2328,7 +2346,48 @@ export class ProviderConversionProductionService
         execution.workspaceId,
         parsed.value.orderRef,
       ),
+      capiCustomData: this.saleCapiCustomData(
+        salesPlatform,
+        payload,
+        execution,
+        decision.conversion.valueCents,
+      ),
     };
+  }
+
+  /**
+   * Real order lines of the sale for Meta (Yampi only, SaaS #188). The sent
+   * value stays the decision value (value_products): when the lines do not
+   * add up to it by more than the tolerance (e.g. a coupon discount), value
+   * and lines are both kept and a structured warning without personal data
+   * is logged.
+   */
+  private saleCapiCustomData(
+    salesPlatform: SalesPlatformProvider,
+    payload: unknown,
+    execution: ExecutionRecord,
+    valueCents: number | null,
+  ): ConversionEventCustomDataDto | null {
+    const lines = saleCapiCustomData(salesPlatform, payload);
+    if (!lines) return null;
+    if (
+      valueCents !== null &&
+      Math.abs(lines.itemsTotalCents - valueCents) >
+        YAMPI_CAPI_VALUE_TOLERANCE_CENTS
+    ) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "sale_capi_items_value_mismatch",
+          provider: salesPlatform,
+          workspaceId: execution.workspaceId,
+          providerConversionExecutionId: execution.id,
+          valueCents,
+          itemsTotalCents: lines.itemsTotalCents,
+          itemCount: lines.itemCount,
+        }),
+      );
+    }
+    return lines.customData;
   }
 
   /**

@@ -38,8 +38,8 @@ export const integrationEventPayloadUnreadableMessage =
 /**
  * Keys never shown, at any depth: account keys of the platforms (Braip
  * `basic_authentication` is already dropped before storage; Payt
- * `integration_key`; Hotmart/Yampi keys for the next phases) and any
- * credential-like field.
+ * `integration_key`; Yampi `x-yampi-hmac-sha256` and the whole `login_url`,
+ * fase 6.7; Hotmart keys for the next phase) and any credential-like field.
  */
 const sensitiveKeyPattern =
   /^(basic_authentication|hottok|x-hotmart-hottok|x-yampi-hmac-sha256|integration_key|integrationkey|chave_unica|token|access_token|refresh_token|api_key|apikey|api_token|secret|client_secret|webhook_secret|password|senha|authorization|signature|hmac|card_number|cvv|login_url)$/iu;

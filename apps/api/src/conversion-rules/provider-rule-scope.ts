@@ -165,6 +165,7 @@ export function providerRuleOrigin(
       if (provider === null || provider === "uazapi") return "whatsapp_label";
       if (provider === "payt") return "automation_payt";
       if (provider === "braip") return "automation_braip";
+      if (provider === "yampi") return "automation_yampi";
       if (provider === "umbler") return "automation_umbler";
       if (provider === "unnichat") return "automation_unnichat";
       if (provider === "roichat") return "automation_roichat";
@@ -194,6 +195,7 @@ export function providerRuleOriginChannelProviders(
       return ["roichat"];
     case "automation_payt":
     case "automation_braip":
+    case "automation_yampi":
       return WHATSAPP_CHANNEL_PROVIDERS;
   }
 }
@@ -286,8 +288,8 @@ export function providerRuleGateConnectionId(
 }
 
 /**
- * Sales-platform postback rules. In the student edition: Payt and Braip
- * (Fase 6.5). Hotmart/Yampi join when ported; Brink Park is not part of the
+ * Sales-platform postback rules. In the student edition: Payt, Braip and
+ * (Fase 6.7) Yampi. Hotmart joins when ported; Brink Park is not part of the
  * student edition.
  */
 export function providerRuleIsSalesPlatform(
@@ -297,7 +299,11 @@ export function providerRuleIsSalesPlatform(
   >,
 ): boolean {
   const origin = providerRuleOrigin(rule);
-  return origin === "automation_payt" || origin === "automation_braip";
+  return (
+    origin === "automation_payt" ||
+    origin === "automation_braip" ||
+    origin === "automation_yampi"
+  );
 }
 
 /**
@@ -343,7 +349,8 @@ export function providerRuleOriginRequiresConnection(
     origin === "automation_unnichat" ||
     origin === "automation_roichat" ||
     origin === "automation_payt" ||
-    origin === "automation_braip"
+    origin === "automation_braip" ||
+    origin === "automation_yampi"
   );
 }
 
@@ -433,6 +440,23 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       connectionBound: false,
       requiresConnection: providerRuleOriginRequiresConnection(
         "automation_braip",
+      ),
+      labelMatch: null,
+      unifiable: false,
+      eventNames: PAYT_RULE_EVENT_NAMES,
+      betaEventNames: PAYT_RULE_BETA_EVENT_NAMES,
+    },
+    {
+      // Fase 6.7 (SaaS #186): Yampi, same base as Braip (event from each
+      // webhook `event`, only through the workspace single URL; any WhatsApp
+      // number). Open to every workspace in the student edition.
+      origin: "automation_yampi",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: [...WHATSAPP_CHANNEL_PROVIDERS],
+      authorChannelProviders: null,
+      connectionBound: false,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_yampi",
       ),
       labelMatch: null,
       unifiable: false,

@@ -127,7 +127,7 @@ Fluxo: **Salvar conexão → Testar → Gerar receiver** (copie a URL completa, 
 
 As variáveis `UAZAPI_*`/`WAHA_*`/`ZAPI_*`/`NOD_API_BROKER_URL` continuam existindo, mas hoje são só o **padrão do deployment** (fallback quando a conexão não traz aquele campo) — não são mais o caminho principal.
 
-### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup, Data Crazy, Unnichat, Payt e Braip (e WhatsApp Cloud API na aba WhatsApp)
+### 10.2 Aba Atendimento e vendas — cards Umbler, Gupshup, Data Crazy, Unnichat, Payt, Braip e Yampi (e WhatsApp Cloud API na aba WhatsApp)
 
 Conexões por workspace, cada uma com segredo próprio. **Umbler Talk** e **Gupshup**:
 
@@ -181,6 +181,21 @@ recebidos e ignorados. As vendas que não viraram conversão aparecem em
 chegou pelas URLs únicas fica em **Backoffice → Webhooks WhatsApp →
 Recebimentos das URLs únicas**. Passo a passo, verificação e recuperação em
 [`setup/braip.md`](setup/braip.md).
+
+**Yampi** (plataforma de venda, Fase 6.7) funciona como a Braip e está
+liberada para todos os workspaces: no card **Yampi**, clique em **Gerar URL
+única**, copie e cadastre num webhook da loja na Yampi com os eventos
+`order.paid`, `order.created`, `order.status.updated` e `cart.reminder` (não
+precisa copiar a chave secreta da Yampi). Depois crie em **Conversões → Nova
+regra → Venda na Yampi** uma regra por evento (Pedido pago → `Purchase`,
+Pedido aguardando pagamento (boleto/Pix) → `InitiateCheckout`, Carrinho
+abandonado (beta) → `CartAbandoned`); a regra já nasce enviando e não há nada
+para liberar ou certificar: o leitor da Yampi já vem em uso (validado com
+payloads reais no SaaS). O valor é só o dos produtos (sem frete e sem juros) e
+a Compra leva à Meta os itens reais do pedido, com o order bump. O mesmo
+pedido nunca vira duas compras; cancelamento, reembolso e pagamento recusado
+são recebidos e ignorados. Passo a passo, conferência e recuperação em
+[`setup/yampi.md`](setup/yampi.md).
 
 **Unnichat** é uma conexão por número: no card **Unnichat**, informe o
 número de WhatsApp do cliente (não o do lead) ao gerar o webhook, cole a URL de entrada
@@ -309,10 +324,10 @@ e nada é processado ou enviado em segundo plano.
   por quê. Proteções: o mesmo evento "uma vez por lead" (Lead recebido, Lead
   qualificado...) já enviado por uma regra é recusado; usa o mesmo `event_id`
   da regra, então a Meta nunca conta dois; o mesmo pedido não entra duas vezes
-  (inclusive contra a Payt e a Braip); o mesmo evento nas últimas 24h pede confirmação.
+  (inclusive contra a Payt, a Braip e a Yampi, pelo id do pedido); o mesmo evento nas últimas 24h pede confirmação.
   Dá para cancelar enquanto nada chegou à Meta. Com a licença bloqueada o botão
-  fica desabilitado (a API responde 423). A compra manual da Hotmart e da
-  Yampi entra quando essas plataformas forem portadas.
+  fica desabilitado (a API responde 423). A compra manual da Hotmart entra
+  quando essa plataforma for portada.
 
 ### 10.6 Visão Geral, Relatórios e Eventos Meta: números do período
 

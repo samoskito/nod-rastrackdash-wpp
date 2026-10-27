@@ -57,6 +57,7 @@ const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_payt",
   "automation_braip",
   "automation_roichat",
+  "automation_yampi",
 ];
 
 /**
@@ -122,6 +123,7 @@ export function RuleManage({
   integrationEndpoints = [],
   paytProducts = [],
   braipProducts = [],
+  yampiProducts = [],
   singleUrlActions,
   numbersUnavailable = false,
 }: {
@@ -133,6 +135,8 @@ export function RuleManage({
   paytProducts?: IntegrationDetectedProductDto[];
   /** Fase 6.5: produtos vistos nas vendas da Braip (filtro de produto). */
   braipProducts?: IntegrationDetectedProductDto[];
+  /** Fase 6.7: produtos vistos nas vendas da Yampi (filtro de produto). */
+  yampiProducts?: IntegrationDetectedProductDto[];
   singleUrlActions?: SingleUrlActions;
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
@@ -342,6 +346,7 @@ export function RuleManage({
             onSaved={onSaved}
             paytProducts={paytProducts}
             braipProducts={braipProducts}
+            yampiProducts={yampiProducts}
             numbersUnavailable={numbersUnavailable}
           />
         ) : null}
@@ -368,6 +373,8 @@ export function RuleManage({
                     endpoint.provider === "payt") ||
                   (origin === "automation_braip" &&
                     endpoint.provider === "braip") ||
+                  (origin === "automation_yampi" &&
+                    endpoint.provider === "yampi") ||
                   (origin === "automation_unnichat" &&
                     endpoint.provider === "unnichat" &&
                     endpoint.eventName === rule.conversionRule.eventName) ||
@@ -419,12 +426,15 @@ function RuleEditForm({
   onSaved,
   paytProducts = [],
   braipProducts = [],
+  yampiProducts = [],
   numbersUnavailable = false,
 }: {
   numbersUnavailable?: boolean;
   paytProducts?: IntegrationDetectedProductDto[];
   /** Fase 6.5: produtos vistos nas vendas da Braip (filtro de produto). */
   braipProducts?: IntegrationDetectedProductDto[];
+  /** Fase 6.7: produtos vistos nas vendas da Yampi (filtro de produto). */
+  yampiProducts?: IntegrationDetectedProductDto[];
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
   numbers: ConversionNumber[];
@@ -538,9 +548,19 @@ function RuleEditForm({
         <fieldset className="conversion-flow-fieldset" disabled={disabled}>
           <legend>Produtos</legend>
           <ProductFilterPicker
-            provider={origin === "automation_braip" ? "braip" : "payt"}
+            provider={
+              origin === "automation_braip"
+                ? "braip"
+                : origin === "automation_yampi"
+                  ? "yampi"
+                  : "payt"
+            }
             products={
-              origin === "automation_braip" ? braipProducts : paytProducts
+              origin === "automation_braip"
+                ? braipProducts
+                : origin === "automation_yampi"
+                  ? yampiProducts
+                  : paytProducts
             }
             selected={draft.productCodes}
             onChange={(productCodes) => patch({ productCodes })}
@@ -548,7 +568,12 @@ function RuleEditForm({
           />
           <p className="action-note">
             O valor de cada venda vem da própria{" "}
-            {origin === "automation_braip" ? "Braip" : "Payt"}.
+            {origin === "automation_braip"
+              ? "Braip"
+              : origin === "automation_yampi"
+                ? "Yampi (só os produtos, sem frete e sem juros)"
+                : "Payt"}
+            .
           </p>
         </fieldset>
       ) : null}

@@ -68,7 +68,7 @@ export default async function ConversionsPage({
     connections: data.connections,
     capabilities: data.capabilities,
     // Porte do SaaS #164: um /channels que falhou nunca esconde as
-    // plataformas de venda (Payt, Braip).
+    // plataformas de venda (Payt, Braip, Yampi).
     numbersPartial: data.numbersPartial,
     crm: {
       kommo: data.crmVisible && data.kommo.length > 0,
@@ -140,6 +140,8 @@ export default async function ConversionsPage({
                 paytUnattributed: singleUrlData.unattributed.payt,
                 braipProducts: singleUrlData.braipProducts,
                 braipUnattributed: singleUrlData.unattributed.braip,
+                yampiProducts: singleUrlData.yampiProducts,
+                yampiUnattributed: singleUrlData.unattributed.yampi,
                 actions: {
                   ensure: ensureIntegrationEndpointAction,
                   reveal: revealIntegrationEndpointAction,

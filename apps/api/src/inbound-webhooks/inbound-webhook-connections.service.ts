@@ -17,7 +17,11 @@ import type {
   InboundWebhookConnectionStatusUpdateInputDto,
   InboundWebhookCapabilitiesDto,
 } from "@wpptrack/shared";
-import { inboundWebhookProviders } from "@wpptrack/shared";
+import {
+  inboundWebhookProviders,
+  isSalesPlatformProvider,
+  salesPlatformLabels,
+} from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
@@ -116,7 +120,8 @@ export class InboundWebhookConnectionsService {
       // UAZAPI/NOD is bridged automatically from the WhatsApp instance and
       // never goes through the generic manual creation flow. Payt is a sales
       // platform with no WhatsApp number: its rules live in Conversoes; so is
-      // Braip (6.5), reached only by the workspace integration URL (hub).
+      // Braip (6.5) and Yampi (6.7), reached only by the workspace integration
+      // URL (hub).
       // WAHA is a WhatsApp connection (Integrações → WhatsApp) whose own
       // receiver uses the waha parser release; it has no generic connection.
       providers: inboundWebhookProviders
@@ -125,6 +130,7 @@ export class InboundWebhookConnectionsService {
             provider !== "uazapi" &&
             provider !== "payt" &&
             provider !== "braip" &&
+            provider !== "yampi" &&
             provider !== "waha",
         )
         .map((provider) => {
@@ -321,11 +327,11 @@ export class InboundWebhookConnectionsService {
         "Conexões UAZAPI são criadas automaticamente a partir da instância WhatsApp",
       );
     }
-    if (input.provider === "payt" || input.provider === "braip") {
-      // A sales platform (Payt, Braip) has no WhatsApp number: its rule is
+    if (isSalesPlatformProvider(input.provider)) {
+      // A sales platform (Payt, Braip, Yampi) has no WhatsApp number: its rule is
       // created in Conversões and bound to the connection of its numbers.
       throw new ConflictException(
-        `A ${input.provider === "braip" ? "Braip" : "Payt"} não usa conexão própria: crie a regra de venda em Conversões`,
+        `A ${salesPlatformLabels[input.provider]} não usa conexão própria: crie a regra de venda em Conversões`,
       );
     }
     if (input.provider === "waha") {

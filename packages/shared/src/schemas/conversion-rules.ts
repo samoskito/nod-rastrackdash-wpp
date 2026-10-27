@@ -63,13 +63,14 @@ export const providerConversionRuleModeSchema = z.enum(
  * Plataforma externa que chama a URL da automacao. Ausente (null) mantem o
  * comportamento original, em que o proprio provedor WhatsApp (Umbler) envia o
  * callback. "payt"/"braip" marcam uma regra de venda vinda da plataforma (Payt
- * na Fase 4a, Braip na 6.5): o valor de cada venda chega no payload.
- * "roichat" (Fase 6.8) marca a regra "Compra no ROI Chat".
+ * na Fase 4a, Braip na 6.5, Yampi na 6.7): o valor de cada venda chega no
+ * payload. "roichat" (Fase 6.8) marca a regra "Compra no ROI Chat".
  */
 export const providerConversionAutomationSources = [
   "payt",
   "braip",
   "roichat",
+  "yampi",
 ] as const;
 export const providerConversionAutomationSourceSchema = z.enum(
   providerConversionAutomationSources,
@@ -107,9 +108,10 @@ export const paytBetaSaleEventNames = ["CartAbandoned"] as const;
 /**
  * Plataformas de venda (checkout) com URL única por workspace: o evento vem
  * do status de cada postback e a regra pode filtrar por produto. Fase 6.5:
- * Braip, com o leitor `automation-v1` certificado (produção direta).
+ * Braip e, na 6.7, Yampi, com o leitor `automation-v1` certificado (produção
+ * direta).
  */
-export const salesPlatformProviders = ["payt", "braip"] as const;
+export const salesPlatformProviders = ["payt", "braip", "yampi"] as const;
 export type SalesPlatformProviderDto = (typeof salesPlatformProviders)[number];
 export function isSalesPlatformProvider(
   provider: string | null | undefined,
@@ -123,9 +125,10 @@ export function isSalesPlatformProvider(
 export const salesPlatformLabels: Record<SalesPlatformProviderDto, string> = {
   payt: "Payt",
   braip: "Braip",
+  yampi: "Yampi",
 };
 
-/** Mesmos eventos para toda plataforma de venda (Payt, Braip). */
+/** Mesmos eventos para toda plataforma de venda (Payt, Braip, Yampi). */
 export const salesPlatformEventNames = paytSaleEventNames;
 
 /** Fase 5.3: código de produto/oferta de uma plataforma de venda. */
@@ -164,7 +167,8 @@ export const providerConversionRuleScopeSchema = z.enum(
  * whatsapp_label = etiqueta do WhatsApp (Uazapi); automation_umbler = callback
  * assinado da automacao Umbler; automation_payt = postback de venda da Payt;
  * automation_unnichat = fluxo do Unnichat chamando a URL da regra (Fase 4b);
- * automation_braip = postback de venda da Braip (6.5);
+ * automation_braip = postback de venda da Braip (6.5); automation_yampi =
+ * webhook de pedido/carrinho da Yampi (6.7);
  * automation_roichat = compra do ROI Chat na URL do numero (6.8).
  * As automacoes por URL ficam sempre ligadas a uma conexao.
  */
@@ -177,6 +181,7 @@ export const providerConversionRuleOrigins = [
   "automation_unnichat",
   "automation_braip",
   "automation_roichat",
+  "automation_yampi",
 ] as const;
 export const providerConversionRuleOriginSchema = z.enum(
   providerConversionRuleOrigins,
@@ -552,9 +557,10 @@ const providerAutomationCreateSchema = z
     triggerType: z.literal("provider_automation"),
     eventName: conversionEventNameSchema,
     // Fase 4a: "payt" = regra de venda da Payt (URL propria da regra);
-    // 6.5: "braip" = regra de venda da Braip (só pela URL única).
+    // 6.5: "braip" = regra de venda da Braip (só pela URL única); 6.7: "yampi",
+    // idem.
     automationSource: providerConversionAutomationSourceSchema.optional(),
-    // Fase 5.3: só plataformas de venda (Payt, Braip). Vazio = todos.
+    // Fase 5.3: só plataformas de venda (Payt, Braip, Yampi). Vazio = todos.
     productFilterCodes: saleProductFilterCodesSchema.optional(),
     // Fase 5.3: false = a regra recebe só pela URL única da integração (a URL
     // própria da regra nasce desativada). Ausente = comportamento histórico.

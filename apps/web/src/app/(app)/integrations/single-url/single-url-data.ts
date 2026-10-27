@@ -22,6 +22,8 @@ export type SingleUrlData = {
   paytProducts: IntegrationDetectedProductDto[];
   /** Fase 6.5: produtos vistos nas vendas da Braip. */
   braipProducts: IntegrationDetectedProductDto[];
+  /** Fase 6.7: produtos vistos nas vendas da Yampi. */
+  yampiProducts: IntegrationDetectedProductDto[];
   unattributed: Record<
     IntegrationEndpointProviderDto,
     IntegrationUnattributedEventListDto | null
@@ -67,16 +69,20 @@ export async function loadSingleUrlData(): Promise<SingleUrlData> {
     endpoints,
     paytProducts,
     braipProducts,
+    yampiProducts,
     payt,
     braip,
+    yampi,
     unnichat,
     umbler,
   ] = await Promise.all([
     settle(serverApiFetch<unknown>("/integrations/endpoints")),
     loadDetectedProducts("payt"),
     loadDetectedProducts("braip"),
+    loadDetectedProducts("yampi"),
     loadUnattributed("payt"),
     loadUnattributed("braip"),
+    loadUnattributed("yampi"),
     loadUnattributed("unnichat"),
     loadUnattributed("umbler"),
   ]);
@@ -85,6 +91,7 @@ export async function loadSingleUrlData(): Promise<SingleUrlData> {
     endpoints: parsedEndpoints.success ? parsedEndpoints.data : null,
     paytProducts,
     braipProducts,
-    unattributed: { payt, braip, unnichat, umbler },
+    yampiProducts,
+    unattributed: { payt, braip, yampi, unnichat, umbler },
   };
 }

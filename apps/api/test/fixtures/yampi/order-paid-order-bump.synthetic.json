@@ -1,0 +1,170 @@
+{
+  "event": "order.paid",
+  "time": "2026-10-22 09:30:12",
+  "merchant": {
+    "id": 900001,
+    "alias": "loja-ficticia"
+  },
+  "resource": {
+    "id": 70000003,
+    "number": 1003,
+    "status_id": 4,
+    "status": {
+      "data": {
+        "id": 4,
+        "alias": "paid",
+        "name": "Pagamento aprovado"
+      }
+    },
+    "value_total": 401.9,
+    "buyer_value_total": 401.9,
+    "value_products": 401.9,
+    "value_shipment": 0,
+    "value_tax": 0,
+    "buyer_value_tax": 0,
+    "value_discount": 0,
+    "created_at": {
+      "date": "2026-10-22 09:29:52.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "updated_at": {
+      "date": "2026-10-22 09:29:58.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "utm_source": "facebook",
+    "utm_campaign": "campanha-ficticia",
+    "utm_content": "anuncio-ficticio",
+    "utm_term": "termo-ficticio",
+    "utm_medium": "cpc",
+    "cart_token": "carttoken-ficticio-0001",
+    "customer": {
+      "data": {
+        "id": 500001,
+        "name": "Fulana de Teste",
+        "first_name": "Fulana",
+        "email": "fulana.teste@example.com",
+        "cpf": "000.000.000-00",
+        "phone": {
+          "full_number": "11900000001",
+          "area_code": "11",
+          "number": "900000001",
+          "formated_number": "(11) 90000-0001",
+          "whatsapp_link": "https://wa.me/5511900000001"
+        }
+      }
+    },
+    "items": {
+      "data": [
+        {
+          "id": 80000010,
+          "product_id": 3000010,
+          "sku_id": 4000010,
+          "item_sku": "BUMP-FICT-01",
+          "quantity": 1,
+          "price": 34.9,
+          "bundle_id": null,
+          "bundle_name": null,
+          "sku": {
+            "data": {
+              "id": 4000010,
+              "sku": "BUMP-FICT-01",
+              "title": "Frete Expresso Ficticio"
+            }
+          }
+        },
+        {
+          "id": 80000011,
+          "product_id": 3000011,
+          "sku_id": 4000011,
+          "item_sku": "SKU-FICT-A",
+          "quantity": 3,
+          "price": 61.16,
+          "bundle_id": null,
+          "bundle_name": null,
+          "sku": {
+            "data": {
+              "id": 4000011,
+              "sku": "SKU-FICT-A",
+              "title": "Kit Ficticio A"
+            }
+          }
+        },
+        {
+          "id": 80000012,
+          "product_id": 3000012,
+          "sku_id": 4000012,
+          "item_sku": "SKU-FICT-B",
+          "quantity": 1,
+          "price": 61.2,
+          "bundle_id": null,
+          "bundle_name": null,
+          "sku": {
+            "data": {
+              "id": 4000012,
+              "sku": "SKU-FICT-B",
+              "title": "Kit Ficticio B"
+            }
+          }
+        },
+        {
+          "id": 80000013,
+          "product_id": 3000013,
+          "sku_id": 4000013,
+          "item_sku": "SKU-FICT-C",
+          "quantity": 1,
+          "price": 61.16,
+          "bundle_id": null,
+          "bundle_name": null,
+          "sku": {
+            "data": {
+              "id": 4000013,
+              "sku": "SKU-FICT-C",
+              "title": "Kit Ficticio C"
+            }
+          }
+        },
+        {
+          "id": 80000014,
+          "product_id": 3000014,
+          "sku_id": 4000014,
+          "item_sku": "SKU-FICT-D",
+          "quantity": 1,
+          "price": 61.16,
+          "bundle_id": null,
+          "bundle_name": null,
+          "sku": {
+            "data": {
+              "id": 4000014,
+              "sku": "SKU-FICT-D",
+              "title": "Kit Ficticio D"
+            }
+          }
+        }
+      ]
+    },
+    "transactions": {
+      "data": [
+        {
+          "id": 60000003,
+          "status": "paid",
+          "amount": 401.9,
+          "buyer_amount": 401.9,
+          "installments": 1
+        }
+      ]
+    },
+    "metadata": {
+      "data": [
+        {
+          "key": "cart_id",
+          "value": "cart-ficticio-0001"
+        }
+      ]
+    },
+    "login_url": "https://loja-ficticia.example/auth/login/force?token=login-ficticio-0003",
+    "reorder_url": "https://loja-ficticia.example/cart/items?customerToken=cliente-ficticio-0003&quantity%5B0%5D=1&store_token=loja-ficticia-0003",
+    "simulate_url": "https://loja-ficticia.example/cart?cart_token=carttoken-ficticio-0004&customerToken=cliente-ficticio-0004"
+  }
+}

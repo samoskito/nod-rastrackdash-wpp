@@ -5,6 +5,14 @@ import {
   type ParsedBraipAutomationV1,
 } from "./braip/braip-automation-v1.parser";
 import {
+  parseYampiAutomationV1,
+  parseYampiSaleEventV1,
+  yampiCapiCustomData,
+  yampiSaleEventNameOf,
+  type ParsedYampiAutomationV1,
+  type YampiCapiCustomData,
+} from "./yampi/yampi-automation-v1.parser";
+import {
   parsePaytAutomationV1,
   parsePaytSaleEventV1,
   paytProductFilterMatches,
@@ -16,22 +24,25 @@ import {
 
 /**
  * Fase 6.5 (porte do SaaS 09d7303a): plataformas de venda (checkout) com URL
- * única — Payt e Braip. Mesmo contrato normalizado (evento do status, pedido,
- * produto/oferta, valor em centavos, telefone com candidatos BR), mesma
- * identidade de compra (workspace + provedor + conta + pedido + evento) e
- * mesmo roteamento. As datas sem fuso das duas são lidas como hora de
+ * única — Payt, Braip e (fase 6.7) Yampi. Mesmo contrato normalizado (evento
+ * do status, pedido, produto/oferta, valor em centavos, telefone com
+ * candidatos BR), mesma identidade de compra (workspace + provedor + conta +
+ * pedido + evento) e mesmo roteamento. As datas sem fuso são lidas como hora de
  * Brasília pelo leitor da fase 6.0 (sao-paulo-timestamp.ts) e nunca ficam
  * depois do recebimento.
  *
- * Hotmart (6.6) e Yampi (6.7) entram aqui quando forem portadas.
+ * Yampi (6.7, porte do SaaS #186/#187/#188): liberada para todos os
+ * workspaces; só ela leva os itens reais do pedido à Meta (saleCapiCustomData).
+ * Hotmart (6.6) entra aqui quando for portada.
  */
-export const SALES_PLATFORM_PROVIDERS = ["payt", "braip"] as const;
+export const SALES_PLATFORM_PROVIDERS = ["payt", "braip", "yampi"] as const;
 export type SalesPlatformProvider = (typeof SALES_PLATFORM_PROVIDERS)[number];
 export const SALES_PLATFORM_PARSER_VERSION = "automation-v1";
 
 export type ParsedSaleAutomationV1 =
   | ParsedPaytAutomationV1
-  | ParsedBraipAutomationV1;
+  | ParsedBraipAutomationV1
+  | ParsedYampiAutomationV1;
 
 export function isSalesPlatformProvider(
   provider: string | null | undefined,
@@ -66,9 +77,26 @@ export function saleEventNameOf(
   provider: SalesPlatformProvider,
   payload: unknown,
 ): PaytSaleEventName | null {
-  return provider === "braip"
-    ? braipSaleEventNameOf(payload)
-    : paytSaleEventNameOf(payload);
+  switch (provider) {
+    case "braip":
+      return braipSaleEventNameOf(payload);
+    case "yampi":
+      return yampiSaleEventNameOf(payload);
+    default:
+      return paytSaleEventNameOf(payload);
+  }
+}
+
+/**
+ * Real order lines for the Meta custom_data of a sale, or null when the
+ * platform keeps the generic default item (Payt, Braip). Yampi only (SaaS
+ * #188): see yampiCapiCustomData.
+ */
+export function saleCapiCustomData(
+  provider: SalesPlatformProvider,
+  payload: unknown,
+): YampiCapiCustomData | null {
+  return provider === "yampi" ? yampiCapiCustomData(payload) : null;
 }
 
 /**
@@ -86,7 +114,9 @@ export function parseSaleEventV1(
   const parsed =
     provider === "braip"
       ? parseBraipSaleEventV1(payload, options)
-      : parsePaytSaleEventV1(payload, options);
+      : provider === "yampi"
+        ? parseYampiSaleEventV1(payload, options)
+        : parsePaytSaleEventV1(payload, options);
   if (parsed.ok) return parsed;
   return {
     ok: false,
@@ -106,9 +136,14 @@ export function parseSalePurchaseV1(
 ):
   | { ok: true; value: ParsedSaleAutomationV1 }
   | { ok: false; errorCode: string } {
-  return provider === "braip"
-    ? parseBraipAutomationV1(payload, options)
-    : parsePaytAutomationV1(payload, options);
+  switch (provider) {
+    case "braip":
+      return parseBraipAutomationV1(payload, options);
+    case "yampi":
+      return parseYampiAutomationV1(payload, options);
+    default:
+      return parsePaytAutomationV1(payload, options);
+  }
 }
 
 /** "Not this rule's event" parse error of a sales platform (ignored). */

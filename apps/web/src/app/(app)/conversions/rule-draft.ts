@@ -250,11 +250,16 @@ export const paytSingleConnectionNote =
 export const braipSingleConnectionNote =
   "As vendas da Braip ficam ligadas à conexão dos números escolhidos: escolha números de uma mesma conexão.";
 
-/** Nota de "mesma conexão" da plataforma de venda da origem (Payt, Braip). */
+export const yampiSingleConnectionNote =
+  "As vendas da Yampi ficam ligadas à conexão dos números escolhidos: escolha números de uma mesma conexão.";
+
+/** Nota de "mesma conexão" da plataforma de venda da origem (Payt, Braip, Yampi). */
 export function salesSingleConnectionNote(origin: string): string {
   return origin === "automation_braip"
     ? braipSingleConnectionNote
-    : paytSingleConnectionNote;
+    : origin === "automation_yampi"
+      ? yampiSingleConnectionNote
+      : paytSingleConnectionNote;
 }
 
 /** Why the chosen reach cannot be sent, or null when it is fine. */
@@ -495,9 +500,11 @@ export function buildRulePayload(
   switch (draft.origin) {
     case "automation_payt":
     case "automation_braip":
+    case "automation_yampi":
       // O valor de cada venda e o evento vêm do postback da plataforma: nada
-      // de valor médio, frases ou etiquetas. A Braip (6.5) recebe só pela URL
-      // única: a URL própria da regra nasce sempre desativada.
+      // de valor médio, frases ou etiquetas. A Braip (6.5) e a Yampi (6.7)
+      // recebem só pela URL única: a URL própria da regra nasce sempre
+      // desativada.
       return {
         ok: true,
         value: {
@@ -505,11 +512,17 @@ export function buildRulePayload(
           triggerType: "provider_automation",
           eventName,
           automationSource:
-            draft.origin === "automation_braip" ? "braip" : "payt",
+            draft.origin === "automation_braip"
+              ? "braip"
+              : draft.origin === "automation_yampi"
+                ? "yampi"
+                : "payt",
           ...(draft.productCodes.length > 0
             ? { productFilterCodes: [...draft.productCodes] }
             : {}),
-          ...(context.singleUrl || draft.origin === "automation_braip"
+          ...(context.singleUrl ||
+          draft.origin === "automation_braip" ||
+          draft.origin === "automation_yampi"
             ? { perRuleUrl: false }
             : {}),
           // Moeda da venda -> da regra -> do workspace.

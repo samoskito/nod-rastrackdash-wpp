@@ -28,6 +28,7 @@ import {
   paytBetaBadge,
   braipEventExplanations,
   paytEventExplanations,
+  yampiEventExplanations,
   paytEventLabel,
   ruleEventLabelForOrigin,
 } from "./event-copy";
@@ -121,6 +122,8 @@ export type NewRuleFlowProps = {
   paytProducts?: IntegrationDetectedProductDto[];
   /** Fase 6.5: produtos vistos nas vendas da Braip (filtro opcional). */
   braipProducts?: IntegrationDetectedProductDto[];
+  /** Fase 6.7: produtos vistos nas vendas da Yampi (filtro opcional). */
+  yampiProducts?: IntegrationDetectedProductDto[];
   /** Fase 5.3: URLs únicas/por evento já geradas (sem a chave). */
   integrationEndpoints?: IntegrationEndpointDto[];
   /** Presente quando a URL única está ativa no workspace. */
@@ -142,6 +145,8 @@ export function singleUrlProviderFor(
       return "payt";
     case "automation_braip":
       return "braip";
+    case "automation_yampi":
+      return "yampi";
     case "automation_unnichat":
       return "unnichat";
     case "automation_umbler":
@@ -174,6 +179,7 @@ export function NewRuleFlow({
   onFinished,
   paytProducts = [],
   braipProducts = [],
+  yampiProducts = [],
   integrationEndpoints = [],
   singleUrlActions,
   numbersUnavailable = false,
@@ -543,7 +549,11 @@ export function NewRuleFlow({
           onChange={patch}
           disabled={locked || licenseLocked}
           paytProducts={
-            draft.origin === "automation_braip" ? braipProducts : paytProducts
+            draft.origin === "automation_braip"
+              ? braipProducts
+              : draft.origin === "automation_yampi"
+                ? yampiProducts
+                : paytProducts
           }
           singleUrl={Boolean(singleUrlActions)}
         />
@@ -703,10 +713,15 @@ function PaytEventStep({
   const eventNames =
     originEventNames(draft.origin, capabilities) ?? definition.allowedEvents ?? [];
   const beta = originBetaEvents(draft.origin, capabilities);
-  // Fase 6.5: a Braip usa o mesmo passo, com os rótulos da Braip.
+  // Fase 6.5/6.7: a Braip e a Yampi usam o mesmo passo, com os seus rótulos.
   const braip = draft.origin === "automation_braip";
-  const platform = braip ? "Braip" : "Payt";
-  const explanations = braip ? braipEventExplanations : paytEventExplanations;
+  const yampi = draft.origin === "automation_yampi";
+  const platform = braip ? "Braip" : yampi ? "Yampi" : "Payt";
+  const explanations = braip
+    ? braipEventExplanations
+    : yampi
+      ? yampiEventExplanations
+      : paytEventExplanations;
 
   return (
     <fieldset className="conversion-flow-fieldset">
@@ -716,7 +731,9 @@ function PaytEventStep({
         {platform}. Crie uma regra para cada evento que quiser enviar.
         {braip
           ? " Reembolso, chargeback e cancelamento são recebidos e ignorados."
-          : ""}
+          : yampi
+            ? " Cancelamento, reembolso e pagamento recusado são recebidos e ignorados."
+            : ""}
       </p>
       <div className="conversion-origin-grid">
         {eventNames.map((eventName) => (
@@ -726,7 +743,7 @@ function PaytEventStep({
           >
             <input
               type="radio"
-              name={braip ? "braip-event" : "payt-event"}
+              name={braip ? "braip-event" : yampi ? "yampi-event" : "payt-event"}
               value={eventName}
               checked={draft.eventName === eventName}
               onChange={() => onChange(eventName)}
@@ -762,7 +779,11 @@ function EventStep({
   onChange: (eventName: ConversionEventNameDto) => void;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
-  if (draft.origin === "automation_payt" || draft.origin === "automation_braip") {
+  if (
+    draft.origin === "automation_payt" ||
+    draft.origin === "automation_braip" ||
+    draft.origin === "automation_yampi"
+  ) {
     return (
       <PaytEventStep
         draft={draft}
@@ -1016,7 +1037,8 @@ export function ScopeStep({
                   ? `Escolha um ou mais números de ${connection?.displayName ?? "conexão removida"}, a conexão desta regra.`
                   : automation ||
                       draft.origin === "automation_payt" ||
-                      draft.origin === "automation_braip"
+                      draft.origin === "automation_braip" ||
+                      draft.origin === "automation_yampi"
                     ? "Escolha um ou mais números de uma mesma conexão."
                     : "Escolha um ou mais números, de qualquer conexão."}
             </small>
@@ -1025,7 +1047,8 @@ export function ScopeStep({
       </div>
 
       {draft.origin === "automation_payt" ||
-      draft.origin === "automation_braip" ? (
+      draft.origin === "automation_braip" ||
+      draft.origin === "automation_yampi" ? (
         <p className="action-note conversion-scope-note">
           {salesSingleConnectionNote(draft.origin)}
         </p>
@@ -1502,6 +1525,25 @@ function DetailsStep({
         </>
       ) : null}
 
+      {draft.origin === "automation_yampi" ? (
+        <>
+          <ProductFilterPicker
+            provider="yampi"
+            products={paytProducts}
+            selected={draft.productCodes}
+            onChange={(productCodes) => onChange({ productCodes })}
+            disabled={disabled}
+          />
+          <p className="action-note">
+            O valor de cada venda vem da própria Yampi: só os produtos, sem
+            frete e sem os juros do parcelamento (no carrinho abandonado, o
+            subtotal). Moeda: real (BRL). Os itens do pedido (com order bump)
+            vão junto para a Meta. As vendas chegam pela URL única da Yampi
+            (uma para a conta toda), cadastrada no webhook da loja.
+          </p>
+        </>
+      ) : null}
+
       {conversionEventCarriesValue(definition.lockedEvent ?? draft.eventName) ? (
         <RuleCurrencySelect
           value={draft.currency}
@@ -1540,7 +1582,8 @@ function DetailsStep({
           </div>
         ) : null}
         {(draft.origin === "automation_payt" && singleUrl) ||
-        draft.origin === "automation_braip" ? (
+        draft.origin === "automation_braip" ||
+        draft.origin === "automation_yampi" ? (
           <div>
             <dt>Produtos</dt>
             <dd>
@@ -1578,11 +1621,14 @@ function SingleUrlAfterCreate({
   const [created, setCreated] = useState<IntegrationEndpointDto | null>(null);
   const endpoint = created ?? existing;
   const sales = isSalesPlatform(provider);
-  const platform = provider === "braip" ? "Braip" : "Payt";
+  const platform =
+    provider === "braip" ? "Braip" : provider === "yampi" ? "Yampi" : "Payt";
   const label = sales
     ? provider === "braip"
       ? "URL única da Braip (cole em Ferramentas → Postback)"
-      : "URL única da Payt (cole em Postback)"
+      : provider === "yampi"
+        ? "URL única da Yampi (cadastre no webhook da loja)"
+        : "URL única da Payt (cole em Postback)"
     : `URL do evento “${ruleEventLabelForOrigin(`automation_${provider}`, eventName)}”`;
 
   return (
@@ -1659,7 +1705,11 @@ export function ruleCurrencyHint(origin: string): string {
   if (origin === "automation_roichat") {
     return "A moeda da compra vence; esta só vale quando a compra não informa a moeda.";
   }
-  if (origin === "automation_payt" || origin === "automation_braip") {
+  if (
+    origin === "automation_payt" ||
+    origin === "automation_braip" ||
+    origin === "automation_yampi"
+  ) {
     return "A moeda da venda vence; esta só vale quando a venda não informa a moeda.";
   }
   if (origin === "structured_catalog") {

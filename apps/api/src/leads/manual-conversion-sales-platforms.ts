@@ -1,15 +1,16 @@
 import { parseBraipSaleEventV1 } from "../inbound-webhooks/providers/braip/braip-automation-v1.parser";
 import { parsePaytSaleEventV1 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
+import { parseYampiSaleEventV1 } from "../inbound-webhooks/providers/yampi/yampi-automation-v1.parser";
 
 /**
  * Plataformas de venda cuja Compra deduplica contra a compra manual com
  * pedido (porte do SaaS #158). Cada plataforma lê o número do pedido do
  * callback preservado com o seu próprio leitor.
  *
- * Ponto de extensão: Payt e Braip (fase 6.5, `trans_key` da venda) já
- * participam; Hotmart (6.6) e Yampi (6.7) entram aqui quando forem portadas,
- * cada uma com o leitor do seu postback. Uma compra de outra plataforma nunca
- * é lida.
+ * Ponto de extensão: Payt, Braip (fase 6.5, `trans_key` da venda) e Yampi
+ * (fase 6.7, id do pedido) já participam; a Hotmart (6.6) entra aqui quando
+ * for portada, com o leitor do seu postback. Uma compra de outra plataforma
+ * nunca é lida.
  */
 export type ManualPurchaseSalesPlatform = {
   provider: string;
@@ -36,6 +37,17 @@ export const MANUAL_PURCHASE_SALES_PLATFORMS: readonly ManualPurchaseSalesPlatfo
       parserVersion: "automation-v1",
       readOrderRef(payload) {
         const parsed = parseBraipSaleEventV1(payload);
+        return parsed.ok ? parsed.value.orderRef : null;
+      },
+    },
+    {
+      // Fase 6.7 (porte do SaaS #186): o pedido da Yampi é o id do pedido
+      // (`resource.id`) do webhook guardado, o mesmo que entra na identidade
+      // da compra (order.paid e order.status.updated pago).
+      provider: "yampi",
+      parserVersion: "automation-v1",
+      readOrderRef(payload) {
+        const parsed = parseYampiSaleEventV1(payload);
         return parsed.ok ? parsed.value.orderRef : null;
       },
     },

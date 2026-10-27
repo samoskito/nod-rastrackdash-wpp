@@ -8,7 +8,7 @@ import {
 /**
  * Fase 5.3 — URL única por plataforma e URLs por evento.
  *
- * - Plataforma de venda (Payt, Braip): UMA URL por workspace; o evento vem de cada
+ * - Plataforma de venda (Payt, Braip, Yampi): UMA URL por workspace; o evento vem de cada
  *   postback (compra aprovada, Pix/boleto gerado, carrinho abandonado).
  * - Automação (Unnichat, Umbler): UMA URL por evento, válida para todos os
  *   números do workspace.
@@ -20,6 +20,7 @@ import {
 export const integrationEndpointProviders = [
   "payt",
   "braip",
+  "yampi",
   "unnichat",
   "umbler",
 ] as const;
@@ -55,7 +56,7 @@ export function integrationEndpointKindFor(
     : "automation_event";
 }
 
-/** Eventos suportados por uma URL (Payt/Braip: os que o postback pode virar). */
+/** Eventos suportados por uma URL (Payt/Braip/Yampi: os que o postback pode virar). */
 export function integrationEndpointSupportedEvents(
   provider: z.infer<typeof integrationEndpointProviderSchema>,
 ): readonly string[] {
@@ -254,7 +255,7 @@ export const integrationEventParsedSaleSchema = z.object({
   productName: z.string().nullable(),
   offerCode: z.string().nullable(),
   offerName: z.string().nullable(),
-  /** Pedido/transação da plataforma (trans_key da Braip). */
+  /** Pedido/transação da plataforma (trans_key da Braip, id do pedido da Yampi). */
   orderRef: z.string().nullable(),
   occurredAt: z.string().datetime().nullable(),
   /** Só os últimos 4 dígitos. */

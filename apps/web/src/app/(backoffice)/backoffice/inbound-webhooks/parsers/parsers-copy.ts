@@ -15,6 +15,7 @@ export const parserProviderLabels: Record<
   waha: "WAHA",
   braip: "Braip",
   roichat: "ROI Chat",
+  yampi: "Yampi",
 };
 
 /** Texto do estado de um leitor (sem jargão de certificação). */

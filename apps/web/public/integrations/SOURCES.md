@@ -34,6 +34,7 @@ instead of a broken image.
 | `meta.svg` | (also the WhatsApp Cloud API card) Meta's brand resource center requires accepting its terms and Brand Review approval before use — the account owner must do this. |
 | `uazapi.svg` | No official logo file could be retrieved with a verifiable source (docs.uazapi.com was not reachable when this was prepared); neutral wordmark until the owner provides the file. |
 | `nod-api.svg`, `zapi.svg` | "Em breve" cards; no public logo kit found; neutral wordmarks. |
+| `yampi.svg` | Fase 6.7: same neutral wordmark placeholder as the SaaS (copied 2026-10-27); no official Yampi artwork with usage terms collected yet. PENDENTE: get the official Yampi logo and its usage permission and swap the file, keeping the name. |
 
 Providers that arrive in later updates (Go High Level)
 add their own logo file and a row here.

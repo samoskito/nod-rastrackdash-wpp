@@ -112,6 +112,7 @@ Tamanho: P até 1 dia, M de 2 a 3 dias, G 4 dias ou mais (execução, testes e r
 | #185 | ROI Chat lê o objeto `anuncio` aninhado | PORTAR | Junto com o #183 | 6.8 | P |
 | #186 | Yampi na URL única | ADAPTAR | Liberado: sem `private-sales-platform-gate` nem `yampi-feature-gate` | 6.7 | M |
 | #187 | Yampi: produto pelo maior valor; tokens ocultos | PORTAR | Junto com o #186 | 6.7 | P |
+| #188 | Yampi: itens reais do pedido (com order bump) na Compra enviada à Meta (`contents`/`order_id`) | PORTAR | Junto com o #186 (achado em 27/10, depois do levantamento) | 6.7 | P |
 
 ### 1.2 Anteriores ao #152 que ainda não estão no nod
 
@@ -502,15 +503,14 @@ Fase nova, proposta depois da auditoria de 26/10 (decisão do Samuel: os dois it
 
 ### 6.7 — Yampi (migrations; entra por último junto com o ROI Chat)
 
-- **Itens:** #186 (`1889af48`) e #187 (`087df11b`).
+- **Itens:** #186 (`1889af48`), #187 (`087df11b`) e #188 (`bce48c6c`). Não há outro commit Yampi no `origin/main` do SaaS (`git log -i --grep=yampi`, 27/10/2026).
 - **Migrations:** `20261027160000_yampi_provider` e `…160100_yampi_parser_release`.
-- **Produção direta (§0):**
-  - se, na hora do porte, o SaaS já tiver validado a Yampi com venda real, a release entra **certificada por migration** (como `20261016090300_validated_parser_certification`), citando a evidência, e as regras nascem enviando;
-  - sem essa evidência, a Yampi não é portada (fica com `PENDENTE:` no plano, não nas notas do aluno).
+- **Produção direta (§0):** a Yampi está **validada**: payloads reais da Yampi chegaram ao SaaS e foram lidos corretamente pelo leitor; o #187 e o #188 foram feitos a partir desse formato real (regra do Samuel de 27/10/2026: payload real recebido e lido corretamente = validado). A release entra **certificada por migration** e as regras nascem enviando. Veja "Decisões do Samuel (27/10/2026): Yampi", no fim.
 - **Adaptações:** liberada, sem `private-sales-platform-gate` nem `yampi-feature-gate`; os tokens de login continuam ocultos nos links.
 - **Testes:** `yampi-*`, `unattributed-sale-certify` (#187).
 - **Notas:** backup obrigatório.
 - **Estimativa:** ~3 a 4 dias.
+- **Execução (27/10/2026, branch `feat/fase-6.7-yampi`):** portados #186, #187 e #188. Leitor `yampi/automation-v1` (pedido pago e mudança de status para pago = a mesma compra; boleto/Pix = `InitiateCheckout`; `cart.reminder` = `CartAbandoned`; valor só dos produtos, BRL; produto principal pelo maior valor), `saleCapiCustomData` da Yampi em `sales-platform-sale.ts` e na produção (itens reais com order bump, `num_items`, `content_name`, `order_id`; aviso `sale_capi_items_value_mismatch` sem dados pessoais) e `customData` gravado no `ConversionEventLog` por `recordExternalConversion`. Migrations `20261027160000_yampi_provider` (só enum) e `20261027160100_yampi_parser_release` (certificada, `ON CONFLICT`, só promove `observation_only`). Adaptações: liberada para todos os workspaces (sem `private-sales-platform-gate`, `yampi-feature-gate`, `yampiEnabled` nem chave em Integrações privadas); sem o hunk de billing (`package-billing.policy`); a URL própria da regra Yampi nasce sempre desativada também na API (reabrir/girar responde 409, como a Braip); card sempre no hub (Atendimento e vendas, logotipo neutro provisório igual ao do SaaS); textos sem "em certificação"; compra manual pelo id do pedido (`manual-conversion-sales-platforms.ts`); mascaramento de `x-yampi-hmac-sha256`, `login_url` e tokens em links (já portado na 6.5). Fixtures sanitizadas (pedido pago, pedido com order bump e links de login, boleto/Pix, carrinho). Sem variável nova. Docs: CHANGELOG, `unreleased.json` (passo 23 da verificação), `docs/setup/yampi.md`, GUIA-ALUNO, `url-unica.md`, README do setup.
 
 ### 6.8 — ROI Chat (migrations; por último)
 
@@ -636,6 +636,19 @@ Migrations: 20261027170000_roichat_provider (enum, aditiva, IF NOT EXISTS) e 202
 Testes: fase6-roichat (parsers com a fixture real do #185, integration, purchase-rule, provider-migration, license-lock 423), dedupe ROI Chat x WAHA em fase6-envio-meta, web roichat-integration + integrations-hub-registry; licensing-client + brand-footer/app-layout/navigation
 ```
 
+### Gate 2 — 6.7 (preenchido em 27/10/2026)
+
+```text
+Status: IMPLEMENTANDO
+Branch: feat/fase-6.7-yampi (worktree C:\Users\samue\Documents\nod-fase-6.7, a partir de origin/integracao/fase-6; rebase em 53ffd184, depois da 6.9, 6.9b e 6.8)
+Executor: Claude Code (subagente do orquestrador)
+Modelo/reasoning: Claude Opus 5.5
+Task file: .hermes/plans/PORTE-SAAS-PARIDADE-FASE-6.md §6.7
+Escopo: SaaS #186 (1889af48), #187 (087df11b) e #188 (bce48c6c), nada além; sem gates privados, sem billing
+Migrations: 20261027160000_yampi_provider (só enum, ADD VALUE IF NOT EXISTS) e 20261027160100_yampi_parser_release (certified, ON CONFLICT, só promove observation_only); aditivas; timestamp > 20261027140100_braip_parser_release
+Testes: apps/api/test/fase6-yampi/* (parser, migrations, URL única, ingestão por regra, contents/order_id, mascaramento, compra manual, 423), produção com itens (fase4-unnichat/payt-no-ad-ctwa-purchase), web yampi-integration + hub/route, shared yampi-sales-platform-contracts; mais licensing-client e brand-footer/app-layout/navigation
+```
+
 ## 5. Checklist ponta a ponta (instância de aluno, depois da 6.8)
 
 Use uma instância de teste com uma licença real de teste, num workspace sem dados de cliente real.
@@ -738,3 +751,11 @@ A fase só fecha com os seguintes arquivos atualizados no mesmo commit:
 - o guia da integração afetada.
 
 A seção "Quando o aluno pedir para atualizar ou mudar algo" do `docs/AI_AGENTS.md` aponta a IA do aluno para esses arquivos.
+
+## Decisões do Samuel (27/10/2026): Yampi
+
+- **A Yampi vai para o aluno agora** (fase 6.7). O teste real será feito numa conta de aluno, não no SaaS: não se espera mais validação no SaaS.
+- **Payload real recebido e lido corretamente = validado.** Payloads reais da Yampi já chegaram ao SaaS e foram lidos corretamente; o #187 e o #188 foram feitos a partir do formato real. A Yampi conta como **validada** (sem `PENDENTE: validar com venda real`, nem na conta de aluno nem no SaaS). No guia do aluno, o "teste" é só a conferência de funcionamento depois da instalação.
+- **Produção direta:** leitor certificado por migration (`20261027160100_yampi_parser_release`); URL única e regras nascem enviando; nenhum passo de observar, retestar ou liberar para o aluno.
+- **Liberada para todos os alunos:** no SaaS a Yampi é plataforma privada de um cliente; no nod ela entra **sem** `private-sales-platform-gate` e **sem** `yampi-feature-gate` (nem `yampiEnabled`, nem chave em Integrações privadas).
+- Os PENDENTEs técnicos genuínos continuam no guia (`docs/setup/yampi.md`): nome do status do `order.created` de boleto/Pix, `value_products` com cupom, marcador do envio de teste, caminho do menu de webhooks no painel da Yampi, logo oficial e itens reais do carrinho abandonado.

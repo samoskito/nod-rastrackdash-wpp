@@ -195,6 +195,8 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado.",
   "A Braip envia compra aprovada, Pix/boleto gerado ou carrinho abandonado":
     "A Braip envia compra aprovada, boleto/Pix gerado ou checkout abandonado.",
+  "A Yampi envia compra aprovada, Pix/boleto gerado ou carrinho abandonado":
+    "A Yampi envia pedido pago, pedido aguardando pagamento (boleto/Pix) ou carrinho abandonado.",
   "Escolha a conexao de WhatsApp dos numeros desta regra":
     "Escolha números de uma conexão de WhatsApp para esta regra.",
   "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal":

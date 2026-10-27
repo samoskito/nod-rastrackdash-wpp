@@ -115,6 +115,7 @@ export const integrationProviderIds = [
   "unnichat",
   "payt",
   "braip",
+  "yampi",
   "kommo",
   "pipedrive",
   "meta",
@@ -159,6 +160,11 @@ export type IntegrationGate =
    * state comes from the Braip rules and URL of the workspace.
    */
   | { kind: "braip_rules" }
+  /**
+   * Fase 6.7: Yampi, same base as Braip (single URL of the workspace). Open
+   * to every workspace in the student edition: no private-integration gate.
+   */
+  | { kind: "yampi_rules" }
   | { kind: "always" };
 
 export type IntegrationProviderDefinition = {
@@ -202,6 +208,9 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   unnichat: { file: "unnichat.png", surface: "light" },
   payt: { file: "payt.svg", surface: "dark" },
   braip: { file: "braip.png", surface: "dark" },
+  // Neutral wordmark placeholder (same file as the SaaS). PENDENTE: official
+  // Yampi artwork with usage permission (see public/integrations/SOURCES.md).
+  yampi: { file: "yampi.svg", surface: "dark" },
   kommo: { file: "kommo.png", surface: "light" },
   pipedrive: { file: "pipedrive.svg", surface: "dark" },
   meta: { file: "meta.svg", surface: "dark" },
@@ -356,6 +365,19 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Envie compra aprovada, boleto/Pix gerado e checkout abandonado da Braip como conversão do lead que veio do anúncio. Uma URL única para a conta toda.",
     gate: { kind: "braip_rules" },
+  },
+  {
+    // Fase 6.7 (porte do SaaS #186): no nod a Yampi é liberada para todos os
+    // workspaces (sem integração privada).
+    id: "yampi",
+    name: "Yampi",
+    category: "attendance",
+    logo: integrationLogoPath("yampi"),
+    initials: "Ya",
+    logoSurface: logoSurface("yampi"),
+    description:
+      "Envie pedido pago, pedido aguardando pagamento (boleto/Pix) e carrinho abandonado da Yampi como conversão do lead que veio do anúncio, com os itens do pedido. Uma URL única para a conta toda.",
+    gate: { kind: "yampi_rules" },
   },
   {
     id: "meta",

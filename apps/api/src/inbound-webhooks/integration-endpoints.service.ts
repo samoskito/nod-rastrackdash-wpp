@@ -114,7 +114,13 @@ function bodyRejectionReason(
   return "body_invalid";
 }
 const SECRET_CONTEXT = "integration-endpoint-secret";
-const routedProviders = ["payt", "braip", "unnichat", "umbler"] as const;
+const routedProviders = [
+  "payt",
+  "braip",
+  "yampi",
+  "unnichat",
+  "umbler",
+] as const;
 const DAY_MS = 24 * 60 * 60 * 1_000;
 /** What the rule decided that is not a conversion (review finding M3). */
 const DECLINED_RULE_OUTCOMES = new Set<string>([
@@ -994,6 +1000,7 @@ export class IntegrationEndpointsService {
     switch (parsed.provider) {
       case "payt":
       case "braip":
+      case "yampi":
         return routeSalePlatformSale(this.prisma, this.paidLeads, {
           workspaceId: endpoint.workspaceId,
           sale: parsed.sale,
@@ -1025,7 +1032,8 @@ export class IntegrationEndpointsService {
   ): ParsedIntegrationEvent {
     switch (endpoint.provider) {
       case "payt":
-      case "braip": {
+      case "braip":
+      case "yampi": {
         const platform = endpoint.provider;
         const sale = parseSaleEventV1(platform, payload, { receivedAt });
         if (!sale.ok) {

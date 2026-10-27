@@ -1253,6 +1253,11 @@ export default async function IntegrationsPage({
   const braipRules = (inboundWebhookData?.providerRules ?? []).filter(
     (rule) => rule.automationSource === "braip",
   );
+  // Fase 6.7: Yampi, same base as Braip (only through the single URL). Open
+  // to every workspace in the student edition (no private-integration gate).
+  const yampiRules = (inboundWebhookData?.providerRules ?? []).filter(
+    (rule) => rule.automationSource === "yampi",
+  );
 
   // Fase 5.3: URL única (Payt) e URLs por evento (Unnichat e Umbler).
   const singleUrlEnabled = Boolean(singleUrlData.endpoints?.enabled);
@@ -1276,6 +1281,9 @@ export default async function IntegrationsPage({
   const braipIntegrationUrl =
     singleUrlEndpoints.find((endpoint) => endpoint.provider === "braip") ??
     null;
+  const yampiIntegrationUrl =
+    singleUrlEndpoints.find((endpoint) => endpoint.provider === "yampi") ??
+    null;
   const ruleEventsFor = (origin: string) => [
     ...new Set(
       (inboundWebhookData?.providerRules ?? [])
@@ -1285,7 +1293,9 @@ export default async function IntegrationsPage({
               (origin === "automation_payt" &&
                 rule.automationSource === "payt") ||
               (origin === "automation_braip" &&
-                rule.automationSource === "braip")) &&
+                rule.automationSource === "braip") ||
+              (origin === "automation_yampi" &&
+                rule.automationSource === "yampi")) &&
             rule.conversionRule.active,
         )
         .map((rule) => rule.conversionRule.eventName),
@@ -1336,6 +1346,14 @@ export default async function IntegrationsPage({
       activeRuleCount: braipRules.filter((rule) => rule.conversionRule.active)
         .length,
       integrationUrl: Boolean(braipIntegrationUrl),
+    },
+    yampi: {
+      loaded:
+        Boolean(inboundWebhookData) && inboundWebhookData!.providerRulesEnabled,
+      ruleCount: yampiRules.length,
+      activeRuleCount: yampiRules.filter((rule) => rule.conversionRule.active)
+        .length,
+      integrationUrl: Boolean(yampiIntegrationUrl),
     },
     crm: {
       kommo: {
@@ -1636,6 +1654,72 @@ export default async function IntegrationsPage({
           instalação; peça a quem administra a instalação para conferir.
         </p>
         {braipRulesLink}
+      </div>
+    </div>
+  );
+
+  // Fase 6.7: Yampi, mesma base da Braip. Só pela URL única da conta (não há
+  // URL por regra); o leitor já entra em uso, nada a liberar. Liberada para
+  // todos os workspaces.
+  const yampiRulesLink = hasWhatsappNumber ? (
+    <Link
+      className="button primary"
+      href={
+        yampiRules.length > 0
+          ? "/conversions"
+          : "/conversions?nova=automation_yampi"
+      }
+    >
+      {yampiRules.length > 0
+        ? "Gerenciar regras da Yampi"
+        : "Criar regra de venda da Yampi"}
+    </Link>
+  ) : (
+    <>
+      <p className="muted">
+        Antes, conecte um número de WhatsApp para saber de qual anúncio veio
+        cada comprador.
+      </p>
+      <a className="button" href="#integracao-whatsapp">
+        Ir para WhatsApp
+      </a>
+    </>
+  );
+  const yampiPanel = singleUrlEnabled ? (
+    <div className="integration-modal-stack">
+      <SalesPlatformSingleUrlPanel
+        provider="yampi"
+        endpoint={yampiIntegrationUrl}
+        products={singleUrlData.yampiProducts}
+        unattributed={singleUrlData.unattributed.yampi}
+        legacyUrls={legacyUrlsFor(singleUrlLegacy, "yampi")}
+        ruleEvents={ruleEventsFor("automation_yampi")}
+        canManage={canManageSingleUrl}
+        licenseLocked={licenseLocked}
+        actions={singleUrlActions}
+        numberNames={singleUrlNumberNames}
+      />
+      <div className="integration-modal-note">
+        <strong>Regras de venda</strong>
+        <p className="muted">
+          Crie uma regra por evento (pedido pago, pedido aguardando pagamento,
+          carrinho abandonado), para todos os números ou só para alguns, e, se
+          quiser, só para certos produtos. A regra já começa enviando: a venda
+          segue para a regra do número por onde o comprador chegou.
+        </p>
+        {yampiRulesLink}
+      </div>
+    </div>
+  ) : (
+    <div className="integration-modal-stack">
+      <div className="integration-modal-note">
+        <strong>Como funciona</strong>
+        <p className="muted">
+          A Yampi avisa cada venda numa URL única da conta. Essa URL só existe
+          com os webhooks de entrada e as regras de conversão ligados nesta
+          instalação; peça a quem administra a instalação para conferir.
+        </p>
+        {yampiRulesLink}
       </div>
     </div>
   );
@@ -2029,6 +2113,7 @@ export default async function IntegrationsPage({
     unnichat: automationUrlsPanel("unnichat"),
     payt: paytPanel,
     braip: braipPanel,
+    yampi: yampiPanel,
     meta: metaPanel,
     kommo:
       workspace && kommoViewerId && canManageKommo ? (
@@ -2235,6 +2320,7 @@ export default async function IntegrationsPage({
           unnichat: [rulesLink],
           payt: [rulesLink],
           braip: [rulesLink],
+          yampi: [rulesLink],
         }}
         tabIntro={{
           whatsapp: whatsappIntro,

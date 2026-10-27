@@ -9,7 +9,7 @@ import { inboundWebhookParserReleaseSchema } from "./inbound-webhooks";
 
 /**
  * Backoffice "Recebimentos das URLs únicas" (porte do SaaS #170, fase 6.5):
- * tudo o que chegou pelas URLs únicas (Payt, Braip) e pelas URLs por evento
+ * tudo o que chegou pelas URLs únicas (Payt, Braip, Yampi) e pelas URLs por evento
  * (Unnichat, Umbler), de todos os workspaces da instalação, com o resultado
  * de cada recebimento. Só administradores da plataforma (o aluno dono da
  * instalação). Só leitura: nada aqui muda o envio.

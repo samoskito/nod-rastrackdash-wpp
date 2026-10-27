@@ -42,6 +42,7 @@ import type { ParsedUnnichatAutomationV1 } from "./providers/unnichat/unnichat-a
 export type IntegrationRoutingProvider =
   | "payt"
   | "braip"
+  | "yampi"
   | "unnichat"
   | "umbler"
   // Fase 6.8: the ROI Chat purchase arrives on the number's own URL and is
@@ -363,7 +364,7 @@ function finishRoute(
 }
 
 /**
- * Plataforma de venda (Payt, Braip — URL única): the event comes from the
+ * Plataforma de venda (Payt, Braip, Yampi — URL única): the event comes from the
  * postback; only rules of the same platform are candidates.
  */
 export async function routeSalePlatformSale(

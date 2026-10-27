@@ -42,6 +42,7 @@ describe("manual purchase vs a Braip sale", () => {
     expect(manualPurchaseSalesPlatformTriggers()).toEqual([
       "inbound_webhook:payt:",
       "inbound_webhook:braip:",
+      "inbound_webhook:yampi:",
     ]);
   });
 

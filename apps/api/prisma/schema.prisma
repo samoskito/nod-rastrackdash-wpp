@@ -61,6 +61,7 @@ enum DiagnosticSource {
   unnichat
   braip
   roichat
+  yampi
 }
 
 enum DiagnosticSeverity {
@@ -300,6 +301,7 @@ enum InboundWebhookProvider {
   waha
   braip
   roichat
+  yampi
 }
 
 enum InboundWebhookParserReleaseStatus {
