@@ -274,7 +274,9 @@ describe("Recebimentos das URLs únicas: what each outcome stores (SaaS #170)", 
 
     const receipts = [...w.receipts.values()];
     expect(receipts.map((r) => [r.status, r.reasonCode, r.attemptCount])).toEqual([
-      ["rejected", "token_invalid", 2],
+      // Revisão do #121: a mesma recusa (endpoint, IP, motivo) dentro de um
+      // minuto não é gravada de novo (o 404 é o mesmo).
+      ["rejected", "token_invalid", 1],
       ["rejected", "token_missing", 1],
       ["rejected", "endpoint_removed", 1],
     ]);

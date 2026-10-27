@@ -52,9 +52,19 @@ describe("routeLeadForm", () => {
   const b = { id: "b", pageId: "p1", formIds: [] as string[] };
   const c = { id: "c", pageId: "p2", formIds: [] as string[] };
 
-  it("a single connection of the Page takes every form", () => {
-    expect(routeLeadForm([a, c], "p1", "other")).toMatchObject({
+  // Revisão do #121: uma conexão só da Página respeita os formulários
+  // escolhidos; sem formulários escolhidos ela recebe todos.
+  it("a single connection of the Page takes its listed forms (or every form when none is listed)", () => {
+    expect(routeLeadForm([a, c], "p1", "f1")).toMatchObject({
       connection: a,
+      reason: "page_match",
+    });
+    expect(routeLeadForm([a, c], "p1", "other")).toMatchObject({
+      connection: null,
+      reason: "form_not_listed",
+    });
+    expect(routeLeadForm([b, c], "p1", "other")).toMatchObject({
+      connection: b,
       reason: "page_match",
     });
   });

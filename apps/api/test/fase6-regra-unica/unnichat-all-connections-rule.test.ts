@@ -56,9 +56,9 @@ type Number = {
 
 // 5159 and 5520 (one connection each) + a 3rd number connected later.
 const numbers: Number[] = [
-  { channelId: "ch_5159", connectionId: "conn_5159", phone: "555195405159" },
-  { channelId: "ch_5520", connectionId: "conn_5520", phone: "555195365520" },
-  { channelId: "ch_new", connectionId: "conn_new", phone: "555199990003" },
+  { channelId: "ch_5159", connectionId: "conn_5159", phone: "5511999990159" },
+  { channelId: "ch_5520", connectionId: "conn_5520", phone: "5511999990520" },
+  { channelId: "ch_new", connectionId: "conn_new", phone: "5511999990003" },
 ];
 
 function connectionOf(number: Number) {
@@ -330,7 +330,7 @@ function harness(input: {
         provider: "unnichat",
         automation: "crm_movement",
         eventName: "QualifiedLead",
-        phone: "5551987650001",
+        phone: "5511999990801",
         hasCtwa: true,
         ctwaClid: "click_1",
         occurredAt: new Date("2026-10-21T11:59:00.000Z"),

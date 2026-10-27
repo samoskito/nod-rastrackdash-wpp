@@ -1,3 +1,4 @@
+import { conversionSendingSwitchedOff } from "../config/deployment-config";
 import { effectiveInboundParserStatus } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -2118,6 +2119,9 @@ export class ProviderConversionRulesService {
       leadSubmittedRuleOverrideEnabled: leadSubmittedRuleOverrideEnabled(
         this.env,
       ),
+      // INBOUND_CONVERSION_PRODUCTION_ENABLED=false: as regras aparecem
+      // enviando, mas nada sai. A tela avisa em linguagem simples.
+      conversionSendingOff: conversionSendingSwitchedOff(this.env),
     };
   }
 
@@ -2507,7 +2511,7 @@ export class ProviderConversionRulesService {
     const target = automationPromotionTarget(input.rules);
     if (!target) {
       throw new ConflictException(
-        "Nenhuma destas regras tem uma conexao ativa; conecte o numero novo e crie a regra para todos os numeros",
+        "Nenhuma destas regras tem uma conexão ativa; conecte o número novo e crie a regra para todos os números",
       );
     }
     const previousChannelIds = target.channels.map(

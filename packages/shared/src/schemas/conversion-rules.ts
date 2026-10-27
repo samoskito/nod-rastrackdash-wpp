@@ -584,7 +584,7 @@ const providerAutomationCreateSchema = z
       if (input.triggerPhrases || input.triggerLabels) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "A compra do ROI Chat nao usa etiquetas",
+          message: "A compra do ROI Chat não usa etiquetas",
           path: ["triggerPhrases"],
         });
       }
@@ -1286,6 +1286,12 @@ export const providerConversionRuleCapabilitiesSchema = z.object({
    * Opcional: APIs anteriores não enviam (tratado como desligado).
    */
   leadSubmittedRuleOverrideEnabled: z.boolean().optional(),
+  /**
+   * INBOUND_CONVERSION_PRODUCTION_ENABLED=false na API: nenhuma regra envia
+   * (nem Kommo e Pipedrive), mesmo as que aparecem enviando. Opcional: APIs
+   * anteriores não enviam (tratado como ligado).
+   */
+  conversionSendingOff: z.boolean().optional(),
 });
 
 /** Código do recibo de entrada cujo Lead recebido foi adiado para a regra. */

@@ -504,6 +504,24 @@ describe("Inbound -> persisted lead -> LeadSubmitted -> same lead Kommo -> real 
     },
   );
 
+  // Revisão do #121 (D2): a Kommo obedece o interruptor do servidor.
+  it("INBOUND_CONVERSION_PRODUCTION_ENABLED=false: a regra da Kommo em produção não envia nada", async () => {
+    const h = fixture();
+    const leadEvent = await h.materialize("production");
+    expect(await h.send(leadEvent)).toMatchObject({ status: "sent" });
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
+    const webhook = await h.receive();
+    expect(await h.kommo.process(webhook.id, "workspace-a")).toMatchObject({
+      status: "blocked",
+    });
+    expect(
+      h.state.conversionEventLog.filter(
+        (row) => row.sourceTrigger === "kommo_stage",
+      ),
+    ).toHaveLength(0);
+    expect(h.fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps legacy LeadSubmitted delivering beside a partial unrelated BM with advanced off", async () => {
     const h = fixture("manual");
     h.business.defaultConversionDestinationId = null;

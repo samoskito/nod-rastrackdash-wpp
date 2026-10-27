@@ -1,4 +1,8 @@
 import {
+  CONVERSION_PRODUCTION_DISABLED_CODE,
+  conversionSendingSwitchedOff,
+} from "../config/deployment-config";
+import {
   BadRequestException,
   ConflictException,
   HttpException,
@@ -1068,6 +1072,10 @@ export class PipedriveWebhookService {
   ) {
     if (!this.conversions || !this.conversionQueue)
       return "pipedrive_production_disabled";
+    // Interruptor do servidor: INBOUND_CONVERSION_PRODUCTION_ENABLED=false
+    // desliga o envio de todas as regras, também as do Pipedrive.
+    if (conversionSendingSwitchedOff())
+      return CONVERSION_PRODUCTION_DISABLED_CODE;
     const activated = rule.productionActivatedAt;
     if (
       !activated ||

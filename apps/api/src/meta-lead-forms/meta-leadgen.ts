@@ -60,11 +60,16 @@ export type LeadFormRouteCandidate = {
 
 export type LeadFormRoute<T extends LeadFormRouteCandidate> =
   | { connection: T; reason: "page_match" | "form_match" | "page_default" }
-  | { connection: null; reason: "no_page_match" | "ambiguous" };
+  | {
+      connection: null;
+      reason: "no_page_match" | "ambiguous" | "form_not_listed";
+    };
 
 /**
  * 1. Active connections of the page.
- * 2. Only one: that one.
+ * 2. Only one: that one, unless it lists its forms and the lead came from
+ *    another form of the Page (then unrouted: the student chose which forms
+ *    this connection receives). A lead without form id goes to it.
  * 3. Several (shared Page): the one listing the form; when none lists it, the
  *    single connection without forms (the Page catch-all).
  * 4. Otherwise unrouted.
@@ -76,8 +81,12 @@ export function routeLeadForm<T extends LeadFormRouteCandidate>(
 ): LeadFormRoute<T> {
   const byPage = connections.filter((item) => item.pageId === pageId);
   if (byPage.length === 0) return { connection: null, reason: "no_page_match" };
-  if (byPage.length === 1)
-    return { connection: byPage[0]!, reason: "page_match" };
+  if (byPage.length === 1) {
+    const only = byPage[0]!;
+    if (formId && only.formIds.length > 0 && !only.formIds.includes(formId))
+      return { connection: null, reason: "form_not_listed" };
+    return { connection: only, reason: "page_match" };
+  }
 
   if (formId) {
     const byForm = byPage.filter((item) => item.formIds.includes(formId));

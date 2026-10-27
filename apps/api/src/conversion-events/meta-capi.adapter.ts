@@ -86,6 +86,50 @@ const BATCH_WIDE_REJECTION_CODES = new Set([
   102, 190, 4, 17, 32, 341, 613, 80000, 80001, 80002, 80003, 80004, 80005,
   80006, 80008, 80009, 80014,
 ]);
+/**
+ * Usage limits (app/account/ads throttling): Meta did not take the events and
+ * will after a pause. In the batch path they become retryable (the queue
+ * retries the job with backoff; Meta dedupes by event_id) instead of a final
+ * MetaCapiRejected.
+ */
+const RATE_LIMIT_CODES = new Set([
+  4, 17, 32, 341, 613, 80000, 80001, 80002, 80003, 80004, 80005, 80006, 80008,
+  80009, 80014,
+]);
+/** The batch POST never hangs a whole group of jobs (like a single POST). */
+const BATCH_REQUEST_TIMEOUT_MS = 30_000;
+
+function graphErrorCode(summary: Record<string, unknown> | null): number | null {
+  const error = summary?.error;
+  if (!error || typeof error !== "object" || Array.isArray(error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "number" && Number.isInteger(code) ? code : null;
+}
+
+/**
+ * Batch path only: a usage-limit refusal is resent later. errorCode
+ * MetaCapiNetworkError is the retryable class of the queue processor (the
+ * job throws and BullMQ retries); the stored response keeps the Graph code,
+ * and the message says it was a usage limit.
+ */
+export function retryableRateLimit(
+  result: MetaCapiSendEventResult,
+): MetaCapiSendEventResult {
+  const code = graphErrorCode(result.responseSummary);
+  if (
+    result.status !== "error" ||
+    result.errorCode !== "MetaCapiRejected" ||
+    code === null ||
+    !RATE_LIMIT_CODES.has(code)
+  )
+    return result;
+  return {
+    ...result,
+    errorCode: "MetaCapiNetworkError",
+    errorMessage: `Meta CAPI usage limit (code ${code}): will retry`,
+  };
+}
+
 /** Parallel single POSTs when a batch must be resent one by one. */
 const BATCH_FALLBACK_CONCURRENCY = 4;
 
@@ -392,10 +436,12 @@ export class MetaCapiAdapter {
       if (items.length === 1) {
         const [item] = items;
         item.resolve(
-          await this.postEvents(
-            item.url,
-            item.requestPayload,
-            item.ctwaDestination,
+          retryableRateLimit(
+            await this.postEvents(
+              item.url,
+              item.requestPayload,
+              item.ctwaDestination,
+            ),
           ),
         );
         return;
@@ -414,6 +460,7 @@ export class MetaCapiAdapter {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(batchPayload),
+          signal: AbortSignal.timeout(BATCH_REQUEST_TIMEOUT_MS),
         });
         payload = await response.json().catch(() => null);
       } catch {
@@ -480,15 +527,17 @@ export class MetaCapiAdapter {
         };
 
         items.forEach((item) =>
-          item.resolve({
-            status: "error",
-            requestPayload: item.requestPayload,
-            responseSummary,
-            errorMessage: isMetaAuthFailureResponse(responseSummary)
-              ? "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend"
-              : "Meta CAPI request failed",
-            errorCode: "MetaCapiRejected",
-          }),
+          item.resolve(
+            retryableRateLimit({
+              status: "error",
+              requestPayload: item.requestPayload,
+              responseSummary,
+              errorMessage: isMetaAuthFailureResponse(responseSummary)
+                ? "Meta CAPI authentication failed (code 190/102): reconnect Meta and resend"
+                : "Meta CAPI request failed",
+              errorCode: "MetaCapiRejected",
+            }),
+          ),
         );
         return;
       }
@@ -507,10 +556,12 @@ export class MetaCapiAdapter {
             .slice(offset, offset + BATCH_FALLBACK_CONCURRENCY)
             .map(async (item) =>
               item.resolve(
-                await this.postEvents(
-                  item.url,
-                  item.requestPayload,
-                  item.ctwaDestination,
+                retryableRateLimit(
+                  await this.postEvents(
+                    item.url,
+                    item.requestPayload,
+                    item.ctwaDestination,
+                  ),
                 ),
               ),
             ),

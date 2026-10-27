@@ -277,6 +277,21 @@ describe("Pipedrive canonical production flow, synthetic storage and injected Me
     expect(h.jobs.size).toBe(0);
     expect(h.fetcher).not.toHaveBeenCalled();
   });
+  // Revisão do #121 (D2): a regra continua nascendo enviando, mas o
+  // interruptor do servidor ("false" explícito) segura o envio.
+  it("INBOUND_CONVERSION_PRODUCTION_ENABLED=false: a regra em produção não materializa nem envia", async () => {
+    const h = await selected();
+    vi.stubEnv("INBOUND_CONVERSION_PRODUCTION_ENABLED", "false");
+    const event = await h.receive();
+    expect(await h.webhooks.process(event.id, "workspace-a")).toMatchObject({
+      status: "ignored",
+    });
+    expect(h.state.pipedriveWebhookEvent![0]!.errorCode).toBe(
+      "conversion_production_disabled",
+    );
+    expect(h.state.conversionEventLog ?? []).toHaveLength(0);
+    expect(h.fetcher).not.toHaveBeenCalled();
+  });
   it("does not backfill receipts predating production activation", async () => {
     const h = await productionHarness();
     const r = await h.webhooks.createRule(

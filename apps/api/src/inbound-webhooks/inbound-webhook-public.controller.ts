@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpException,
   Inject,
+  Ip,
   Logger,
   Param,
   Post,
@@ -65,6 +66,7 @@ export class InboundWebhookPublicController {
     @Headers("content-type") contentType: string | undefined,
     @Headers("x-attempt") providerAttempt: unknown,
     @RawBody() rawBody: Buffer | undefined,
+    @Ip() clientIp?: string,
   ) {
     return this.integrationEndpoints.ingest({
       endpointId,
@@ -72,6 +74,7 @@ export class InboundWebhookPublicController {
       contentType,
       providerAttempt,
       rawBody,
+      clientIp,
     });
   }
 

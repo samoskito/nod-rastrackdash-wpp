@@ -169,7 +169,41 @@ export type IntegrationEndpointIngestInput = {
   contentType: string | undefined;
   providerAttempt: unknown;
   rawBody: Buffer | undefined;
+  /** Who called (only used to limit how often a refusal is written). */
+  clientIp?: string;
 };
+
+/**
+ * Refusals without a valid token are written at most once per endpoint, IP
+ * and reason in this window (per API process): a flood of bad calls costs no
+ * database write per request. The answer (404) never changes.
+ */
+export const REJECTION_WRITE_INTERVAL_MS = 60_000;
+const REJECTION_WRITE_KEYS_MAX = 10_000;
+
+export class RejectionWriteLimiter {
+  private readonly lastWrite = new Map<string, number>();
+
+  constructor(
+    private readonly intervalMs = REJECTION_WRITE_INTERVAL_MS,
+    private readonly maxKeys = REJECTION_WRITE_KEYS_MAX,
+  ) {}
+
+  /** true: write this refusal now; false: one was written recently. */
+  allow(key: string, now: number): boolean {
+    const last = this.lastWrite.get(key);
+    if (last !== undefined && now - last < this.intervalMs) return false;
+    if (this.lastWrite.size >= this.maxKeys) {
+      for (const [entry, at] of this.lastWrite) {
+        if (now - at >= this.intervalMs) this.lastWrite.delete(entry);
+      }
+      // Still full (a burst of distinct callers): start over rather than grow.
+      if (this.lastWrite.size >= this.maxKeys) this.lastWrite.clear();
+    }
+    this.lastWrite.set(key, now);
+    return true;
+  }
+}
 
 export type IntegrationEndpointIngestResult = {
   status: "accepted";
@@ -197,6 +231,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 @Injectable()
 export class IntegrationEndpointsService {
   private readonly logger = new Logger(IntegrationEndpointsService.name);
+  private readonly rejectionLimiter = new RejectionWriteLimiter();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -224,12 +259,19 @@ export class IntegrationEndpointsService {
     // before; the attempt is recorded as METADATA ONLY (never the body), for
     // Backoffice > Recebimentos das URLs únicas (SaaS #170).
     if (rejection) {
-      await this.recordRejection({
-        endpoint,
-        reasonCode: rejection,
-        rawBody: null,
-        receivedAt,
-      });
+      if (
+        this.rejectionLimiter.allow(
+          `${endpoint?.id ?? input.endpointId}|${input.clientIp ?? "-"}|${rejection}`,
+          receivedAt.getTime(),
+        )
+      ) {
+        await this.recordRejection({
+          endpoint,
+          reasonCode: rejection,
+          rawBody: null,
+          receivedAt,
+        });
+      }
       throw new NotFoundException(notFoundMessage);
     }
     // Braip (6.5): JSON or form-urlencoded, stored and routed as canonical

@@ -141,14 +141,14 @@ describe("MetaLeadFormsService.ingestLeadgen", () => {
   it("keeps a Graph failure as fetch_failed and retries it next time", async () => {
     const h = createHarness();
     h.graph.fetchLead.mockRejectedValueOnce(
-      new MetaLeadFormGraphError("token expired", 400, 190),
+      new MetaLeadFormGraphError("Graph indisponível", 503, 2),
     );
 
     const first = await h.service.ingestLeadgen([change]);
     expect(first.fetchFailed).toBe(1);
     expect(h.submissions.get(change.leadgen_id)).toMatchObject({
       fetchStatus: "fetch_failed",
-      fetchError: "token expired",
+      fetchError: "[transient] Graph indisponível",
       leadId: null,
     });
 

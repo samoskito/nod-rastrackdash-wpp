@@ -57,6 +57,59 @@ function maskSensitiveString(value: string): string {
   return value.replace(sensitiveUrlParamPattern, `$1${maskedValue}`);
 }
 
+/**
+ * Personal data of the buyer (LGPD): shown only partially, enough to tell
+ * receipts apart. Documents (CPF, CNPJ, any "document"/"doc"): only the last 2
+ * characters. E-mail: first letter and the domain. Address (street, number,
+ * complement, district): the first 3 characters; CEP: the first 5 digits.
+ * City, state and country stay readable.
+ */
+const documentKeyPattern =
+  /(?:^|_|-)(?:cpf|cnpj|cpf_cnpj|cpfcnpj|document|documment|documento|doc|doc_number|document_number|tax_id|taxid|rg)$/iu;
+const emailKeyPattern = /(?:^|_|-)e-?mail$/iu;
+const addressKeyPattern =
+  /(?:^|_|-)(?:address|street|street_number|address_number|address_comp|complement|comp|endereco|logradouro|bairro|district|neighborhood|neighbourhood)$/iu;
+const zipKeyPattern =
+  /(?:^|_|-)(?:zip|zipcode|zip_code|cep|postal_code|postcode)$/iu;
+const hiddenChar = "•";
+
+function maskDocument(value: string): string {
+  const compact = value.replace(/\s/gu, "");
+  if (compact.length <= 2) return hiddenChar.repeat(3);
+  return `${hiddenChar.repeat(6)}${compact.slice(-2)}`;
+}
+
+function maskEmail(value: string): string {
+  const at = value.lastIndexOf("@");
+  if (at <= 0) return maskDocument(value);
+  return `${value[0]}${hiddenChar.repeat(3)}${value.slice(at)}`;
+}
+
+function maskAddress(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= 3) return hiddenChar.repeat(3);
+  return `${trimmed.slice(0, 3)}${hiddenChar.repeat(3)}`;
+}
+
+function maskZip(value: string): string {
+  const digits = value.replace(/\D/gu, "");
+  return digits.length >= 5
+    ? `${digits.slice(0, 5)}-${hiddenChar.repeat(3)}`
+    : hiddenChar.repeat(3);
+}
+
+/** Partial mask of a personal value by its key; null when not personal. */
+export function maskPersonalValue(key: string, value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value);
+  if (!text) return null;
+  if (documentKeyPattern.test(key)) return maskDocument(text);
+  if (emailKeyPattern.test(key)) return maskEmail(text);
+  if (zipKeyPattern.test(key)) return maskZip(text);
+  if (addressKeyPattern.test(key)) return maskAddress(text);
+  return null;
+}
+
 export function maskSensitivePayload(value: unknown, depth = 0): unknown {
   if (typeof value === "string") return maskSensitiveString(value);
   if (!value || typeof value !== "object" || depth > 12) return value;
@@ -68,7 +121,8 @@ export function maskSensitivePayload(value: unknown, depth = 0): unknown {
       key,
       sensitiveKeyPattern.test(key)
         ? maskedValue
-        : maskSensitivePayload(entry, depth + 1),
+        : (maskPersonalValue(key, entry) ??
+          maskSensitivePayload(entry, depth + 1)),
     ]),
   );
 }
@@ -108,10 +162,14 @@ export function maskSensitiveText(text: string): string {
   );
   const pairs = multipart.replace(
     /([^&=\s?"]+)=([^&\s]*)/gu,
-    (match, key: string) =>
-      sensitiveKeyPattern.test(formKeyName(key))
-        ? `${key}=${maskedValue}`
-        : match,
+    (match, key: string, raw: string) => {
+      const name = formKeyName(key);
+      if (sensitiveKeyPattern.test(name)) return `${key}=${maskedValue}`;
+      const personal = maskPersonalValue(name, decodeSafely(raw));
+      return personal === null
+        ? match
+        : `${key}=${encodeURIComponent(personal)}`;
+    },
   );
   return maskSensitiveString(pairs).replace(
     encodedUrlParamPattern,

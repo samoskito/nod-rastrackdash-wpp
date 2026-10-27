@@ -210,7 +210,7 @@ describe("CRM board (rendered)", () => {
     const novos = column("Leads novos");
     expect(within(novos).getByLabelText("46 leads")).toBeTruthy();
     expect(within(novos).getByText("Mariana Alves")).toBeTruthy();
-    expect(within(novos).getByText("+55 11 99876-1020")).toBeTruthy();
+    expect(within(novos).getByText("+55 11 99999-0101")).toBeTruthy();
     expect(within(novos).getAllByText("CTWA").length).toBe(20);
     expect(within(novos).getAllByText("Black Friday WhatsApp · Carrossel 40% OFF").length).toBeGreaterThan(0);
     expect(within(novos).getAllByText(/nesta etapa/u).length).toBe(20);

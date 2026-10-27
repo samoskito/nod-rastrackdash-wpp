@@ -55,8 +55,9 @@ respondem 423 (o webhook da Meta também é recusado até a licença voltar).
    usa o token Graph.
 4. No painel, preencha **Nome**, **ID da Página**, **Dataset do CRM**, **Evento ao qualificar**
    (padrão `LeadQualificado`; `Lead` e `LeadSubmitted` são recusados, porque a Meta já recebe o lead)
-   e os tokens. **IDs dos formulários** só são necessários quando a mesma Página atende mais de uma
-   conexão: vazio quer dizer todos os formulários não reservados por outra.
+   e os tokens. **IDs dos formulários**: vazio quer dizer todos os formulários da Página (não
+   reservados por outra conexão). Preenchido, a conexão recebe **só** esses formulários, mesmo sendo a
+   única da Página; os leads dos outros formulários não entram.
 5. Clique em **Assinar Página**. Isso faz `POST /{page}/subscribed_apps` com `leadgen`.
 6. Confira com a [ferramenta de leads da Meta](https://developers.facebook.com/tools/lead-ads-testing):
    o lead aparece em `/leads` com a origem **Formulário Meta**.
@@ -86,10 +87,17 @@ respondem 423 (o webhook da Meta também é recusado até a licença voltar).
   190 ou 102, nos últimos 7 dias) aparecem em **Eventos Meta** e são reenviadas por **Reenviar
   bloqueados** depois de corrigir em **Editar**. Outras recusas da Meta não são reenviadas
   automaticamente.
-- Se a leitura do lead na Graph API falhar (token expirado, por exemplo), o envio fica como
-  `fetch_failed` e o webhook responde 503, então a Meta reentrega e o lead é lido de novo. Corrija o
-  token em **Editar**; se a Meta desistir de reentregar, o lead não entra (PENDENTE: não há botão
-  "Ler de novo").
+- Se a leitura do lead na Graph API falhar, o envio fica como `fetch_failed`:
+  - falha **passageira** (rede, instabilidade da Meta, limite de uso 4/17/32/613/80001-80014): o
+    webhook responde 503, a Meta reentrega e o lead é lido de novo;
+  - falha **permanente**: o webhook responde 200 (reentregar não resolve, e horas de 503 podem
+    fazer a Meta desligar a assinatura do app que recebe todo o `/webhooks/meta`). Com token vencido
+    ou inválido (190/102) a conexão mostra **Reconecte a Página**; com falta de permissão
+    (10/200-299), **Falta permissão**. Gere um token novo (ou ajuste as permissões do Usuário do
+    Sistema) e salve em **Editar**: o aviso some ao salvar e volta no próximo lead se o token
+    continuar recusado. Outro erro 4xx (por exemplo, um lead que a Meta não deixa mais ler) fica só
+    no envio, como `fetch_failed`, sem aviso na conexão. Os leads desse intervalo não entram
+    sozinhos: ficam na Central de Leads da Meta (PENDENTE: não há botão "Ler de novo").
 - Os dados que a pessoa preencheu no formulário (nome, e-mail, telefone e respostas) ficam guardados
   no banco da sua instalação, como os leads do WhatsApp; trate-os como dados pessoais do cliente.
 - Uma Página **sem** conexão continua no comportamento anterior do webhook Meta (só log de
