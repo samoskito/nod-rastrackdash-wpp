@@ -7,7 +7,9 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json) (planned as 1.3.1; version and tag not defined). **One additive migration (`20261028100000_meta_lead_form_token_updated_at`): back up PostgreSQL first. No new variable.** Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.
+## [1.3.1] - 2026-10-28
+
+Upgrade notes for students: [`docs/releases/1.3.1.json`](docs/releases/1.3.1.json). The "Formulários Meta (Lead Ads)" feature stays hidden in this version until it is validated. **One additive migration (`20261028100000_meta_lead_form_token_updated_at`): back up PostgreSQL first. No new variable.** Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.
 
 ### Added
 
