@@ -862,7 +862,7 @@ export class ManualConversionService {
 
   /**
    * Order number of a sales-platform execution's preserved callback (nod:
-   * Payt; Braip/Hotmart/Yampi join through manual-conversion-sales-platforms).
+   * Payt and Braip; Hotmart/Yampi join through manual-conversion-sales-platforms).
    */
   private readonly readProviderOrderRef: ProviderOrderRefReader = async ({
     workspaceId,

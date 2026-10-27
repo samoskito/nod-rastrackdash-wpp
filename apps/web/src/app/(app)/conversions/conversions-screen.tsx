@@ -117,6 +117,9 @@ export type ConversionsSingleUrl = {
   endpoints: IntegrationEndpointDto[];
   paytProducts: IntegrationDetectedProductDto[];
   paytUnattributed: IntegrationUnattributedEventListDto | null;
+  /** Fase 6.5: produtos e vendas sem atribuição da Braip. */
+  braipProducts?: IntegrationDetectedProductDto[];
+  braipUnattributed?: IntegrationUnattributedEventListDto | null;
   actions: SingleUrlActions;
 };
 
@@ -634,12 +637,37 @@ export function ConversionsScreen({
           className="conversions-list-section conversions-unattributed"
           aria-labelledby="conversions-unattributed-title"
         >
-          <h2 id="conversions-unattributed-title">Vendas sem atribuição</h2>
+          <h2 id="conversions-unattributed-title">
+            {singleUrl.braipUnattributed && singleUrl.braipUnattributed.total > 0
+              ? "Vendas sem atribuição (Payt)"
+              : "Vendas sem atribuição"}
+          </h2>
           <UnattributedSalesList
             list={singleUrl.paytUnattributed}
             canManage={canManage}
             licenseLocked={licenseLocked}
             retry={singleUrl.actions.retry}
+            loadPayload={singleUrl.actions.loadPayload}
+          />
+        </section>
+      ) : null}
+
+      {singleUrl &&
+      singleUrl.braipUnattributed &&
+      singleUrl.braipUnattributed.total > 0 ? (
+        <section
+          className="conversions-list-section conversions-unattributed"
+          aria-labelledby="conversions-unattributed-braip-title"
+        >
+          <h2 id="conversions-unattributed-braip-title">
+            Vendas sem atribuição (Braip)
+          </h2>
+          <UnattributedSalesList
+            list={singleUrl.braipUnattributed}
+            canManage={canManage}
+            licenseLocked={licenseLocked}
+            retry={singleUrl.actions.retry}
+            loadPayload={singleUrl.actions.loadPayload}
           />
         </section>
       ) : null}
@@ -683,6 +711,7 @@ export function ConversionsScreen({
             createAction={createAction}
             confirmAction={confirmCreateAction}
             paytProducts={singleUrl?.paytProducts}
+            braipProducts={singleUrl?.braipProducts}
             integrationEndpoints={singleUrl?.endpoints}
             singleUrlActions={singleUrl?.actions}
             numbersUnavailable={numbersPartial}
@@ -792,6 +821,7 @@ export function ConversionsScreen({
             actions={manageActions}
             integrationEndpoints={singleUrl?.endpoints}
             paytProducts={singleUrl?.paytProducts}
+            braipProducts={singleUrl?.braipProducts}
             singleUrlActions={singleUrl?.actions}
             numbersUnavailable={numbersPartial}
             initialTab={manage.tab}

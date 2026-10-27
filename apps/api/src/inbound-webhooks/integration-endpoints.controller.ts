@@ -14,6 +14,7 @@ import {
 import {
   integrationEndpointCreateInputSchema,
   integrationEndpointProviderSchema,
+  isSalesPlatformProvider,
   type IntegrationEndpointProviderDto,
 } from "@wpptrack/shared";
 import { AuthToken } from "../auth/auth-user.decorator";
@@ -22,7 +23,7 @@ import { WorkspacesService } from "../workspaces/workspaces.service";
 import { IntegrationEndpointsService } from "./integration-endpoints.service";
 
 /**
- * Fase 5.3: URL única por plataforma (Payt) e URLs por evento (Unnichat,
+ * Fase 5.3: URL única por plataforma (Payt; Braip na 6.5) e URLs por evento (Unnichat,
  * Umbler) do workspace atual. Leitura para qualquer membro; criar, mostrar,
  * girar, remover e "Tentar de novo" só para quem gerencia integrações. Com a
  * licença bloqueada, toda escrita responde 423 (guarda global).
@@ -62,19 +63,20 @@ export class IntegrationEndpointsController {
     };
   }
 
-  /** Produtos detectados nas vendas recebidas (só Payt, por código). */
+  /** Produtos detectados nas vendas recebidas (Payt, Braip; por código). */
   @Get("products")
   async products(
     @AuthToken() refreshToken: string,
     @Query("provider") provider: unknown,
   ) {
     const context = await this.context(refreshToken);
-    if ((provider ?? "payt") !== "payt") {
+    const selected = provider ?? "payt";
+    if (typeof selected !== "string" || !isSalesPlatformProvider(selected)) {
       throw new BadRequestException(
-        "Produtos detectados só existem para a Payt",
+        "Produtos detectados só existem para plataformas de venda",
       );
     }
-    return this.endpoints.listProducts(context.workspaceId, "payt");
+    return this.endpoints.listProducts(context.workspaceId, selected);
   }
 
   /** "Vendas sem atribuição": recebidos que não viraram conversão. */
@@ -91,6 +93,30 @@ export class IntegrationEndpointsController {
       selected = parsed.data;
     }
     return this.endpoints.listUnattributed(context.workspaceId, selected);
+  }
+
+  /**
+   * "Ver dados recebidos" de uma venda guardada (porte do SaaS #169, só
+   * leitura): gestores de integração. Chaves de conta e segredos ocultos;
+   * auditado. Leitura: continua com a licença bloqueada.
+   */
+  @Get("events/:eventId/payload")
+  async eventPayload(
+    @AuthToken() refreshToken: string,
+    @Param("eventId") eventId: string,
+  ) {
+    const context = await this.context(refreshToken);
+    if (!context.canManageIntegrations) {
+      throw new ForbiddenException("Sem permissão para ver os dados recebidos");
+    }
+    if (!/^[A-Za-z0-9_-]{1,64}$/u.test(eventId)) {
+      throw new BadRequestException("Evento inválido");
+    }
+    return this.endpoints.readEventPayload(
+      context.workspaceId,
+      eventId,
+      context.userId,
+    );
   }
 
   /** "Tentar de novo": roteia outra vez um recibo guardado. */

@@ -58,8 +58,11 @@ async function paytNoAdScenario(
     withoutProof?: boolean;
     /** Decision frozen before the CTWA fallback: no proof in the decision. */
     decisionWithoutProof?: boolean;
+    /** Sales platform of the postback (Braip uses the same pipeline, 6.5). */
+    platform?: "payt" | "braip";
   } = {},
 ) {
+  const platform = options.platform ?? "payt";
   const saleEvent: PaytSaleEvent = options.eventName ?? "Purchase";
   const base = offline();
   const h = { ...base, ...pagePixelHarness(base) };
@@ -105,10 +108,25 @@ async function paytNoAdScenario(
       paid_at: new Date().toISOString(),
     },
   };
+  const braipStatusByEvent: Record<PaytSaleEvent, string> = {
+    Purchase: "Pagamento Aprovado",
+    InitiateCheckout: "Aguardando Pagamento",
+    CartAbandoned: "Abandono de Checkout",
+  };
+  const braipSale = {
+    trans_key: sale.transaction_id,
+    trans_status: braipStatusByEvent[saleEvent],
+    trans_total_value: sale.transaction.total_price,
+    trans_updatedate: new Date().toISOString(),
+    trans_createdate: new Date().toISOString(),
+    product_key: sale.product.code,
+    product_name: sale.product.name,
+    client_cel: h.payload.phone,
+  };
   const purchaseKey = buildProviderPurchaseIdentity({
     workspaceId: "w",
-    provider: "payt",
-    accountRef: sale.seller_id,
+    provider: platform,
+    accountRef: platform === "braip" ? "braip" : sale.seller_id,
     orderRef: sale.transaction_id,
     eventName: saleEvent,
   });
@@ -192,7 +210,7 @@ async function paytNoAdScenario(
       contactIdentityHash: h.leads[0].phoneHash,
       occurrence: {
         source: "automation",
-        provider: "payt",
+        provider: platform,
         workspaceId: "w",
         // The Payt rule endpoint sits on the WhatsApp connection.
         connectionId: ruleConnectionId,
@@ -249,7 +267,7 @@ async function paytNoAdScenario(
         productFilterCodes: input.productFilterCodes ?? [],
         conversionRule: { ...rule, active: true },
         parserRelease: {
-          provider: "payt",
+          provider: platform,
           version: "automation-v1",
           status: "certified",
         },
@@ -293,7 +311,10 @@ async function paytNoAdScenario(
   };
   const service = new ProviderConversionProductionService(
     h.prisma,
-    { decrypt: () => Buffer.from(JSON.stringify(sale)) } as any,
+    {
+      decrypt: () =>
+        Buffer.from(JSON.stringify(platform === "braip" ? braipSale : sale)),
+    } as any,
     new InboundWebhookParserRegistry(),
     {} as any,
     new InboundWebhookMetaRouteReaderService(h.prisma),
@@ -312,6 +333,80 @@ async function paytNoAdScenario(
     service,
   };
 }
+
+describe("Braip sale through the same production pipeline as Payt (Fase 6.5)", () => {
+  it("sends one page/pixel Purchase for a Braip approved sale, deduped across rules and deliveries", async () => {
+    const s = await paytNoAdScenario({ platform: "braip" });
+    const first = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "braip_delivery_1",
+    });
+    const second = s.paytExecution({
+      id: "execution_b",
+      ruleId: "rule_b",
+      deliveryId: "braip_delivery_2",
+    });
+    const results = [];
+    for (const execution of [first, second, first])
+      results.push(
+        await s.service.processExecution({
+          workspaceId: "w",
+          providerConversionExecutionId: execution.id,
+        }),
+      );
+    expect(results.map((r) => r.status)).toEqual([
+      "materialized",
+      "duplicate",
+      "unchanged",
+    ]);
+    const purchase = s.h.logs.find((log: any) => log.eventName === "Purchase");
+    expect(purchase).toMatchObject({
+      valueCents: 19700,
+      currency: "BRL",
+      valueSource: "actual",
+      dedupeKey: s.purchaseKey,
+    });
+    expect(purchase.sourcePayload).toMatchObject({ provider: "braip" });
+    expect(s.claims.size).toBe(1);
+  });
+
+  it("never sends while the Braip parser release is not certified", async () => {
+    const s = await paytNoAdScenario({ platform: "braip" });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "braip_delivery_1",
+    });
+    execution.providerRule.parserRelease.status = "observation_only";
+    await expect(
+      s.service.processExecution({
+        workspaceId: "w",
+        providerConversionExecutionId: execution.id,
+      }),
+    ).rejects.toThrow();
+    expect(s.h.logs.filter((l: any) => l.eventName === "Purchase")).toHaveLength(0);
+    expect(s.claims.size).toBe(0);
+  });
+
+  it("materializes InitiateCheckout (boleto/pix generated) from a Braip awaiting-payment sale", async () => {
+    const s = await paytNoAdScenario({ platform: "braip", eventName: "InitiateCheckout" });
+    const execution = s.paytExecution({
+      id: "execution_a",
+      ruleId: "rule_a",
+      deliveryId: "braip_delivery_1",
+    });
+    await expect(
+      s.service.processExecution({
+        workspaceId: "w",
+        providerConversionExecutionId: execution.id,
+      }),
+    ).resolves.toEqual({ status: "materialized" });
+    expect(
+      s.h.logs.find((log: any) => log.eventName === "InitiateCheckout"),
+    ).toMatchObject({ valueCents: 19700, dedupeKey: s.purchaseKey });
+  });
+});
 
 describe("Payt purchase for a no-ad CTWA lead (authorized_ctwa_destination)", () => {
   it.each(["c", "payt_host_connection"])(

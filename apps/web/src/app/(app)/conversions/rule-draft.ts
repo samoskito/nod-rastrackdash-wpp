@@ -202,10 +202,25 @@ export function resolveRuleConnectionId(
       draft.origin,
       context.capabilities ?? null,
     );
+    // Porte do SaaS #164: números não lidos (um /channels que falhou) não
+    // escondem a plataforma de venda; "Todos os números" ainda fica preso a
+    // uma conexão de WhatsApp da conta (a em produção primeiro).
+    const whatsappConnections = context.connections.filter((connection) =>
+      providers.includes(connection.provider),
+    );
     return (
       chosen[0]?.connectionId ??
       context.numbers.find((number) => providers.includes(number.provider))
         ?.connectionId ??
+      (draft.scope === "all_numbers"
+        ? (whatsappConnections.find(
+            (connection) => connection.status === "production",
+          ) ??
+            whatsappConnections.find(
+              (connection) => connection.status !== "paused",
+            ) ??
+            whatsappConnections[0])?.id
+        : undefined) ??
       null
     );
   }
@@ -229,6 +244,16 @@ export function draftChannelProviders(
 
 export const paytSingleConnectionNote =
   "As vendas da Payt ficam ligadas à conexão dos números escolhidos: escolha números de uma mesma conexão.";
+
+export const braipSingleConnectionNote =
+  "As vendas da Braip ficam ligadas à conexão dos números escolhidos: escolha números de uma mesma conexão.";
+
+/** Nota de "mesma conexão" da plataforma de venda da origem (Payt, Braip). */
+export function salesSingleConnectionNote(origin: string): string {
+  return origin === "automation_braip"
+    ? braipSingleConnectionNote
+    : paytSingleConnectionNote;
+}
 
 /** Why the chosen reach cannot be sent, or null when it is fine. */
 export function scopeIssue(
@@ -272,7 +297,7 @@ export function scopeIssue(
     definition.connection === "any" &&
     new Set(chosen.map((number) => number.connectionId)).size > 1
   ) {
-    return paytSingleConnectionNote;
+    return salesSingleConnectionNote(draft.origin);
   }
   return null;
 }
@@ -467,19 +492,24 @@ export function buildRulePayload(
 
   switch (draft.origin) {
     case "automation_payt":
-      // O valor de cada venda e o evento vêm do postback da Payt: nada de
-      // valor médio, frases ou etiquetas.
+    case "automation_braip":
+      // O valor de cada venda e o evento vêm do postback da plataforma: nada
+      // de valor médio, frases ou etiquetas. A Braip (6.5) recebe só pela URL
+      // única: a URL própria da regra nasce sempre desativada.
       return {
         ok: true,
         value: {
           ...base,
           triggerType: "provider_automation",
           eventName,
-          automationSource: "payt",
+          automationSource:
+            draft.origin === "automation_braip" ? "braip" : "payt",
           ...(draft.productCodes.length > 0
             ? { productFilterCodes: [...draft.productCodes] }
             : {}),
-          ...(context.singleUrl ? { perRuleUrl: false } : {}),
+          ...(context.singleUrl || draft.origin === "automation_braip"
+            ? { perRuleUrl: false }
+            : {}),
           // Moeda da venda -> da regra -> do workspace.
           ...(conversionEventCarriesValue(eventName) && draft.currency
             ? { defaultCurrency: draft.currency }

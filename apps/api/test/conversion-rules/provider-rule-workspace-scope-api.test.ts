@@ -120,6 +120,13 @@ function createWorld(options: { unnichat?: boolean } = {}) {
       version: "automation-v1",
       status: "certified",
     },
+    // Fase 6.5: Braip sale release (certified by migration: production direct).
+    {
+      id: "release_braip_automation",
+      provider: "braip",
+      version: "automation-v1",
+      status: "certified",
+    },
     // Fase 4b: Unnichat entry and automation releases (certified by migration).
     { id: "release_unnichat", provider: "unnichat", version: "v1", status: "certified" },
     {
@@ -677,6 +684,61 @@ describe("provider rules API: workspace scope", () => {
     expect(created.webhookUrl).toMatch(
       /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
     );
+  });
+
+  it("creates a Braip sale rule born in production, received only through the single URL (Fase 6.5)", async () => {
+    const world = createWorld();
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        name: "Venda Braip",
+        triggerType: "provider_automation",
+        automationSource: "braip",
+        eventName: "Purchase",
+        scope: "all_numbers",
+        connectionId: "connection_umbler",
+        channelIds: [],
+        productFilterCodes: ["pro1abc"],
+        // No perRuleUrl sent: the API keeps the Braip on the single URL.
+      }),
+      "user_1",
+    );
+    // Production direct: no mode sent, the API decides (certified reader).
+    expect(created.rule).toMatchObject({
+      connectionId: "connection_umbler",
+      parserReleaseId: "release_braip_automation",
+      origin: "automation_braip",
+      automationSource: "braip",
+      productFilterCodes: ["PRO1ABC"],
+      mode: "production",
+    });
+    // Its own URL is born disabled: the Braip only posts to the single URL.
+    expect(created.webhookUrl ?? null).toBeNull();
+    // ...and it is never reopened nor rotated (no per-rule URL for Braip).
+    await expect(
+      world.service.updateRule(
+        workspaceId,
+        created.rule.id,
+        providerConversionRuleUpdateInputSchema.parse({ publicUrlDisabled: false }),
+        "user_1",
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      world.service.rotateEndpoint(workspaceId, created.rule.id, "user_1"),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("refuses a Braip rule with a non-sale event (same contract as Payt)", () => {
+    expect(
+      providerConversionRuleCreateInputSchema.safeParse({
+        name: "Braip",
+        triggerType: "provider_automation",
+        automationSource: "braip",
+        eventName: "QualifiedLead",
+        scope: "all_numbers",
+        connectionId: "connection_umbler",
+      }).success,
+    ).toBe(false);
   });
 
   it("creates an Unnichat automation rule on its connection with its own URL (Fase 4b)", async () => {
@@ -1635,6 +1697,16 @@ describe("provider rules API: Conversões screen support", () => {
       ],
       // Fase 4b: the Unnichat automation runs on its own connection number.
       automation_unnichat: ["unnichat"],
+      // Fase 6.5: the Braip sale, same base as Payt (any WhatsApp number).
+      automation_braip: [
+        "umbler",
+        "gupshup",
+        "uazapi",
+        "meta_cloud",
+        "data_crazy",
+        "unnichat",
+        "waha",
+      ],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
@@ -1665,6 +1737,7 @@ describe("provider rules API: Conversões screen support", () => {
       automation_umbler: [true, true],
       automation_payt: [false, true],
       automation_unnichat: [true, true],
+      automation_braip: [false, true],
     });
     // Unnichat: any catalog event (the rule chooses it), never unified.
     expect(

@@ -234,10 +234,24 @@ describe("Payt: rascunho e payload", () => {
   });
 
   it("pede um número de WhatsApp quando não há nenhum compatível", () => {
-    expect(buildRulePayload(paytDraft(), { ...context, numbers: [] })).toEqual({
+    expect(
+      buildRulePayload(paytDraft(), { ...context, numbers: [], connections: [] }),
+    ).toEqual({
       ok: false,
       message: "Conecte um número de WhatsApp antes de criar esta regra.",
     });
+  });
+
+  // Porte do SaaS #164 (fase 6.5): números não lidos (um /channels que
+  // falhou) não impedem "Todos os números": a regra fica presa a uma conexão
+  // de WhatsApp da conta.
+  it("liga “Todos os números” a uma conexão de WhatsApp quando os números não foram lidos", () => {
+    const result = buildRulePayload(paytDraft({ scope: "all_numbers" }), {
+      ...context,
+      numbers: [],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.value.connectionId).toBe(connections[0]!.id);
   });
 });
 

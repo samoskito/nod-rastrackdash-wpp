@@ -172,6 +172,12 @@ export function executionReasonLabel(reasonCode: string | null): string {
       "Número do lead no motor antigo de conversões: nada enviado à Meta",
     payt_automation_v1_not_purchase: "Status da Payt não gera conversão",
     payt_automation_v1_event_not_in_rule: "Evento da Payt fora desta regra",
+    // Venda da Braip (Fase 6.5).
+    braip_purchase_identity_missing: "Venda da Braip sem transação identificada",
+    braip_automation_v1_invalid_payload:
+      "Postback da Braip incompleto (telefone, valor ou data)",
+    braip_automation_v1_not_purchase: "Status da Braip não gera conversão",
+    braip_automation_v1_event_not_in_rule: "Evento da Braip fora desta regra",
     // Unnichat (Fase 4b).
     ctwa_missing: "Sem clique do anúncio (ctwa_clid): nada é enviado à Meta",
     ctwa_ad_unavailable:

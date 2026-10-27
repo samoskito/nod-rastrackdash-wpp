@@ -55,6 +55,7 @@ const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_umbler",
   "automation_unnichat",
   "automation_payt",
+  "automation_braip",
 ];
 
 /**
@@ -112,6 +113,7 @@ export function RuleManage({
   onChanged,
   integrationEndpoints = [],
   paytProducts = [],
+  braipProducts = [],
   singleUrlActions,
   numbersUnavailable = false,
 }: {
@@ -121,6 +123,8 @@ export function RuleManage({
   integrationEndpoints?: IntegrationEndpointDto[];
   /** Fase 5.3: produtos vistos nas vendas da Payt (filtro de produto). */
   paytProducts?: IntegrationDetectedProductDto[];
+  /** Fase 6.5: produtos vistos nas vendas da Braip (filtro de produto). */
+  braipProducts?: IntegrationDetectedProductDto[];
   singleUrlActions?: SingleUrlActions;
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
@@ -329,6 +333,7 @@ export function RuleManage({
             updateAction={actions.update}
             onSaved={onSaved}
             paytProducts={paytProducts}
+            braipProducts={braipProducts}
             numbersUnavailable={numbersUnavailable}
           />
         ) : null}
@@ -353,6 +358,8 @@ export function RuleManage({
                 (endpoint) =>
                   (origin === "automation_payt" &&
                     endpoint.provider === "payt") ||
+                  (origin === "automation_braip" &&
+                    endpoint.provider === "braip") ||
                   (origin === "automation_unnichat" &&
                     endpoint.provider === "unnichat" &&
                     endpoint.eventName === rule.conversionRule.eventName) ||
@@ -403,10 +410,13 @@ function RuleEditForm({
   updateAction,
   onSaved,
   paytProducts = [],
+  braipProducts = [],
   numbersUnavailable = false,
 }: {
   numbersUnavailable?: boolean;
   paytProducts?: IntegrationDetectedProductDto[];
+  /** Fase 6.5: produtos vistos nas vendas da Braip (filtro de produto). */
+  braipProducts?: IntegrationDetectedProductDto[];
   rule: ProviderConversionRuleDto;
   origin: ProviderConversionRuleOriginDto;
   numbers: ConversionNumber[];
@@ -520,13 +530,17 @@ function RuleEditForm({
         <fieldset className="conversion-flow-fieldset" disabled={disabled}>
           <legend>Produtos</legend>
           <ProductFilterPicker
-            products={paytProducts}
+            provider={origin === "automation_braip" ? "braip" : "payt"}
+            products={
+              origin === "automation_braip" ? braipProducts : paytProducts
+            }
             selected={draft.productCodes}
             onChange={(productCodes) => patch({ productCodes })}
             disabled={disabled}
           />
           <p className="action-note">
-            O valor de cada venda vem da própria Payt.
+            O valor de cada venda vem da própria{" "}
+            {origin === "automation_braip" ? "Braip" : "Payt"}.
           </p>
         </fieldset>
       ) : null}

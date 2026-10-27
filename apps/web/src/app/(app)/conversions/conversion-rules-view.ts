@@ -256,6 +256,7 @@ export function providerRuleOrigin(
 ): ProviderConversionRuleOriginDto {
   if (rule.origin) return rule.origin;
   if (rule.automationSource === "payt") return "automation_payt";
+  if (rule.automationSource === "braip") return "automation_braip";
 
   switch (rule.conversionRule.triggerType) {
     case "message_phrase":
@@ -417,6 +418,9 @@ function triggerDetailForProviderRule(
     }
     case "automation_payt":
       return rule.endpoint ? "URL de postback criada" : null;
+    case "automation_braip":
+      // Só pela URL única da Braip (uma para a conta toda).
+      return "URL única da Braip";
   }
 }
 
@@ -953,6 +957,11 @@ export type OriginOfferInput = {
   connections: readonly ConversionConnection[];
   /** GET providers/capabilities; null: não deu para confirmar o que a API aceita. */
   capabilities: ProviderConversionRuleCapabilitiesDto | null;
+  /**
+   * Porte do SaaS #164: os números de alguma conexão não puderam ser lidos
+   * (o /channels dela falhou): `numbers` pode estar incompleta, até vazia.
+   */
+  numbersPartial?: boolean;
   crm: Record<CrmRuleOrigin, boolean>;
 };
 
@@ -980,6 +989,19 @@ export function offeredRuleOrigins(input: OriginOfferInput): RuleOriginId[] {
           (connection) =>
             providers.includes(connection.provider) &&
             connection.status !== "paused",
+        );
+      }
+      if (definition.connection === "any") {
+        // Plataformas de venda (Payt, Braip; porte do SaaS #164): precisam de
+        // um número de WhatsApp de qualquer provedor para atribuir a venda.
+        // Um número lido prova; uma conexão de WhatsApp ou uma leitura
+        // incompleta também: um /channels que falhou nunca esconde a origem.
+        return (
+          input.numbers.some((number) => providers.includes(number.provider)) ||
+          Boolean(input.numbersPartial) ||
+          input.connections.some((connection) =>
+            providers.includes(connection.provider),
+          )
         );
       }
       return input.numbers.some((number) => providers.includes(number.provider));
@@ -1048,10 +1070,14 @@ export function ineligibleNumbers(
 ): ConversionNumber[] {
   if (!capabilities) return [];
   const supported = new Set(
-    origin === "automation_payt"
+    origin === "automation_payt" || origin === "automation_braip"
       ? originChannelProviders(origin, capabilities)
       : capabilities.origins
-          .filter((item) => item.origin !== "automation_payt")
+          .filter(
+            (item) =>
+              item.origin !== "automation_payt" &&
+              item.origin !== "automation_braip",
+          )
           .flatMap((item) => item.channelProviders),
   );
 

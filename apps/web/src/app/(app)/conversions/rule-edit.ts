@@ -75,7 +75,8 @@ export function ruleEditCapabilities(
         origin === "automation_unnichat"),
     currency: carriesValue && origin !== "structured_catalog",
     catalogAliases: origin === "structured_catalog" && Boolean(rule.catalog),
-    productFilter: origin === "automation_payt",
+    productFilter:
+      origin === "automation_payt" || origin === "automation_braip",
   };
 }
 

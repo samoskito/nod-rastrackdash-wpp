@@ -168,6 +168,7 @@ describe("integrations route", () => {
 
     expect([...new Set(cardIds)].sort()).toEqual(
       [
+        "braip",
         "kommo",
         "meta",
         "nod_api",

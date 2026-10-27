@@ -1,0 +1,12 @@
+{
+  "basic_authentication": "SYNTHETIC-KEY-NOT-REAL",
+  "type": "STATUS_ALTERADO",
+  "trans_key": "VEN000SYNTH1",
+  "trans_status": "Cancelada",
+  "trans_status_code": 3,
+  "trans_total_value": 19700,
+  "trans_createdate": "2026-10-14 08:59:00",
+  "trans_updatedate": "2026-10-15 10:00:00",
+  "product_key": "pro0synth1",
+  "client_cel": "11991231020"
+}

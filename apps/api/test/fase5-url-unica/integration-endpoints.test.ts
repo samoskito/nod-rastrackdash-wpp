@@ -548,7 +548,16 @@ describe("Payt: one URL per workspace", () => {
     await expect(w.post(endpoint.id, token, paytSale({}))).rejects.toThrow(
       "Webhook não encontrado",
     );
-    expect(w.receipts.size).toBe(0);
+    // Fase 6.5 (SaaS #170): a refused call of a KNOWN URL leaves only its
+    // metadata (Backoffice > Recebimentos das URLs únicas), never the body;
+    // an unknown URL records nothing.
+    const receipts = [...w.receipts.values()];
+    expect(receipts.map((r) => [r.status, r.reasonCode])).toEqual([
+      ["rejected", "token_invalid"],
+      ["rejected", "token_missing"],
+      ["rejected", "endpoint_removed"],
+    ]);
+    expect(receipts.every((r) => !r.encryptedPayload)).toBe(true);
   });
 
   it("never lets another workspace read, reveal, rotate, remove or retry this workspace's URL", async () => {
@@ -736,9 +745,16 @@ describe("Unnichat: one URL per event for every number (Jean: 1020 and 5520)", (
       integrationEndpointCreateInputSchema.safeParse({ provider: "unnichat" })
         .success,
     ).toBe(false);
+    // Fase 6.5: Braip is a sales platform (one URL, no event in the URL).
     expect(
       integrationEndpointCreateInputSchema.safeParse({ provider: "braip" })
         .success,
+    ).toBe(true);
+    expect(
+      integrationEndpointCreateInputSchema.safeParse({
+        provider: "braip",
+        eventName: "Purchase",
+      }).success,
     ).toBe(false);
   });
 });

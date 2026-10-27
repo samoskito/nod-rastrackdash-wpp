@@ -26,6 +26,7 @@ import {
 import {
   accentEventCopy,
   paytBetaBadge,
+  braipEventExplanations,
   paytEventExplanations,
   paytEventLabel,
   ruleEventLabelForOrigin,
@@ -39,7 +40,10 @@ import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
-import { findEventEndpoint } from "../integrations/single-url/single-url-copy";
+import {
+  findEventEndpoint,
+  isSalesPlatform,
+} from "../integrations/single-url/single-url-copy";
 import {
   EnsureUrlButton,
   IntegrationUrlBox,
@@ -73,6 +77,7 @@ import {
   emptyRuleDraft,
   mintRequestKey,
   paytSingleConnectionNote,
+  salesSingleConnectionNote,
   resolveRuleConnectionId,
   scopeIssue,
   type RuleDraft,
@@ -114,6 +119,8 @@ export type NewRuleFlowProps = {
   onFinished: () => void;
   /** Fase 5.3: produtos vistos nas vendas da Payt (filtro opcional). */
   paytProducts?: IntegrationDetectedProductDto[];
+  /** Fase 6.5: produtos vistos nas vendas da Braip (filtro opcional). */
+  braipProducts?: IntegrationDetectedProductDto[];
   /** Fase 5.3: URLs únicas/por evento já geradas (sem a chave). */
   integrationEndpoints?: IntegrationEndpointDto[];
   /** Presente quando a URL única está ativa no workspace. */
@@ -133,6 +140,8 @@ export function singleUrlProviderFor(
   switch (origin) {
     case "automation_payt":
       return "payt";
+    case "automation_braip":
+      return "braip";
     case "automation_unnichat":
       return "unnichat";
     case "automation_umbler":
@@ -164,6 +173,7 @@ export function NewRuleFlow({
   onBusyChange,
   onFinished,
   paytProducts = [],
+  braipProducts = [],
   integrationEndpoints = [],
   singleUrlActions,
   numbersUnavailable = false,
@@ -525,7 +535,9 @@ export function NewRuleFlow({
           capabilities={capabilities}
           onChange={patch}
           disabled={locked || licenseLocked}
-          paytProducts={paytProducts}
+          paytProducts={
+            draft.origin === "automation_braip" ? braipProducts : paytProducts
+          }
           singleUrl={Boolean(singleUrlActions)}
         />
       ) : null}
@@ -684,13 +696,20 @@ function PaytEventStep({
   const eventNames =
     originEventNames(draft.origin, capabilities) ?? definition.allowedEvents ?? [];
   const beta = originBetaEvents(draft.origin, capabilities);
+  // Fase 6.5: a Braip usa o mesmo passo, com os rótulos da Braip.
+  const braip = draft.origin === "automation_braip";
+  const platform = braip ? "Braip" : "Payt";
+  const explanations = braip ? braipEventExplanations : paytEventExplanations;
 
   return (
     <fieldset className="conversion-flow-fieldset">
-      <legend>Qual venda da Payt vai para a Meta?</legend>
+      <legend>Qual venda da {platform} vai para a Meta?</legend>
       <p className="muted">
-        O evento vem do status de cada venda e o valor vem da própria venda da
-        Payt. Crie uma regra para cada evento que quiser enviar.
+        O evento vem do status de cada venda e o valor vem da própria venda da{" "}
+        {platform}. Crie uma regra para cada evento que quiser enviar.
+        {braip
+          ? " Reembolso, chargeback e cancelamento são recebidos e ignorados."
+          : ""}
       </p>
       <div className="conversion-origin-grid">
         {eventNames.map((eventName) => (
@@ -700,14 +719,14 @@ function PaytEventStep({
           >
             <input
               type="radio"
-              name="payt-event"
+              name={braip ? "braip-event" : "payt-event"}
               value={eventName}
               checked={draft.eventName === eventName}
               onChange={() => onChange(eventName)}
             />
             <span>
               <strong>
-                {paytEventLabel(eventName)}
+                {ruleEventLabelForOrigin(draft.origin, eventName)}
                 {beta.includes(eventName) ? (
                   <>
                     {" "}
@@ -717,7 +736,7 @@ function PaytEventStep({
                   </>
                 ) : null}
               </strong>
-              <small>{paytEventExplanations[eventName] ?? ""}</small>
+              <small>{explanations[eventName] ?? ""}</small>
             </span>
           </label>
         ))}
@@ -736,7 +755,7 @@ function EventStep({
   onChange: (eventName: ConversionEventNameDto) => void;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
-  if (draft.origin === "automation_payt") {
+  if (draft.origin === "automation_payt" || draft.origin === "automation_braip") {
     return (
       <PaytEventStep
         draft={draft}
@@ -982,7 +1001,9 @@ export function ScopeStep({
                 ? "Escolha um ou mais números."
                 : automation && connectionLocked
                   ? `Escolha um ou mais números de ${connection?.displayName ?? "conexão removida"}, a conexão desta regra.`
-                  : automation || draft.origin === "automation_payt"
+                  : automation ||
+                      draft.origin === "automation_payt" ||
+                      draft.origin === "automation_braip"
                     ? "Escolha um ou mais números de uma mesma conexão."
                     : "Escolha um ou mais números, de qualquer conexão."}
             </small>
@@ -990,9 +1011,10 @@ export function ScopeStep({
         </label>
       </div>
 
-      {draft.origin === "automation_payt" ? (
+      {draft.origin === "automation_payt" ||
+      draft.origin === "automation_braip" ? (
         <p className="action-note conversion-scope-note">
-          {paytSingleConnectionNote}
+          {salesSingleConnectionNote(draft.origin)}
         </p>
       ) : null}
 
@@ -1442,6 +1464,23 @@ function DetailsStep({
         </>
       ) : null}
 
+      {draft.origin === "automation_braip" ? (
+        <>
+          <ProductFilterPicker
+            provider="braip"
+            products={paytProducts}
+            selected={draft.productCodes}
+            onChange={(productCodes) => onChange({ productCodes })}
+            disabled={disabled}
+          />
+          <p className="action-note">
+            O valor de cada venda vem da própria Braip. As vendas chegam pela
+            URL única da Braip (uma para a conta toda), que você cola na Braip
+            em Ferramentas → Postback.
+          </p>
+        </>
+      ) : null}
+
       {conversionEventCarriesValue(definition.lockedEvent ?? draft.eventName) ? (
         <RuleCurrencySelect
           value={draft.currency}
@@ -1469,7 +1508,8 @@ function DetailsStep({
           <dt>Alcance</dt>
           <dd>{scopeSummary}</dd>
         </div>
-        {draft.origin === "automation_payt" && singleUrl ? (
+        {(draft.origin === "automation_payt" && singleUrl) ||
+        draft.origin === "automation_braip" ? (
           <div>
             <dt>Produtos</dt>
             <dd>
@@ -1506,17 +1546,20 @@ function SingleUrlAfterCreate({
   const existing = findEventEndpoint(endpoints, provider, eventName);
   const [created, setCreated] = useState<IntegrationEndpointDto | null>(null);
   const endpoint = created ?? existing;
-  const label =
-    provider === "payt"
-      ? "URL única da Payt (cole em Postback)"
-      : `URL do evento “${ruleEventLabelForOrigin(`automation_${provider}`, eventName)}”`;
+  const sales = isSalesPlatform(provider);
+  const platform = provider === "braip" ? "Braip" : "Payt";
+  const label = sales
+    ? provider === "braip"
+      ? "URL única da Braip (cole em Ferramentas → Postback)"
+      : "URL única da Payt (cole em Postback)"
+    : `URL do evento “${ruleEventLabelForOrigin(`automation_${provider}`, eventName)}”`;
 
   return (
     <div className="integration-modal-note single-url-after-create">
-      <strong>{provider === "payt" ? "URL única da Payt" : "URL do evento"}</strong>
+      <strong>{sales ? `URL única da ${platform}` : "URL do evento"}</strong>
       <p className="muted">
-        {provider === "payt"
-          ? "A mesma URL vale para todas as regras e números da Payt. Se ela já está na Payt, não precisa fazer nada."
+        {sales
+          ? `A mesma URL vale para todas as regras e números da ${platform}. Se ela já está na ${platform}, não precisa fazer nada.`
           : "A mesma URL vale para todos os números da conta. Cole na automação que marca este evento."}
       </p>
       {endpoint ? (
@@ -1530,9 +1573,9 @@ function SingleUrlAfterCreate({
       ) : (
         <EnsureUrlButton
           provider={provider}
-          eventName={provider === "payt" ? null : eventName}
+          eventName={sales ? null : eventName}
           ensure={actions.ensure}
-          label={provider === "payt" ? "Gerar URL única" : "Gerar URL do evento"}
+          label={sales ? "Gerar URL única" : "Gerar URL do evento"}
           onReady={setCreated}
         />
       )}
@@ -1542,7 +1585,7 @@ function SingleUrlAfterCreate({
 
 /** O que a moeda da regra significa em cada origem. */
 export function ruleCurrencyHint(origin: string): string {
-  if (origin === "automation_payt") {
+  if (origin === "automation_payt" || origin === "automation_braip") {
     return "A moeda da venda vence; esta só vale quando a venda não informa a moeda.";
   }
   if (origin === "structured_catalog") {

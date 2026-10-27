@@ -18,6 +18,10 @@ export const inboundWebhookProviders = [
   // certificada por migration) usada pelo receptor da conexao de WhatsApp
   // (POST /webhooks/whatsapp/:id). Nao tem conexao de webhook generica.
   "waha",
+  // Fase 6.5: plataforma de venda (como a Payt): so existe como release de
+  // parser (braip automation-v1, certificada por migration) das regras de
+  // venda recebidas pela URL unica. Sem conexao propria.
+  "braip",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",

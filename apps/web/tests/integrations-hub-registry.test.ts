@@ -81,6 +81,8 @@ describe("integration registry", () => {
         "data_crazy",
         "unnichat",
         "payt",
+        // Fase 6.5: Braip (same base as Payt, always offered).
+        "braip",
         "kommo",
         "pipedrive",
         "meta",
@@ -163,6 +165,7 @@ describe("integration registry", () => {
       "data_crazy",
       "unnichat",
       "payt",
+      "braip",
     ]);
     expect(inTab("ads")).toEqual(["meta"]);
     expect(inTab("crm")).toEqual(["kommo", "pipedrive"]);
@@ -323,7 +326,7 @@ describe("buildIntegrationCards", () => {
 
     const conversions = cardsForTab(cards, "attendance");
     expect(ids(conversions.active)).toEqual(["umbler"]);
-    expect(ids(conversions.available)).toEqual(["gupshup", "payt"]);
+    expect(ids(conversions.available)).toEqual(["gupshup", "payt", "braip"]);
     expect(ids(cardsForTab(cards, "ads").active)).toEqual(["meta"]);
     expect(
       conversions.active.find((card) => card.id === "umbler")?.status.label,

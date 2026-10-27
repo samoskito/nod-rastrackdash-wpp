@@ -26,5 +26,6 @@ export * from "./lead-labels";
 export * from "./currency";
 export * from "./schemas/currency-settings";
 export * from "./schemas/integration-endpoints";
+export * from "./schemas/backoffice-integration-events";
 export * from "./schemas/manual-conversions";
 export * from "./schemas/crm";

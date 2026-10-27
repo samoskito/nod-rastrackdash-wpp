@@ -19,6 +19,7 @@ import {
 } from "../integrations/unnichat-setup";
 import {
   disableLegacyUrlConfirmText,
+  isSalesPlatform,
   singleUrlLicenseLockedNote,
   singleUrlSetupSteps,
 } from "../integrations/single-url/single-url-copy";
@@ -35,6 +36,7 @@ const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = 
   automation_umbler: "Umbler Talk",
   automation_unnichat: "Unnichat",
   automation_payt: "Payt",
+  automation_braip: "Braip",
 };
 
 // Artigo por plataforma: "na Umbler Talk", "na Payt", mas "no Unnichat".
@@ -105,6 +107,16 @@ function SetupSteps({
       />
     );
   }
+  if (origin === "automation_braip") {
+    // Fase 6.5: só pela URL única da Braip (uma para a conta toda).
+    return (
+      <ol className="integration-steps">
+        {singleUrlSetupSteps("braip").map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+    );
+  }
   if (origin === "automation_umbler") {
     return (
       <>
@@ -131,6 +143,7 @@ const singleUrlProviders: Partial<
   Record<ProviderConversionRuleOriginDto, IntegrationEndpointProviderDto>
 > = {
   automation_payt: "payt",
+  automation_braip: "braip",
   automation_unnichat: "unnichat",
   automation_umbler: "umbler",
 };
@@ -164,14 +177,14 @@ function SingleUrlSection({
   const eventName = rule.conversionRule.eventName;
   // Fase 6.1a (#159): a URL do evento vale para todos os números do
   // provedor, de todas as conexões.
-  const label =
-    provider === "payt"
-      ? "URL única da Payt (todas as regras e números)"
-      : `URL do evento “${ruleEventLabelForOrigin(origin, eventName)}” (todos os números ${provider === "umbler" ? "da Umbler" : "do Unnichat"}, de todas as conexões)`;
+  const sales = isSalesPlatform(provider);
+  const label = sales
+    ? `URL única da ${provider === "braip" ? "Braip" : "Payt"} (todas as regras e números)`
+    : `URL do evento “${ruleEventLabelForOrigin(origin, eventName)}” (todos os números ${provider === "umbler" ? "da Umbler" : "do Unnichat"}, de todas as conexões)`;
 
   return (
     <section className="conversion-endpoint-single-url" aria-label="URL nova">
-      <h3>{provider === "payt" ? "URL única" : "URL por evento"}</h3>
+      <h3>{sales ? "URL única" : "URL por evento"}</h3>
       {endpoint ? (
         <IntegrationUrlBox
           key={endpoint.id}
@@ -190,9 +203,9 @@ function SingleUrlSection({
         <>
           <EnsureUrlButton
             provider={provider}
-            eventName={provider === "payt" ? null : eventName}
+            eventName={sales ? null : eventName}
             ensure={actions.ensure}
-            label={provider === "payt" ? "Gerar URL única" : "Gerar URL do evento"}
+            label={sales ? "Gerar URL única" : "Gerar URL do evento"}
             disabled={licenseLocked}
             onReady={(next) => {
               setRemoved(false);
@@ -245,7 +258,7 @@ function LegacyUrlSwitch({
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const sameThing = provider === "payt" ? "uma venda" : "um evento";
+  const sameThing = isSalesPlatform(provider) ? "uma venda" : "um evento";
   const automation = provider === "unnichat" || provider === "umbler";
   const inProvider = provider === "umbler" ? "na Umbler" : "no Unnichat";
 

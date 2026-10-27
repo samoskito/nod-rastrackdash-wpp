@@ -22,9 +22,17 @@ import {
   type IntegrationEndpointListDto,
   type IntegrationEndpointProviderDto,
   type IntegrationEndpointRoutingResultDto,
+  type IntegrationEventPayloadDto,
   type IntegrationLegacyUrlDto,
   type IntegrationUnattributedEventListDto,
 } from "@wpptrack/shared";
+import {
+  decryptIntegrationEvent,
+  integrationEventPayloadExpiredMessage,
+  integrationEventPayloadUnreadableMessage,
+  maskSensitivePayload,
+  parseIntegrationSale,
+} from "./integration-event-inspection";
 import { hashPhoneIdentity } from "../common/phone/phone-identity";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
@@ -43,15 +51,18 @@ import {
 } from "./inbound-webhook-ingestion.service";
 import { InboundWebhookPayloadEncryptionService } from "./inbound-webhook-payload-encryption.service";
 import {
-  routePaytSale,
+  routeSalePlatformSale,
   routeUmblerEvent,
   routeUnnichatEvent,
   type IntegrationRouteDecision,
 } from "./integration-endpoint-routing";
+import { normalizeBraipBody } from "./providers/braip/braip-body";
 import {
-  parsePaytSaleEventV1,
-  type ParsedPaytAutomationV1,
-} from "./providers/payt/payt-automation-v1.parser";
+  isSalesPlatformProvider,
+  parseSaleEventV1,
+  type ParsedSaleAutomationV1,
+  type SalesPlatformProvider,
+} from "./providers/sales-platform-sale";
 import {
   parseUmblerAutomationV1,
   type ParsedUmblerAutomationV1,
@@ -66,8 +77,44 @@ const notFoundMessage = "Webhook não encontrado";
 const unavailableMessage = "Webhook temporariamente indisponível";
 const fallbackDedupeWindowMs = 5 * 60 * 1_000;
 const AUTOMATION_PARSER_VERSION = "automation-v1";
+/** Refused calls without a body kept: one row per reason per hour. */
+const rejectionMetadataWindowMs = 60 * 60 * 1_000;
+type IntegrationAuthRejection =
+  | "token_missing"
+  | "token_invalid"
+  | "endpoint_removed"
+  | "parser_retired";
+/** Never store the body of these refusals (not authenticated / too big). */
+const metadataOnlyRejections = new Set<string>([
+  "token_missing",
+  "token_invalid",
+  "endpoint_removed",
+  "parser_retired",
+  "payload_too_large",
+]);
+
+/**
+ * Fase 6.5 (SaaS #170): reason of a refused body of an authenticated call.
+ * Kept only for Backoffice > Recebimentos das URLs únicas.
+ */
+function bodyRejectionReason(
+  error: unknown,
+  rawBody: Buffer | undefined,
+): string {
+  if (error instanceof PayloadTooLargeException) return "payload_too_large";
+  if (error instanceof UnsupportedMediaTypeException)
+    return "content_type_unsupported";
+  if (!rawBody || rawBody.length === 0) return "body_empty";
+  if (
+    error instanceof BadRequestException &&
+    error.message === "Payload JSON inválido"
+  ) {
+    return "body_invalid_json";
+  }
+  return "body_invalid";
+}
 const SECRET_CONTEXT = "integration-endpoint-secret";
-const routedProviders = ["payt", "unnichat", "umbler"] as const;
+const routedProviders = ["payt", "braip", "unnichat", "umbler"] as const;
 const DAY_MS = 24 * 60 * 60 * 1_000;
 /** What the rule decided that is not a conversion (review finding M3). */
 const DECLINED_RULE_OUTCOMES = new Set<string>([
@@ -83,10 +130,10 @@ type EndpointRecord = Prisma.IntegrationEndpointGetPayload<{
 type ParsedIntegrationEvent =
   | {
       ok: true;
-      provider: "payt";
+      provider: SalesPlatformProvider;
       eventName: string;
       externalKey: string;
-      sale: ParsedPaytAutomationV1;
+      sale: ParsedSaleAutomationV1;
     }
   | {
       ok: true;
@@ -162,13 +209,49 @@ export class IntegrationEndpointsService {
     input: IntegrationEndpointIngestInput,
   ): Promise<IntegrationEndpointIngestResult> {
     this.assertFeatureEnabled();
-    const endpoint = await this.authenticate(input.endpointId, input.token);
-    const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
+    const receivedAt = new Date();
+    const { endpoint, rejection } = await this.authenticate(
+      input.endpointId,
+      input.token,
+    );
+    // Missing/wrong token, removed URL, retired parser: the same 404 as
+    // before; the attempt is recorded as METADATA ONLY (never the body), for
+    // Backoffice > Recebimentos das URLs únicas (SaaS #170).
+    if (rejection) {
+      await this.recordRejection({
+        endpoint,
+        reasonCode: rejection,
+        rawBody: null,
+        receivedAt,
+      });
+      throw new NotFoundException(notFoundMessage);
+    }
+    // Braip (6.5): JSON or form-urlencoded, stored and routed as canonical
+    // JSON (the Braip account key is dropped before storage).
+    let rawBody: Buffer;
+    try {
+      rawBody =
+        endpoint.provider === "braip"
+          ? this.requireBraipBody(input.contentType, input.rawBody)
+          : this.requireJsonBody(input.contentType, input.rawBody);
+    } catch (error) {
+      // Authenticated but unreadable body (415/400): kept as a refused
+      // receipt with the body as received (encrypted, same retention).
+      // Braip: metadata only. An unreadable Braip body never went through
+      // the normalization that drops the account key (basic_authentication),
+      // and that key is never stored, not even encrypted.
+      await this.recordRejection({
+        endpoint,
+        reasonCode: bodyRejectionReason(error, input.rawBody),
+        rawBody: endpoint.provider === "braip" ? null : (input.rawBody ?? null),
+        receivedAt,
+      });
+      throw error;
+    }
     const payload = JSON.parse(rawBody.toString("utf8")) as unknown;
     const providerAttempt = parseInboundWebhookProviderAttempt(
       input.providerAttempt,
     );
-    const receivedAt = new Date();
     const parsed = this.parse(endpoint, payload, receivedAt);
     const ingressKey = parsed.ok
       ? this.ingressKey(endpoint.id, parsed.externalKey)
@@ -251,6 +334,16 @@ export class IntegrationEndpointsService {
     if (event.status === "routed") {
       throw new ConflictException(
         "Este evento já foi entregue a uma regra; reprocesse pela regra",
+      );
+    }
+    // "Tentar de novo" exists only for "Vendas sem atribuição" (unattributed
+    // or pending). A refused call, an ignored status or an invalid read is
+    // never routed from here (SaaS #170).
+    if (event.status !== "unattributed" && event.status !== "pending") {
+      throw new ConflictException(
+        event.status === "rejected"
+          ? "Este recebimento foi recusado na chegada e não pode ser reenviado"
+          : "Somente eventos sem atribuição podem ser tentados de novo",
       );
     }
     const rawBody = this.decryptEventPayload(event);
@@ -346,12 +439,18 @@ export class IntegrationEndpointsService {
     actorUserId: string,
   ): Promise<IntegrationEndpointDto> {
     this.assertFeatureEnabled();
-    const eventName = input.provider === "payt" ? null : input.eventName!;
+    const eventName = isSalesPlatformProvider(input.provider)
+      ? null
+      : input.eventName!;
     const existing = await this.findLive(workspaceId, input.provider, eventName);
     if (existing) {
       // The answer carries the token: same audit as "Mostrar URL".
       await this.auditReveal(workspaceId, existing.id, actorUserId);
-      return this.endpointDto(existing, true, []);
+      return this.endpointDto(
+        existing,
+        true,
+        await this.receiptCounts(workspaceId, existing.id),
+      );
     }
 
     const parserRelease =
@@ -414,7 +513,11 @@ export class IntegrationEndpointsService {
         );
         if (winner) {
           await this.auditReveal(workspaceId, winner.id, actorUserId);
-          return this.endpointDto(winner, true, []);
+          return this.endpointDto(
+            winner,
+            true,
+            await this.receiptCounts(workspaceId, winner.id),
+          );
         }
       }
       throw error;
@@ -433,7 +536,29 @@ export class IntegrationEndpointsService {
     this.assertFeatureEnabled();
     const endpoint = await this.requireOwned(workspaceId, endpointId);
     await this.auditReveal(workspaceId, endpoint.id, actorUserId);
-    return this.endpointDto(endpoint, true, []);
+    return this.endpointDto(
+      endpoint,
+      true,
+      await this.receiptCounts(workspaceId, endpoint.id),
+    );
+  }
+
+  /**
+   * Receipts of one endpoint by status (SaaS #164). Every DTO that replaces
+   * the listed endpoint on screen (Mostrar URL, Gerar URL de uma existente,
+   * Gerar nova) carries the real counters: never zeros over the receipts
+   * already kept.
+   */
+  private async receiptCounts(
+    workspaceId: string,
+    endpointId: string,
+  ): Promise<Array<{ status: string; _count: { _all: number } }>> {
+    const rows = await this.prisma.integrationEndpointEvent.groupBy({
+      by: ["integrationEndpointId", "status"],
+      where: { workspaceId, integrationEndpointId: endpointId },
+      _count: { _all: true },
+    });
+    return rows;
   }
 
   private async auditReveal(
@@ -491,7 +616,11 @@ export class IntegrationEndpointsService {
       });
       return next;
     });
-    return this.endpointDto(updated, true, []);
+    return this.endpointDto(
+      updated,
+      true,
+      await this.receiptCounts(workspaceId, updated.id),
+    );
   }
 
   async remove(
@@ -529,7 +658,7 @@ export class IntegrationEndpointsService {
   /** Produtos detectados nas vendas recebidas (código, nome, oferta). */
   async listProducts(
     workspaceId: string,
-    provider: "payt",
+    provider: SalesPlatformProvider,
   ): Promise<IntegrationDetectedProductListDto> {
     const rows = await this.prisma.integrationEndpointEvent.findMany({
       where: {
@@ -567,6 +696,7 @@ export class IntegrationEndpointsService {
   ): Promise<IntegrationUnattributedEventListDto> {
     // "pending": received but the routing did not finish (e.g. a 503 the
     // provider will retry); listed with its own reason, never blank.
+    // "rejected" (refused calls) never show here: Backoffice only.
     const where = {
       workspaceId,
       status: { in: ["unattributed", "pending"] },
@@ -622,6 +752,103 @@ export class IntegrationEndpointsService {
             !removedEndpointIds.has(row.integrationEndpointId),
         ),
       })),
+    };
+  }
+
+  /**
+   * "Ver dados recebidos" of a stored sale receipt ("Vendas sem atribuição",
+   * porte do SaaS #169 sem a certificação): the payload with account keys
+   * and secrets hidden, next to what the parser read from it. Audited like
+   * the payload of a rule callback. An expired payload (retention) still
+   * returns the stored summary, with a message. Read-only.
+   */
+  async readEventPayload(
+    workspaceId: string,
+    eventId: string,
+    actorUserId: string,
+  ): Promise<IntegrationEventPayloadDto> {
+    const event = await this.prisma.integrationEndpointEvent.findFirst({
+      where: { id: eventId, workspaceId },
+    });
+    if (
+      !event ||
+      !isSalesPlatformProvider(event.provider) ||
+      event.status === "rejected"
+    ) {
+      throw new NotFoundException("Evento não encontrado");
+    }
+    const decrypted = decryptIntegrationEvent(this.encryption, event);
+    const read = decrypted.ok
+      ? parseIntegrationSale(event, decrypted.payload)
+      : null;
+    if (decrypted.ok) {
+      await this.prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId,
+          actorType: "user",
+          action: "integration_endpoint.event.payload.read",
+          targetType: "IntegrationEndpointEvent",
+          targetId: event.id,
+          reason: "Explicit workspace callback audit",
+          sourceIp: null,
+          resultStatus: "success",
+          afterSummary: { provider: event.provider, status: event.status },
+        },
+      });
+    }
+    return {
+      eventId: event.id,
+      provider: event.provider as IntegrationEndpointProviderDto,
+      status: event.status as IntegrationEventPayloadDto["status"],
+      reasonLabel: integrationUnattributedReasonLabel(
+        event.reasonCode ?? "routing_pending",
+      ),
+      receivedAt: event.firstReceivedAt.toISOString(),
+      payloadExpiresAt: event.payloadExpiresAt.toISOString(),
+      payloadAvailable: decrypted.ok,
+      payloadMessage: decrypted.ok
+        ? null
+        : decrypted.kind === "expired"
+          ? integrationEventPayloadExpiredMessage
+          : integrationEventPayloadUnreadableMessage,
+      payload: decrypted.ok ? maskSensitivePayload(decrypted.payload) : null,
+      // Without the payload: what the receipt recorded when it arrived.
+      parsed: read
+        ? read.ok
+          ? read.parsed
+          : null
+        : this.storedSaleSummary(event),
+      parseError: read && !read.ok ? read.errorCode : null,
+    };
+  }
+
+  private storedSaleSummary(event: {
+    eventName: string | null;
+    valueCents: number | null;
+    currency: string | null;
+    productCode: string | null;
+    productName: string | null;
+    offerCode: string | null;
+    offerName: string | null;
+    occurredAt: Date | null;
+    providerStatus: string | null;
+  }): IntegrationEventPayloadDto["parsed"] {
+    if (!event.eventName) return null;
+    return {
+      eventName: event.eventName,
+      valueCents: event.valueCents,
+      currency: event.currency,
+      valueSent: true,
+      productCode: event.productCode,
+      productName: event.productName,
+      offerCode: event.offerCode,
+      offerName: event.offerName,
+      orderRef: null,
+      occurredAt: event.occurredAt?.toISOString() ?? null,
+      phoneMasked: null,
+      providerStatus: event.providerStatus,
+      test: false,
     };
   }
 
@@ -766,7 +993,8 @@ export class IntegrationEndpointsService {
   ): Promise<IntegrationRouteDecision> {
     switch (parsed.provider) {
       case "payt":
-        return routePaytSale(this.prisma, this.paidLeads, {
+      case "braip":
+        return routeSalePlatformSale(this.prisma, this.paidLeads, {
           workspaceId: endpoint.workspaceId,
           sale: parsed.sale,
           receivedAt,
@@ -796,10 +1024,12 @@ export class IntegrationEndpointsService {
     receivedAt?: Date,
   ): ParsedIntegrationEvent {
     switch (endpoint.provider) {
-      case "payt": {
-        const sale = parsePaytSaleEventV1(payload, { receivedAt });
+      case "payt":
+      case "braip": {
+        const platform = endpoint.provider;
+        const sale = parseSaleEventV1(platform, payload, { receivedAt });
         if (!sale.ok) {
-          return sale.errorCode === "payt_sale_v1_status_not_supported"
+          return sale.kind === "status_not_supported"
             ? {
                 ok: false,
                 status: "ignored",
@@ -815,12 +1045,12 @@ export class IntegrationEndpointsService {
         }
         return {
           ok: true,
-          provider: "payt",
+          provider: platform,
           eventName: sale.value.eventName,
           // One sale (seller + order + event) is one receipt.
           externalKey: buildProviderPurchaseIdentity({
             workspaceId: endpoint.workspaceId,
-            provider: "payt",
+            provider: platform,
             accountRef: sale.value.accountRef,
             orderRef: sale.value.orderRef,
             eventName: sale.value.eventName,
@@ -909,9 +1139,9 @@ export class IntegrationEndpointsService {
       connectionId: `integration:${endpoint.id}`,
       deliveryId: id,
     });
-    const sale = parsed.ok && parsed.provider === "payt" ? parsed.sale : null;
+    const sale = parsed.ok && "sale" in parsed ? parsed.sale : null;
     const phone = parsed.ok
-      ? parsed.provider === "payt"
+      ? "sale" in parsed
         ? parsed.sale.phone
         : parsed.automation.phone
       : null;
@@ -953,7 +1183,7 @@ export class IntegrationEndpointsService {
               ? (hashPhoneIdentity(phone) ?? null)
               : null,
             occurredAt: parsed.ok
-              ? parsed.provider === "payt"
+              ? "sale" in parsed
                 ? parsed.sale.occurredAt
                 : parsed.automation.occurredAt
               : null,
@@ -1102,10 +1332,19 @@ export class IntegrationEndpointsService {
 
   // ----------------------------------------------------------------- helpers
 
+  /**
+   * Finds the endpoint of a public call. Unknown id: 404 with nothing
+   * recorded (no workspace to attach it to). Known endpoint refused (token,
+   * removed URL, retired parser): returned with the rejection reason so the
+   * caller records the attempt's metadata before answering the same 404.
+   */
   private async authenticate(
     endpointId: string,
     token: unknown,
-  ): Promise<EndpointRecord> {
+  ): Promise<{
+    endpoint: EndpointRecord;
+    rejection: IntegrationAuthRejection | null;
+  }> {
     let endpoint: EndpointRecord | null;
     try {
       endpoint =
@@ -1126,14 +1365,137 @@ export class IntegrationEndpointsService {
     );
     if (
       !endpoint ||
-      !tokenMatches ||
-      endpoint.removedAt !== null ||
-      endpoint.parserRelease.status === "retired" ||
       !(routedProviders as readonly string[]).includes(endpoint.provider)
     ) {
       throw new NotFoundException(notFoundMessage);
     }
-    return endpoint;
+    const rejection: IntegrationAuthRejection | null = !tokenMatches
+      ? typeof token === "string" && token.length > 0
+        ? "token_invalid"
+        : "token_missing"
+      : endpoint.removedAt !== null
+        ? "endpoint_removed"
+        : endpoint.parserRelease.status === "retired"
+          ? "parser_retired"
+          : null;
+    return { endpoint, rejection };
+  }
+
+  /**
+   * Refused call (4xx) of a known endpoint, kept for the Backoffice audit
+   * ("Recebimentos das URLs únicas") as status "rejected" (SaaS #170).
+   * Without a valid token only metadata is written (never the body); after
+   * authentication the body is kept encrypted with the same retention as
+   * every receipt. Repeated refusals collapse into one row per reason and
+   * time window (attemptCount), so a flood of bad calls cannot grow the
+   * table. Never changes the HTTP answer: a storage failure is only logged.
+   * Does not touch the endpoint's "último recebimento" shown in the panel.
+   */
+  private async recordRejection(input: {
+    endpoint: EndpointRecord;
+    reasonCode: string;
+    rawBody: Buffer | null;
+    receivedAt: Date;
+  }): Promise<void> {
+    const { endpoint, reasonCode, receivedAt } = input;
+    const body =
+      input.rawBody &&
+      input.rawBody.length > 0 &&
+      input.rawBody.length <= MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES &&
+      !metadataOnlyRejections.has(reasonCode)
+        ? input.rawBody
+        : null;
+    const hash = createHash("sha256")
+      .update(
+        body
+          ? "integration-endpoint-rejected-v1\0"
+          : "integration-endpoint-rejected-meta-v1\0",
+        "utf8",
+      )
+      .update(endpoint.id, "utf8")
+      .update("\0", "utf8")
+      .update(reasonCode, "utf8")
+      .update("\0", "utf8")
+      .update(
+        String(
+          Math.floor(
+            receivedAt.getTime() /
+              (body ? fallbackDedupeWindowMs : rejectionMetadataWindowMs),
+          ),
+        ),
+        "utf8",
+      );
+    if (body) hash.update("\0", "utf8").update(body);
+    const ingressKey = hash.digest("hex");
+    try {
+      const existing = await this.findReceipt(endpoint.id, ingressKey);
+      if (existing) {
+        await this.prisma.integrationEndpointEvent.update({
+          where: { id: existing.id },
+          data: { attemptCount: { increment: 1 }, lastReceivedAt: receivedAt },
+        });
+        return;
+      }
+      const id = randomUUID();
+      await this.prisma.integrationEndpointEvent.create({
+        data: {
+          id,
+          workspaceId: endpoint.workspaceId,
+          integrationEndpointId: endpoint.id,
+          provider: endpoint.provider,
+          ingressKey,
+          externalKey: null,
+          eventName: null,
+          providerStatus: null,
+          status: "rejected",
+          reasonCode,
+          firstReceivedAt: receivedAt,
+          lastReceivedAt: receivedAt,
+          ...(body
+            ? this.encryption.encrypt(body, {
+                workspaceId: endpoint.workspaceId,
+                connectionId: `integration:${endpoint.id}`,
+                deliveryId: id,
+              })
+            : {}),
+          payloadExpiresAt: new Date(
+            receivedAt.getTime() + INBOUND_WEBHOOK_RAW_RETENTION_DAYS * DAY_MS,
+          ),
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "integration_endpoint.rejection_not_recorded",
+          endpointId: endpoint.id,
+          reasonCode,
+          error: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+
+  /** Braip (6.5): JSON or form-urlencoded body, converted to canonical JSON. */
+  private requireBraipBody(
+    contentType: string | undefined,
+    rawBody: Buffer | undefined,
+  ): Buffer {
+    if (!rawBody || rawBody.length === 0) {
+      throw new BadRequestException("Payload obrigatório");
+    }
+    if (rawBody.length > MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES) {
+      throw new PayloadTooLargeException("Payload do webhook excede o limite");
+    }
+    const normalized = normalizeBraipBody(contentType, rawBody);
+    if (!normalized.ok) {
+      if (normalized.errorCode === "braip_body_unsupported") {
+        throw new UnsupportedMediaTypeException(
+          "Webhook requer JSON ou application/x-www-form-urlencoded",
+        );
+      }
+      throw new BadRequestException("Payload inválido");
+    }
+    return normalized.body;
   }
 
   private requireJsonBody(

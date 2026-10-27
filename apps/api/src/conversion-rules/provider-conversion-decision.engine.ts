@@ -1,3 +1,4 @@
+import { isSalesPlatformProvider } from "../inbound-webhooks/providers/sales-platform-sale";
 import type {
   ProviderConversionDecisionConversionDto,
   ProviderConversionDecisionDto,
@@ -419,7 +420,10 @@ export class ProviderConversionDecisionEngine {
 
     // A sale with a merchant order identity (Payt) is deduplicated forever by
     // that identity (seller + order + event), never by the lead window.
-    if (input.occurrence.provider === "payt" && input.occurrence.purchaseKey) {
+    if (
+      isSalesPlatformProvider(input.occurrence.provider) &&
+      input.occurrence.purchaseKey
+    ) {
       return { mode: "lifetime", scopeKey: input.occurrence.purchaseKey };
     }
     const scopeKey = [

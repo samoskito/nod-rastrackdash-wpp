@@ -3,6 +3,7 @@ import type {
   IntegrationEndpointListDto,
   IntegrationEndpointProviderDto,
   IntegrationUnattributedEventListDto,
+  SalesPlatformProviderDto,
 } from "@wpptrack/shared";
 import {
   integrationDetectedProductListSchema,
@@ -19,6 +20,8 @@ import { serverApiFetch } from "../../../../lib/server-api";
 export type SingleUrlData = {
   endpoints: IntegrationEndpointListDto | null;
   paytProducts: IntegrationDetectedProductDto[];
+  /** Fase 6.5: produtos vistos nas vendas da Braip. */
+  braipProducts: IntegrationDetectedProductDto[];
   unattributed: Record<
     IntegrationEndpointProviderDto,
     IntegrationUnattributedEventListDto | null
@@ -33,12 +36,14 @@ async function settle<T>(promise: Promise<T>): Promise<T | null> {
   }
 }
 
-export async function loadDetectedProducts(): Promise<
-  IntegrationDetectedProductDto[]
-> {
+export async function loadDetectedProducts(
+  provider: SalesPlatformProviderDto = "payt",
+): Promise<IntegrationDetectedProductDto[]> {
   const parsed = integrationDetectedProductListSchema.safeParse(
     await settle(
-      serverApiFetch<unknown>("/integrations/endpoints/products?provider=payt"),
+      serverApiFetch<unknown>(
+        `/integrations/endpoints/products?provider=${provider}`,
+      ),
     ),
   );
   return parsed.success ? parsed.data.products : [];
@@ -58,10 +63,20 @@ async function loadUnattributed(
 }
 
 export async function loadSingleUrlData(): Promise<SingleUrlData> {
-  const [endpoints, paytProducts, payt, unnichat, umbler] = await Promise.all([
+  const [
+    endpoints,
+    paytProducts,
+    braipProducts,
+    payt,
+    braip,
+    unnichat,
+    umbler,
+  ] = await Promise.all([
     settle(serverApiFetch<unknown>("/integrations/endpoints")),
-    loadDetectedProducts(),
+    loadDetectedProducts("payt"),
+    loadDetectedProducts("braip"),
     loadUnattributed("payt"),
+    loadUnattributed("braip"),
     loadUnattributed("unnichat"),
     loadUnattributed("umbler"),
   ]);
@@ -69,6 +84,7 @@ export async function loadSingleUrlData(): Promise<SingleUrlData> {
   return {
     endpoints: parsedEndpoints.success ? parsedEndpoints.data : null,
     paytProducts,
-    unattributed: { payt, unnichat, umbler },
+    braipProducts,
+    unattributed: { payt, braip, unnichat, umbler },
   };
 }

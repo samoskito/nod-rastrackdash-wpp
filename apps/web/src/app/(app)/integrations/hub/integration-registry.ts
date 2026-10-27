@@ -113,6 +113,7 @@ export const integrationProviderIds = [
   "data_crazy",
   "unnichat",
   "payt",
+  "braip",
   "kommo",
   "pipedrive",
   "meta",
@@ -146,6 +147,12 @@ export type IntegrationGate =
    * state comes from the Payt rules the workspace already has.
    */
   | { kind: "payt_rules" }
+  /**
+   * Fase 6.5: Braip, same base as Payt (a rule origin in Conversões that
+   * receives through the workspace single URL). Always offered, no gate; the
+   * state comes from the Braip rules and URL of the workspace.
+   */
+  | { kind: "braip_rules" }
   | { kind: "always" };
 
 export type IntegrationProviderDefinition = {
@@ -186,6 +193,7 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
   unnichat: { file: "unnichat.png", surface: "light" },
   payt: { file: "payt.svg", surface: "dark" },
+  braip: { file: "braip.png", surface: "dark" },
   kommo: { file: "kommo.png", surface: "light" },
   pipedrive: { file: "pipedrive.svg", surface: "dark" },
   meta: { file: "meta.svg", surface: "dark" },
@@ -315,6 +323,17 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Envie compra aprovada, Pix/boleto gerado e carrinho abandonado como conversão do lead que veio do anúncio. Funciona por regra em Conversões.",
     gate: { kind: "payt_rules" },
+  },
+  {
+    id: "braip",
+    name: "Braip",
+    category: "attendance",
+    logo: integrationLogoPath("braip"),
+    initials: "Br",
+    logoSurface: logoSurface("braip"),
+    description:
+      "Envie compra aprovada, boleto/Pix gerado e checkout abandonado da Braip como conversão do lead que veio do anúncio. Uma URL única para a conta toda.",
+    gate: { kind: "braip_rules" },
   },
   {
     id: "meta",

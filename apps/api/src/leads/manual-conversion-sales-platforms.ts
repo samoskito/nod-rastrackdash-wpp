@@ -1,3 +1,4 @@
+import { parseBraipSaleEventV1 } from "../inbound-webhooks/providers/braip/braip-automation-v1.parser";
 import { parsePaytSaleEventV1 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
 
 /**
@@ -5,9 +6,10 @@ import { parsePaytSaleEventV1 } from "../inbound-webhooks/providers/payt/payt-au
  * pedido (porte do SaaS #158). Cada plataforma lê o número do pedido do
  * callback preservado com o seu próprio leitor.
  *
- * Ponto de extensão: Braip (fase 6.5), Hotmart (6.6) e Yampi (6.7) entram
- * aqui quando forem portadas, cada uma com o leitor do seu postback. Até lá,
- * só a Payt participa; uma compra de outra plataforma nunca é lida.
+ * Ponto de extensão: Payt e Braip (fase 6.5, `trans_key` da venda) já
+ * participam; Hotmart (6.6) e Yampi (6.7) entram aqui quando forem portadas,
+ * cada uma com o leitor do seu postback. Uma compra de outra plataforma nunca
+ * é lida.
  */
 export type ManualPurchaseSalesPlatform = {
   provider: string;
@@ -24,6 +26,16 @@ export const MANUAL_PURCHASE_SALES_PLATFORMS: readonly ManualPurchaseSalesPlatfo
       parserVersion: "automation-v1",
       readOrderRef(payload) {
         const parsed = parsePaytSaleEventV1(payload);
+        return parsed.ok ? parsed.value.orderRef : null;
+      },
+    },
+    {
+      // Fase 6.5 (porte do hunk de compra do SaaS #158): o pedido da Braip
+      // é a transação (trans_key) do postback guardado.
+      provider: "braip",
+      parserVersion: "automation-v1",
+      readOrderRef(payload) {
+        const parsed = parseBraipSaleEventV1(payload);
         return parsed.ok ? parsed.value.orderRef : null;
       },
     },

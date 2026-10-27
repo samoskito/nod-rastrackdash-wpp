@@ -76,12 +76,14 @@ import {
   UMBLER_AUTOMATION_V1_PARSER_VERSION,
 } from "./providers/umbler/umbler-automation-v1.parser";
 import {
-  parsePaytAutomationV1,
-  parsePaytSaleEventV1,
-  paytSaleEventNameOf,
-  type ParsedPaytAutomationV1,
-  PAYT_AUTOMATION_V1_PARSER_VERSION,
-} from "./providers/payt/payt-automation-v1.parser";
+  parseSaleEventV1,
+  parseSalePurchaseV1,
+  saleEventNameOf,
+  saleNotThisRuleErrorCode,
+  salesPlatformOf,
+  type ParsedSaleAutomationV1,
+} from "./providers/sales-platform-sale";
+import { normalizeBraipBody } from "./providers/braip/braip-body";
 import {
   parseUnnichatAutomationV1,
   type ParsedUnnichatAutomationV1,
@@ -96,6 +98,8 @@ const ignoredUntrackedLeadReason = "ignored_untracked_lead";
 const ignoredParseErrors = new Set<string>([
   "payt_automation_v1_not_purchase",
   "payt_automation_v1_event_not_in_rule",
+  "braip_automation_v1_not_purchase",
+  "braip_automation_v1_event_not_in_rule",
 ]);
 const ignoredEmptyTemplateReason = "ignored_empty_template";
 const paytLeadOtherChannelMessage =
@@ -258,7 +262,7 @@ type ParsedUnnichatAutomation = ParsedUnnichatAutomationV1 & {
 };
 type ParsedAutomation =
   | ParsedUmblerAutomationV1
-  | ParsedPaytAutomationV1
+  | ParsedSaleAutomationV1
   | ParsedUnnichatAutomation;
 type AutomationParseResult =
   | { ok: true; value: ParsedAutomation }
@@ -318,7 +322,11 @@ export class InboundConversionAutomationIngestionService {
       input.token,
     );
     const endpoint = authenticated.endpoint;
-    const rawBody = this.requireJsonBody(input.contentType, input.rawBody);
+    // Braip (6.5): JSON or form-urlencoded, converted to canonical JSON.
+    const rawBody =
+      endpoint.providerRule.parserRelease.provider === "braip"
+        ? this.requireBraipBody(input.contentType, input.rawBody)
+        : this.requireJsonBody(input.contentType, input.rawBody);
     if (authenticated.forwardedFrom) {
       // The OLD URL keeps showing that it still receives ("Desativar URL
       // antiga"), the unified rule's own URL does not move.
@@ -1745,12 +1753,10 @@ export class InboundConversionAutomationIngestionService {
       token,
     );
     const rule = endpoint?.providerRule;
-    // Payt rules intentionally sit on the WhatsApp connection of their
-    // numbers. The persisted parser release, not that connection's provider,
-    // identifies the callback contract.
-    const isPaytAutomation =
-      rule?.parserRelease.provider === "payt" &&
-      rule?.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION;
+    // Sales-platform rules (Payt, Braip) intentionally sit on the WhatsApp
+    // connection of their numbers. The persisted parser release, not that
+    // connection's provider, identifies the callback contract.
+    const isPaytAutomation = salesPlatformOf(rule?.parserRelease) !== null;
 
     // "Unificar" of automations (21/10/2026): the merged rule is paused and
     // linked to the rule for all numbers. Its OLD URL keeps working: the
@@ -1834,9 +1840,7 @@ export class InboundConversionAutomationIngestionService {
       throw new ServiceUnavailableException(publicPersistenceFailureMessage);
     }
     const rule = endpoint?.providerRule;
-    const isPaytAutomation =
-      rule?.parserRelease.provider === "payt" &&
-      rule?.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION;
+    const isPaytAutomation = salesPlatformOf(rule?.parserRelease) !== null;
     if (
       !endpoint ||
       !rule ||
@@ -1879,6 +1883,29 @@ export class InboundConversionAutomationIngestionService {
     return rawBody;
   }
 
+  /** Braip (6.5): JSON or form-urlencoded, converted to canonical JSON. */
+  private requireBraipBody(
+    contentType: string | undefined,
+    rawBody: Buffer | undefined,
+  ): Buffer {
+    if (!rawBody || rawBody.length === 0) {
+      throw new BadRequestException("Payload obrigatório");
+    }
+    if (rawBody.length > MAX_INBOUND_WEBHOOK_PAYLOAD_BYTES) {
+      throw new PayloadTooLargeException("Payload do webhook excede o limite");
+    }
+    const normalized = normalizeBraipBody(contentType, rawBody);
+    if (!normalized.ok) {
+      if (normalized.errorCode === "braip_body_unsupported") {
+        throw new UnsupportedMediaTypeException(
+          "Webhook requer JSON ou application/x-www-form-urlencoded",
+        );
+      }
+      throw new BadRequestException("Payload inválido");
+    }
+    return normalized.body;
+  }
+
   private parseAutomation(
     endpoint: PublicConversionEndpoint,
     payload: unknown,
@@ -1886,30 +1913,32 @@ export class InboundConversionAutomationIngestionService {
     receivedAt?: Date,
   ): AutomationParseResult {
     const rule = endpoint.providerRule;
-    if (
-      rule.parserRelease.provider === "payt" &&
-      rule.parserRelease.version === PAYT_AUTOMATION_V1_PARSER_VERSION
-    ) {
-      // A Payt postback may be Purchase, InitiateCheckout or CartAbandoned. A
-      // rule only takes its own event; any other one is ignored (never an
-      // error), exactly like a non-purchase on a Purchase rule.
-      const notThisRule =
-        rule.conversionRule.eventName === "Purchase"
-          ? "payt_automation_v1_not_purchase"
-          : "payt_automation_v1_event_not_in_rule";
+    const salesPlatform = salesPlatformOf(rule.parserRelease);
+    if (salesPlatform) {
+      // A sales-platform postback (Payt, Braip) may be Purchase,
+      // InitiateCheckout or CartAbandoned. A rule only takes its own event;
+      // any other one is ignored (never an error), exactly like a
+      // non-purchase on a Purchase rule.
+      const notThisRule = saleNotThisRuleErrorCode(
+        salesPlatform,
+        rule.conversionRule.eventName,
+      );
       // Classify the event FIRST: a postback of another event (or of an
       // unsupported status) is ignored before identity/phone/value are
       // judged.
-      if (paytSaleEventNameOf(payload) !== rule.conversionRule.eventName) {
+      if (
+        saleEventNameOf(salesPlatform, payload) !==
+        rule.conversionRule.eventName
+      ) {
         return { ok: false, errorCode: notThisRule };
       }
       // Purchase rules keep the validated Purchase-only contract.
       const parsed =
         rule.conversionRule.eventName === "Purchase"
-          ? parsePaytAutomationV1(payload, { receivedAt })
-          : parsePaytSaleEventV1(payload, { receivedAt });
+          ? parseSalePurchaseV1(salesPlatform, payload, { receivedAt })
+          : parseSaleEventV1(salesPlatform, payload, { receivedAt });
       if (!parsed.ok) {
-        return parsed.errorCode === "payt_sale_v1_status_not_supported"
+        return "kind" in parsed && parsed.kind === "status_not_supported"
           ? { ok: false, errorCode: notThisRule }
           : { ok: false, errorCode: parsed.errorCode };
       }
@@ -1922,7 +1951,7 @@ export class InboundConversionAutomationIngestionService {
           ...parsed.value,
           externalExecutionKey: buildProviderPurchaseIdentity({
             workspaceId: endpoint.workspaceId,
-            provider: "payt",
+            provider: salesPlatform,
             accountRef: parsed.value.accountRef,
             orderRef: parsed.value.orderRef,
             eventName: parsed.value.eventName,
@@ -1968,6 +1997,8 @@ export class InboundConversionAutomationIngestionService {
     switch (endpoint.providerRule.parserRelease.provider) {
       case "payt":
         return "payt-automation-v1";
+      case "braip":
+        return "braip-automation-v1";
       case "unnichat":
         return "unnichat-automation-v1";
       default:
@@ -2238,10 +2269,10 @@ export class InboundConversionAutomationIngestionService {
       return { parsed: stored.parsed ?? input.parsed };
     }
 
-    // Only Payt resends may cure a source mismatch; other providers keep the
-    // stored body once a decision exists.
+    // Only sales-platform resends (Payt, Braip) may cure a source mismatch;
+    // other providers keep the stored body once a decision exists.
     const mismatchExecutionId =
-      input.endpoint.providerRule.parserRelease?.provider === "payt"
+      salesPlatformOf(input.endpoint.providerRule.parserRelease) !== null
         ? await this.sourceMismatchExecutionId(
             input.endpoint,
             input.parsed.externalExecutionKey,

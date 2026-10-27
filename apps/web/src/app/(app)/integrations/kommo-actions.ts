@@ -358,6 +358,15 @@ function parseEventsPage(
 }
 
 const settingsPath = "/settings";
+
+/**
+ * Porte parcial do SaaS 7570fe14 (fase 6.5): o Kommo é gerenciado no hub de
+ * Integrações; Configurações ainda lista as origens de CRM nas regras.
+ */
+function revalidateCrmPaths(): void {
+  revalidatePath(settingsPath);
+  revalidatePath("/integrations");
+}
 const invalidFormMessage = "Revise os dados informados e tente novamente.";
 const sessionExpiredMessage =
   "Sua sessão expirou ou você não tem permissão para esta ação. Atualize a página e tente novamente.";
@@ -586,7 +595,7 @@ export async function createKommoConnectionAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message:
@@ -627,7 +636,7 @@ export async function replaceKommoCredentialAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message: "Credenciais da Kommo atualizadas.",
@@ -668,7 +677,7 @@ export async function setKommoConnectionStatusAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message:
@@ -713,7 +722,7 @@ export async function setKommoChannelBindingsAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message: "Canais autorizados atualizados.",
@@ -751,7 +760,7 @@ export async function rotateKommoWebhookTokenAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message:
@@ -790,7 +799,7 @@ export async function refreshKommoCatalogAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message:
@@ -835,7 +844,7 @@ export async function createKommoRuleAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return { ok: true, message: "Regra Kommo criada.", rule: result.data };
   } catch (error) {
     return ruleFailureFromError(error, "Não foi possível criar a regra Kommo.");
@@ -871,7 +880,7 @@ export async function updateKommoRuleAction(
       };
     }
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return {
       ok: true,
       message: result.data.active
@@ -904,7 +913,7 @@ export async function deleteKommoRuleAction(
       { method: "DELETE" },
     );
 
-    revalidatePath(settingsPath);
+    revalidateCrmPaths();
     return { ok: true, message: "Regra Kommo removida." };
   } catch (error) {
     return ruleFailureFromError(error, "Não foi possível remover a regra Kommo.");

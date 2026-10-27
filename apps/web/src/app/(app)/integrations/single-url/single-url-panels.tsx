@@ -19,6 +19,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SingleUrlActionResult } from "./single-url-actions";
+import { SalePayloadToggle } from "./sale-payload-view";
 import {
   disableLegacyUrlConfirmText,
   eventLabel,
@@ -29,12 +30,12 @@ import {
   legacyUrlState,
   mergeEndpoints,
   normalizeManualProductCode,
-  paytEventExplanations,
-  paytProductCodeGuidance,
+  productCodeGuidance,
   productCodeSeen,
   productFilterOptions,
   removeConfirmText,
   rotateConfirmText,
+  saleEventExplanation,
   singleUrlLicenseLockedNote,
   singleUrlPlatformNames,
   singleUrlReadOnlyNote,
@@ -42,8 +43,9 @@ import {
   singleUrlSetupSteps,
   statsSummary,
   supportedEvents,
-  unseenProductCodeWarning,
+  unseenProductCodeWarningFor,
 } from "./single-url-copy";
+import type { SalesPlatformProviderDto } from "@wpptrack/shared";
 
 type Action = (formData: FormData) => Promise<SingleUrlActionResult>;
 
@@ -55,6 +57,8 @@ export type SingleUrlActions = {
   remove: Action;
   retry: Action;
   setPublicUrl: Action;
+  /** Fase 6.5: "Ver dados recebidos" de uma venda (só leitura, auditado). */
+  loadPayload?: Action;
 };
 
 function useRefresh() {
@@ -438,6 +442,7 @@ function SetupSteps({
 
 const unattributedTitles: Record<IntegrationEndpointProviderDto, string> = {
   payt: "Vendas sem atribuição",
+  braip: "Vendas sem atribuição",
   unnichat: "Eventos sem atribuição",
   umbler: "Eventos sem atribuição",
 };
@@ -454,12 +459,18 @@ export function UnattributedSalesList({
   licenseLocked = false,
   retry,
   limit = 20,
+  loadPayload,
 }: {
   list: IntegrationUnattributedEventListDto | null;
   canManage: boolean;
   licenseLocked?: boolean;
   retry: Action;
   limit?: number;
+  /**
+   * Fase 6.5: "Ver dados recebidos" das vendas (Payt, Braip). Só leitura:
+   * continua disponível com a licença bloqueada.
+   */
+  loadPayload?: Action;
 }) {
   const refresh = useRefresh();
   const [results, setResults] = useState<Record<string, string>>({});
@@ -535,6 +546,9 @@ export function UnattributedSalesList({
                 <RotateCcw size={14} aria-hidden="true" />
                 {pendingId === item.id ? "Tentando..." : "Tentar de novo"}
               </button>
+            ) : null}
+            {loadPayload && canManage && isSalesPlatform(item.provider) ? (
+              <SalePayloadToggle eventId={item.id} loadPayload={loadPayload} />
             ) : null}
             {!item.retryable ? (
               <small className="muted">
@@ -768,8 +782,23 @@ type PlatformPanelCommon = {
   numberNames?: Record<string, string>;
 };
 
+type SalesPlatformPanelProps = PlatformPanelCommon & {
+  endpoint: IntegrationEndpointDto | null;
+  products: readonly IntegrationDetectedProductDto[];
+};
+
 /** Conteúdo do modal da Payt: URL única, eventos, produtos, vendas e URLs antigas. */
-export function PaytSingleUrlPanel({
+export function PaytSingleUrlPanel(props: SalesPlatformPanelProps) {
+  return <SalesPlatformSingleUrlPanel provider="payt" {...props} />;
+}
+
+/**
+ * Conteúdo do modal de uma plataforma de venda (Payt; Braip desde a 6.5):
+ * URL única, eventos suportados, produtos detectados, vendas sem atribuição
+ * (com "Ver dados recebidos") e URLs antigas.
+ */
+export function SalesPlatformSingleUrlPanel({
+  provider,
   endpoint,
   products,
   unattributed,
@@ -779,10 +808,7 @@ export function PaytSingleUrlPanel({
   licenseLocked = false,
   actions,
   numberNames,
-}: PlatformPanelCommon & {
-  endpoint: IntegrationEndpointDto | null;
-  products: readonly IntegrationDetectedProductDto[];
-}) {
+}: SalesPlatformPanelProps & { provider: SalesPlatformProviderDto }) {
   const [created, setCreated] = useState<IntegrationEndpointDto | null>(null);
   const [removed, setRemoved] = useState<string[]>([]);
   const current = mergeEndpoints(
@@ -790,24 +816,30 @@ export function PaytSingleUrlPanel({
     created ? [created] : [],
     removed,
   )[0] ?? null;
+  const platform = singleUrlPlatformNames[provider];
+  const braip = provider === "braip";
 
   return (
     <div className="integration-modal-stack single-url-panel">
       <section
         className="integration-modal-note"
-        aria-labelledby="payt-url-title"
+        aria-labelledby={`${provider}-url-title`}
       >
-        <strong id="payt-url-title">URL única da Payt</strong>
+        <strong id={`${provider}-url-title`}>URL única da {platform}</strong>
         <p className="muted">
-          Uma URL só para a conta toda: a Payt avisa cada venda e o sistema
-          descobre por qual número o comprador chegou. Não precisa de uma URL
-          por número nem por regra.
+          Uma URL só para a conta toda: a {platform} avisa cada venda e o
+          sistema descobre por qual número o comprador chegou. Não precisa de
+          uma URL por número nem por regra.
         </p>
         {current ? (
           <IntegrationUrlBox
             key={current.id}
             endpoint={current}
-            label="URL única (cole na Payt, em Postback)"
+            label={
+              braip
+                ? "URL única (cole na Braip, em Ferramentas → Postback)"
+                : "URL única (cole na Payt, em Postback)"
+            }
             canManage={canManage}
             licenseLocked={licenseLocked}
             actions={actions}
@@ -816,7 +848,7 @@ export function PaytSingleUrlPanel({
         ) : canManage ? (
           <>
             <EnsureUrlButton
-              provider="payt"
+              provider={provider}
               eventName={null}
               ensure={actions.ensure}
               label="Gerar URL única"
@@ -831,24 +863,24 @@ export function PaytSingleUrlPanel({
             gerar.
           </p>
         )}
-        <SetupSteps provider="payt" eventName={null} />
+        <SetupSteps provider={provider} eventName={null} />
       </section>
 
       <section
         className="integration-modal-note"
-        aria-labelledby="payt-events-title"
+        aria-labelledby={`${provider}-events-title`}
       >
-        <strong id="payt-events-title">Eventos suportados</strong>
+        <strong id={`${provider}-events-title`}>Eventos suportados</strong>
         <ul className="single-url-list" role="list">
-          {supportedEvents("payt").map((eventName) => {
+          {supportedEvents(provider).map((eventName) => {
             const hasRule = ruleEvents.includes(eventName);
             return (
               <li key={eventName} className="single-url-list-item">
                 <div>
-                  <strong>{eventLabel(eventName, "payt")}</strong>
+                  <strong>{eventLabel(eventName, provider)}</strong>
                   <span className="muted">
                     {" · "}
-                    {paytEventExplanations[eventName] ?? ""}
+                    {saleEventExplanation(provider, eventName)}
                   </span>
                 </div>
                 <span className={`status-chip${hasRule ? "" : " neutral"}`}>
@@ -861,23 +893,26 @@ export function PaytSingleUrlPanel({
         <p className="muted">
           Cada evento só vai para a Meta se existir uma regra ativa dele em
           Conversões.
+          {braip
+            ? " Reembolso, chargeback e cancelamento são recebidos e ignorados (não viram evento)."
+            : ""}
         </p>
       </section>
 
       <section
         className="integration-modal-note"
-        aria-labelledby="payt-products-title"
+        aria-labelledby={`${provider}-products-title`}
       >
-        <strong id="payt-products-title">Produtos detectados</strong>
+        <strong id={`${provider}-products-title`}>Produtos detectados</strong>
         <DetectedProducts products={products} />
       </section>
 
       <section
         className="integration-modal-note"
-        aria-labelledby="payt-unattributed-title"
+        aria-labelledby={`${provider}-unattributed-title`}
       >
-        <strong id="payt-unattributed-title">
-          {unattributedTitle("payt")}
+        <strong id={`${provider}-unattributed-title`}>
+          {unattributedTitle(provider)}
         </strong>
         <UnattributedSalesList
           list={unattributed}
@@ -885,23 +920,27 @@ export function PaytSingleUrlPanel({
           licenseLocked={licenseLocked}
           retry={actions.retry}
           limit={10}
+          loadPayload={actions.loadPayload}
         />
       </section>
 
-      <section
-        className="integration-modal-note"
-        aria-labelledby="payt-legacy-title"
-      >
-        <strong id="payt-legacy-title">URLs antigas</strong>
-        <LegacyUrlList
-          provider="payt"
-          legacyUrls={legacyUrls}
-          canManage={canManage}
-          licenseLocked={licenseLocked}
-          setPublicUrl={actions.setPublicUrl}
-          numberNames={numberNames}
-        />
-      </section>
+      {/* A Braip nasce só com a URL única: não há URL antiga para migrar. */}
+      {!braip || legacyUrls.length > 0 ? (
+        <section
+          className="integration-modal-note"
+          aria-labelledby={`${provider}-legacy-title`}
+        >
+          <strong id={`${provider}-legacy-title`}>URLs antigas</strong>
+          <LegacyUrlList
+            provider={provider}
+            legacyUrls={legacyUrls}
+            canManage={canManage}
+            licenseLocked={licenseLocked}
+            setPublicUrl={actions.setPublicUrl}
+            numberNames={numberNames}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -918,7 +957,7 @@ export function AutomationEventUrlsPanel({
   actions,
   numberNames,
 }: PlatformPanelCommon & {
-  provider: Exclude<IntegrationEndpointProviderDto, "payt">;
+  provider: Exclude<IntegrationEndpointProviderDto, SalesPlatformProviderDto>;
   endpoints: readonly IntegrationEndpointDto[];
 }) {
   const [created, setCreated] = useState<IntegrationEndpointDto[]>([]);
@@ -1062,11 +1101,14 @@ export function ProductFilterPicker({
   selected,
   onChange,
   disabled = false,
+  provider = "payt",
 }: {
   products: readonly IntegrationDetectedProductDto[];
   selected: readonly string[];
   onChange: (codes: string[]) => void;
   disabled?: boolean;
+  /** Plataforma da regra (guia de onde achar o código). */
+  provider?: SalesPlatformProviderDto;
 }) {
   const [manual, setManual] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
@@ -1142,7 +1184,7 @@ export function ProductFilterPicker({
                 addManual();
               }
             }}
-            placeholder="Ex.: 4O9J39"
+            placeholder={provider === "braip" ? "Ex.: pro1abc" : "Ex.: 4O9J39"}
             maxLength={80}
           />
         </label>
@@ -1150,7 +1192,7 @@ export function ProductFilterPicker({
           Adicionar código
         </button>
       </div>
-      <small className="action-note">{paytProductCodeGuidance}</small>
+      <small className="action-note">{productCodeGuidance(provider)}</small>
       {manualError ? (
         <small className="action-note warn" role="alert">
           {manualError}
@@ -1161,7 +1203,7 @@ export function ProductFilterPicker({
           <span className="single-url-code">{code}</span>
           {!productCodeSeen(code, products) ? (
             <small className="action-note warn">
-              {unseenProductCodeWarning}
+              {unseenProductCodeWarningFor(provider)}
             </small>
           ) : null}
           <button

@@ -7854,3 +7854,183 @@ body {
   margin: 0 0 8px;
   font-size: 1rem;
 }
+
+/* Fase 6.5 (porte do SaaS #169): "Ver dados recebidos" das vendas. */
+.single-url-list-item > .unattributed-sale-payload {
+  flex: 1 1 100%;
+}
+
+.unattributed-sale-payload {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.unattributed-sale-parsed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.unattributed-sale-parsed > div {
+  min-width: 0;
+}
+
+.unattributed-sale-parsed dt {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.unattributed-sale-parsed dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Backoffice "Recebimentos das URLs únicas": table on desktop, cards on phones. */
+.integration-receipts-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.integration-receipts-filter .filter-field {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.integration-receipts-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.integration-receipts-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.integration-receipts-table th,
+.integration-receipts-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.integration-receipts-table tr.open > td {
+  border-bottom: 0;
+}
+
+.integration-receipt-client,
+.integration-receipt-result,
+.integration-receipt-actions {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.integration-receipt-client small {
+  overflow-wrap: anywhere;
+}
+
+.integration-receipt-result small {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.integration-receipt-detail > td {
+  background: var(--surface);
+}
+
+.integration-receipt-payload {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.integration-receipt-payload .unattributed-sale-payload {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+}
+
+.integration-receipt-payload .payload-block {
+  max-height: 420px;
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .integration-receipt-payload .unattributed-sale-payload {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .integration-receipts-table {
+    overflow: visible;
+  }
+
+  .integration-receipts-table :is(table, tbody, tr, td) {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .integration-receipts-table thead {
+    display: none;
+  }
+
+  .integration-receipts-table tr {
+    padding: 12px 12px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .integration-receipts-table tr.open {
+    border-bottom: 0;
+  }
+
+  .integration-receipts-table td {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 2px 10px;
+    padding: 4px 0;
+    border: 0;
+  }
+
+  .integration-receipts-table td::before {
+    content: attr(data-label);
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  .integration-receipts-table td > * {
+    grid-column: 2;
+  }
+
+  .integration-receipts-table td[data-label="Ações"],
+  .integration-receipts-table td[data-label="Dados recebidos"] {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 8px;
+  }
+
+  .integration-receipts-table td[data-label="Ações"]::before,
+  .integration-receipts-table td[data-label="Dados recebidos"]::before {
+    display: none;
+  }
+
+  .integration-receipts-table td[data-label="Ações"] > *,
+  .integration-receipts-table td[data-label="Dados recebidos"] > * {
+    grid-column: 1;
+  }
+
+  .integration-receipt-actions,
+  .integration-receipt-actions .button {
+    width: 100%;
+  }
+
+  .integration-receipt-detail > td {
+    padding: 10px;
+    border-radius: 10px;
+  }
+}

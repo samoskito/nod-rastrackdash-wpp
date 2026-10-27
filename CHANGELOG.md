@@ -7,10 +7,40 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit. Fase 6.4 (Meta Graph robustness): **two more additive migrations, `20261027130000_meta_creative_thumbnail` then `20261027130100_meta_reporting_sync_block` (they run by themselves at API boot): back up PostgreSQL before the redeploy**; only optional API variables, all with safe defaults (`WPPTRACK_META_USAGE_PAUSE_PERCENT`, `WPPTRACK_META_SYNC_DEDUPE_WINDOW_MINUTES`, `WPPTRACK_META_SYNC_MAX_DEFERRALS`, `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS` — on by default with 3 days, `0` turns it off —, `META_INSIGHTS_LEVEL_MODE` default `legacy`, `META_INSIGHTS_PAGE_LIMIT` default 500, `META_INSIGHTS_ASYNC_*` and `META_CAPI_BATCH_*` off by default, `WPPTRACK_CONVERSION_WORKER_CONCURRENCY` default 1); `META_VIDEO_THUMBNAILS_ENABLED` is unchanged; redeploy API, shared and web from the same commit.
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two migrations (Fase 6.1a, additive; Fase 6.1c, data-only promotion): back up PostgreSQL before the redeploy.** One new optional API variable (Fase 6.1b): `META_CAPI_SEND_FIRST_NAME`, off by default. New default (Fase 6.1c): `INBOUND_CONVERSION_PRODUCTION_ENABLED` unset follows `INBOUND_CONVERSION_RULES_ENABLED`. New API variable (Fase 6.2a, no migration): `LEAD_SUBMITTED_RULE_OVERRIDE_ENABLED`, **on by default** (unset = on; explicit `false`/`0`/`off`/`no` restores the entry send); students only act if they want it off. Fase 6.3a (reports, read-only): no migration, no new variable, nothing to do. Fase 6.2b (CRM Kanban): no migration and no new variable; the build installs new dependencies (`@dnd-kit/core`, `@dnd-kit/utilities`; `@electric-sql/pglite` only in API tests) pinned in `pnpm-lock.yaml`, so redeploy API, shared and web from the same commit. Fase 6.3b (filters of Visão Geral, Relatórios, Leads, Eventos Meta and Revisão de compras that apply by themselves; WhatsApp number and several-campaign filters; activity of each Uazapi/WAHA connection): no migration and no new variable (the existing optional WEB variable `WPPTRACK_WEB_PROVIDER_STATUS_TIMEOUT_MS`, default 2000 ms, now also limits each activity read); nothing to do beyond the redeploy of API, shared and web from the same commit. Fase 6.4 (Meta Graph robustness): **two more additive migrations, `20261027130000_meta_creative_thumbnail` then `20261027130100_meta_reporting_sync_block` (they run by themselves at API boot): back up PostgreSQL before the redeploy**; only optional API variables, all with safe defaults (`WPPTRACK_META_USAGE_PAUSE_PERCENT`, `WPPTRACK_META_SYNC_DEDUPE_WINDOW_MINUTES`, `WPPTRACK_META_SYNC_MAX_DEFERRALS`, `WPPTRACK_META_AUTO_SYNC_INCREMENTAL_DAYS` — on by default with 3 days, `0` turns it off —, `META_INSIGHTS_LEVEL_MODE` default `legacy`, `META_INSIGHTS_PAGE_LIMIT` default 500, `META_INSIGHTS_ASYNC_*` and `META_CAPI_BATCH_*` off by default, `WPPTRACK_CONVERSION_WORKER_CONCURRENCY` default 1); `META_VIDEO_THUMBNAILS_ENABLED` is unchanged; redeploy API, shared and web from the same commit. Fase 6.5 (Braip on the single URL): **two more migrations, `20261027140000_braip_provider` (enum values only) then `20261027140100_braip_parser_release` (inserts the Braip reader already certified: production direct); they run by themselves at API boot: back up PostgreSQL before the redeploy**; no new variable; redeploy API, shared and web from the same commit; nothing to release or certify (guide: [`docs/setup/braip.md`](docs/setup/braip.md)).
 
 ### Added
 
+- **Fase 6.5 — Sales platforms on the single URL: Braip, received data and
+  receipts audit (API, shared and web; two migrations; no new variable)**.
+  Ported from the SaaS (`09d7303a`, `f83522af`, `072bb61a`, `25a7cd76`,
+  `b3124d65`, `8af225f4` #168, `ec996549` #164, `92edd263` #169 read part,
+  `60588489` #170, `4ba8961d` #184, `be599f49` #158 purchase hunk for Braip,
+  `7570fe14` Kommo part; `b4d71afc` and `1af5411c` #166 only as a read-only
+  diagnostic). A shared sales-platform base (`sales-platform-sale.ts`:
+  Payt + Braip, same purchase identity, product filter, routing, resend
+  reconciliation, production gates and claims); the Braip reader
+  (`braip/automation-v1`: JSON or form body normalized to canonical JSON,
+  the account key dropped at any depth, order bump routed by the main item,
+  dates read in Brasília time by the fase 6.0 reader and capped at the
+  arrival) enters **certified** by migration, validated in the SaaS against
+  the official Braip postback (#168), so the Braip URL and rules are born in
+  production and the student never releases anything. Braip card always in
+  the hub (Atendimento e vendas), "Venda na Braip" rules in Conversões
+  (event from each status, optional product filter, single URL only),
+  Braip unattributed sales, Braip in the manual purchase dedupe (order =
+  `trans_key`). "Ver dados recebidos" of a stored sale (masked: account
+  keys, credentials and tokens inside URLs; audited) for integration
+  managers. Backoffice → Webhooks WhatsApp → **Recebimentos das URLs únicas**
+  (every receipt of every workspace, filters, cursor, masked payload; refused
+  calls of a known URL kept as `rejected`, metadata only without a valid
+  token and for any refused Braip body, same 60-day retention) and **Leitores de webhook** (read only).
+  The URL box counters stay real after "Mostrar URL"/"Gerar URL"/"Gerar
+  nova" (#164); a failed `/channels` read never hides the sales platforms in
+  "Nova regra" (#164); "Tentar de novo" only for unattributed/pending
+  receipts. Kommo actions also refresh `/integrations`. The SaaS
+  certification actions ("Liberar plataforma", certify-parser routes) and
+  the private-integration/billing gates are not part of the student edition.
 - **Fase 6.4 — Robustness of the Meta Graph calls (API, shared and web;
   two additive migrations; optional variables only)**. Ported from the
   SaaS (`918a0837`, `0403cbce`, `f1ec6a9e`, `6a3f2c79`, `c0cec66c`,

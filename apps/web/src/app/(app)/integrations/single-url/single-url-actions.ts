@@ -4,10 +4,12 @@ import {
   integrationEndpointCreateInputSchema,
   integrationEndpointResultSchema,
   integrationEndpointRoutingResultSchema,
+  integrationEventPayloadSchema,
   providerConversionRuleSchema,
   providerConversionRuleUpdateInputSchema,
   type IntegrationEndpointDto,
   type IntegrationEndpointRoutingResultDto,
+  type IntegrationEventPayloadDto,
 } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
 import { licenseLockedMessageFor } from "../../../../lib/license-locked-message";
@@ -34,6 +36,8 @@ export type SingleUrlActionResult = {
   routing?: IntegrationEndpointRoutingResultDto;
   /** "Desativar/Reativar URL antiga": o estado da URL antiga depois da ação. */
   publicUrlDisabledAt?: string | null;
+  /** Fase 6.5: "Ver dados recebidos" de uma venda (só leitura). */
+  eventPayload?: IntegrationEventPayloadDto;
 };
 
 function refresh() {
@@ -194,6 +198,44 @@ export async function retryIntegrationEventAction(
     };
   } catch (error) {
     return failure(error, singleUrlUnavailableMessage);
+  }
+}
+
+/**
+ * Fase 6.5 (porte do SaaS #169, só a leitura): "Ver dados recebidos" de uma
+ * venda sem atribuição. Payload guardado (chaves de conta e segredos
+ * ocultos) e o que o leitor leu. A API registra quem viu. É leitura: continua
+ * funcionando com a licença bloqueada.
+ */
+export async function loadIntegrationEventPayloadAction(
+  formData: FormData,
+): Promise<SingleUrlActionResult> {
+  const eventId = safeId(text(formData, "eventId"));
+  if (!eventId) return { ok: false, message: singleUrlUnavailableMessage };
+  try {
+    const response = await serverApiFetch<unknown>(
+      `/integrations/endpoints/events/${encodeURIComponent(eventId)}/payload`,
+    );
+    const parsed = integrationEventPayloadSchema.safeParse(response);
+    if (!parsed.success || parsed.data.eventId !== eventId) {
+      return { ok: false, message: "Não deu para abrir os dados desta venda." };
+    }
+    return {
+      ok: true,
+      eventPayload: parsed.data,
+      message: parsed.data.payloadAvailable
+        ? "Dados recebidos abertos."
+        : (parsed.data.payloadMessage ?? "Os dados recebidos já foram apagados."),
+    };
+  } catch (error) {
+    const status = isApiRequestError(error) ? error.status : null;
+    if (status === 403) {
+      return {
+        ok: false,
+        message: "Você não tem permissão para ver os dados recebidos.",
+      };
+    }
+    return failure(error, "Não deu para abrir os dados desta venda.");
   }
 }
 

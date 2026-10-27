@@ -176,7 +176,7 @@ type RuleInput = {
   active?: boolean;
   unifiedIntoRuleId?: string | null;
   phrases?: string[];
-  automationSource?: "payt" | null;
+  automationSource?: "payt" | "braip" | null;
   lastExecution?: ProviderConversionRuleDto["lastExecution"];
 };
 

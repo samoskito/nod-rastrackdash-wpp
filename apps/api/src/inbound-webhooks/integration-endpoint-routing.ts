@@ -19,9 +19,9 @@ import {
   type ScopedProviderRule,
 } from "../conversion-rules/provider-rule-scope";
 import {
-  paytProductFilterMatches,
-  type ParsedPaytAutomationV1,
-} from "./providers/payt/payt-automation-v1.parser";
+  saleProductFilterMatches as paytProductFilterMatches,
+  type ParsedSaleAutomationV1,
+} from "./providers/sales-platform-sale";
 import type { ParsedUmblerAutomationV1 } from "./providers/umbler/umbler-automation-v1.parser";
 import type { ParsedUnnichatAutomationV1 } from "./providers/unnichat/unnichat-automation-v1.parser";
 
@@ -39,7 +39,11 @@ import type { ParsedUnnichatAutomationV1 } from "./providers/unnichat/unnichat-a
  * números; empate: a com filtro de produto, depois a mais antiga).
  */
 
-export type IntegrationRoutingProvider = "payt" | "unnichat" | "umbler";
+export type IntegrationRoutingProvider =
+  | "payt"
+  | "braip"
+  | "unnichat"
+  | "umbler";
 
 const routingRuleSelect = {
   id: true,
@@ -355,19 +359,22 @@ function finishRoute(
   };
 }
 
-/** Payt (URL única): the event comes from the postback. */
-export async function routePaytSale(
+/**
+ * Plataforma de venda (Payt, Braip — URL única): the event comes from the
+ * postback; only rules of the same platform are candidates.
+ */
+export async function routeSalePlatformSale(
   client: RoutingClient,
   paidLeads: PaidLeadResolverLike,
   input: {
     workspaceId: string;
-    sale: ParsedPaytAutomationV1;
+    sale: ParsedSaleAutomationV1;
     receivedAt: Date;
   },
 ): Promise<IntegrationRouteDecision> {
   const rules = await loadRoutingRules(client, {
     workspaceId: input.workspaceId,
-    provider: "payt",
+    provider: input.sale.provider,
     eventName: input.sale.eventName,
   });
   if (rules.length === 0) return unattributed("no_active_rule_for_event");
@@ -399,6 +406,9 @@ export async function routePaytSale(
     return routeMultiOrigin(productRules, channels, origins, productCodes);
   return finishRoute(productRules, channels, origins[0]!, productCodes);
 }
+
+/** Historical name (Payt was the first sales platform). */
+export const routePaytSale = routeSalePlatformSale;
 
 /**
  * Unnichat (URL por evento): the conversation's ctwa_clid points to the exact

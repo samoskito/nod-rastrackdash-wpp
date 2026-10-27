@@ -1,3 +1,4 @@
+import { isSalesPlatformProvider } from "../inbound-webhooks/providers/sales-platform-sale";
 import { Injectable } from "@nestjs/common";
 import { normalizeCurrencyCode } from "@wpptrack/shared";
 import type {
@@ -119,9 +120,9 @@ export class ProviderConversionLegacyDecisionEngine {
         "automation_matched",
       );
     }
-    // A Payt sale carries its own value; the rule average is only a fallback.
+    // A sale (Payt, Braip) carries its own value; the rule average is only a fallback.
     if (
-      input.occurrence.provider === "payt" &&
+      isSalesPlatformProvider(input.occurrence.provider) &&
       input.occurrence.observedValueCents
     ) {
       return this.eligible(
@@ -227,7 +228,8 @@ export class ProviderConversionLegacyDecisionEngine {
         ? { purchaseKey: input.occurrence.purchaseKey }
         : {}),
       businessDedupePolicy:
-        input.occurrence.provider === "payt" && input.occurrence.purchaseKey
+        isSalesPlatformProvider(input.occurrence.provider) &&
+        input.occurrence.purchaseKey
           ? { mode: "lifetime", scopeKey: input.occurrence.purchaseKey }
           : input.rule.eventName === "QualifiedLead"
             ? {

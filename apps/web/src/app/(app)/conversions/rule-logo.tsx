@@ -16,6 +16,7 @@ const originIcons: Record<RuleOriginId, LucideIcon> = {
   automation_umbler: Webhook,
   automation_unnichat: Webhook,
   automation_payt: CreditCard,
+  automation_braip: CreditCard,
   kommo: KanbanSquare,
   pipedrive: KanbanSquare,
 };

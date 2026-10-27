@@ -8,17 +8,21 @@ import type {
 import {
   formatMoney,
   integrationEndpointSupportedEvents,
+  isSalesPlatformProvider,
+  type SalesPlatformProviderDto,
 } from "@wpptrack/shared";
 import {
+  braipEventExplanations,
+  braipEventLabels,
   paytEventExplanations,
   paytEventLabels,
   ruleEventLabel,
 } from "../../conversions/event-copy";
 
 /**
- * Textos e decisões puras da Fase 5.3 (URL única da Payt e URLs por evento do
- * Unnichat e da Umbler). Sem React: testados direto. Linguagem do aluno, sem
- * jargão técnico.
+ * Textos e decisões puras da Fase 5.3 (URL única da Payt — e da Braip desde a
+ * 6.5 — e URLs por evento do Unnichat e da Umbler). Sem React: testados
+ * direto. Linguagem do aluno, sem jargão técnico.
  */
 
 export const singleUrlPlatformNames: Record<
@@ -26,6 +30,7 @@ export const singleUrlPlatformNames: Record<
   string
 > = {
   payt: "Payt",
+  braip: "Braip",
   unnichat: "Unnichat",
   umbler: "Umbler Talk",
 };
@@ -36,6 +41,7 @@ export const singleUrlPlatformLocatives: Record<
   string
 > = {
   payt: "na Payt",
+  braip: "na Braip",
   unnichat: "no Unnichat",
   umbler: "na Umbler Talk",
 };
@@ -46,6 +52,7 @@ export const singleUrlPlatformSubjects: Record<
   string
 > = {
   payt: "a Payt",
+  braip: "a Braip",
   unnichat: "o Unnichat",
   umbler: "a Umbler Talk",
 };
@@ -74,11 +81,11 @@ export const singleUrlRevealNote =
 
 export function isSalesPlatform(
   provider: IntegrationEndpointProviderDto,
-): boolean {
-  return provider === "payt";
+): provider is SalesPlatformProviderDto {
+  return isSalesPlatformProvider(provider);
 }
 
-/** Rótulo de um evento (Payt tem rótulos próprios de venda). */
+/** Rótulo de um evento (Payt e Braip têm rótulos próprios de venda). */
 export function eventLabel(
   eventName: string | null,
   provider: IntegrationEndpointProviderDto | null = null,
@@ -87,10 +94,25 @@ export function eventLabel(
   if (provider === "payt" && paytEventLabels[eventName]) {
     return paytEventLabels[eventName];
   }
+  if (provider === "braip" && braipEventLabels[eventName]) {
+    return braipEventLabels[eventName];
+  }
   return ruleEventLabel(eventName);
 }
 
 export { paytEventExplanations };
+
+/** Explicação de um evento de venda (Payt, Braip). */
+export function saleEventExplanation(
+  provider: SalesPlatformProviderDto,
+  eventName: string,
+): string {
+  return (
+    (provider === "braip" ? braipEventExplanations : paytEventExplanations)[
+      eventName
+    ] ?? ""
+  );
+}
 
 export function supportedEvents(
   provider: IntegrationEndpointProviderDto,
@@ -106,12 +128,39 @@ export const paytProductCodeGuidance =
 export const unseenProductCodeWarning =
   "Código ainda não visto em nenhuma venda. Confira se está igual ao da Payt.";
 
+export const braipProductCodeGuidance =
+  "Na Braip, use o código do produto (product_key) ou do plano (plan_key). O mais seguro é marcar na lista de produtos detectados depois da primeira venda.";
+
+/** Onde achar o código do produto em cada plataforma de venda. */
+export function productCodeGuidance(
+  provider: SalesPlatformProviderDto = "payt",
+): string {
+  return provider === "braip"
+    ? braipProductCodeGuidance
+    : paytProductCodeGuidance;
+}
+
+export function unseenProductCodeWarningFor(
+  provider: SalesPlatformProviderDto = "payt",
+): string {
+  return provider === "braip"
+    ? "Código ainda não visto em nenhuma venda. Confira se está igual ao da Braip."
+    : unseenProductCodeWarning;
+}
+
 /** Passo a passo para colar a URL na plataforma. */
 export function singleUrlSetupSteps(
   provider: IntegrationEndpointProviderDto,
   eventName: string | null = null,
 ): string[] {
   switch (provider) {
+    case "braip":
+      return [
+        "Na Braip, abra Ferramentas → Postback → Nova configuração.",
+        "Cole esta URL única no endereço do postback, escolha todos os produtos e o método POST.",
+        "Em Eventos, marque Pagamento Aprovado e Aguardando Pagamento (e o abandono de checkout, se aparecer).",
+        "Cada venda vai para a regra do número por onde o comprador chegou. Sem regra, ela aparece em “Vendas sem atribuição”.",
+      ];
     case "payt":
       return [
         "Na Payt, abra Postback (webhook de vendas).",

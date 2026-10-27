@@ -1,0 +1,17 @@
+{
+  "basic_authentication": "SYNTHETIC-KEY-NOT-REAL",
+  "type": "STATUS_ALTERADO",
+  "trans_key": "VEN000SYNTH1",
+  "trans_status": "Aguardando Pagamento",
+  "trans_status_code": 1,
+  "trans_total_value": "197,00",
+  "trans_createdate": "2026-10-14 08:59:00",
+  "trans_updatedate": "2026-10-14 08:59:00",
+  "product_key": "pro0synth1",
+  "product_name": "Mentoria Sintetica",
+  "plan_key": "pla0synth1",
+  "plan_name": "Oferta principal",
+  "client_name": "Comprador Sintetico",
+  "client_email": "comprador@example.test",
+  "client_cel": "11991231020"
+}

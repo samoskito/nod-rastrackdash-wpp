@@ -163,6 +163,7 @@ export function providerRuleOrigin(
         rule.parserRelease?.provider ?? rule.connection?.provider ?? null;
       if (provider === null || provider === "uazapi") return "whatsapp_label";
       if (provider === "payt") return "automation_payt";
+      if (provider === "braip") return "automation_braip";
       if (provider === "umbler") return "automation_umbler";
       if (provider === "unnichat") return "automation_unnichat";
       return null;
@@ -188,6 +189,7 @@ export function providerRuleOriginChannelProviders(
     case "automation_unnichat":
       return ["unnichat"];
     case "automation_payt":
+    case "automation_braip":
       return WHATSAPP_CHANNEL_PROVIDERS;
   }
 }
@@ -272,8 +274,9 @@ export function providerRuleGateConnectionId(
 }
 
 /**
- * Sales-platform postback rules. In the student edition: Payt (Braip comes
- * with Fase 6.5; Brink Park is not part of the student edition).
+ * Sales-platform postback rules. In the student edition: Payt and Braip
+ * (Fase 6.5). Hotmart/Yampi join when ported; Brink Park is not part of the
+ * student edition.
  */
 export function providerRuleIsSalesPlatform(
   rule: Pick<
@@ -281,7 +284,8 @@ export function providerRuleIsSalesPlatform(
     "conversionRule" | "parserRelease" | "connection"
   >,
 ): boolean {
-  return providerRuleOrigin(rule) === "automation_payt";
+  const origin = providerRuleOrigin(rule);
+  return origin === "automation_payt" || origin === "automation_braip";
 }
 
 /**
@@ -325,7 +329,8 @@ export function providerRuleOriginRequiresConnection(
   return (
     origin === "automation_umbler" ||
     origin === "automation_unnichat" ||
-    origin === "automation_payt"
+    origin === "automation_payt" ||
+    origin === "automation_braip"
   );
 }
 
@@ -399,6 +404,22 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       connectionBound: false,
       requiresConnection: providerRuleOriginRequiresConnection(
         "automation_payt",
+      ),
+      labelMatch: null,
+      unifiable: false,
+      eventNames: PAYT_RULE_EVENT_NAMES,
+      betaEventNames: PAYT_RULE_BETA_EVENT_NAMES,
+    },
+    {
+      // Fase 6.5: Braip, same base as Payt (event from each postback status,
+      // only through the workspace single URL; any WhatsApp number).
+      origin: "automation_braip",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: [...WHATSAPP_CHANNEL_PROVIDERS],
+      authorChannelProviders: null,
+      connectionBound: false,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_braip",
       ),
       labelMatch: null,
       unifiable: false,

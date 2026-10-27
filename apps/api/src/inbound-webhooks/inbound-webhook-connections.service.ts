@@ -113,13 +113,17 @@ export class InboundWebhookConnectionsService {
       productionEnabled: config.enabled && config.productionEnabled,
       // UAZAPI/NOD is bridged automatically from the WhatsApp instance and
       // never goes through the generic manual creation flow. Payt is a sales
-      // platform with no WhatsApp number: its rules live in Conversoes.
+      // platform with no WhatsApp number: its rules live in Conversoes; so is
+      // Braip (6.5), reached only by the workspace integration URL (hub).
       // WAHA is a WhatsApp connection (Integrações → WhatsApp) whose own
       // receiver uses the waha parser release; it has no generic connection.
       providers: inboundWebhookProviders
         .filter(
           (provider) =>
-            provider !== "uazapi" && provider !== "payt" && provider !== "waha",
+            provider !== "uazapi" &&
+            provider !== "payt" &&
+            provider !== "braip" &&
+            provider !== "waha",
         )
         .map((provider) => {
           const release = releaseByProvider.get(provider);
@@ -314,11 +318,11 @@ export class InboundWebhookConnectionsService {
         "Conexões UAZAPI são criadas automaticamente a partir da instância WhatsApp",
       );
     }
-    if (input.provider === "payt") {
-      // Payt has no WhatsApp number: a Payt rule is created in Conversões
-      // and bound to the connection of its WhatsApp numbers.
+    if (input.provider === "payt" || input.provider === "braip") {
+      // A sales platform (Payt, Braip) has no WhatsApp number: its rule is
+      // created in Conversões and bound to the connection of its numbers.
       throw new ConflictException(
-        "A Payt não usa conexão própria: crie a regra de venda em Conversões",
+        `A ${input.provider === "braip" ? "Braip" : "Payt"} não usa conexão própria: crie a regra de venda em Conversões`,
       );
     }
     if (input.provider === "waha") {

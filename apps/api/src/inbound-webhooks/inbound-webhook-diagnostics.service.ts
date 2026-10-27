@@ -19,7 +19,8 @@ type DiagnosticSource =
   | "zapi"
   | "data_crazy"
   | "payt"
-  | "unnichat";
+  | "unnichat"
+  | "braip";
 
 function diagnosticSourceForProvider(
   provider: InboundWebhookProviderDto,

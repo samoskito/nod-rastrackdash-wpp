@@ -351,7 +351,10 @@ export class InboundWebhookMaintenanceService
    */
   private async deleteOldIntegrationReceipts(now: Date): Promise<number> {
     const where = {
-      status: { in: ["pending", "unattributed", "ignored", "invalid"] },
+      // 6.5 (SaaS #170): refused calls ("rejected") follow the same retention.
+      status: {
+        in: ["pending", "unattributed", "ignored", "invalid", "rejected"],
+      },
       lastReceivedAt: {
         lt: new Date(now.getTime() - INTEGRATION_RECEIPT_RETENTION_DAYS * DAY_MS),
       },

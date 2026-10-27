@@ -12,7 +12,9 @@ A Fase 5.3 traz um endereço do **workspace**:
 | Unnichat | **Uma URL por evento** (ex.: Lead qualificado, Compra), válida para todos os números | Da URL |
 | Umbler | **Uma URL por evento** (Lead qualificado ou Compra), válida para todos os números | Da URL |
 
-Braip e Guimoo não entram nesta fase.
+A **Braip** entrou na Fase 6.5 com a mesma base da Payt (uma URL única; o evento vem do status de
+cada postback; filtro de produto pelo produto principal): veja [`braip.md`](braip.md). Guimoo não
+faz parte da edição do aluno.
 
 ## Como o destino é escolhido
 

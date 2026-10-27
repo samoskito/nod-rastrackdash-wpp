@@ -1,3 +1,4 @@
+import { isSalesPlatformProvider } from "../inbound-webhooks/providers/sales-platform-sale";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { ProviderConversionObservationDetailDto } from "@wpptrack/shared";
@@ -122,7 +123,7 @@ export class ProviderConversionOrchestrator {
 
     const purchaseKey = persistedDecision.decision.occurrence.purchaseKey;
     if (
-      persistedDecision.decision.occurrence.provider === "payt" &&
+      isSalesPlatformProvider(persistedDecision.decision.occurrence.provider) &&
       purchaseKey &&
       input.disposition.state === "observed"
     ) {

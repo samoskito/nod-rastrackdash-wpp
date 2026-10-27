@@ -71,14 +71,47 @@ export function paytEventLabel(eventName: string): string {
   return paytEventLabels[eventName] ?? ruleEventLabel(eventName);
 }
 
-/** Rótulo do evento de uma regra, conforme a origem (Payt tem rótulos próprios). */
+/**
+ * Fase 6.5: eventos de venda da Braip (mesma base da Payt). O evento vem do
+ * status de cada postback da Braip.
+ */
+export const braipEventLabels: Readonly<Record<string, string>> = {
+  Purchase: "Compra aprovada",
+  InitiateCheckout: "Boleto/Pix gerado",
+  CartAbandoned: "Checkout abandonado",
+};
+
+export const braipEventExplanations: Readonly<Record<string, string>> = {
+  Purchase: "Status “Pagamento Aprovado”.",
+  InitiateCheckout:
+    "Status “Aguardando Pagamento” (boleto ou Pix gerado). Cartão aprovado na hora vai direto para compra aprovada.",
+  CartAbandoned:
+    "Checkout abandonado (beta): só é enviado se a Braip mandar o aviso de abandono com a transação.",
+};
+
+export function braipEventLabel(eventName: string): string {
+  return braipEventLabels[eventName] ?? ruleEventLabel(eventName);
+}
+
+/** Rótulos de venda de uma origem de plataforma de venda (Payt, Braip). */
+export function saleEventLabelsForOrigin(
+  origin: string,
+): Readonly<Record<string, string>> | null {
+  if (origin === "automation_payt") return paytEventLabels;
+  if (origin === "automation_braip") return braipEventLabels;
+  return null;
+}
+
+/** Rótulo do evento de uma regra, conforme a origem (Payt/Braip têm rótulos próprios). */
 export function ruleEventLabelForOrigin(
   origin: string,
   eventName: string,
 ): string {
   return origin === "automation_payt"
     ? paytEventLabel(eventName)
-    : ruleEventLabel(eventName);
+    : origin === "automation_braip"
+      ? braipEventLabel(eventName)
+      : ruleEventLabel(eventName);
 }
 
 /**

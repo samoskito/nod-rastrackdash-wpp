@@ -37,6 +37,9 @@ import { UazapiConversionBridgeService } from "./uazapi-conversion-bridge.servic
 import { UazapiProviderConversionService } from "./uazapi-provider-conversion.service";
 import { MetaTokenEncryptionService } from "../integrations/meta/meta-token-encryption.service";
 import { INTEGRATION_ENV } from "../integrations/integration.types";
+import { BackofficeIntegrationEventsController } from "./backoffice-integration-events.controller";
+import { BackofficeParserReleasesController } from "./backoffice-parser-releases.controller";
+import { BackofficeIntegrationEventsService } from "./backoffice-integration-events.service";
 import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/whatsapp-providers.module";
 
 @Module({
@@ -55,6 +58,8 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
     }),
   ],
   controllers: [
+    BackofficeIntegrationEventsController,
+    BackofficeParserReleasesController,
     InboundWebhookConnectionsController,
     InboundWebhookPublicController,
     IntegrationEndpointsController,
@@ -62,6 +67,7 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
     ProviderRuleBlockedReprocessController,
   ],
   providers: [
+    BackofficeIntegrationEventsService,
     InboundConversionAutomationIngestionService,
     InboundWebhookChannelRoutesService,
     InboundWebhookConnectionsService,

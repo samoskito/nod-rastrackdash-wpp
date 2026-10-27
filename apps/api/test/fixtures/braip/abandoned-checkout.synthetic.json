@@ -1,0 +1,13 @@
+{
+  "basic_authentication": "SYNTHETIC-KEY-NOT-REAL",
+  "type": "ABANDONO_CHECKOUT",
+  "trans_status": "Abandono de Checkout",
+  "cart_key": "CHK000SYNTH9",
+  "trans_createdate": "2026-10-14 08:30:00",
+  "product_key": "pro0synth1",
+  "product_name": "Mentoria Sintetica",
+  "plan_key": "pla0synth1",
+  "plan_name": "Oferta principal",
+  "client_name": "Comprador Sintetico",
+  "client_cel": "+55 11 99123-1020"
+}

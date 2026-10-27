@@ -32,7 +32,7 @@ function env(production = false) {
   };
 }
 
-export type Provider = "payt" | "unnichat" | "umbler";
+export type Provider = "payt" | "braip" | "unnichat" | "umbler";
 export type Channel = {
   id: string;
   connectionId: string;
@@ -350,7 +350,28 @@ export function world(options: {
               statusMatches(where, r.status),
           ).length,
       ),
-      groupBy: vi.fn(async () => []),
+      // Receipts by endpoint + status (counters of the URL box; SaaS #164).
+      groupBy: vi.fn(async ({ where }: any) => {
+        const ids: string[] | null =
+          where.integrationEndpointId?.in ??
+          (typeof where.integrationEndpointId === "string"
+            ? [where.integrationEndpointId]
+            : null);
+        const groups = new Map<string, any>();
+        for (const r of receipts.values()) {
+          if (r.workspaceId !== where.workspaceId) continue;
+          if (ids && !ids.includes(r.integrationEndpointId)) continue;
+          const key = `${r.integrationEndpointId}:${r.status}`;
+          const group = groups.get(key) ?? {
+            integrationEndpointId: r.integrationEndpointId,
+            status: r.status,
+            _count: { _all: 0 },
+          };
+          group._count._all += 1;
+          groups.set(key, group);
+        }
+        return [...groups.values()];
+      }),
     },
     providerConversionRuleConfig: {
       findMany: vi.fn(async ({ where }: any) => {
@@ -624,6 +645,22 @@ export function world(options: {
     });
   }
 
+  /** Raw body with any Content-Type (Braip form postback; refused bodies). */
+  function postRaw(
+    endpointId: string,
+    token: string,
+    contentType: string,
+    body: string,
+  ) {
+    return service.ingest({
+      endpointId,
+      token,
+      contentType,
+      providerAttempt: undefined,
+      rawBody: Buffer.from(body),
+    });
+  }
+
   function postOldUrl(ruleId: string, body: unknown) {
     return ingestion.ingest({
       endpointId: `endpoint_${ruleId}`,
@@ -640,6 +677,7 @@ export function world(options: {
     prisma,
     connect,
     post,
+    postRaw,
     postOldUrl,
     addRule,
     rules,

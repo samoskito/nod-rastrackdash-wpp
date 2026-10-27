@@ -132,6 +132,28 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     betaEvents: ["CartAbandoned"],
   },
   {
+    // Fase 6.5: mesma base da Payt (só pela URL única da Braip).
+    id: "automation_braip",
+    kind: "provider",
+    label: "Venda na Braip",
+    description:
+      "Quando a Braip avisa uma compra aprovada, um boleto/Pix gerado ou um checkout abandonado de alguém que chegou pelo WhatsApp.",
+    logoProvider: "braip",
+    fallbackChannelProviders: [
+      "umbler",
+      "gupshup",
+      "uazapi",
+      "meta_cloud",
+      "data_crazy",
+      "unnichat",
+      "waha",
+    ],
+    connection: "any",
+    // O evento vem do status de cada venda; o valor vem da própria venda.
+    allowedEvents: ["Purchase", "InitiateCheckout", "CartAbandoned"],
+    betaEvents: ["CartAbandoned"],
+  },
+  {
     id: "kommo",
     kind: "crm",
     label: "Etapa no Kommo",

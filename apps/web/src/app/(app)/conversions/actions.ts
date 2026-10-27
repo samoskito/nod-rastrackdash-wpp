@@ -193,6 +193,8 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "O teste de pedido só existe para regras de catálogo.",
   "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado":
     "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado.",
+  "A Braip envia compra aprovada, Pix/boleto gerado ou carrinho abandonado":
+    "A Braip envia compra aprovada, boleto/Pix gerado ou checkout abandonado.",
   "Escolha a conexao de WhatsApp dos numeros desta regra":
     "Escolha números de uma conexão de WhatsApp para esta regra.",
   "Configure a Meta deste número (página e pixel do workspace ou rotas próprias) antes de ativar o canal":

@@ -14,8 +14,10 @@ import { Prisma } from "@prisma/client";
 import {
   conversionEventCarriesValue,
   conversionEventNameSchema,
+  isSalesPlatformProvider,
   messagePhraseConfigKind,
-  paytSaleEventNames,
+  salesPlatformEventNames,
+  salesPlatformLabels,
   providerConversionRuleIdempotentCreateInputSchema,
   providerConversionTechnicalDeliveryStateSchema,
   providerRuleCreateRequestKeySchema,
@@ -292,6 +294,10 @@ type GlobalNumberActivation = {
   reason: ProviderConversionRulePendingNumberReasonDto | null;
   errorCode?: string;
 };
+
+/** Fase 6.5: a Braip rule has no per-rule URL to reopen or rotate. */
+const braipSingleUrlOnlyMessage =
+  "A Braip recebe só pela URL única da conta: gere, mostre ou gire a URL em Integrações → Braip";
 
 @Injectable()
 export class ProviderConversionRulesService {
@@ -724,22 +730,26 @@ export class ProviderConversionRulesService {
             }
           }
 
-          // Fase 4a: a Payt rule sits on a WhatsApp connection (the one of its
-          // numbers) only as the anchor of its signed URL; the parser release
-          // stored with the rule identifies the Payt contract.
-          const isPaytAutomation =
+          // Fase 4a: a sales-platform rule (Payt; Braip since 6.5) sits on a
+          // WhatsApp connection (the one of its numbers) only as the anchor
+          // of its signed URL; the parser release stored with the rule
+          // identifies the platform contract.
+          const salesPlatform =
             input.triggerType === "provider_automation" &&
-            input.automationSource === "payt";
+            isSalesPlatformProvider(input.automationSource)
+              ? input.automationSource
+              : null;
+          const isPaytAutomation = salesPlatform !== null;
           if (
-            isPaytAutomation &&
-            !(paytSaleEventNames as readonly string[]).includes(
+            salesPlatform &&
+            !(salesPlatformEventNames as readonly string[]).includes(
               input.eventName,
             )
           ) {
             // The HTTP schema enforces this too. Keep the invariant at the
             // service boundary for internal callers and future entry points.
             throw new BadRequestException(
-              "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado",
+              `A ${salesPlatformLabels[salesPlatform]} envia compra aprovada, Pix/boleto gerado ou carrinho abandonado`,
             );
           }
 
@@ -752,9 +762,11 @@ export class ProviderConversionRulesService {
               "Filtro de produto só existe para plataformas de venda",
             );
           }
+          // Fase 6.5: the Braip receives only through its workspace single
+          // URL: its per-rule URL is always born disabled (internal anchor).
           perRuleUrlDisabled =
             input.triggerType === "provider_automation" &&
-            input.perRuleUrl === false;
+            (input.perRuleUrl === false || salesPlatform === "braip");
 
           if (
             input.triggerType === "provider_automation" &&
@@ -766,8 +778,11 @@ export class ProviderConversionRulesService {
               "Automação por tag ainda só está disponível para este provedor",
             );
           }
-          if (isPaytAutomation && connection?.provider === "payt") {
-            // A Payt connection has no WhatsApp number to activate: the rule
+          if (
+            isPaytAutomation &&
+            isSalesPlatformProvider(connection?.provider)
+          ) {
+            // A sales platform has no WhatsApp number to activate: the rule
             // is bound to the connection of its numbers (as in the SaaS).
             throw new BadRequestException(
               "Escolha a conexão de WhatsApp dos números desta regra",
@@ -776,7 +791,7 @@ export class ProviderConversionRulesService {
 
           const scope: ProviderConversionRuleScopeDto =
             input.scope ?? "specific_numbers";
-          const origin = this.createOrigin(input, connection, isPaytAutomation);
+          const origin = this.createOrigin(input, connection, salesPlatform);
           // "Todos os numeros da <plataforma> (todas as conexoes)": explicit,
           // only for Umbler/Unnichat automations for all numbers.
           const crossConnectionScope =
@@ -810,13 +825,13 @@ export class ProviderConversionRulesService {
                   input.channelIds,
                 ))));
 
-          // Endpoint automations (signed URL of the rule): Umbler, Payt and,
-          // since Fase 4b, Unnichat.
+          // Endpoint automations (signed URL of the rule): Umbler, Payt (and
+          // Braip, 6.5) and, since Fase 4b, Unnichat.
           const endpointAutomationProvider =
             input.triggerType !== "provider_automation"
               ? null
-              : isPaytAutomation
-                ? "payt"
+              : salesPlatform
+                ? salesPlatform
                 : connection?.provider === "umbler" ||
                     connection?.provider === "unnichat"
                   ? connection.provider
@@ -830,7 +845,7 @@ export class ProviderConversionRulesService {
               transaction,
               workspaceId,
               connection.id,
-              isPaytAutomation ? "payt" : connection.provider,
+              salesPlatform ?? connection.provider,
               input.channelIds,
             );
           } else {
@@ -1490,9 +1505,8 @@ export class ProviderConversionRulesService {
             transaction,
             workspaceId,
             nextConnectionId,
-            this.isPaytAutomationRule(current)
-              ? "payt"
-              : (current.connection?.provider ?? ""),
+            this.salesPlatformOfRule(current) ??
+              (current.connection?.provider ?? ""),
             nextChannelIds,
           );
         } else {
@@ -1632,20 +1646,29 @@ export class ProviderConversionRulesService {
         if (!current.endpoint || current.endpoint.removedAt) {
           throw new NotFoundException(endpointNotFoundMessage);
         }
+        // Fase 6.5: the Braip receives only through the workspace single URL;
+        // its per-rule address (internal anchor) is never reopened.
+        if (
+          input.publicUrlDisabled === false &&
+          this.salesPlatformOfRule(current) === "braip"
+        ) {
+          throw new ConflictException(braipSingleUrlOnlyMessage);
+        }
         const isDisabled = current.endpoint.publicUrlDisabledAt != null;
         if (input.publicUrlDisabled && !isDisabled) {
           // Never close the only way in: the workspace URL of this platform
           // (and event, for Unnichat/Umbler) must exist first.
           const provider = current.parserRelease?.provider;
           const workspaceUrl =
-            provider && ["payt", "unnichat", "umbler"].includes(provider)
+            provider &&
+            ["payt", "braip", "unnichat", "umbler"].includes(provider)
               ? await transaction.integrationEndpoint.findFirst({
                   where: {
                     workspaceId,
                     provider,
                     removedAt: null,
                     eventName:
-                      provider === "payt"
+                      isSalesPlatformProvider(provider)
                         ? null
                         : current.conversionRule.eventName,
                   },
@@ -1842,6 +1865,11 @@ export class ProviderConversionRulesService {
         !rule.endpoint
       ) {
         throw new NotFoundException(endpointNotFoundMessage);
+      }
+      // Fase 6.5: no per-rule URL for the Braip (the single URL is rotated
+      // in Integrações).
+      if (this.salesPlatformOfRule(rule) === "braip") {
+        throw new ConflictException(braipSingleUrlOnlyMessage);
       }
 
       const rotatedAt = new Date();
@@ -2739,11 +2767,12 @@ export class ProviderConversionRulesService {
   private createOrigin(
     input: ProviderConversionRuleCreateInputDto,
     connection: { provider: string } | null,
-    isPaytAutomation: boolean,
+    salesPlatform: "payt" | "braip" | null,
   ): ProviderRuleOrigin {
     if (input.triggerType === "message_phrase") return "message_phrase";
     if (input.triggerType === "structured_catalog") return "structured_catalog";
-    if (isPaytAutomation) return "automation_payt";
+    if (salesPlatform === "braip") return "automation_braip";
+    if (salesPlatform === "payt") return "automation_payt";
     // Without a connection, a provider automation can only be a WhatsApp
     // label rule (the Umbler automation always names its connection).
     const origin = providerRuleOrigin({
@@ -2811,6 +2840,7 @@ export class ProviderConversionRulesService {
           rule.origin === "whatsapp_label" ||
           rule.origin === "automation_umbler" ||
           rule.origin === "automation_payt" ||
+          rule.origin === "automation_braip" ||
           rule.origin === "automation_unnichat"
             ? "provider_automation"
             : rule.origin,
@@ -2821,6 +2851,8 @@ export class ProviderConversionRulesService {
           ? { provider: "umbler" }
           : rule.origin === "automation_payt"
             ? { provider: "payt" }
+            : rule.origin === "automation_braip"
+              ? { provider: "braip" }
             : rule.origin === "automation_unnichat"
               ? { provider: "unnichat" }
               : null,
@@ -4137,7 +4169,7 @@ export class ProviderConversionRulesService {
   }
 
   /**
-   * A Payt callback is not itself a WhatsApp channel. Its automation rule may
+   * A sales-platform callback (Payt, Braip) is not itself a WhatsApp channel. Its automation rule may
    * scope any channel of the workspace; the selected channels still scope
    * lookup and observation. Other providers keep the stricter connection
    * ownership check.
@@ -4149,7 +4181,7 @@ export class ProviderConversionRulesService {
     provider: string,
     channelIds: string[],
   ): Promise<void> {
-    if (provider !== "payt") {
+    if (!isSalesPlatformProvider(provider)) {
       return this.assertChannelsBelongToConnection(
         transaction,
         workspaceId,
@@ -4169,11 +4201,19 @@ export class ProviderConversionRulesService {
     }
   }
 
+  /** Sales-platform rule (Payt, Braip): its parser release names it. */
   private isPaytAutomationRule(rule: PersistedProviderRule): boolean {
-    return (
-      rule.conversionRule.triggerType === "provider_automation" &&
-      rule.parserRelease?.provider === "payt"
-    );
+    return this.salesPlatformOfRule(rule) !== null;
+  }
+
+  private salesPlatformOfRule(
+    rule: PersistedProviderRule,
+  ): "payt" | "braip" | null {
+    const provider = rule.parserRelease?.provider;
+    return rule.conversionRule.triggerType === "provider_automation" &&
+      isSalesPlatformProvider(provider)
+      ? provider
+      : null;
   }
 
   private messagePhraseConfig(input: {
@@ -4603,7 +4643,7 @@ export class ProviderConversionRulesService {
       exampleMessage: messagePhrase.exampleMessage,
       // The parser release is stored with the rule, so this remains available
       // after a connection changes and does not require a new database column.
-      automationSource: this.isPaytAutomationRule(rule) ? "payt" : null,
+      automationSource: this.salesPlatformOfRule(rule),
       productFilterCodes: rule.productFilterCodes ?? [],
       endpoint: rule.endpoint ? this.endpointToDto(rule.endpoint) : null,
       catalog: rule.catalog ? this.catalogToDto(rule.catalog) : null,

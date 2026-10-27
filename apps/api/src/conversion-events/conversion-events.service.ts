@@ -1,3 +1,4 @@
+import { salesPlatformOf } from "../inbound-webhooks/providers/sales-platform-sale";
 import {
   Inject,
   Injectable,
@@ -2660,13 +2661,15 @@ export class ConversionEventsService {
     // Unnichat, Umbler), which always keep their connection binding.
     if (!e.providerRule.connection || !e.providerRule.parserRelease)
       return "provider_conversion_origin_mismatch";
-    // A sale callback (Payt, Fase 4a) sits on its rule's endpoint (any
+    // A sale callback (Payt, Fase 4a; Braip, 6.5) sits on its rule's endpoint (any
     // WhatsApp connection of the workspace); its origin is the scoped channel,
     // which must belong to the connection of the verified CTWA entry, and the
     // event must be the durable winner of that sale.
     const paytPurchase =
-      String(e.providerRule.parserRelease.provider) === "payt" &&
-      e.providerRule.parserRelease.version === "automation-v1" &&
+      salesPlatformOf({
+        provider: String(e.providerRule.parserRelease.provider),
+        version: e.providerRule.parserRelease.version,
+      }) !== null &&
       ["Purchase", "InitiateCheckout", "CartAbandoned"].includes(
         log.eventName,
       );

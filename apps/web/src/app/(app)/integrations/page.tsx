@@ -45,6 +45,7 @@ import {
 } from "./pipedrive-actions";
 import {
   ensureIntegrationEndpointAction,
+  loadIntegrationEventPayloadAction,
   removeIntegrationEndpointAction,
   retryIntegrationEventAction,
   revealIntegrationEndpointAction,
@@ -56,6 +57,7 @@ import { loadSingleUrlData } from "./single-url/single-url-data";
 import {
   AutomationEventUrlsPanel,
   PaytSingleUrlPanel,
+  SalesPlatformSingleUrlPanel,
   type SingleUrlActions,
 } from "./single-url/single-url-panels";
 import { buildIntegrationCards } from "./hub/integration-cards";
@@ -1227,6 +1229,10 @@ export default async function IntegrationsPage({
   const paytRules = (inboundWebhookData?.providerRules ?? []).filter(
     (rule) => rule.automationSource === "payt",
   );
+  // Fase 6.5: Braip, same base as Payt (only through the single URL).
+  const braipRules = (inboundWebhookData?.providerRules ?? []).filter(
+    (rule) => rule.automationSource === "braip",
+  );
 
   // Fase 5.3: URL única (Payt) e URLs por evento (Unnichat e Umbler).
   const singleUrlEnabled = Boolean(singleUrlData.endpoints?.enabled);
@@ -1242,9 +1248,13 @@ export default async function IntegrationsPage({
     remove: removeIntegrationEndpointAction,
     retry: retryIntegrationEventAction,
     setPublicUrl: setRulePublicUrlAction,
+    loadPayload: loadIntegrationEventPayloadAction,
   };
   const paytIntegrationUrl =
     singleUrlEndpoints.find((endpoint) => endpoint.provider === "payt") ??
+    null;
+  const braipIntegrationUrl =
+    singleUrlEndpoints.find((endpoint) => endpoint.provider === "braip") ??
     null;
   const ruleEventsFor = (origin: string) => [
     ...new Set(
@@ -1253,7 +1263,9 @@ export default async function IntegrationsPage({
           (rule) =>
             (rule.origin === origin ||
               (origin === "automation_payt" &&
-                rule.automationSource === "payt")) &&
+                rule.automationSource === "payt") ||
+              (origin === "automation_braip" &&
+                rule.automationSource === "braip")) &&
             rule.conversionRule.active,
         )
         .map((rule) => rule.conversionRule.eventName),
@@ -1296,6 +1308,14 @@ export default async function IntegrationsPage({
       activeRuleCount: paytRules.filter((rule) => rule.conversionRule.active)
         .length,
       integrationUrl: Boolean(paytIntegrationUrl),
+    },
+    braip: {
+      loaded:
+        Boolean(inboundWebhookData) && inboundWebhookData!.providerRulesEnabled,
+      ruleCount: braipRules.length,
+      activeRuleCount: braipRules.filter((rule) => rule.conversionRule.active)
+        .length,
+      integrationUrl: Boolean(braipIntegrationUrl),
     },
     crm: {
       kommo: {
@@ -1509,6 +1529,71 @@ export default async function IntegrationsPage({
             </a>
           </>
         )}
+      </div>
+    </div>
+  );
+
+  // Fase 6.5: Braip, mesma base da Payt. Só pela URL única da conta (não há
+  // URL por regra); o leitor já entra em uso, nada a liberar.
+  const braipRulesLink = hasWhatsappNumber ? (
+    <Link
+      className="button primary"
+      href={
+        braipRules.length > 0
+          ? "/conversions"
+          : "/conversions?nova=automation_braip"
+      }
+    >
+      {braipRules.length > 0
+        ? "Gerenciar regras da Braip"
+        : "Criar regra de venda da Braip"}
+    </Link>
+  ) : (
+    <>
+      <p className="muted">
+        Antes, conecte um número de WhatsApp para saber de qual anúncio veio
+        cada comprador.
+      </p>
+      <a className="button" href="#integracao-whatsapp">
+        Ir para WhatsApp
+      </a>
+    </>
+  );
+  const braipPanel = singleUrlEnabled ? (
+    <div className="integration-modal-stack">
+      <SalesPlatformSingleUrlPanel
+        provider="braip"
+        endpoint={braipIntegrationUrl}
+        products={singleUrlData.braipProducts}
+        unattributed={singleUrlData.unattributed.braip}
+        legacyUrls={legacyUrlsFor(singleUrlLegacy, "braip")}
+        ruleEvents={ruleEventsFor("automation_braip")}
+        canManage={canManageSingleUrl}
+        licenseLocked={licenseLocked}
+        actions={singleUrlActions}
+        numberNames={singleUrlNumberNames}
+      />
+      <div className="integration-modal-note">
+        <strong>Regras de venda</strong>
+        <p className="muted">
+          Crie uma regra por evento (compra aprovada, boleto/Pix gerado,
+          checkout abandonado), para todos os números ou só para alguns, e, se
+          quiser, só para certos produtos. A regra já começa enviando: a venda
+          segue para a regra do número por onde o comprador chegou.
+        </p>
+        {braipRulesLink}
+      </div>
+    </div>
+  ) : (
+    <div className="integration-modal-stack">
+      <div className="integration-modal-note">
+        <strong>Como funciona</strong>
+        <p className="muted">
+          A Braip avisa cada venda numa URL única da conta. Essa URL só existe
+          com os webhooks de entrada e as regras de conversão ligados nesta
+          instalação; peça a quem administra a instalação para conferir.
+        </p>
+        {braipRulesLink}
       </div>
     </div>
   );
@@ -1894,6 +1979,7 @@ export default async function IntegrationsPage({
     data_crazy: inboundPanel("data_crazy"),
     unnichat: automationUrlsPanel("unnichat"),
     payt: paytPanel,
+    braip: braipPanel,
     meta: metaPanel,
     kommo:
       workspace && kommoViewerId && canManageKommo ? (
@@ -2098,6 +2184,7 @@ export default async function IntegrationsPage({
           data_crazy: [rulesLink],
           unnichat: [rulesLink],
           payt: [rulesLink],
+          braip: [rulesLink],
         }}
         tabIntro={{
           whatsapp: whatsappIntro,

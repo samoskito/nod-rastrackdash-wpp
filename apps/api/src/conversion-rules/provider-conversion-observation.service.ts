@@ -27,9 +27,10 @@ import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import type { ParsedInboundWebhookEvent } from "../inbound-webhooks/providers/inbound-webhook-parser";
 import type { ParsedUmblerAutomationV1 } from "../inbound-webhooks/providers/umbler/umbler-automation-v1.parser";
 import {
-  paytProductFilterMatches,
-  type ParsedPaytAutomationV1,
-} from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
+  isSalesPlatformProvider,
+  saleProductFilterMatches,
+  type ParsedSaleAutomationV1,
+} from "../inbound-webhooks/providers/sales-platform-sale";
 import type { ParsedUnnichatAutomationV1 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
 import {
   PAYT_LEAD_OTHER_CHANNEL_REASON,
@@ -163,7 +164,7 @@ const observedChannelSelect = {
 /** Endpoint automations of this edition (Umbler, Payt). */
 type ParsedProviderAutomation =
   | ParsedUmblerAutomationV1
-  | ParsedPaytAutomationV1
+  | ParsedSaleAutomationV1
   | (ParsedUnnichatAutomationV1 & {
       provider: "unnichat";
       automation: "crm_movement";
@@ -279,16 +280,19 @@ export class ProviderConversionObservationService {
     /** Callback origin (default: the rule's own connection). */
     origin?: AutomationCallbackOrigin | null;
   }): Promise<ProviderConversionAutomationObservationResult> {
-    if (input.automation.provider === "payt") {
+    if (
+      isSalesPlatformProvider(input.automation.provider) &&
+      "orderRef" in input.automation
+    ) {
       // One sale (seller + order + event) is one occurrence, whatever endpoint
-      // or delivery carried it.
+      // or delivery carried it (Payt, Braip).
       input = {
         ...input,
         automation: {
           ...input.automation,
           externalExecutionKey: buildProviderPurchaseIdentity({
             workspaceId: input.workspaceId,
-            provider: "payt",
+            provider: input.automation.provider,
             accountRef: input.automation.accountRef,
             orderRef: input.automation.orderRef,
             eventName: input.automation.eventName,
@@ -339,10 +343,12 @@ export class ProviderConversionObservationService {
     // code). A sale of another product is not this rule's: ignored, never an
     // error, never sent by it.
     if (
-      input.automation.provider === "payt" &&
-      !paytProductFilterMatches(
+      isSalesPlatformProvider(input.automation.provider) &&
+      !saleProductFilterMatches(
         rule.productFilterCodes,
-        input.automation.productCodes ?? [],
+        ("productCodes" in input.automation
+          ? input.automation.productCodes
+          : undefined) ?? [],
       )
     ) {
       return {
@@ -375,9 +381,9 @@ export class ProviderConversionObservationService {
     // entry (on any channel of the workspace) is then bound to the rule scope.
     // An Unnichat automation resolves the lead on its own entry connection
     // (a rule "todas as conexões": then on any number of its scope).
-    const purchaseLead = ["payt", "unnichat"].includes(
-      rule.parserRelease.provider,
-    )
+    const purchaseLead =
+      isSalesPlatformProvider(rule.parserRelease.provider) ||
+      rule.parserRelease.provider === "unnichat"
       ? await this.resolveAutomationPurchaseLead({
           input,
           rule,
@@ -433,7 +439,7 @@ export class ProviderConversionObservationService {
         };
       }
     }
-    if (rule.parserRelease.provider === "payt" && !channel) {
+    if (isSalesPlatformProvider(rule.parserRelease.provider) && !channel) {
       // One Payt rule per WhatsApp number receives the same sale. When the
       // buyer is a tracked lead whose verified origin is another number, this
       // rule simply does not own the purchase: record it as such (the rule of
@@ -589,7 +595,11 @@ export class ProviderConversionObservationService {
     workspaceId: string,
     automation: ParsedProviderAutomation,
   ): Promise<string[]> {
-    if (ruleIds.length === 0 || automation.provider !== "payt") return ruleIds;
+    if (ruleIds.length === 0 || !isSalesPlatformProvider(automation.provider))
+      return ruleIds;
+    const productCodes =
+      ("productCodes" in automation ? automation.productCodes : undefined) ??
+      [];
     const filters = await this.prisma.providerConversionRuleConfig.findMany({
       where: { workspaceId, id: { in: ruleIds } },
       select: { id: true, productFilterCodes: true },
@@ -598,10 +608,7 @@ export class ProviderConversionObservationService {
       filters.map((rule) => [rule.id, rule.productFilterCodes ?? []]),
     );
     return ruleIds.filter((id) =>
-      paytProductFilterMatches(
-        byId.get(id) ?? [],
-        automation.productCodes ?? [],
-      ),
+      saleProductFilterMatches(byId.get(id) ?? [], productCodes),
     );
   }
 
@@ -867,11 +874,12 @@ export class ProviderConversionObservationService {
         externalEventId: input.input.automation.externalExecutionKey,
         externalMessageId: null,
         occurrenceKey,
-        ...(input.input.automation.provider === "payt"
+        ...(isSalesPlatformProvider(input.input.automation.provider) &&
+        "orderRef" in input.input.automation
           ? {
               purchaseKey: buildProviderPurchaseIdentity({
                 workspaceId: input.input.workspaceId,
-                provider: "payt",
+                provider: input.input.automation.provider,
                 accountRef: input.input.automation.accountRef,
                 orderRef: input.input.automation.orderRef,
                 eventName: input.input.automation.eventName,
@@ -1040,7 +1048,7 @@ export class ProviderConversionObservationService {
         },
       });
     }
-    if (input.rule.parserRelease.provider === "payt") {
+    if (isSalesPlatformProvider(input.rule.parserRelease.provider)) {
       // A Payt sale belongs to the scoped channel where the paid lead's CTWA
       // entry was verified; a phone match alone is never enough.
       if (input.purchaseLead?.status !== "resolved") return null;
@@ -1499,8 +1507,10 @@ export class ProviderConversionObservationService {
     // Payt is only sent by the canonical engine; legacy/shadow channels keep
     // its sales audit-only. Canonical production still requires every live
     // certification, activation and feature gate below.
-    // Sales platform of the student edition: Payt (Braip arrives in 6.5).
-    const salesPlatform = input.rule.parserRelease?.provider === "payt";
+    // Sales platforms of the student edition: Payt and Braip (6.5).
+    const salesPlatform = isSalesPlatformProvider(
+      input.rule.parserRelease?.provider,
+    );
     if (salesPlatform && input.channel.conversionEngineMode !== "canonical") {
       return {
         state: "observed",

@@ -59,6 +59,7 @@ enum DiagnosticSource {
   data_crazy
   payt
   unnichat
+  braip
 }
 
 enum DiagnosticSeverity {
@@ -296,6 +297,7 @@ enum InboundWebhookProvider {
   payt
   unnichat
   waha
+  braip
 }
 
 enum InboundWebhookParserReleaseStatus {
@@ -1205,7 +1207,7 @@ model IntegrationEndpointEvent {
   externalKey           String?
   eventName             String?
   providerStatus        String?
-  /// pending | routed | unattributed | ignored | invalid
+  /// pending | routed | unattributed | ignored | invalid | rejected (6.5)
   status                String
   reasonCode            String?
   productCode           String?

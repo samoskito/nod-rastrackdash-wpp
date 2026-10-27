@@ -22,12 +22,16 @@ import { createHash } from "node:crypto";
 import { resolvePurchaseChannels } from "../conversion-rules/provider-purchase-routing";
 import { buildProviderPurchaseIdentity } from "../conversion-rules/provider-purchase-identity";
 import {
-  parsePaytSaleEventV1,
   PAYT_SALE_EVENT_NAMES,
   PAYT_VALUE_CORRECTION_REASON,
   paytLegacyTotalPriceCents,
-  paytProductFilterMatches,
 } from "../inbound-webhooks/providers/payt/payt-automation-v1.parser";
+import {
+  isSalesPlatformProvider,
+  parseSaleEventV1,
+  saleProductFilterMatches,
+  salesPlatformOf,
+} from "../inbound-webhooks/providers/sales-platform-sale";
 import { Prisma } from "@prisma/client";
 import {
   conversionEventCarriesValue,
@@ -830,11 +834,11 @@ export class ProviderConversionProductionService
     }
 
     // CTWA lead with ctwa_clid and no known ad (authorized page/pixel proof),
-    // exactly as in the SaaS: sale callbacks (Payt) may use the proof as the
-    // fallback of an ad lead; Unnichat automations only for a no-ad lead.
-    // Every other provider keeps requiring a known ad.
+    // exactly as in the SaaS: sale callbacks (Payt, Braip) may use the proof
+    // as the fallback of an ad lead; Unnichat automations only for a no-ad
+    // lead. Every other provider keeps requiring a known ad.
     let ctwaProof =
-      occurrence.provider === "payt"
+      isSalesPlatformProvider(occurrence.provider)
         ? (lead.ctwaDestination ?? purchaseContext?.ctwaProof)
         : occurrence.provider === CTWA_DESTINATION_PROVIDER && !lead.adId
           ? lead.ctwaDestination
@@ -885,7 +889,7 @@ export class ProviderConversionProductionService
           throw error;
         // Decisions frozen before the CTWA fallback carry no proof: verify it
         // live for Payt (same rules as the paid-lead resolver).
-        if (!ctwaProof && occurrence.provider === "payt")
+        if (!ctwaProof && isSalesPlatformProvider(occurrence.provider))
           ctwaProof = await this.livePaytCtwaProof(execution, lead);
         if (!ctwaProof) throw error;
         adRoute = {
@@ -903,7 +907,11 @@ export class ProviderConversionProductionService
         Boolean(adRoute.adAccountId) &&
         Boolean(adRoute.businessConnectionId) &&
         Boolean(adRoute.conversionDestinationId);
-      if (!adRouteResolved && !ctwaProof && occurrence.provider === "payt")
+      if (
+        !adRouteResolved &&
+        !ctwaProof &&
+        isSalesPlatformProvider(occurrence.provider)
+      )
         ctwaProof = await this.livePaytCtwaProof(execution, lead);
       if (!adRouteResolved && ctwaProof) {
         ctwaDestination = ctwaProof;
@@ -2141,12 +2149,12 @@ export class ProviderConversionProductionService
     correctedValueCents: number | null;
     /**
      * manualOrderKey of the sale's order (Purchase dedupe vs the manual
-     * conversion on the lead). Extension point: Braip, Hotmart and Yampi
-     * (fases 6.5 a 6.7) derive it from their own order number here.
+     * conversion on the lead). Payt and Braip (6.5) derive it from their own
+     * order number; Hotmart and Yampi (6.6/6.7) join here.
      */
     manualOrderKey: string;
   } | null> {
-    if (decision.occurrence.provider === "payt")
+    if (isSalesPlatformProvider(decision.occurrence.provider))
       return this.assertPaytPurchaseContext(execution, decision);
     if (!decision.occurrence.purchaseKey) return null;
     throw new ProviderConversionProductionFailure(
@@ -2155,7 +2163,7 @@ export class ProviderConversionProductionService
   }
 
   /**
-   * Re-derives a Payt sale from the preserved postback: event of the rule,
+   * Re-derives a sale (Payt, Braip) from the preserved postback: event of the rule,
    * buyer phone of the lead, seller+order identity and value. The origin is
    * the single scoped channel of the paid lead's verified CTWA entry.
    */
@@ -2170,20 +2178,21 @@ export class ProviderConversionProductionService
     correctedValueCents: number | null;
     /**
      * manualOrderKey of the sale's order (Purchase dedupe vs the manual
-     * conversion on the lead). Extension point: Braip, Hotmart and Yampi
-     * (fases 6.5 a 6.7) derive it from their own order number here.
+     * conversion on the lead): the platform's own order number.
      */
     manualOrderKey: string;
   }> {
     this.assertAutomationProductionContext(execution);
+    const salesPlatform = salesPlatformOf(execution.providerRule.parserRelease);
     if (
+      !salesPlatform ||
+      decision.occurrence.provider !== salesPlatform ||
       execution.channel?.conversionEngineMode !== "canonical" ||
       !(PAYT_SALE_EVENT_NAMES as readonly string[]).includes(
         decision.occurrence.eventName,
       ) ||
       decision.occurrence.eventName !==
-        execution.providerRule.conversionRule.eventName ||
-      execution.providerRule.parserRelease?.provider !== "payt"
+        execution.providerRule.conversionRule.eventName
     ) {
       throw new ProviderConversionProductionFailure(
         "provider_conversion_production_context_invalid",
@@ -2261,7 +2270,7 @@ export class ProviderConversionProductionService
         "provider_purchase_channel_missing_or_ambiguous",
       );
     const payload = this.decryptedPayload(execution);
-    const parsed = parsePaytSaleEventV1(payload);
+    const parsed = parseSaleEventV1(salesPlatform, payload);
     if (!parsed.ok)
       throw new ProviderConversionProductionFailure(
         "provider_purchase_identity_missing",
@@ -2269,13 +2278,14 @@ export class ProviderConversionProductionService
     // Decision frozen before the Payt value fix: it holds the same postback's
     // total_price (with installment interest). Same sale, legacy value.
     const legacyPaytValue =
+      salesPlatform === "payt" &&
       parsed.value.valueCents !== null &&
       decision.conversion.valueCents !== null &&
       decision.conversion.valueCents !== parsed.value.valueCents &&
       decision.conversion.valueCents === paytLegacyTotalPriceCents(payload);
     const purchaseKey = buildProviderPurchaseIdentity({
       workspaceId: execution.workspaceId,
-      provider: "payt",
+      provider: salesPlatform,
       accountRef: parsed.value.accountRef,
       orderRef: parsed.value.orderRef,
       eventName: parsed.value.eventName,
@@ -2284,7 +2294,7 @@ export class ProviderConversionProductionService
       // The preserved postback must still be the event of this rule and,
       // when the rule is limited to some products (Fase 5.3), one of them.
       parsed.value.eventName !== decision.occurrence.eventName ||
-      !paytProductFilterMatches(
+      !saleProductFilterMatches(
         execution.providerRule.productFilterCodes,
         parsed.value.productCodes ?? [],
       ) ||
@@ -2403,7 +2413,7 @@ export class ProviderConversionProductionService
 
   /**
    * Unnichat automations arrive on the entry connection itself. A sale
-   * callback (Payt) sits on its rule's endpoint (any WhatsApp connection of the
+   * callback (Payt, Braip) sits on its rule's endpoint (any WhatsApp connection of the
    * workspace), so its origin is the scoped channel, which must belong to the
    * connection of the verified CTWA entry. An Unnichat/Umbler rule for all
    * numbers stores its callbacks on its anchor connection while the number
@@ -2414,7 +2424,9 @@ export class ProviderConversionProductionService
     intent: { channelId: string; connectionId: string },
   ): boolean {
     if (
-      String(execution.providerRule.parserRelease?.provider) === "payt" ||
+      isSalesPlatformProvider(
+        String(execution.providerRule.parserRelease?.provider),
+      ) ||
       (providerRuleScope(execution.providerRule) === "all_numbers" &&
         providerRuleSpansProviderConnections(execution.providerRule))
     )
@@ -2695,7 +2707,7 @@ export class ProviderConversionProductionService
   ): "actual" | "configured_average" {
     if (
       decision.rule.triggerType === "structured_catalog" ||
-      decision.occurrence.provider === "payt"
+      isSalesPlatformProvider(decision.occurrence.provider)
     )
       return "actual";
 

@@ -8651,6 +8651,18 @@ th {
   gap: 7px;
 }
 
+/* Fase 6.5 (porte do SaaS #184): the help text always takes its own full row
+   below the fields, so it never pushes the submit button into a narrow
+   column. */
+.inbound-webhook-create .field-help {
+  grid-column: 1 / -1;
+  order: 1;
+}
+
+.inbound-webhook-create .button {
+  white-space: nowrap;
+}
+
 .inbound-webhook-create input,
 .inbound-webhook-create select,
 .inbound-webhook-secret input {

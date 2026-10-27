@@ -142,7 +142,7 @@ export type PaytParseOptions = {
  * (plus a small skew) is a wrong clock or zone, so the arrival is used and
  * Meta never gets a future event_time.
  */
-function capAtReceived(occurredAt: Date, receivedAt: Date | undefined): Date {
+export function capAtReceived(occurredAt: Date, receivedAt: Date | undefined): Date {
   const reference = receivedAt?.getTime() ?? Date.now();
   if (!Number.isFinite(reference)) return occurredAt;
   return occurredAt.getTime() > reference + PAYT_FUTURE_SKEW_MS

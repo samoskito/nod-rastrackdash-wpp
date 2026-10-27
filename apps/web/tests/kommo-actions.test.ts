@@ -259,6 +259,8 @@ describe("createKommoConnectionAction", () => {
     expect(JSON.stringify(result.connection)).not.toContain("webhookUrl");
     expect(JSON.stringify(result)).not.toContain(SECRET_TOKEN);
     expect(revalidatePath).toHaveBeenCalledWith("/settings");
+    // Porte parcial do SaaS 7570fe14 (fase 6.5): o Kommo vive no hub.
+    expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });
 
   it("rejects an invalid payload before any request", async () => {

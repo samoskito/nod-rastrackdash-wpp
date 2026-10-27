@@ -12,6 +12,7 @@ import { WebhookHistoryDetail } from "../../../../components/webhook-history-det
 import { getCurrentWorkspace } from "../../../../lib/current-workspace";
 import { formatDateTime } from "../../../../lib/date-time";
 import { isApiRequestError, serverApiFetch } from "../../../../lib/server-api";
+import { WebhooksViewSwitch } from "./webhooks-view-switch";
 
 /**
  * Backoffice "Webhooks WhatsApp": platform-admin view of BYO WhatsApp
@@ -189,6 +190,8 @@ export default async function BackofficeInboundWebhooksPage({
           <span className="status-chip neutral">Somente leitura</span>
         )}
       </header>
+
+      <WebhooksViewSwitch active="connections" />
 
       <BackofficeWorkspaceSelector
         selectedWorkspaceId={selectedWorkspace?.id ?? null}

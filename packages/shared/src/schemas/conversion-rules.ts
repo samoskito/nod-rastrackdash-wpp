@@ -62,10 +62,10 @@ export const providerConversionRuleModeSchema = z.enum(
 /**
  * Plataforma externa que chama a URL da automacao. Ausente (null) mantem o
  * comportamento original, em que o proprio provedor WhatsApp (Umbler) envia o
- * callback. "payt" marca uma regra de venda vinda da Payt (Fase 4a): o valor
- * de cada venda chega em centavos no payload.
+ * callback. "payt"/"braip" marcam uma regra de venda vinda da plataforma (Payt
+ * na Fase 4a, Braip na 6.5): o valor de cada venda chega no payload.
  */
-export const providerConversionAutomationSources = ["payt"] as const;
+export const providerConversionAutomationSources = ["payt", "braip"] as const;
 export const providerConversionAutomationSourceSchema = z.enum(
   providerConversionAutomationSources,
 );
@@ -82,6 +82,30 @@ export const paytSaleEventNames = [
 ] as const;
 /** Eventos ainda em beta na Payt (a tela mostra o selo "beta"). */
 export const paytBetaSaleEventNames = ["CartAbandoned"] as const;
+
+/**
+ * Plataformas de venda (checkout) com URL única por workspace: o evento vem
+ * do status de cada postback e a regra pode filtrar por produto. Fase 6.5:
+ * Braip, com o leitor `automation-v1` certificado (produção direta).
+ */
+export const salesPlatformProviders = ["payt", "braip"] as const;
+export type SalesPlatformProviderDto = (typeof salesPlatformProviders)[number];
+export function isSalesPlatformProvider(
+  provider: string | null | undefined,
+): provider is SalesPlatformProviderDto {
+  return (salesPlatformProviders as readonly string[]).includes(
+    provider ?? "",
+  );
+}
+
+/** Nome exibido de cada plataforma de venda. */
+export const salesPlatformLabels: Record<SalesPlatformProviderDto, string> = {
+  payt: "Payt",
+  braip: "Braip",
+};
+
+/** Mesmos eventos para toda plataforma de venda (Payt, Braip). */
+export const salesPlatformEventNames = paytSaleEventNames;
 
 /** Fase 5.3: código de produto/oferta de uma plataforma de venda. */
 export const saleProductCodeSchema = z
@@ -118,7 +142,8 @@ export const providerConversionRuleScopeSchema = z.enum(
  * Origem normalizada de uma regra (usada na precedencia e no "Unificar").
  * whatsapp_label = etiqueta do WhatsApp (Uazapi); automation_umbler = callback
  * assinado da automacao Umbler; automation_payt = postback de venda da Payt;
- * automation_unnichat = fluxo do Unnichat chamando a URL da regra (Fase 4b).
+ * automation_unnichat = fluxo do Unnichat chamando a URL da regra (Fase 4b);
+ * automation_braip = postback de venda da Braip (6.5).
  * As automacoes por URL ficam sempre ligadas a uma conexao.
  */
 export const providerConversionRuleOrigins = [
@@ -128,6 +153,7 @@ export const providerConversionRuleOrigins = [
   "automation_umbler",
   "automation_payt",
   "automation_unnichat",
+  "automation_braip",
 ] as const;
 export const providerConversionRuleOriginSchema = z.enum(
   providerConversionRuleOrigins,
@@ -499,9 +525,10 @@ const providerAutomationCreateSchema = z
     ...eventValueShape,
     triggerType: z.literal("provider_automation"),
     eventName: conversionEventNameSchema,
-    // Fase 4a: "payt" = regra de venda da Payt (URL propria da regra).
+    // Fase 4a: "payt" = regra de venda da Payt (URL propria da regra);
+    // 6.5: "braip" = regra de venda da Braip (só pela URL única).
     automationSource: providerConversionAutomationSourceSchema.optional(),
-    // Fase 5.3: só plataformas de venda (Payt). Vazio = todos os produtos.
+    // Fase 5.3: só plataformas de venda (Payt, Braip). Vazio = todos.
     productFilterCodes: saleProductFilterCodesSchema.optional(),
     // Fase 5.3: false = a regra recebe só pela URL única da integração (a URL
     // própria da regra nasce desativada). Ausente = comportamento histórico.
@@ -513,7 +540,7 @@ const providerAutomationCreateSchema = z
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
-    if (input.automationSource !== "payt") {
+    if (!isSalesPlatformProvider(input.automationSource)) {
       refineEventValueFields(input, context);
       if (input.productFilterCodes && input.productFilterCodes.length > 0) {
         context.addIssue({
@@ -524,19 +551,21 @@ const providerAutomationCreateSchema = z
       }
       return;
     }
-    // A Payt traz o valor real de cada venda; o evento vem do status.
-    if (!(paytSaleEventNames as readonly string[]).includes(input.eventName)) {
+    // A plataforma de venda traz o valor real; o evento vem do status.
+    const platform = salesPlatformLabels[input.automationSource];
+    if (
+      !(salesPlatformEventNames as readonly string[]).includes(input.eventName)
+    ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "A Payt envia compra aprovada, Pix/boleto gerado ou carrinho abandonado",
+        message: `A ${platform} envia compra aprovada, Pix/boleto gerado ou carrinho abandonado`,
         path: ["eventName"],
       });
     }
     if (input.triggerPhrases || input.triggerLabels) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "A automação da Payt não usa etiquetas",
+        message: `A automação da ${platform} não usa etiquetas`,
         path: ["triggerPhrases"],
       });
     }
