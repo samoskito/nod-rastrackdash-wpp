@@ -64,6 +64,8 @@ Atualizar uma instância que já está no ar é **redeploy**, não instalação.
    - o que acontece se ficar sem valor.
 
    A fonte é [`docs/setup/environment.md`](setup/environment.md), comparado com o `.env` que o aluno já usa. Não apague nem regenere variáveis que já existem.
+   **Atenção ao atualizar para a 1.3.0 ou superior:** confira estas variáveis da API: `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_CONVERSION_RULES_ENABLED=true`, `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` e `INBOUND_CONVERSION_PRODUCTION_ENABLED` vazia ou `true`. Se alguma estiver em `false` (o `.env.example` da 1.2.0 trazia `INBOUND_CONVERSION_PRODUCTION_ENABLED=false`), explique ao aluno o efeito (webhooks desligados, regras desligadas, envios fora de produção ou todo o envio desligado, inclusive Kommo e Pipedrive) e que, ao ligar, tudo o que estiver ativo passa a enviar; peça a confirmação; então ajuste a variável (para `INBOUND_CONVERSION_PRODUCTION_ENABLED`, apague a linha ou use `true`) e refaça o Deploy da API. Depois confirme que a tela Conversões não mostra mais "Envio desligado no servidor". Detalhe em `docs/setup/troubleshooting.md`.
+
 4. Se houver migration, peça um **backup do PostgreSQL antes** do redeploy. As migrations rodam sozinhas no boot da API.
 5. Depois do redeploy, faça a verificação descrita nas notas e em `update.md`. Se algo falhar, use `troubleshooting.md`. Nunca reinstale para "resolver".
 

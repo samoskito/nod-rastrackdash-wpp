@@ -7,7 +7,9 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json) (planned as 1.3.1; version and tag not defined). **No new migration and no new variable.** The Meta instant forms (Lead Ads) and the Dashboard Leads import of 1.3.0 were removed (see Removed); their two tables stay in the database, unused. Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.
+## [1.3.1] - 2026-10-28
+
+Upgrade notes for students: [`docs/releases/1.3.1.json`](docs/releases/1.3.1.json). **First check Conversões: if it shows "Envio desligado no servidor", set `INBOUND_WEBHOOKS_ENABLED`, `INBOUND_CONVERSION_RULES_ENABLED` and `INBOUND_WEBHOOK_PRODUCTION_ENABLED` to `true` and leave `INBOUND_CONVERSION_PRODUCTION_ENABLED` empty (or `true`) on the API, then redeploy it.** **No new migration and no new variable.** The Meta instant forms (Lead Ads) and the Dashboard Leads import of 1.3.0 were removed (see Removed); their two tables stay in the database, unused. Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.
 
 ### Added
 

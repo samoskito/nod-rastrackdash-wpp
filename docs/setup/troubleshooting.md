@@ -2,6 +2,21 @@
 
 Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → correção → verificação**. "Diagnóstico seguro" nunca inclui comandos destrutivos nem pedir para colar segredos em algum lugar.
 
+## Conversões mostra "Envio desligado no servidor" depois de atualizar
+
+- **Sintoma:** depois de atualizar para a 1.3.0 ou superior, as conversões pararam de ir para a Meta (também as da Kommo e do Pipedrive) e a tela **Conversões** mostra o aviso "Envio desligado no servidor".
+- **Causa:** alguma destas variáveis da API está desligada. O `.env.example` da 1.2.0 trazia `INBOUND_CONVERSION_PRODUCTION_ENABLED=false`, e desde a 1.3.0 esse `false` escrito desliga TODO o envio de conversões.
+- **Correção, passo a passo:**
+  1. No Dokploy, abra o serviço da **API** e a aba **Environment**.
+  2. Deixe estas quatro variáveis assim (o efeito de cada uma em `false` está ao lado):
+     - `INBOUND_WEBHOOKS_ENABLED=true` (`false` desliga todo o recebimento de webhooks e, com ele, o envio de conversões);
+     - `INBOUND_CONVERSION_RULES_ENABLED=true` (`false` desliga as regras de conversão: nenhuma regra envia, e a API não sobe se `INBOUND_CONVERSION_PRODUCTION_ENABLED` estiver `true`);
+     - `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (`false` mantém os envios dos números e conexões fora de produção, sem chegar à Meta);
+     - `INBOUND_CONVERSION_PRODUCTION_ENABLED` vazia (apague a linha) ou `true` (`false` escrito desliga TODO o envio, inclusive Kommo e Pipedrive).
+  3. Salve e faça o **Deploy** da API.
+  4. Atenção: ao ligar, tudo o que estiver ativo passa a enviar à Meta. Se algo não deve enviar, pause a regra antes do Deploy.
+- **Verificação:** a API sobe (`/health/ready` responde 200), a tela **Conversões** não mostra mais o aviso e, na Kommo e no Pipedrive, os movimentos que esperavam saem em até 15 minutos (até 7 dias de espera).
+
 ## Docker não sobe / `docker compose up` falha
 
 - **Diagnóstico:** `docker --version`, `docker compose version`, `docker compose ps`, `docker compose logs postgres redis`.
