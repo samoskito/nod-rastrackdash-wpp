@@ -253,7 +253,12 @@ Veja o [guia de produção e recuperação](setup/meta-cloud-recovery.md).
 
 **Regras de frase da equipe na Meta Cloud:** como a Meta não entrega as mensagens enviadas pela equipe, elas não funcionam numa conexão Meta Cloud. Se o número usa **coexistência** (app WhatsApp Business junto com a Cloud API), conecte esse número pela **Uazapi** do aluno (URL + token da sua instância): ela entrega o anúncio (CTWA) e as mensagens da equipe. Sem coexistência, a conversão por frase depende de integrar a plataforma que a equipe usa para responder (CRM/atendimento), por exemplo chamando a URL única de conversão; fale com o suporte.
 
-**Antes de ativar envio automático** nessa conexão, preencha `META_APP_SECRET` (o App Secret do app Meta, não o token do Graph) e redeploy: sem ele, a conexão em produção passa a **recusar** os POSTs da Meta.
+**Antes de ativar envio automático** nessa conexão, a API precisa do **App Secret do app Meta que entrega as mensagens** (não é o token do Graph): sem ele, a conexão em produção passa a **recusar** os POSTs da Meta.
+
+- **Um único app Meta na instalação:** preencha `META_APP_SECRET` na env da API (Dokploy) e redeploy, como antes.
+- **Vários apps Meta (agência com um app por BM de cliente):** abra o cartão da conexão do cliente em `/integrations` e preencha **App ID** e **App Secret** do app daquele cliente em **App do Meta desta conexão**. Não precisa de redeploy. O cartão mostra de onde vem o segredo ("Segredo configurado nesta conexão", "Usando o META_APP_SECRET do servidor" ou "Nenhum segredo configurado").
+
+Use sempre o segredo do **seu** app (nunca o da PalmUP) e digite-o direto no painel ou no Dokploy, nunca no chat.
 
 **Zap Responder** ainda não é implementado neste código. **Data Crazy** é
 suportado como conexão inbound por webhook, conforme o passo 10.2.

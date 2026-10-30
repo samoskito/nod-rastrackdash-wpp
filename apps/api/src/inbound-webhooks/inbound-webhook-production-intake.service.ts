@@ -1,4 +1,7 @@
-import { inboundParserProductionEligible } from "./inbound-webhook-parser-eligibility";
+import {
+  inboundParserProductionEligible,
+  metaCloudSigningConfigured,
+} from "./inbound-webhook-parser-eligibility";
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
@@ -87,6 +90,7 @@ export class InboundWebhookProductionIntakeService {
             status: true,
             removedAt: true,
             productionActivatedAt: true,
+            metaAppSecretEncrypted: true,
             parserRelease: {
               select: {
                 status: true, provider: true, version: true,
@@ -285,6 +289,7 @@ export class InboundWebhookProductionIntakeService {
       status: string;
       removedAt: Date | null;
       productionActivatedAt: Date | null;
+      metaAppSecretEncrypted: string | null;
       parserRelease: { status: string; provider: string; version: string };
     };
     channel: {
@@ -300,7 +305,7 @@ export class InboundWebhookProductionIntakeService {
       event.connection.removedAt === null &&
       event.connection.parserRelease.provider === event.connection.provider &&
       inboundParserProductionEligible(event.connection.parserRelease) &&
-      (event.connection.provider !== "meta_cloud" || Boolean(this.env.META_APP_SECRET?.trim())) &&
+      metaCloudSigningConfigured(event.connection, this.env) &&
       event.channel.status === "active" &&
       connectionActivatedAt &&
       channelActivatedAt &&

@@ -16,6 +16,8 @@ import type {
   InboundWebhookConnectionRotateSecretResultDto,
   InboundWebhookConnectionStatusUpdateInputDto,
   InboundWebhookCapabilitiesDto,
+  InboundWebhookMetaAppDto,
+  MetaCloudAppCredentialsInputDto,
 } from "@wpptrack/shared";
 import {
   inboundWebhookProviders,
@@ -49,7 +51,21 @@ import {
  */
 const bridgeSecretRotationBlockedMessage =
   "Conexões Uazapi e WAHA recebem pelo webhook da própria conexão WhatsApp. Não gere URL aqui: confira o webhook da conexão WhatsApp em Integrações.";
-import { effectiveInboundParserStatus } from "./inbound-webhook-parser-eligibility";
+import {
+  effectiveInboundParserStatus,
+  metaCloudSigningConfigured,
+} from "./inbound-webhook-parser-eligibility";
+import {
+  encryptMetaCloudAppSecret,
+  metaCloudAppSecretSource,
+} from "./meta-cloud-app-secret";
+
+export const metaAppOnlyForMetaCloudMessage =
+  "O App ID e o App Secret do app Meta só existem em conexões Meta WhatsApp (Cloud API).";
+export const metaAppSecretRemovalBlockedMessage =
+  "Esta conexão está enviando e o servidor não tem META_APP_SECRET de reserva: sem o App Secret desta conexão, a API recusaria as entregas da Meta. Pause o envio da conexão antes de remover, ou troque pelo App Secret correto.";
+const metaAppSecretEncryptionUnavailableMessage =
+  "Não foi possível proteger o App Secret agora: confira a INBOUND_WEBHOOK_ENCRYPTION_KEY na configuração da API.";
 import {
   bornChannelState,
   bornConnectionStatus,
@@ -380,14 +396,17 @@ export class InboundWebhookConnectionsService {
 
       // Fase 6.1c (produção direta): integração validada nasce em produção;
       // só um leitor ainda não validado começa em observação. Meta Cloud sem
-      // META_APP_SECRET também: em produção a API passa a exigir a assinatura
-      // da Meta e recusaria as entregas; a tela pede o segredo e "Ativar
-      // envio" confere de novo.
+      // App Secret também (a conexão nasce sem segredo próprio, então vale o
+      // META_APP_SECRET do ambiente): em produção a API passa a exigir a
+      // assinatura da Meta e recusaria as entregas; a tela pede o App Secret
+      // da conexão e "Ativar envio" confere de novo.
       const bornAt = new Date();
-      const status =
-        input.provider === "meta_cloud" && !this.env.META_APP_SECRET?.trim()
-          ? "observation"
-          : bornConnectionStatus(release);
+      const status = !metaCloudSigningConfigured(
+        { provider: input.provider, metaAppSecretEncrypted: null },
+        this.env,
+      )
+        ? "observation"
+        : bornConnectionStatus(release);
       const created = await transaction.inboundWebhookConnection.create({
         data: {
           workspaceId,
@@ -586,6 +605,9 @@ export class InboundWebhookConnectionsService {
         data: {
           status: "paused",
           secretHash: null,
+          // O App Secret da Meta não sobrevive à conexão removida.
+          metaAppSecretEncrypted: null,
+          metaAppSecretUpdatedAt: null,
           productionActivatedAt: null,
           removedAt,
           updatedAt: removedAt,
@@ -612,6 +634,8 @@ export class InboundWebhookConnectionsService {
         ...current,
         status: "paused",
         secretHash: null,
+        metaAppSecretEncrypted: null,
+        metaAppSecretUpdatedAt: null,
         productionActivatedAt: null,
         removedAt,
         updatedAt: removedAt,
@@ -779,6 +803,180 @@ export class InboundWebhookConnectionsService {
         connection.lastSuccessfulParseAt?.toISOString() ?? null,
       createdAt: connection.createdAt.toISOString(),
       updatedAt: connection.updatedAt.toISOString(),
+      metaApp:
+        connection.provider === "meta_cloud" ? this.metaAppDto(connection) : null,
+    };
+  }
+
+  /** Nunca inclui o segredo: só se existe e de onde vem. */
+  private metaAppDto(
+    connection: PersistedInboundWebhookConnection,
+  ): InboundWebhookMetaAppDto {
+    const appSecretConfigured = Boolean(
+      connection.metaAppSecretEncrypted?.trim(),
+    );
+    return {
+      appId: connection.metaAppId ?? null,
+      appSecretConfigured,
+      appSecretSource: metaCloudAppSecretSource(connection, this.env),
+      appSecretUpdatedAt: appSecretConfigured
+        ? (connection.metaAppSecretUpdatedAt?.toISOString() ?? null)
+        : null,
+    };
+  }
+
+  /**
+   * Salva (ou troca) o App ID e o App Secret do app Meta desta conexão Meta
+   * Cloud. O segredo é cifrado antes de ir ao banco e nunca volta, nem na
+   * auditoria. Trocar não muda o status: uma conexão enviando continua
+   * enviando, agora conferida com o segredo novo.
+   */
+  async setMetaCloudAppCredentials(
+    workspaceId: string,
+    connectionId: string,
+    input: MetaCloudAppCredentialsInputDto,
+    actorUserId: string,
+  ): Promise<InboundWebhookConnectionDto> {
+    this.requireEnabledConfig();
+
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      const current = await this.requireConnection(
+        transaction,
+        workspaceId,
+        connectionId,
+      );
+      this.assertMetaCloudConnection(current);
+      const updatedAt = this.nextMutationTime(current.updatedAt);
+      let encrypted: string;
+      try {
+        encrypted = encryptMetaCloudAppSecret(
+          input.appSecret,
+          { workspaceId, connectionId: current.id },
+          this.env,
+        );
+      } catch {
+        throw new ServiceUnavailableException(
+          metaAppSecretEncryptionUnavailableMessage,
+        );
+      }
+      const claimed = await transaction.inboundWebhookConnection.updateMany({
+        where: this.activeMutationWhere(current),
+        data: {
+          metaAppId: input.appId,
+          metaAppSecretEncrypted: encrypted,
+          metaAppSecretUpdatedAt: updatedAt,
+          updatedAt,
+        },
+      });
+
+      this.assertMutationClaimed(claimed.count);
+      const next = await this.requireConnection(
+        transaction,
+        workspaceId,
+        connectionId,
+      );
+
+      await this.createAudit(transaction, {
+        workspaceId,
+        actorUserId,
+        action: "inbound_webhook.meta_app_secret_set",
+        targetId: next.id,
+        resultStatus: next.status,
+        beforeSummary: this.metaAppAuditSummary(current),
+        afterSummary: this.metaAppAuditSummary(next),
+      });
+
+      return next;
+    });
+
+    return this.toDto(updated);
+  }
+
+  /**
+   * Remove o App ID e o App Secret desta conexão: ela volta a usar o
+   * META_APP_SECRET do ambiente. Recusado enquanto a conexão envia sem esse
+   * segredo de reserva, porque a Meta passaria a ser recusada (mesma regra
+   * de "Ativar envio": produção exige um segredo para conferir a assinatura).
+   */
+  async clearMetaCloudAppCredentials(
+    workspaceId: string,
+    connectionId: string,
+    actorUserId: string,
+  ): Promise<InboundWebhookConnectionDto> {
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      const current = await this.requireConnection(
+        transaction,
+        workspaceId,
+        connectionId,
+      );
+      this.assertMetaCloudConnection(current);
+
+      if (!current.metaAppId && !current.metaAppSecretEncrypted) {
+        return current;
+      }
+
+      if (
+        current.status === "production" &&
+        !metaCloudSigningConfigured(
+          { provider: current.provider, metaAppSecretEncrypted: null },
+          this.env,
+        )
+      ) {
+        throw new ConflictException(metaAppSecretRemovalBlockedMessage);
+      }
+
+      const updatedAt = this.nextMutationTime(current.updatedAt);
+      const claimed = await transaction.inboundWebhookConnection.updateMany({
+        where: this.activeMutationWhere(current),
+        data: {
+          metaAppId: null,
+          metaAppSecretEncrypted: null,
+          metaAppSecretUpdatedAt: null,
+          updatedAt,
+        },
+      });
+
+      this.assertMutationClaimed(claimed.count);
+      const next = await this.requireConnection(
+        transaction,
+        workspaceId,
+        connectionId,
+      );
+
+      await this.createAudit(transaction, {
+        workspaceId,
+        actorUserId,
+        action: "inbound_webhook.meta_app_secret_cleared",
+        targetId: next.id,
+        resultStatus: next.status,
+        beforeSummary: this.metaAppAuditSummary(current),
+        afterSummary: this.metaAppAuditSummary(next),
+      });
+
+      return next;
+    });
+
+    return this.toDto(updated);
+  }
+
+  private assertMetaCloudConnection(
+    connection: PersistedInboundWebhookConnection,
+  ): void {
+    if (connection.provider !== "meta_cloud") {
+      throw new ConflictException(metaAppOnlyForMetaCloudMessage);
+    }
+  }
+
+  /** Auditoria sem o segredo: só o App ID, a fonte e se existe. */
+  private metaAppAuditSummary(
+    connection: PersistedInboundWebhookConnection,
+  ): Prisma.InputJsonObject {
+    const meta = this.metaAppDto(connection);
+    return {
+      ...this.auditSummary(connection),
+      metaAppId: meta.appId,
+      metaAppSecretConfigured: meta.appSecretConfigured,
+      metaAppSecretSource: meta.appSecretSource,
     };
   }
 

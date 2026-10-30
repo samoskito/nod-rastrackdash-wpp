@@ -141,9 +141,22 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 ## Meta WhatsApp (Cloud API): parou de receber depois de ativar o envio
 
 - **Diagnóstico:** a Meta passa a registrar falha de entrega; a API responde `404` nos POSTs daquela conexão. O log tinha, antes disso, o aviso `inbound_webhook.meta_cloud_signature_unverified`.
-- **Causa:** sem `META_APP_SECRET` preenchida, a API só aceita POSTs de uma conexão `meta_cloud` enquanto o envio dela está desligado. Com a conexão enviando, as entregas passam a exigir a assinatura `x-hub-signature-256` — que não pode ser validada sem o segredo. Desde a produção direta (Fase 6.1c), uma conexão nova só nasce enviando com o segredo configurado e a tela não deixa ativar o envio sem ele; isto acontece se o segredo foi removido ou trocado depois.
-- **Correção:** preencha `META_APP_SECRET` com o **App Secret do mesmo app Meta** (não é o token permanente do Graph), redeploy a API.
-- **Verificação:** os POSTs voltam a ser aceitos com `202` e o aviso `meta_cloud_signature_unverified` some do log.
+- **Causa:** a conexão não tem um App Secret que confira a assinatura `x-hub-signature-256`, ou tem o segredo de **outro app Meta**. A API usa o App Secret salvo na conexão (cartão da conexão → **App do Meta desta conexão**); sem ele, o `META_APP_SECRET` do ambiente. Sem nenhum dos dois, só aceita POSTs enquanto o envio está desligado. Desde a produção direta (Fase 6.1c), uma conexão nova só nasce enviando com um segredo e a tela não deixa ativar o envio sem ele; isto acontece se o segredo foi removido, trocado ou é de outro app. Caso comum em agências: cada cliente tem o próprio app Meta e o `META_APP_SECRET` só valida um deles.
+- **Correção:**
+  - **Vários apps Meta (agência):** no cartão da conexão do cliente, preencha **App ID** e **App Secret** do app Meta **daquele cliente** em **App do Meta desta conexão** e salve. Não precisa de redeploy.
+  - **Um único app Meta:** preencha `META_APP_SECRET` com o **App Secret do mesmo app Meta** (não é o token permanente do Graph) e redeploy a API.
+  - Nunca use o segredo da PalmUP e nunca cole o segredo no chat.
+- **Verificação:** o cartão da conexão mostra "Segredo configurado nesta conexão" (ou "Usando o META_APP_SECRET do servidor"), os POSTs voltam a ser aceitos com `202` e o aviso `meta_cloud_signature_unverified` some do log.
+
+## Meta WhatsApp (Cloud API): "Esta conexão está enviando e o servidor não tem META_APP_SECRET de reserva"
+
+- **Causa:** você tentou remover o App Secret de uma conexão que está enviando, e o servidor não tem `META_APP_SECRET`. Sem segredo, as entregas da Meta seriam recusadas.
+- **Correção:** para trocar o segredo, cole o novo App Secret e clique em **Salvar** (não precisa remover antes). Para remover de vez, clique em **Pausar conexão** antes.
+
+## Meta WhatsApp (Cloud API): "Não foi possível ler o App Secret salvo nesta conexão"
+
+- **Causa:** a `INBOUND_WEBHOOK_ENCRYPTION_KEY` da API mudou depois que o App Secret foi salvo na conexão. O segredo antigo não decifra mais e as entregas dessa conexão são recusadas.
+- **Correção:** salve o App ID e o App Secret de novo em **App do Meta desta conexão**. Não troque a `INBOUND_WEBHOOK_ENCRYPTION_KEY` de uma instalação no ar.
 
 ## Meta WhatsApp (Cloud API): chegam mensagens mas nenhum lead
 

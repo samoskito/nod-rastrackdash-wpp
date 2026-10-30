@@ -245,7 +245,7 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | Variável | Obrigatória | Onde obter | Onde inserir | Secreto |
 |---|---|---|---|---|
 | `META_APP_ID` | Só se for usar integração Meta via App próprio | Meta for Developers | `.env` da API | Não |
-| `META_APP_SECRET` | **Sim para produção do Meta WhatsApp (Cloud API)** — veja abaixo | Meta for Developers → App Secret do **mesmo app** do webhook | `.env` local / env do serviço | **Sim** |
+| `META_APP_SECRET` | **Só se a instalação usa um único app Meta** para o Meta WhatsApp (Cloud API): é o segredo de reserva de toda conexão sem App Secret próprio. Com vários apps (agências), preencha o App Secret em cada conexão no painel — veja abaixo | Meta for Developers → App Secret do **mesmo app** do webhook | `.env` local / env do serviço | **Sim** |
 | `META_CONNECTION_MODES` | Sim para o MVP do aluno | Defina exatamente `manual` | `.env` da API / env do serviço | Não |
 | `META_GRAPH_API_VERSION` | Não (tem padrão) | Documentação Graph API | `.env` da API | Não |
 | `META_TOKEN_ENCRYPTION_KEY` | Sim, antes de conectar qualquer token Meta | Você gera | `.env` local / env do serviço | **Sim** |
@@ -336,26 +336,52 @@ Defina `META_CONNECTION_MODES=manual` **antes** de configurar Meta e redeploy a 
 O webhook de mensagens do Meta WhatsApp (Cloud API) **não** usa
 `META_WEBHOOK_VERIFY_TOKEN`: o Verify token é gerado pelo produto, por
 conexão, e mostrado uma única vez ao criar a conexão em `/integrations`.
-`META_APP_SECRET` serve para validar o header `x-hub-signature-256` de
-cada POST:
+A Meta assina cada POST com o **App Secret do app que entrega as
+mensagens** (header `x-hub-signature-256`). A API confere essa assinatura
+com um segredo escolhido nesta ordem, por conexão:
 
-| `META_APP_SECRET` | Conexão em **observação** | Conexão em **produção** |
+1. o **App Secret salvo na própria conexão** (Integrações → cartão da conexão
+   Meta Cloud → **App do Meta desta conexão**);
+2. senão, o `META_APP_SECRET` do ambiente da API;
+3. senão, nenhum.
+
+| Segredo da conexão (1 ou 2) | Conexão em **observação** | Conexão em **produção** |
 |---|---|---|
-| Preenchido | Aceita só com assinatura válida | Aceita só com assinatura válida |
-| Vazio | Aceita e registra o aviso `meta_cloud_signature_unverified` | **Recusa com `404`** |
+| Existe | Aceita só com assinatura válida | Aceita só com assinatura válida |
+| Nenhum | Aceita e registra o aviso `meta_cloud_signature_unverified` | **Recusa com `404`** |
 
-Ou seja: opcional para homologar, **obrigatório antes de ativar o envio
-automático** numa conexão `meta_cloud`. É o App Secret do app Meta, não o
-token permanente do Graph de [`meta-manual.md`](meta-manual.md).
-Use o segredo do **próprio app que entrega mensagens**, nunca o da PalmUP.
-A API verifica sua presença antes da ativação e da autorização de recuperação.
+Qual caminho usar:
+
+- **Um único app Meta na instalação** (o caso comum): preencha só
+  `META_APP_SECRET` (e `META_APP_ID`, para a inscrição na WABA) e redeploy a
+  API. Nada muda em relação às versões anteriores.
+- **Vários apps Meta** (agências com um app por BM de cliente): um único
+  `META_APP_SECRET` só valida um dos apps. Preencha o **App ID** e o **App
+  Secret** do app de cada cliente no cartão da conexão dele, em
+  **App do Meta desta conexão**. Não precisa de redeploy. O segredo fica
+  cifrado no banco com a `INBOUND_WEBHOOK_ENCRYPTION_KEY` e nunca volta para a
+  tela, para a resposta da API nem para a auditoria. `META_APP_SECRET` pode
+  continuar preenchido como reserva para as conexões sem segredo próprio.
+
+É sempre o App Secret do app Meta (Configurações do app → Básico), não o token
+permanente do Graph de [`meta-manual.md`](meta-manual.md). Use o segredo do
+**próprio app que entrega mensagens**, nunca o da PalmUP, e nunca cole o
+segredo no chat. A API confere o segredo (da conexão ou do ambiente) antes de
+a conexão nascer enviando, antes da ativação e antes da autorização de
+recuperação. Trocar o App Secret de uma conexão que está enviando não pausa
+nada. Remover o App Secret de uma conexão que está enviando é recusado quando
+o servidor não tem `META_APP_SECRET` de reserva: pause o envio antes.
+
+Atenção: se a `INBOUND_WEBHOOK_ENCRYPTION_KEY` for trocada, os App Secrets
+salvos nas conexões deixam de ser lidos e as entregas dessas conexões passam a
+ser recusadas. Salve o App ID e o App Secret de novo em cada conexão.
 
 ### Recuperação histórica Meta Cloud por owner
 
 `INBOUND_WEBHOOK_REPLAY_ENABLED` continua `false` por padrão. O operador pode
 configurar `true` somente na API para disponibilizar prévia e confirmação
 por owner; também exige `INBOUND_WEBHOOKS_ENABLED`, a chave atual
-`INBOUND_WEBHOOK_ENCRYPTION_KEY`, `META_APP_SECRET` próprio, licença e rotas
+`INBOUND_WEBHOOK_ENCRYPTION_KEY`, o App Secret próprio (o da conexão ou o `META_APP_SECRET`), licença e rotas
 autorizadas. Reinicie a API após ajustar suas variáveis; preserve o `.env`
 e a chave existente. A flag não envia histórico nem promove a conexão.
 `INBOUND_WEBHOOK_PRODUCTION_ENABLED` é necessária para novos envios e não
@@ -612,8 +638,10 @@ META_CONNECTION_MODES=manual
 # Botão "Conectar Meta (PalmUP)". URL pública, NÃO é segredo nem App Secret.
 PALMUP_META_BROKER_URL=[já vem preenchido no .env.example — https://wpptrack-api.rastrack.app]
 META_APP_ID=[PREENCHER — só se usar App próprio]
-# App Secret do app Meta. Obrigatório antes de ativar o envio automático
-# em uma conexão Meta WhatsApp (Cloud API).
+# App Secret do app Meta. Instalação com UM app Meta: obrigatório antes de
+# ativar o envio automático em uma conexão Meta WhatsApp (Cloud API).
+# Vários apps (agências): deixe vazio ou como reserva e preencha o App Secret
+# de cada app no cartão da conexão (App do Meta desta conexão).
 META_APP_SECRET=[PREENCHER NO DOKPLOY]
 # Só para o webhook de Meta Ads (/webhooks/meta).
 META_WEBHOOK_VERIFY_TOKEN=[GERAR]

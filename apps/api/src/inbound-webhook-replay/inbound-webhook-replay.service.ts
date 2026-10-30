@@ -2,6 +2,7 @@ import {
   assertMetaCloudSigningConfigured,
   effectiveInboundParserStatus,
   inboundParserProductionEligible,
+  metaCloudSigningConfigured,
   missingMetaSigningSecretMessage,
 } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
 import {
@@ -201,7 +202,7 @@ export class InboundWebhookReplayService {
     });
     const unavailableReason = !this.replayEnabled()
       ? "Recuperação indisponível. Quem administra a instalação precisa ligar o recebimento de webhooks e a recuperação na configuração da API e reiniciar o serviço."
-      : !this.env.META_APP_SECRET?.trim()
+      : !metaCloudSigningConfigured(connection, this.env)
         ? missingMetaSigningSecretMessage
         : !context
           ? "Habilite o canal, valide a rota Meta e use a integração Meta Cloud nativa v1 disponível antes de recuperar."
@@ -485,7 +486,7 @@ export class InboundWebhookReplayService {
         "Digite exatamente o nome da conexão para autorizar",
       );
     }
-    assertMetaCloudSigningConfigured(connection.provider, this.env);
+    assertMetaCloudSigningConfigured(connection, this.env);
     const now = new Date();
 
     const reset = await this.prisma.$transaction(async (tx) => {
@@ -1189,7 +1190,7 @@ export class InboundWebhookReplayService {
       throw new BadRequestException(
         "Revise a prévia antes de confirmar o envio",
       );
-    assertMetaCloudSigningConfigured(connection.provider, this.env);
+    assertMetaCloudSigningConfigured(connection, this.env);
     const requestedLimit = this.replaySelectionLimit(selection);
     const replayChannelId = channelId.trim();
 
@@ -1672,7 +1673,7 @@ export class InboundWebhookReplayService {
       throw new ReplayItemFailure("inbound_webhook_replay_payload_unavailable");
     }
 
-    assertMetaCloudSigningConfigured(connection.provider, this.env);
+    assertMetaCloudSigningConfigured(connection, this.env);
     const parsedEvent = this.reparseEvent(item);
     const phone = normalizePhoneIdentity(parsedEvent.contact.phoneNumber);
     const phoneHash = hashPhoneIdentity(parsedEvent.contact.phoneNumber);

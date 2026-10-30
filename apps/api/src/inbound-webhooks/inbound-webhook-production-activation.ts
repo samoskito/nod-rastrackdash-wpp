@@ -284,7 +284,7 @@ export async function applyInboundWebhookConnectionStatus(
      * Fase 6.1c (produção direta): retomar uma conexão pausada de integração
      * validada. Os números nascem ativos sem exigir rota (a rota é conferida
      * no envio), então a retomada não exige canal ativo nem rota em cada
-     * canal; leitor validado, META_APP_SECRET (Meta Cloud) e replay em curso
+     * canal; leitor validado, App Secret (Meta Cloud: o da conexão ou o META_APP_SECRET) e replay em curso
      * continuam valendo.
      */
     productionDirectResume?: boolean;
@@ -298,7 +298,7 @@ export async function applyInboundWebhookConnectionStatus(
   );
 
   if (status === "production") {
-    assertMetaCloudSigningConfigured(current.provider, input.env ?? process.env);
+    assertMetaCloudSigningConfigured(current, input.env ?? process.env);
     await assertProductionReady(transaction, current, {
       requireValidMetaRoute: input.requireValidMetaRoute,
       productionDirectResume:

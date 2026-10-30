@@ -681,7 +681,7 @@ export class InboundWebhookProductionService {
         "inbound_webhook_production_context_changed",
       );
     }
-    assertMetaCloudSigningConfigured(connection.provider, this.env);
+    assertMetaCloudSigningConfigured(connection, this.env);
     const now = new Date();
 
     if (

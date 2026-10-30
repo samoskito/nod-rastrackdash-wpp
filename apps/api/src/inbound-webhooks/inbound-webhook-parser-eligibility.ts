@@ -2,6 +2,13 @@ import { ConflictException } from "@nestjs/common";
 import type { RuntimeEnv } from "../common/runtime/runtime.module";
 import { MetaCloudV1Parser } from "./providers/meta-cloud/meta-cloud-v1.parser";
 import { InboundWebhookParserRegistry } from "./providers/inbound-webhook-parser.registry";
+import { metaCloudAppSecretSource } from "./meta-cloud-app-secret";
+
+/** A coluna é obrigatória no tipo: um select que a esqueça não compila. */
+export type MetaCloudSigningConnection = {
+  provider: string;
+  metaAppSecretEncrypted: string | null;
+};
 
 type Release = { provider: string; version: string; status: string };
 const builtInRegistry = new InboundWebhookParserRegistry();
@@ -64,13 +71,28 @@ export function effectiveInboundParserStatus<T extends Release>(
 }
 
 export const missingMetaSigningSecretMessage =
-  "Configure o segredo do seu próprio app Meta (App Secret) na configuração da API antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.";
+  "Preencha o App Secret do seu próprio app Meta nesta conexão (Integrações → cartão da conexão → “App do Meta desta conexão”) ou, se a instalação usa um único app Meta, o META_APP_SECRET na configuração da API, antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.";
 
+/**
+ * Portão único da assinatura Meta Cloud: vale o segredo da conexão; sem ele,
+ * o META_APP_SECRET do ambiente (resolveMetaCloudAppSecret). Outros
+ * provedores passam direto.
+ */
 export function assertMetaCloudSigningConfigured(
-  provider: string,
+  connection: MetaCloudSigningConnection,
   env: RuntimeEnv,
 ): void {
-  if (provider === "meta_cloud" && !env.META_APP_SECRET?.trim()) {
+  if (!metaCloudSigningConfigured(connection, env)) {
     throw new ConflictException(missingMetaSigningSecretMessage);
   }
+}
+
+export function metaCloudSigningConfigured(
+  connection: MetaCloudSigningConnection,
+  env: RuntimeEnv,
+): boolean {
+  return (
+    connection.provider !== "meta_cloud" ||
+    metaCloudAppSecretSource(connection, env) !== "none"
+  );
 }

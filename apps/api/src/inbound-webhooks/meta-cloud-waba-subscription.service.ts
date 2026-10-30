@@ -22,6 +22,10 @@ import {
 } from "../common/runtime/runtime.module";
 import { connectionNotFoundMessage } from "./inbound-webhook-production-activation";
 import { isProvisionalProviderChannelId } from "./inbound-webhook-provisional-channel";
+import {
+  type ResolvedMetaCloudAppSecret,
+  resolveMetaCloudAppSecret,
+} from "./meta-cloud-app-secret";
 
 /** Mesmo padrão do adapter Meta do projeto. */
 const defaultGraphApiVersion = "v21.0";
@@ -77,9 +81,13 @@ export class MetaCloudWabaError extends HttpException {
 
 const messages = {
   appNotConfigured:
-    "Esta instalação ainda não tem o ID e o segredo do app Meta (App ID e App Secret) configurados na API. Configure os dois, do seu próprio app Meta (o mesmo que entrega os webhooks), e reinicie a API antes de consultar ou inscrever a WABA.",
+    "Falta o App ID e o App Secret do app Meta que entrega os webhooks desta conexão. Preencha os dois em “App do Meta desta conexão”, logo acima, ou, se a instalação usa um único app Meta, META_APP_ID e META_APP_SECRET na configuração da API (e reinicie a API) antes de consultar ou inscrever a WABA.",
   appCredentialsRejected:
-    "A Meta recusou as credenciais do app desta instalação ao validar o token. Confira o ID e o segredo do app Meta (App ID e App Secret) configurados na API (do seu próprio app Meta).",
+    "A Meta recusou as credenciais do app desta instalação ao validar o token. Confira o ID e o segredo do app Meta (META_APP_ID e META_APP_SECRET) configurados na API (do seu próprio app Meta).",
+  connectionAppCredentialsRejected:
+    "A Meta recusou o App ID e o App Secret salvos nesta conexão ao validar o token. Confira os dois em “App do Meta desta conexão” (Configurações do app → Básico, no seu próprio app Meta) e salve de novo.",
+  connectionAppUnreadable:
+    "Não foi possível ler o App Secret salvo nesta conexão (a chave de criptografia da API pode ter mudado). Salve o App ID e o App Secret de novo em “App do Meta desta conexão”.",
   connectionNotMetaCloud:
     "A inscrição na WABA só existe para conexões Meta WhatsApp (Cloud API).",
   tokenInvalid:
@@ -87,7 +95,7 @@ const messages = {
   tokenType:
     "Este tipo de token não serve. Use o token temporário do painel do app (WhatsApp → Configuração da API), um token do Graph API Explorer ou um token de system user — sempre do app configurado nesta instalação.",
   tokenAppMismatch:
-    "Este token foi gerado para outro app Meta. Gere o token no mesmo app configurado nesta instalação (o App ID configurado na API): é com o segredo dele que a assinatura dos webhooks é conferida.",
+    "Este token foi gerado para outro app Meta. Gere o token no mesmo app desta conexão (o App ID salvo em “App do Meta desta conexão” ou, sem ele, o configurado na API): é com o segredo dele que a assinatura dos webhooks é conferida.",
   tokenMissingScope:
     "O token não tem a permissão whatsapp_business_management. Gere um novo token marcando essa permissão.",
   tokenWabaNotGranted:
@@ -146,7 +154,13 @@ export class MetaCloudWabaSubscriptionService {
         workspaceId: input.workspaceId,
         removedAt: null,
       },
-      select: { id: true, provider: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        provider: true,
+        metaAppId: true,
+        metaAppSecretEncrypted: true,
+      },
     });
 
     if (!connection) {
@@ -164,7 +178,10 @@ export class MetaCloudWabaSubscriptionService {
     const ctx: Ctx = { ...input, deadline: Date.now() + this.timeouts.totalMs };
     let status: MetaCloudWabaSubscriptionStatusDto;
     try {
-      status = await this.execute(operation, ctx);
+      // App da conexão (App ID + App Secret salvos nela); sem eles, o app da
+      // instalação (META_APP_ID + META_APP_SECRET). Nunca mistura os dois.
+      const app = resolveMetaCloudAppSecret(connection, this.env);
+      status = await this.execute(operation, ctx, app);
     } catch (error) {
       await this.safeAudit(operation, input, {
         resultStatus: "failed",
@@ -208,19 +225,22 @@ export class MetaCloudWabaSubscriptionService {
   private async execute(
     operation: Operation,
     input: Ctx,
+    app: ResolvedMetaCloudAppSecret,
   ): Promise<MetaCloudWabaSubscriptionStatusDto> {
-    const appId = this.env.META_APP_ID?.trim();
-    const appSecret = this.env.META_APP_SECRET?.trim();
+    const appId = app.appId;
+    const appSecret = app.secret;
 
     if (!appId || !appSecret) {
       throw new MetaCloudWabaError(
         "meta_app_not_configured",
-        messages.appNotConfigured,
+        app.source === "connection"
+          ? messages.connectionAppUnreadable
+          : messages.appNotConfigured,
         503,
       );
     }
 
-    await this.validateToken(input, appId, appSecret);
+    await this.validateToken(input, appId, appSecret, app.source);
     const phoneNumbers = await this.readPhoneNumbers(input);
     const channelCheck = await this.checkChannels(input, phoneNumbers);
 
@@ -254,14 +274,16 @@ export class MetaCloudWabaSubscriptionService {
   }
 
   /**
-   * debug_token com o app token (META_APP_ID|META_APP_SECRET), montado só
-   * aqui no servidor. Aceita token de usuário (temporário do painel do app ou
-   * do Graph API Explorer) e de system user.
+   * debug_token com o app token (App ID|App Secret da conexão ou, sem eles,
+   * META_APP_ID|META_APP_SECRET), montado só aqui no servidor. Aceita token
+   * de usuário (temporário do painel do app ou do Graph API Explorer) e de
+   * system user.
    */
   private async validateToken(
     input: Ctx,
     appId: string,
     appSecret: string,
+    source: ResolvedMetaCloudAppSecret["source"],
   ): Promise<void> {
     const result = await this.graph("GET", "/debug_token", {
       bearer: `${appId}|${appSecret}`,
@@ -276,7 +298,9 @@ export class MetaCloudWabaSubscriptionService {
       if (code === 190 || code === 100 || code === 101 || code === 102) {
         throw new MetaCloudWabaError(
           "meta_app_not_configured",
-          messages.appCredentialsRejected,
+          source === "connection"
+            ? messages.connectionAppCredentialsRejected
+            : messages.appCredentialsRejected,
           503,
         );
       }

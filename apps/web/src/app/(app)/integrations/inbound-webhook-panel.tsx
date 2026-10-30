@@ -40,6 +40,7 @@ import {
 } from "./whatsapp-instance-activity";
 import { InboundWebhookRoutingMode } from "./inbound-webhook-routing-mode";
 import { InboundRecoveryPanel } from "./inbound-recovery-panel";
+import { MetaCloudAppCredentialsPanel } from "./meta-cloud-app-credentials";
 import { MetaCloudWabaSubscriptionPanel } from "./meta-cloud-waba-subscription";
 import {
   adUnavailableLabel,
@@ -669,6 +670,14 @@ export function InboundWebhookPanel({
                   ))}
 
                   {connection.provider === "meta_cloud" ? <p>Com a conexão enviando, cada novo CTWA de um canal ativo e com rota válida vai para a Meta. CTWA roteado não significa enviado. O histórico anterior não é reenviado automaticamente.</p> : null}
+                  {connection.provider === "meta_cloud" ? (
+                    <MetaCloudAppCredentialsPanel
+                      connectionId={connection.id}
+                      metaApp={connection.metaApp}
+                      canManage={canManage}
+                      licenseLocked={licenseLocked}
+                    />
+                  ) : null}
                   {connection.provider === "meta_cloud" ? (
                     <MetaCloudWabaSubscriptionPanel
                       connectionId={connection.id}

@@ -295,6 +295,50 @@ export const inboundWebhookParserReleaseSchema = z.object({
   updatedAt: dateTimeSchema,
 });
 
+/**
+ * Meta Cloud: App ID e App Secret do app Meta por conexão (agências com um
+ * app por BM de cliente). O segredo nunca volta da API: a tela só vê se ele
+ * existe e de onde vem. Resolução: o segredo da conexão; senão, o
+ * META_APP_SECRET do ambiente da API; senão, nenhum.
+ */
+export const metaCloudAppSecretSourceSchema = z.enum([
+  "connection",
+  "environment",
+  "none",
+]);
+
+export const inboundWebhookMetaAppSchema = z.object({
+  /** App ID salvo nesta conexão (não é segredo); null = não salvo. */
+  appId: z.string().nullable(),
+  /** true = esta conexão tem App Secret próprio salvo. */
+  appSecretConfigured: z.boolean(),
+  /** Qual segredo confere as assinaturas desta conexão agora. */
+  appSecretSource: metaCloudAppSecretSourceSchema,
+  appSecretUpdatedAt: dateTimeSchema.nullable(),
+});
+
+export const metaCloudAppIdSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{5,25}$/, "Informe o App ID do app Meta (somente números).");
+
+export const metaCloudAppSecretSchema = z
+  .string()
+  .trim()
+  .min(16, "Cole o App Secret completo do app Meta (Configurações do app → Básico).")
+  .max(128, "App Secret longo demais.")
+  .regex(
+    /^[\x21-\x7e]+$/,
+    "O App Secret não pode ter espaços, quebras de linha ou acentos.",
+  );
+
+export const metaCloudAppCredentialsInputSchema = z
+  .object({
+    appId: metaCloudAppIdSchema,
+    appSecret: metaCloudAppSecretSchema,
+  })
+  .strict();
+
 export const inboundWebhookConnectionSchema = z.object({
   id: idSchema,
   workspaceId: idSchema,
@@ -308,6 +352,8 @@ export const inboundWebhookConnectionSchema = z.object({
   lastSuccessfulParseAt: dateTimeSchema.nullable(),
   createdAt: dateTimeSchema,
   updatedAt: dateTimeSchema,
+  /** Só em conexões Meta Cloud; ausente ou null nos demais provedores. */
+  metaApp: inboundWebhookMetaAppSchema.nullable().optional(),
 });
 
 export const inboundWebhookConnectionListSchema = z.array(
@@ -1103,6 +1149,15 @@ export type InboundWebhookParserReleaseDto = z.infer<
 >;
 export type InboundWebhookConnectionDto = z.infer<
   typeof inboundWebhookConnectionSchema
+>;
+export type MetaCloudAppSecretSourceDto = z.infer<
+  typeof metaCloudAppSecretSourceSchema
+>;
+export type InboundWebhookMetaAppDto = z.infer<
+  typeof inboundWebhookMetaAppSchema
+>;
+export type MetaCloudAppCredentialsInputDto = z.infer<
+  typeof metaCloudAppCredentialsInputSchema
 >;
 export type InboundWebhookConnectionListDto = z.infer<
   typeof inboundWebhookConnectionListSchema
