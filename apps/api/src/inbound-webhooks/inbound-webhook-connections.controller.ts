@@ -17,6 +17,7 @@ import {
   inboundWebhookChannelStatusUpdateInputSchema,
   inboundWebhookConnectionCreateInputSchema,
   inboundWebhookConnectionStatusUpdateInputSchema,
+  metaCloudAppCredentialsInputSchema,
   providerConversionAutomationReprocessBatchInputSchema,
 } from "@wpptrack/shared";
 import { AuthToken } from "../auth/auth-user.decorator";
@@ -133,6 +134,60 @@ export class InboundWebhookConnectionsController {
     const context = await this.requireManager(refreshToken);
 
     return this.connectionsService.rotateSecret(
+      context.workspaceId,
+      connectionId,
+      context.userId,
+    );
+  }
+
+  /**
+   * App ID e App Secret do app Meta desta conexão Meta Cloud (agências com um
+   * app por BM de cliente). Só dono/admin; o guard global de licença
+   * responde 423 com a licença bloqueada. O segredo vai só no corpo, é
+   * cifrado e nunca volta: a resposta traz apenas metaApp (App ID, se há
+   * segredo e de onde vem).
+   */
+  @Put(":connectionId/meta-cloud/app")
+  async setMetaCloudApp(
+    @AuthToken() refreshToken: string,
+    @Param("connectionId") connectionId: string,
+    @Body() body: unknown,
+  ) {
+    const context = await this.requireManager(refreshToken);
+    const parsed = metaCloudAppCredentialsInputSchema.safeParse(body);
+
+    if (!parsed.success) {
+      // Sem eco do corpo: só a primeira mensagem de validação.
+      const fields = parsed.error.flatten().fieldErrors as Record<
+        string,
+        string[] | undefined
+      >;
+      throw new BadRequestException({
+        statusCode: 400,
+        message:
+          fields.appId?.[0] ??
+          fields.appSecret?.[0] ??
+          "Informe o App ID e o App Secret do app Meta desta conexão.",
+        code: "invalid_input",
+      });
+    }
+
+    return this.connectionsService.setMetaCloudAppCredentials(
+      context.workspaceId,
+      connectionId,
+      parsed.data,
+      context.userId,
+    );
+  }
+
+  @Delete(":connectionId/meta-cloud/app")
+  async clearMetaCloudApp(
+    @AuthToken() refreshToken: string,
+    @Param("connectionId") connectionId: string,
+  ) {
+    const context = await this.requireManager(refreshToken);
+
+    return this.connectionsService.clearMetaCloudAppCredentials(
       context.workspaceId,
       connectionId,
       context.userId,

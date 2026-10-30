@@ -50,7 +50,7 @@ export function MetaCloudWabaSubscriptionPanel({
     if (
       kind === "subscribe" &&
       !window.confirm(
-        "Inscrever o app desta instalação na WABA informada? A Meta passa a entregar as mensagens dessa WABA para este app. Outros apps inscritos não são removidos.",
+        "Inscrever o app Meta desta conexão na WABA informada? A Meta passa a entregar as mensagens dessa WABA para este app. Outros apps inscritos não são removidos.",
       )
     ) {
       return;
@@ -160,9 +160,9 @@ export function MetaCloudWabaSubscriptionPanel({
           />
           <span id={`${tokenFieldId}-help`} className="field-help muted">
             O mais simples: o token temporário de WhatsApp → Configuração da API (vale cerca de 24 h).
-            Também serve um do Graph API Explorer ou de system user, desde que seja do mesmo app
-            configurado nesta instalação, com whatsapp_business_management e gerado por quem é admin da
-            WABA. Ele é usado só nesta consulta e descartado: não é salvo, não volta para a tela e precisa
+            Também serve um do Graph API Explorer ou de system user, desde que seja do mesmo app desta
+            conexão (o salvo em “App do Meta desta conexão” ou, sem ele, o configurado na instalação),
+            com whatsapp_business_management e gerado por quem é admin da WABA. Ele é usado só nesta consulta e descartado: não é salvo, não volta para a tela e precisa
             ser colado de novo a cada ação.
           </span>
         </div>
@@ -278,8 +278,8 @@ export function MetaCloudWabaManualGuide() {
       <summary>Fazer a inscrição manualmente</summary>
       <ol>
         <li>
-          Abra o Graph API Explorer (developers.facebook.com/tools/explorer) e escolha o app configurado
-          nesta instalação.
+          Abra o Graph API Explorer (developers.facebook.com/tools/explorer) e escolha o app desta
+          conexão (o de “App do Meta desta conexão” ou, sem ele, o configurado na instalação).
         </li>
         <li>Gere um token de usuário com a permissão whatsapp_business_management e selecione a sua WABA.</li>
         <li>

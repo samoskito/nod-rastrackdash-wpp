@@ -1811,6 +1811,14 @@ model InboundWebhookConnection {
   lastDeliveryAt        DateTime?
   lastSuccessfulParseAt DateTime?
   removedAt             DateTime?
+  /// Meta Cloud only: App ID of the student's own Meta app that delivers this
+  /// connection's webhooks (agencies: one app per client BM). Not secret.
+  metaAppId             String?
+  /// Meta Cloud only: that app's App Secret, AES-256-GCM encrypted with
+  /// INBOUND_WEBHOOK_ENCRYPTION_KEY. Never returned, logged or audited.
+  /// NULL = fall back to META_APP_SECRET from the API environment.
+  metaAppSecretEncrypted String?
+  metaAppSecretUpdatedAt DateTime?
   createdAt             DateTime                       @default(now())
   updatedAt             DateTime                       @updatedAt
 

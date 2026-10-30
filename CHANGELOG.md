@@ -7,6 +7,36 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One additive migration (`20261030120000_meta_cloud_app_secret_per_connection`): back up PostgreSQL before redeploying. No new variable.** Single-app installs keep using `META_APP_SECRET`; agencies with one Meta app per client fill App ID + App Secret on each Meta Cloud connection card ("App do Meta desta conexão").
+
+### Added
+
+- **Meta Cloud App Secret per connection**: each `meta_cloud` inbound
+  connection can store its own Meta App ID and App Secret, entered by owners
+  and admins in the connection card ("App do Meta desta conexão";
+  `PUT`/`DELETE /integrations/inbound-webhooks/:id/meta-cloud/app`, 423 with a
+  locked license). The secret is AES-256-GCM encrypted with
+  `INBOUND_WEBHOOK_ENCRYPTION_KEY` (AAD bound to workspace and connection) and
+  never returned, logged or audited; the connection DTO only exposes
+  `metaApp` (`appId`, `appSecretConfigured`, `appSecretSource`:
+  `connection` | `environment` | `none`, `appSecretUpdatedAt`).
+- One resolver (`resolveMetaCloudAppSecret`): the connection's secret, else
+  `META_APP_SECRET`, else none. Used by the `x-hub-signature-256` check, the
+  connection born in production, activation, production intake, the
+  inbound Meta dispatch check, replay/recovery and the WABA subscription
+  (`debug_token` with the connection's App ID|App Secret when set). A stored
+  secret that no longer decrypts fails closed (no fallback to the env app).
+
+### Changed
+
+- The "missing signing secret" blocker now tells the student to fill the App
+  Secret in this connection, or `META_APP_SECRET` when the install has a
+  single Meta app (still warning not to paste secrets in chat nor use the
+  PalmUP secret).
+- Replacing a connection's App Secret keeps its status; removing it while the
+  connection is in production is refused (409) when there is no
+  `META_APP_SECRET` fallback. Removing a connection wipes its stored secret.
+
 ## [1.3.1] - 2026-10-28
 
 Upgrade notes for students: [`docs/releases/1.3.1.json`](docs/releases/1.3.1.json). **First check Conversões: if it shows "Envio desligado no servidor", set `INBOUND_WEBHOOKS_ENABLED`, `INBOUND_CONVERSION_RULES_ENABLED` and `INBOUND_WEBHOOK_PRODUCTION_ENABLED` to `true` and leave `INBOUND_CONVERSION_PRODUCTION_ENABLED` empty (or `true`) on the API, then redeploy it.** **No new migration and no new variable.** The Meta instant forms (Lead Ads) and the Dashboard Leads import of 1.3.0 were removed (see Removed); their two tables stay in the database, unused. Kommo/Pipedrive events that arrive with `INBOUND_CONVERSION_PRODUCTION_ENABLED=false` now wait and are sent after it is turned back on.

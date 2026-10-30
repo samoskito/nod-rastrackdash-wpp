@@ -146,7 +146,7 @@ describe("Meta Cloud production UI actions", () => {
     p.setConnectionStatusAction = vi.fn(async () => ({
       ok: false,
       message:
-        "Configure META_APP_SECRET do seu próprio app Meta no ambiente da API antes de enviar.",
+        "Preencha o App Secret do seu próprio app Meta nesta conexão (Integrações → cartão da conexão → “App do Meta desta conexão”) ou, se a instalação usa um único app Meta, o META_APP_SECRET na configuração da API, antes de enviar. Não use o segredo PalmUP nem cole segredos no chat.",
     }));
     render(createElement(InboundWebhookPanel, p));
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -158,7 +158,10 @@ describe("Meta Cloud production UI actions", () => {
         }),
       );
     });
-    expect(screen.getByRole("alert").textContent).toContain("META_APP_SECRET");
+    const alert = screen.getByRole("alert").textContent ?? "";
+    expect(alert).toContain("App do Meta desta conexão");
+    expect(alert).toContain("META_APP_SECRET");
+    expect(alert).toContain("PalmUP");
     expect(refresh).not.toHaveBeenCalled();
   });
   it("only exposes recovery to the owner capability while retaining the observation/production distinction", () => {

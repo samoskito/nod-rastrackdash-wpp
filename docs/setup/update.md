@@ -192,7 +192,8 @@ Revise separadamente migrations de outras mudanças incluídas na atualização.
 **Variáveis de ambiente:** nenhuma nova. Preserve o `.env` e
 `INBOUND_WEBHOOK_ENCRYPTION_KEY`; confira `INBOUND_WEBHOOKS_ENABLED`,
 `INBOUND_WEBHOOK_PRODUCTION_ENABLED` para novos envios, e `META_APP_SECRET`
-do próprio app Meta na API. `INBOUND_WEBHOOK_REPLAY_ENABLED` continua
+do próprio app Meta na API (ou, com vários apps Meta, o App Secret salvo em
+cada conexão Meta Cloud, em "App do Meta desta conexão"). `INBOUND_WEBHOOK_REPLAY_ENABLED` continua
 `false`; habilitar recuperação é decisão explícita do operador e exige
 reinício da API. Nunca use segredo PalmUP ou variável pública para segredos.
 

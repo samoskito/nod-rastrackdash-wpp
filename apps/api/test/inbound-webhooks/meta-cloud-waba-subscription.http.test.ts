@@ -22,6 +22,7 @@ import {
   MetaCloudWabaSubscriptionService,
   type MetaCloudWabaTimeouts,
 } from "../../src/inbound-webhooks/meta-cloud-waba-subscription.service";
+import { encryptMetaCloudAppSecret } from "../../src/inbound-webhooks/meta-cloud-app-secret";
 import { LicenseClientService } from "../../src/licensing-client/license-client.service";
 import { LicenseSoftlockGuard } from "../../src/licensing-client/license-softlock.guard";
 import { WorkspacesService } from "../../src/workspaces/workspaces.service";
@@ -171,7 +172,7 @@ function prismaFake() {
       }),
     },
   };
-  return { prisma, channels, audits };
+  return { prisma, channels, audits, connections };
 }
 
 const apps: NestExpressApplication[] = [];
@@ -447,7 +448,8 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
     const h = await fixture({ env });
     const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
     expect(res.body.code).toBe("meta_app_not_configured");
-    expect(res.body.message).toContain("App ID e App Secret");
+    expect(res.body.message).toContain("App Secret");
+    expect(res.body.message).toContain("App do Meta desta conexão");
     expect(h.fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -599,7 +601,7 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
     h.state.debugTopLevelError = { code: 100 };
     const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
     expect(res.body.code).toBe("meta_app_not_configured");
-    expect(res.body.message).toContain("App ID e App Secret");
+    expect(res.body.message).toContain("META_APP_ID e META_APP_SECRET");
   });
 
   it("prazo total da operação: 504 sugerindo Consultar de novo", async () => {
@@ -618,5 +620,78 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
     const h = await fixture();
     await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
     expect(typeof h.audits[0]!.data.sourceIp).toBe("string");
+  });
+});
+
+describe("Meta Cloud WABA: app Meta salvo na conexão (agências, um app por BM)", () => {
+  const CONNECTION_APP_ID = "555444333222111";
+  const CONNECTION_APP_SECRET = "connection-app-secret-abcdef0123456789";
+  const encryptionEnv = {
+    NODE_ENV: "test",
+    API_PUBLIC_URL: "http://localhost:3333",
+    INBOUND_WEBHOOKS_ENABLED: "true",
+    INBOUND_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+  };
+
+  async function withConnectionApp(
+    env: Record<string, string | undefined>,
+    secret: string | null = CONNECTION_APP_SECRET,
+  ) {
+    const h = await fixture({
+      env: { ...encryptionEnv, META_GRAPH_API_VERSION: "v25.0", ...env },
+    });
+    const connection = h.connections.find(
+      (row) => row.id === "conn_meta",
+    ) as Record<string, unknown>;
+    connection.metaAppId = CONNECTION_APP_ID;
+    connection.metaAppSecretEncrypted =
+      secret === null
+        ? "v1.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA==.AAAA"
+        : encryptMetaCloudAppSecret(
+            secret,
+            { workspaceId: "ws", connectionId: "conn_meta" },
+            encryptionEnv,
+          );
+    h.state.debug = userToken({ app_id: CONNECTION_APP_ID });
+    h.state.subscribed = [
+      { whatsapp_business_api_data: { id: CONNECTION_APP_ID, name: "App do cliente" } },
+    ];
+    return h;
+  }
+
+  it("usa o App ID e o App Secret da conexão no debug_token, mesmo sem nada no ambiente", async () => {
+    const h = await withConnectionApp({});
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+    expect(res.body).toMatchObject({ thisAppId: CONNECTION_APP_ID, thisAppSubscribed: true });
+    const debug = h.state.calls.find((call) => call.path === "/debug_token");
+    expect(debug?.auth).toBe(`Bearer ${CONNECTION_APP_ID}|${CONNECTION_APP_SECRET}`);
+    expect(JSON.stringify(res.body)).not.toContain(CONNECTION_APP_SECRET);
+    expect(JSON.stringify(h.audits)).not.toContain(CONNECTION_APP_SECRET);
+  });
+
+  it("a conexão vence o app do ambiente: token do app da instalação é de outro app", async () => {
+    const h = await withConnectionApp({ META_APP_ID: APP_ID, META_APP_SECRET: APP_SECRET });
+    h.state.debug = userToken({ app_id: APP_ID });
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(422);
+    expect(res.body.code).toBe("token_app_mismatch");
+    const debug = h.state.calls.find((call) => call.path === "/debug_token");
+    expect(debug?.auth).toBe(`Bearer ${CONNECTION_APP_ID}|${CONNECTION_APP_SECRET}`);
+    expect(debug?.auth).not.toContain(APP_SECRET);
+  });
+
+  it("credenciais da conexão recusadas pela Meta apontam para o bloco da conexão", async () => {
+    const h = await withConnectionApp({});
+    h.state.debugTopLevelError = { code: 190 };
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
+    expect(res.body.code).toBe("meta_app_not_configured");
+    expect(res.body.message).toContain("salvos nesta conexão");
+  });
+
+  it("segredo salvo que não decifra: 503 sem cair para o app do ambiente e sem chamar a Meta", async () => {
+    const h = await withConnectionApp({ META_APP_ID: APP_ID, META_APP_SECRET: APP_SECRET }, null);
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(503);
+    expect(res.body.code).toBe("meta_app_not_configured");
+    expect(res.body.message).toContain("Salve o App ID e o App Secret de novo");
+    expect(h.fetchImpl).not.toHaveBeenCalled();
   });
 });

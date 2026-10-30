@@ -99,7 +99,7 @@ Em `/integrations`, aba **WhatsApp**, clique no card do provedor (Uazapi ou WAHA
 | `POST /webhooks/whatsapp/:id` — **Z-API** | Idem | `body.instanceId` precisa ser **exatamente** o Instance ID salvo | **Em breve** — o parser ainda não lê o payload real da Z-API; não use para receber leads |
 | `POST /webhooks/whatsapp/:id` — **NOD API** | Idem | — | **Ainda não existe** — a rota responde `501` ("Receiver inbound para nod_api ainda nao esta disponivel"). Em breve no Hub: só para conexões já existentes |
 | `POST /webhooks/inbound/:id?token=` — **Umbler / Gupshup / Data Crazy / Unnichat / ROI Chat** | `?token=` comparado ao `secretHash` da conexão (rotacionável) | — | **Pronto** |
-| `POST /webhooks/inbound/:id` — **Meta WhatsApp (Cloud API)** | `x-hub-signature-256` via `META_APP_SECRET`; **sem** `META_APP_SECRET`, só é aceito enquanto a conexão está em **observação** | — | **Pronto (CTWA)** — veja a seção Meta Cloud |
+| `POST /webhooks/inbound/:id` — **Meta WhatsApp (Cloud API)** | `x-hub-signature-256` via App Secret da conexão (**App do Meta desta conexão**) ou, sem ele, `META_APP_SECRET`; **sem nenhum dos dois**, só é aceito enquanto a conexão está em **observação** | — | **Pronto (CTWA)** — veja a seção Meta Cloud |
 | `GET /webhooks/inbound/:id` — handshake Meta Cloud | `hub.verify_token` comparado ao **Verify token** daquela conexão | `hub.mode=subscribe` | **Pronto** |
 | `POST /webhooks/uazapi` e `POST /webhooks/uazapi/instances/:id` (legado) | Env global `UAZAPI_WEBHOOK_AUTH_TOKEN` / hash por instância | Exigem uma linha `WhatsappInstance` com `provider = "uazapi"` (valor legado) — **o painel novo grava `uazapi_byo`**, então essas rotas não enxergam as conexões criadas pela UI | **Legado — use o receiver por conexão acima** |
 | `GET`/`POST /webhooks/meta` | `META_WEBHOOK_VERIFY_TOKEN` / `META_APP_SECRET` | Roteamento por `page_id` até o `MetaConversionDestination` | **Pronto** — é webhook de **Meta Ads**, não de mensagens |
@@ -171,8 +171,10 @@ configuração mais comum hoje.
 
 ### Passo a passo
 
-Toda a conexão Meta Cloud é sua: usa o **seu** app Meta (o mesmo de
-`META_APP_ID` e `META_APP_SECRET` na API) e o **seu** número oficial. Não
+Toda a conexão Meta Cloud é sua: usa o **seu** app Meta e o **seu** número
+oficial. O app é o de `META_APP_ID` e `META_APP_SECRET` na API (instalação com
+um único app) ou o App ID e o App Secret salvos na própria conexão, em
+**App do Meta desta conexão** (agências com um app por BM de cliente). Não
 existe QR code e o "Conectar Meta" de anúncios não serve para isso.
 
 São **três passos diferentes na Meta**, e os três são obrigatórios. É comum
@@ -199,14 +201,21 @@ fazer só o primeiro (ou os dois primeiros) e a Meta nunca entregar nada:
    produto devolve o `hub.challenge` quando o token confere.
 4. **Passo 2 — assinar o campo `messages`.** Na mesma tela, em **Campos do
    webhook**, assine **`messages`** do objeto WhatsApp Business Account.
-5. **Passo 3 — inscrever o app na WABA.** Na conexão, use o bloco
+5. **App do Meta desta conexão.** Se cada cliente tem o próprio app Meta,
+   abra a conexão e preencha **App ID** e **App Secret** do app deste
+   cliente (developers.facebook.com → app → Configurações do app → Básico) e
+   clique em **Salvar**. Com um único app na instalação, pule: vale o
+   `META_APP_SECRET` do servidor. O cartão mostra a fonte do segredo
+   ("Segredo configurado nesta conexão", "Usando o META_APP_SECRET do
+   servidor" ou "Nenhum segredo configurado").
+6. **Passo 3 — inscrever o app na WABA.** Na conexão, use o bloco
    **Inscrição do app na sua WABA** (veja a próxima seção) ou faça a
    inscrição manual.
-6. Cadastre o **canal/número** na própria conexão (botão **Cadastrar
+7. Cadastre o **canal/número** na própria conexão (botão **Cadastrar
    canal/número**), usando o número que aparece como
    `display_phone_number` na Meta. Isso libera as regras de conversão
    antes do primeiro lead — veja a seção seguinte.
-7. Configure a **rota Meta** do canal (Pixel/dataset e evento de
+8. Configure a **rota Meta** do canal (Pixel/dataset e evento de
    destino). Um canal sem rota Meta válida não pode ser ativado para
    envio automático.
 
@@ -220,14 +229,16 @@ indisponíveis (a API responde `423`).
 
 **Requisitos**
 
-- `META_APP_ID` e `META_APP_SECRET` do **seu** app configurados na API. Sem
-  eles o painel avisa que a instalação precisa das duas variáveis e não
-  tenta nada.
+- O App ID e o App Secret do **seu** app: os salvos na conexão em **App do
+  Meta desta conexão** ou, sem eles, `META_APP_ID` e `META_APP_SECRET` na
+  API. Sem nenhum dos pares o painel avisa o que falta e não tenta nada. Com
+  o app salvo na conexão, a consulta usa só ele (nunca mistura com o do
+  servidor).
 - O **WABA ID** — o "ID da conta do WhatsApp Business". Fica em
   developers.facebook.com → seu app → **WhatsApp → Configuração da API**,
   logo acima do número, ou no Gerenciador do WhatsApp. **Não** é o ID do
   número (phone number ID); se você colar o ID do número, o painel avisa.
-- Um **token do mesmo app configurado na instalação** (`META_APP_ID`), com a
+- Um **token do mesmo app desta conexão** (o App ID salvo na conexão ou, sem ele, `META_APP_ID`), com a
   permissão `whatsapp_business_management` e gerado por alguém com acesso
   de **admin à WABA**. Serve qualquer um destes:
   - o **token temporário** de WhatsApp → Configuração da API, no painel do
@@ -336,24 +347,41 @@ Secret próprio, retenção, resultados, atualização e recuperação. Não edi
 o banco nem apague tentativas para contornar um bloqueio. A validação é
 local com fixtures; nenhum envio Meta real foi feito nesta entrega.
 
-### `META_APP_SECRET` — opcional para observar, necessário para produção
+### App Secret (por conexão ou `META_APP_SECRET`) — opcional para observar, necessário para produção
 
-`META_APP_SECRET` (o **App Secret** do app Meta — *não* é o token
-permanente do Graph usado em [`meta-manual.md`](meta-manual.md)) faz a API
-validar o header `x-hub-signature-256` de cada POST.
+O **App Secret** do app Meta (*não* é o token permanente do Graph usado em
+[`meta-manual.md`](meta-manual.md)) faz a API validar o header
+`x-hub-signature-256` de cada POST. A API escolhe o segredo de cada conexão
+nesta ordem:
 
-| `META_APP_SECRET` | Conexão com o **envio desligado** | Conexão em **produção** (envio automático) |
+1. o App Secret salvo na conexão (**App do Meta desta conexão**);
+2. senão, o `META_APP_SECRET` do ambiente da API;
+3. senão, nenhum.
+
+| Segredo da conexão | Conexão com o **envio desligado** | Conexão em **produção** (envio automático) |
 |---|---|---|
-| Preenchido | POST aceito só com assinatura válida | POST aceito só com assinatura válida |
-| Vazio | POST aceito (a API registra o aviso `meta_cloud_signature_unverified`) | **POST recusado com `404`** |
+| Existe (1 ou 2) | POST aceito só com assinatura válida | POST aceito só com assinatura válida |
+| Nenhum | POST aceito (a API registra o aviso `meta_cloud_signature_unverified`) | **POST recusado com `404`** |
 
-Ou seja: **preencha `META_APP_SECRET` do próprio app e reinicie a API
-antes de criar a conexão `meta_cloud`**. Produção direta (Fase 6.1c): com o
-segredo, a conexão já nasce enviando; sem ele, nasce com o envio desligado
-(para não recusar as entregas da Meta) e a ativação e a autorização de
-recuperação ficam bloqueadas até o segredo existir. Uma
-conexão em produção continua recusando POSTs sem assinatura válida. Nunca
-use o segredo PalmUP nem envie o valor por chat.
+**Um único app Meta na instalação:** preencha `META_APP_SECRET` do próprio app
+e reinicie a API **antes de criar a conexão `meta_cloud`**. Produção direta
+(Fase 6.1c): com o segredo, a conexão já nasce enviando.
+
+**Vários apps Meta (agências, um app por BM de cliente):** um único
+`META_APP_SECRET` só valida as assinaturas de um dos apps. Crie a conexão de
+cada cliente, preencha **App ID** e **App Secret** do app daquele cliente em
+**App do Meta desta conexão** e clique em **Ativar envio**. Sem segredo
+nenhum, a conexão nasce com o envio desligado (para não recusar as entregas da
+Meta) e a ativação e a autorização de recuperação ficam bloqueadas até o
+segredo existir.
+
+O App Secret salvo na conexão fica cifrado com a
+`INBOUND_WEBHOOK_ENCRYPTION_KEY` e nunca volta para a tela, para a API nem para
+a auditoria; para trocar, cole o novo e salve. Remover o segredo de uma
+conexão que está enviando é recusado se o servidor não tiver
+`META_APP_SECRET` de reserva (pause antes). Uma conexão em produção continua
+recusando POSTs sem assinatura válida. Nunca use o segredo PalmUP nem envie o
+valor por chat.
 
 ## Data Crazy — conexão de webhook de entrada (CTWA)
 

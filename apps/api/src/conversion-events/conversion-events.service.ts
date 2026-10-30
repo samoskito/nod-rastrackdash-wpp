@@ -116,7 +116,7 @@ import { LicenseClientService } from "../licensing-client/license-client.service
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import {
-  assertMetaCloudSigningConfigured,
+  metaCloudSigningConfigured,
   inboundParserProductionEligible,
 } from "../inbound-webhooks/inbound-webhook-parser-eligibility";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
@@ -456,11 +456,6 @@ export class ConversionEventsService {
       return false;
     const config = parseInboundWebhooksConfig(this.env);
     if (!config.enabled) return false;
-    try {
-      assertMetaCloudSigningConfigured("meta_cloud", this.env);
-    } catch {
-      return false;
-    }
     const source = log.sourcePayload as { inboundEventId?: string } | null;
     if (!source?.inboundEventId) return false;
     const event = await client.inboundWebhookEvent.findFirst({
@@ -480,6 +475,8 @@ export class ConversionEventsService {
       !event ||
       event.provider !== "meta_cloud" ||
       event.connection.provider !== "meta_cloud" ||
+      // O segredo da conexão; sem ele, o META_APP_SECRET do ambiente.
+      !metaCloudSigningConfigured(event.connection, this.env) ||
       event.connection.workspaceId !== log.workspaceId ||
       event.channel.workspaceId !== log.workspaceId ||
       event.channel.connectionId !== event.connectionId ||

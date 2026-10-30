@@ -23,6 +23,7 @@ import {
   parseInboundWebhooksConfig,
 } from "../config/deployment-config";
 import { InboundWebhookPayloadEncryptionService } from "./inbound-webhook-payload-encryption.service";
+import { resolveMetaCloudAppSecret } from "./meta-cloud-app-secret";
 import { InboundWebhookQueueService } from "./inbound-webhook-queue.service";
 import {
   rawBodyDeliveryIdentity,
@@ -278,16 +279,35 @@ export class InboundWebhookIngestionService {
     }
 
     const isMetaCloud = connection?.provider === "meta_cloud";
-    const metaAppSecret = this.env.META_APP_SECRET;
+    // Segredo da conexão; sem ele, o META_APP_SECRET do ambiente. Um segredo
+    // de conexão que não decifra falha fechado (nunca cai para o do ambiente,
+    // que é de outro app).
+    const metaAppSecret =
+      isMetaCloud && connection
+        ? resolveMetaCloudAppSecret(connection, this.env)
+        : null;
     const authenticated = isMetaCloud
-      ? metaAppSecret && metaAppSecret.trim().length > 0
+      ? metaAppSecret && metaAppSecret.source !== "none"
         ? matchesMetaCloudSignature256(
-            metaAppSecret,
+            metaAppSecret.secret ?? undefined,
             rawBody,
             metaCloudSignature256,
           )
         : connection?.status === "observation"
       : matchesInboundWebhookSecret(connection?.secretHash, token);
+
+    if (
+      connection &&
+      metaAppSecret?.source === "connection" &&
+      metaAppSecret.secret === null
+    ) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "inbound_webhook.meta_cloud_app_secret_unreadable",
+          connectionId: connection.id,
+        }),
+      );
+    }
 
     if (
       !connection ||
@@ -298,7 +318,7 @@ export class InboundWebhookIngestionService {
       throw new NotFoundException(publicConnectionNotFoundMessage);
     }
 
-    if (isMetaCloud && (!metaAppSecret || metaAppSecret.trim().length === 0)) {
+    if (isMetaCloud && (!metaAppSecret || metaAppSecret.source === "none")) {
       this.logger.warn(
         JSON.stringify({
           event: "inbound_webhook.meta_cloud_signature_unverified",
