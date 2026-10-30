@@ -7,7 +7,9 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One additive migration (`20261030120000_meta_cloud_app_secret_per_connection`): back up PostgreSQL before redeploying. No new variable.** Single-app installs keep using `META_APP_SECRET`; agencies with one Meta app per client fill App ID + App Secret on each Meta Cloud connection card ("App do Meta desta conexão").
+## [1.3.2] - 2026-10-30
+
+Upgrade notes for students: [`docs/releases/1.3.2.json`](docs/releases/1.3.2.json). **One additive migration (`20261030120000_meta_cloud_app_secret_per_connection`): back up PostgreSQL before redeploying. No new variable.** Single-app installs keep using `META_APP_SECRET`; agencies with one Meta app per client fill App ID + App Secret on each Meta Cloud connection card ("App do Meta desta conexão").
 
 ### Added
 
