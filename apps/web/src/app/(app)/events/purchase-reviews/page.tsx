@@ -7,6 +7,7 @@ import type {
   PurchaseReviewViewDto,
 } from "@wpptrack/shared";
 import Link from "next/link";
+import { PageBar } from "../../../../components/page-bar";
 import { serverApiFetch } from "../../../../lib/server-api";
 import { PurchaseReviewPanel } from "./purchase-review-panel";
 import {
@@ -119,15 +120,21 @@ export default async function PurchaseReviewsPage({
 
   return (
     <section className="page-stack page-wide audit-page purchase-review-page">
-      <header className="page-header audit-page-header">
-        <div>
-          <span className="eyebrow">Eventos Meta</span>
-          <h1>Auditoria de conversões</h1>
-          <p>
-            Revise compras reconhecidas antes do envio e corrija valores do
-            painel com histórico.
-          </p>
-        </div>
+      <PageBar
+        className="audit-page-bar"
+        title="Eventos Meta"
+        helpLabel="Sobre a revisão de compras"
+        help="Auditoria de conversões: revise compras reconhecidas antes do envio e corrija valores do painel com histórico."
+      >
+        <nav
+          className="report-view-tabs audit-view-tabs"
+          aria-label="Visões de eventos Meta"
+        >
+          <Link href="/events">Conversões</Link>
+          <Link className="active" href="/events/purchase-reviews">
+            Revisão de compras
+          </Link>
+        </nav>
         <span
           className={data?.pendingCount ? "status-chip warn" : "status-chip"}
         >
@@ -135,17 +142,7 @@ export default async function PurchaseReviewsPage({
             ? `${data.pendingCount} aguardando decisão`
             : "API indisponível"}
         </span>
-      </header>
-
-      <nav
-        className="report-view-tabs audit-view-tabs"
-        aria-label="Visões de eventos Meta"
-      >
-        <Link href="/events">Conversões</Link>
-        <Link className="active" href="/events/purchase-reviews">
-          Revisão de compras
-        </Link>
-      </nav>
+      </PageBar>
 
       <section className="surface-panel purchase-review-command-panel">
         <PurchaseReviewFilters

@@ -6397,12 +6397,17 @@ export class MetaReportingService {
   }): ReportDailyComparisonPointDto[] {
     const timezone = this.reportTimezone();
     const metaByDate = new Map<string, number>();
+    const spendByDate = new Map<string, number>();
 
     for (const insight of input.dailyInsights) {
       metaByDate.set(
         insight.localDate,
         (metaByDate.get(insight.localDate) ?? 0) +
           insight.metaConversationsStarted,
+      );
+      spendByDate.set(
+        insight.localDate,
+        (spendByDate.get(insight.localDate) ?? 0) + insight.spendCents,
       );
     }
 
@@ -6422,6 +6427,10 @@ export class MetaReportingService {
       { returningEvents: input.returningEvents },
       dateKey,
     );
+    const trafficRevenueByDate = this.metricsEngine.dailyTrafficRevenueCents(
+      { events: input.events },
+      dateKey,
+    );
 
     return this.reportDateRange(input.since, input.until).map((date) => ({
       date,
@@ -6429,6 +6438,8 @@ export class MetaReportingService {
       adConversationsStarted: adConversationsByDate.get(date) ?? 0,
       realConversations: realByDate.get(date) ?? 0,
       returningLeads: returningByDate.get(date) ?? 0,
+      spendCents: spendByDate.get(date) ?? 0,
+      trafficRevenueCents: trafficRevenueByDate.get(date) ?? 0,
     }));
   }
 

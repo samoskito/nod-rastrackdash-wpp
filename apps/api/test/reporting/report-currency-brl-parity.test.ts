@@ -33,13 +33,24 @@ const ADDED_AFTER_BASELINE = new Set([
   "thumbnailVersion",
 ]);
 
-function withoutCurrency(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(withoutCurrency);
+/**
+ * Investimento e receita de tráfego por dia (gráfico da Visão geral): só
+ * aditivos e só dentro de cada dia de dailyComparison. Fora dele, spendCents
+ * (do resumo, das campanhas) continua comparado com a referência.
+ */
+const ADDED_TO_DAILY_POINT = new Set(["spendCents", "trafficRevenueCents"]);
+
+function withoutCurrency(value: unknown, parentKey?: string): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => withoutCurrency(item, parentKey));
+  }
   if (value && typeof value === "object") {
+    const dailyPoint = parentKey === "dailyComparison";
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([key]) => !ADDED_AFTER_BASELINE.has(key))
-        .map(([key, item]) => [key, withoutCurrency(item)]),
+        .filter(([key]) => !(dailyPoint && ADDED_TO_DAILY_POINT.has(key)))
+        .map(([key, item]) => [key, withoutCurrency(item, key)]),
     );
   }
   return value;

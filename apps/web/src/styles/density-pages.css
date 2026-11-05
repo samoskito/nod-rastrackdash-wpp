@@ -1,0 +1,384 @@
+/* Density: Leads, CRM, Eventos Meta, Integrações, Conversões, Configurações. Loaded after glass.css. */
+
+/*
+ * "Painel de print": every page starts with PageBar (short title, "i",
+ * chips/actions on the same row), then the compact filter/action strip,
+ * then the data. Section titles lose their eyebrow and paragraph (the
+ * explanation sits behind a HelpTip next to the title).
+ */
+
+/* ---------- Shared ---------- */
+
+/* Pages that used bigger vertical rhythms of their own. */
+.audit-page,
+.purchase-review-page,
+.lead-detail-page,
+.conversions-page {
+  gap: 12px;
+}
+
+/* Tabs and segmented controls sitting in the PageBar row. */
+.page-bar .report-view-tabs {
+  padding: 3px;
+}
+
+.page-bar .report-view-tabs a {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+
+/* A title with its "i" on one line (section headings). */
+.audit-heading-title,
+.settings-domain-title {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ---------- Leads ---------- */
+
+.leads-page {
+  --section-gap: 12px;
+}
+
+.leads-page .lead-origin-filter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lead-filter-primary {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.lead-filter-primary .filter-control,
+.lead-filter-primary .button {
+  min-height: 38px;
+}
+
+.lead-advanced-filters > summary {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.lead-filter-advanced-grid {
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.lead-filter-advanced-grid .filter-control,
+.lead-filter-advanced-grid input {
+  min-height: 38px;
+}
+
+.lead-results-section {
+  gap: 10px;
+}
+
+.lead-results-header {
+  align-items: center;
+  gap: 12px;
+}
+
+.lead-results-header h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.lead-results-header p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+}
+
+/* Lead detail: the phone sits beside the name, in the bar. */
+.lead-detail-phone {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* ---------- CRM ---------- */
+
+.crm-page {
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.crm-header {
+  gap: 10px;
+}
+
+/* crm.css lays the old header row out as a grid; PageBar is a flex row. */
+.crm-header > .page-bar.crm-header-top {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.crm-header .page-bar-actions {
+  gap: 10px;
+}
+
+.crm-header .crm-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 0;
+}
+
+.crm-header .crm-pipeline-tabs {
+  padding: 3px;
+}
+
+.crm-header .crm-pipeline-tab {
+  min-width: 108px;
+  min-height: 30px;
+  padding: 5px 12px;
+}
+
+.crm-toolbar {
+  padding: 8px 10px;
+}
+
+.crm-filters {
+  gap: 8px 10px;
+}
+
+.crm-filters .filter-field {
+  gap: 3px;
+}
+
+.crm-filters .filter-field > span:first-child {
+  font-size: 10px;
+}
+
+.crm-filters input[type="date"],
+.crm-filters select,
+.crm-filters .filter-combobox-trigger,
+.crm-filter-status {
+  min-height: 36px;
+}
+
+.crm-filters .filter-combobox-trigger {
+  padding-block: 7px;
+  background-position:
+    calc(100% - 17px) 15px,
+    calc(100% - 12px) 15px,
+    0 0,
+    0 0;
+}
+
+.crm-summary {
+  gap: 6px;
+}
+
+.crm-summary li {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+/* ---------- Eventos Meta ---------- */
+
+.audit-health-heading {
+  padding: 12px 16px;
+}
+
+.audit-heading-copy h2 {
+  font-size: 16px;
+}
+
+.audit-section-heading {
+  padding-top: 0;
+}
+
+.audit-history-context .help-tip {
+  align-self: center;
+}
+
+/* ---------- Integrações ---------- */
+
+/* The section has no gap of its own: the old header carried a margin. */
+.integrations-page > .page-bar {
+  margin-bottom: 12px;
+}
+
+.integration-domain-heading h2 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+/* ---------- Configurações ---------- */
+
+.settings-page > .page-bar {
+  margin-bottom: 12px;
+}
+
+.settings-overview {
+  padding-top: 12px;
+}
+
+.settings-overview-heading {
+  align-items: center;
+  padding-bottom: 10px;
+}
+
+.settings-overview-heading h2,
+.settings-domain-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.settings-overview-grid article {
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.settings-domain-nav a {
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.settings-domain-section {
+  padding: 20px 0;
+}
+
+.settings-domain-heading {
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-domain-section > .surface-panel,
+.settings-automation-list {
+  margin-top: 12px;
+}
+
+/* ---------- Loading skeleton (same shape as PageBar) ---------- */
+
+.route-loading-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skeleton-bar-title {
+  width: 140px;
+  height: 22px;
+}
+
+.skeleton-chip {
+  width: 96px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+.route-loading-bar .skeleton-action {
+  width: 110px;
+  height: 34px;
+}
+
+.skeleton-strip {
+  width: 100%;
+  height: 56px;
+  border-radius: 12px;
+}
+
+.route-loading .skeleton-block {
+  min-height: 96px;
+}
+
+/* ---------- Phone (<= 900px): nothing cut, nothing wider than the screen ---------- */
+
+@media (max-width: 900px) {
+  .page-bar,
+  .page-bar-actions {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Long titles (lead name) shrink with an ellipsis instead of pushing. */
+  .page-bar-title {
+    flex: 1 1 auto;
+    max-width: 100%;
+  }
+
+  .page-bar-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .page-bar-actions > * {
+    max-width: 100%;
+  }
+
+  .page-bar .status-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Two views only (Conversoes | Revisao de compras): two equal halves. */
+  .page-bar .audit-view-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .page-bar .audit-view-tabs a {
+    justify-content: center;
+    padding-inline: 8px;
+    text-align: center;
+  }
+
+  .crm-header .page-bar-actions {
+    gap: 8px;
+  }
+
+  .crm-header .crm-pipeline-tabs {
+    display: flex;
+    width: 100%;
+  }
+
+  .crm-header .crm-pipeline-tab {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .crm-header .crm-header-actions {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .lead-filter-primary {
+    padding: 10px;
+  }
+
+  .lead-filter-advanced-grid {
+    padding: 10px;
+  }
+
+  .lead-results-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .settings-domain-nav a {
+    min-height: 40px;
+    padding: 0 12px;
+  }
+
+  .settings-domain-section {
+    padding: 16px 0;
+  }
+
+  .help-tip-bubble {
+    max-width: min(320px, calc(100vw - 48px));
+  }
+}

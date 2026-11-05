@@ -780,6 +780,60 @@ describe("ReportingMetricsEngine leads novos x leads que voltaram", () => {
     );
   });
 
+  it("splits receita de trafego by day and the days add up to the total", () => {
+    const utcDay = (date: Date) => date.toISOString().slice(0, 10);
+    const events = [
+      event({
+        campaignId: "cmp_1",
+        eventOccurredAt: new Date("2026-10-20T12:00:00.000Z"),
+        id: "buy_1",
+        valueCents: 49700,
+      }),
+      event({
+        campaignId: "cmp_1",
+        customerIdentityKey: "phone_b",
+        eventOccurredAt: new Date("2026-10-21T09:00:00.000Z"),
+        id: "buy_2",
+        phoneHash: "phone_b",
+        valueCents: 99700,
+      }),
+      // Organic purchase: not receita de trafego.
+      event({
+        businessSource: "organic",
+        customerIdentityKey: "phone_c",
+        eventOccurredAt: new Date("2026-10-21T10:00:00.000Z"),
+        id: "buy_organic",
+        phoneHash: "phone_c",
+        valueCents: 30000,
+      }),
+      // Not countable (skipped): left out of both.
+      event({
+        campaignId: "cmp_1",
+        customerIdentityKey: "phone_d",
+        eventOccurredAt: new Date("2026-10-21T11:00:00.000Z"),
+        id: "buy_skipped",
+        phoneHash: "phone_d",
+        status: "skipped",
+        valueCents: 77700,
+      }),
+    ];
+    const byDay = engine.dailyTrafficRevenueCents({ events }, utcDay);
+    const metrics = engine.calculate({
+      events,
+      insight,
+      leads: [],
+      scope: {},
+    });
+
+    expect(Object.fromEntries(byDay)).toEqual({
+      "2026-10-20": 49700,
+      "2026-10-21": 99700,
+    });
+    expect([...byDay.values()].reduce((a, b) => a + b, 0)).toBe(
+      metrics.trafficRevenueCents,
+    );
+  });
+
   it("renames only the old default label of the LeadSubmitted stage", () => {
     const stages = (label: string) => [
       {

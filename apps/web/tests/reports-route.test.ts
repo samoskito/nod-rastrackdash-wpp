@@ -638,29 +638,45 @@ describe("reports route", () => {
     expect(row).toContain('class="performance-review-cell"');
   });
 
-  it("keeps report controls compact and gives the results table visual priority", async () => {
+  it("keeps report controls in one compact strip and puts the table right under it", async () => {
     mockReportsApi();
     const html = await renderReports();
+    const pageBarIndex = html.indexOf('class="page-bar reports-page-bar"');
     const controlsIndex = html.indexOf(
-      'class="surface-panel report-control-center"',
+      'class="surface-panel report-control-center report-strip"',
     );
-    const resultsIndex = html.indexOf('class="report-results-overview"');
     const tableIndex = html.indexOf('class="performance-table"');
+    const table = html.slice(tableIndex);
 
-    expect(controlsIndex).toBeGreaterThan(-1);
-    expect(resultsIndex).toBeGreaterThan(controlsIndex);
-    expect(tableIndex).toBeGreaterThan(resultsIndex);
-    expect(html).toContain('class="report-analysis-switcher"');
+    // Short title bar, no explanatory header and no summary cards.
+    expect(pageBarIndex).toBeGreaterThan(-1);
+    expect(html).not.toContain('class="eyebrow"');
+    expect(html).not.toContain("report-results-overview");
+    expect(html).not.toContain("report-summary-strip");
+    expect(html).toContain("<h1>Relatórios</h1>");
+    expect(controlsIndex).toBeGreaterThan(pageBarIndex);
+    expect(tableIndex).toBeGreaterThan(controlsIndex);
+    // Totals are the first, highlighted row of the table body.
+    expect(table).toMatch(
+      /<\/thead><tbody class="report-total-body"><tr class="report-total-row"/,
+    );
+    expect(table.indexOf("Total do filtro")).toBeLessThan(
+      table.indexOf("Black Friday WhatsApp"),
+    );
+    expect(html).toContain('class="report-roas-bar"');
     expect(html).toContain('class="report-period-context"');
     expect(html).toContain('aria-label="Período"');
     expect(html).toContain('aria-label="Escopo"');
     expect(html).toContain('aria-label="Ações"');
-    // Periodo comes before escopo, which comes before acoes.
-    expect(html.indexOf('aria-label="Período"')).toBeLessThan(
-      html.indexOf('aria-label="Escopo"'),
-    );
+    // Strip order: escopo (nivel + visao), periodo, filtros, acoes.
     expect(html.indexOf('aria-label="Escopo"')).toBeLessThan(
+      html.indexOf('aria-label="Período"'),
+    );
+    expect(html.indexOf('aria-label="Período"')).toBeLessThan(
       html.indexOf('aria-label="Ações"'),
+    );
+    expect(html.indexOf('aria-label="Nível do relatório"')).toBeLessThan(
+      html.indexOf('aria-label="Grupo de métricas"'),
     );
     // The Meta sync window is a hint on the sync action, not a floating tag.
     expect(html).toContain('class="report-sync-hint"');
@@ -726,6 +742,31 @@ describe("reports route", () => {
     expect(css).toMatch(
       /\.report-period-form input\[type="date"\]\s*{[^}]*rgba\(5,\s*8,\s*7,\s*0\.92\)[^}]*color-scheme:\s*dark/s,
     );
+  });
+
+  it("styles the print layout: highlighted total row, ROAS bar and a strip that wraps on phones", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/styles/density-reports.css"),
+      "utf8",
+    );
+
+    expect(css).toMatch(
+      /\.report-total-row td[^{]*{[^}]*background:\s*rgba\(66,\s*240,\s*168,\s*0\.07\)[^}]*font-weight:\s*800/s,
+    );
+    expect(css).toMatch(
+      /\.report-total-row td:first-child[^{]*{[^}]*color:\s*var\(--mint\)/s,
+    );
+    expect(css).toMatch(
+      /\.report-roas-bar\s*{[^}]*width:\s*calc\(var\(--roas-share/s,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 900px\)\s*{[^@]*\.report-strip-group[^{]*{[^}]*flex-wrap:\s*wrap/s,
+    );
+    // Phones keep a real table scrolling sideways in its own container.
+    expect(css).toMatch(
+      /@media \(max-width: 760px\)\s*{[^@]*\.report-table-scroll\s*{[^}]*overflow:\s*auto/s,
+    );
+    expect(css).not.toMatch(/backdrop-filter|transform:/);
   });
 
   it("renders and preserves the selected metric group without changing the API query", async () => {

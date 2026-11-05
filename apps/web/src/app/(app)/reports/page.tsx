@@ -17,7 +17,7 @@ import type {
   ReportSortKeyDto,
   WhatsappConnectionDto,
 } from "@wpptrack/shared";
-import { BarChart3, CalendarRange, Download, RefreshCcw } from "lucide-react";
+import { CalendarRange, Download, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -27,7 +27,9 @@ import {
   CurrencyKpiGroups,
   ExchangeRateMissingNote,
 } from "../../../components/currency-kpi-groups";
+import { HelpTip } from "../../../components/help-tip";
 import { MetaSyncCoverageNotice } from "../../../components/meta-sync-coverage-notice";
+import { PageBar } from "../../../components/page-bar";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { SubmitButton } from "../../../components/submit-button";
 import {
@@ -268,7 +270,6 @@ function roas(value: number | null) {
   })}x`;
 }
 
-const roasText = roas;
 
 function percent(value: number | null) {
   if (value === null) {
@@ -1251,10 +1252,56 @@ const adSummaryCopy: ReportEntityCopy = {
   unknownPlural: "sem status",
 };
 
+/** Highest ROAS of each ROAS column in the table (scale of the bars). */
+type ReportRoasScale = { acquisition: number; withRepurchase: number };
+
+function reportRoasScale(rows: PerformanceRow[]): ReportRoasScale {
+  const max = (select: (row: PerformanceRow) => number | null) =>
+    rows.reduce((top, row) => Math.max(top, select(row) ?? 0), 0);
+
+  return {
+    acquisition: max((row) => row.roasAcquisition),
+    withRepurchase: max((row) => row.roasWithRepurchase),
+  };
+}
+
+/**
+ * ROAS number with a small bar proportional to the table's highest ROAS, or
+ * "sem cotação" (no bar) when part of the revenue could not be converted.
+ */
+function RoasMeter({
+  max,
+  rateMissing,
+  value,
+}: {
+  max: number;
+  rateMissing: boolean;
+  value: number | null;
+}) {
+  if (rateMissing) {
+    return <>{roasOrMissing(value, true)}</>;
+  }
+
+  const share =
+    value !== null && value > 0 && max > 0 ? Math.min(1, value / max) : 0;
+
+  return (
+    <span className="report-roas">
+      <span
+        aria-hidden="true"
+        className="report-roas-bar"
+        style={{ "--roas-share": share.toFixed(3) } as CSSProperties}
+      />
+      <span className="report-roas-value">{roas(value)}</span>
+    </span>
+  );
+}
+
 function PerformanceMetricsCells({
   currency: reportCurrencyCode,
   funnelSteps,
   metricGroup,
+  roasScale,
   row,
   realConversationsHref,
 }: {
@@ -1262,6 +1309,7 @@ function PerformanceMetricsCells({
   currency: CurrencyCode;
   funnelSteps: ReportFunnelStepDto[];
   metricGroup: ReportMetricGroup;
+  roasScale: ReportRoasScale;
   row: PerformanceRow;
   realConversationsHref: string;
 }) {
@@ -1336,12 +1384,20 @@ function PerformanceMetricsCells({
       ) : null}
       {showOverview || showRevenue ? (
         <td data-label="ROAS de aquisição">
-          {roasOrMissing(row.roasAcquisition, rateMissing)}
+          <RoasMeter
+            max={roasScale.acquisition}
+            rateMissing={rateMissing}
+            value={row.roasAcquisition}
+          />
         </td>
       ) : null}
       {showRevenue ? (
         <td data-label="ROAS com recompra">
-          {roasOrMissing(row.roasWithRepurchase, rateMissing)}
+          <RoasMeter
+            max={roasScale.withRepurchase}
+            rateMissing={rateMissing}
+            value={row.roasWithRepurchase}
+          />
         </td>
       ) : null}
     </>
@@ -1972,7 +2028,12 @@ function rowsByCurrency(
   }));
 }
 
-function PerformanceSummaryFooter({
+/**
+ * Totals as the first, highlighted rows of the table (one per currency when
+ * the filter mixes currencies): same columns as the active metric group, so
+ * one print shows the result and the detail together.
+ */
+function PerformanceTotalRows({
   copy,
   currency,
   currencyGroups = [],
@@ -2020,18 +2081,12 @@ function PerformanceSummaryFooter({
   const perCurrency = lines.length > 1;
 
   return (
-    <tfoot className="report-summary">
-      {lines.map((line, index) => (
+    <tbody className="report-total-body">
+      {lines.map((line) => (
         <tr
+          className="report-total-row"
           data-currency={perCurrency ? line.currency : undefined}
           key={line.currency}
-          style={
-            perCurrency
-              ? ({
-                  "--summary-after": lines.length - 1 - index,
-                } as CSSProperties)
-              : undefined
-          }
         >
           <td
             className="performance-name-cell summary-name"
@@ -2064,7 +2119,7 @@ function PerformanceSummaryFooter({
           </td>
         </tr>
       ))}
-    </tfoot>
+    </tbody>
   );
 }
 
@@ -2331,122 +2386,6 @@ function ReportComparisonMetrics({
   );
 }
 
-function reportSummaryMetrics(
-  metricGroup: ReportMetricGroup,
-  totals: ReportTotals,
-  currency: CurrencyCode = "BRL",
-  mixedCurrency = false,
-  rateMissing = false,
-): Array<{ detail: string; label: string; value: string }> {
-  // Moedas misturadas: dinheiro e ROAS ficam nos blocos por moeda, abaixo.
-  const money = (cents: number) =>
-    mixedCurrency ? "Por moeda" : formatReportMoney(cents, currency);
-  const roas = (value: number | null) =>
-    mixedCurrency
-      ? "Por moeda"
-      : rateMissing
-        ? exchangeRateMissingLabel
-        : roasText(value);
-
-  if (metricGroup === "traffic") {
-    return [
-      {
-        detail: "Período filtrado",
-        label: "Investimento",
-        value: money(totals.spendCents),
-      },
-      {
-        detail: "Registradas pela Meta",
-        label: "Conversas Meta",
-        value: String(totals.metaConversationsStarted),
-      },
-      {
-        detail: "1º contato no período",
-        label: "Leads novos",
-        value: String(totals.realConversations),
-      },
-      {
-        detail: `${totals.totalReceived} recebidas`,
-        label: "Cobertura",
-        value: percent(totals.trackingRate),
-      },
-    ];
-  }
-
-  if (metricGroup === "funnel") {
-    return [
-      {
-        detail: "1º contato no período",
-        label: "Leads novos",
-        value: String(totals.realConversations),
-      },
-      {
-        detail: "Avançaram no funil",
-        label: "Leads qualificados",
-        value: String(totals.qualifiedLead),
-      },
-      {
-        detail: "Conversões registradas",
-        label: "Compras",
-        value: String(totals.purchases),
-      },
-      {
-        detail: `${totals.repurchases} recompra(s)`,
-        label: "Primeiras compras",
-        value: String(totals.firstPurchases),
-      },
-    ];
-  }
-
-  if (metricGroup === "revenue") {
-    return [
-      {
-        detail: "Mídia no período",
-        label: "Investimento",
-        value: money(totals.spendCents),
-      },
-      {
-        detail: "Atribuída ao tráfego",
-        label: "Receita",
-        value: money(totals.trafficRevenueCents),
-      },
-      {
-        detail: "Receita de aquisição",
-        label: "Primeira compra",
-        value: money(totals.firstPurchaseRevenueCents),
-      },
-      {
-        detail: "Retorno de aquisição",
-        label: "ROAS",
-        value: roas(totals.roasAcquisition),
-      },
-    ];
-  }
-
-  return [
-    {
-      detail: "Período filtrado",
-      label: "Investimento",
-      value: money(totals.spendCents),
-    },
-    {
-      detail: "Registradas pela Meta",
-      label: "Conversas Meta",
-      value: String(totals.metaConversationsStarted),
-    },
-    {
-      detail: "1º contato no período",
-      label: "Leads novos",
-      value: String(totals.realConversations),
-    },
-    {
-      detail: "Retorno de aquisição",
-      label: "ROAS",
-      value: roas(totals.roasAcquisition),
-    },
-  ];
-}
-
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -2706,12 +2645,9 @@ export default async function ReportsPage({
   const activeRateGap = mixedCurrency
     ? noRateGap
     : singleCurrencyRateGap(loadedReport);
-  const summaryMetrics = reportSummaryMetrics(
-    activeMetricGroup,
-    currentTotals,
-    activeCurrency,
-    mixedCurrency,
-    activeRateGap.exchangeRateMissing,
+  const roasScale = reportRoasScale(activeRows);
+  const currencyRateMissing = activeCurrencyGroups.some(
+    (group) => group.exchangeRateMissing,
   );
   const metaSummary = metaStructureSummary(metaStructure, metaAssets);
   const metaSyncPeriod = metaSyncPeriodState(metaAssets);
@@ -2843,12 +2779,6 @@ export default async function ReportsPage({
 
     return column ? [column.count, column.cost] : [];
   });
-  const activeMetricLabel = {
-    funnel: "Funil",
-    overview: "Visão geral",
-    revenue: "Receita",
-    traffic: "Tráfego",
-  }[activeMetricGroup];
   const metaPeriodWarning: ReportNotice | null =
     metaSyncPeriod.kind === "none" || metaPeriodProvidesReport
       ? null
@@ -2873,12 +2803,19 @@ export default async function ReportsPage({
 
   return (
     <section className="page-stack page-wide reports-page">
-      <header className="page-header reports-page-header">
-        <span className="eyebrow">Relatórios</span>
-        <h1>{reportTitle}</h1>
-        <p>
-          Métricas Meta Ads combinadas com leads reais e eventos de conversão.
-        </p>
+      <PageBar
+        className="reports-page-bar"
+        help={
+          <>
+            {reportTitle}: métricas Meta Ads combinadas com leads reais e
+            eventos de conversão. A primeira linha da tabela é o total do
+            filtro; a barra do ROAS compara cada linha com o maior ROAS da
+            tabela.
+          </>
+        }
+        helpLabel="Sobre os relatórios"
+        title="Relatórios"
+      >
         <nav
           aria-label="Modo do relatório"
           className="report-view-tabs report-mode-tabs"
@@ -2899,84 +2836,108 @@ export default async function ReportsPage({
             </Link>
           ))}
         </nav>
-      </header>
+        <span className="tag report-scope-count">
+          {pagination?.totalItems ?? activeRows.length} {activeCopy.plural}
+        </span>
+      </PageBar>
 
       <section
-        className="surface-panel report-control-center"
+        className="surface-panel report-control-center report-strip"
         aria-label="Controles do relatório"
       >
         <ReportFiltersProvider applied={appliedFilterValues}>
-          <div className="report-toolbar">
+          <div className="report-strip-row">
             <div
-              className="report-toolbar-group report-toolbar-period"
-              role="group"
-              aria-label="Período"
-            >
-              <span className="micro-label report-group-label">Período</span>
-              <ReportPeriodFilter periodLabel={requestedPeriodLabel} />
-            </div>
-
-            <div
-              className="report-toolbar-group report-toolbar-scope"
+              className="report-strip-group report-strip-scope"
               role="group"
               aria-label="Escopo"
             >
-              <div className="report-analysis-switcher">
-                <span className="micro-label report-group-label">Escopo</span>
+              <nav className="report-view-tabs" aria-label="Nível do relatório">
+                {(
+                  [
+                    ["campaigns", "Campanhas"],
+                    ["adsets", "Conjuntos"],
+                    ["ads", "Anúncios"],
+                  ] as const
+                ).map(([view, label]) => (
+                  <Link
+                    aria-current={activeView === view ? "page" : undefined}
+                    className={activeView === view ? "active" : ""}
+                    href={reportViewHref(view, {
+                      ...reportFilters,
+                      selectedIds:
+                        view === activeView
+                          ? reportFilters.selectedIds
+                          : undefined,
+                    })}
+                    key={view}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+              {showTable ? (
                 <nav
-                  className="report-view-tabs"
-                  aria-label="Nível do relatório"
+                  className="report-metric-tabs"
+                  aria-label="Grupo de métricas"
                 >
                   {(
                     [
-                      ["campaigns", "Campanhas"],
-                      ["adsets", "Conjuntos"],
-                      ["ads", "Anúncios"],
+                      ["overview", "Visão geral"],
+                      ["traffic", "Tráfego"],
+                      ["funnel", "Funil"],
+                      ["revenue", "Receita"],
                     ] as const
-                  ).map(([view, label]) => (
+                  ).map(([metricGroup, label]) => (
                     <Link
-                      aria-current={activeView === view ? "page" : undefined}
-                      className={activeView === view ? "active" : ""}
-                      href={reportViewHref(view, {
-                        ...reportFilters,
-                        selectedIds:
-                          view === activeView
-                            ? reportFilters.selectedIds
-                            : undefined,
-                      })}
-                      key={view}
+                      aria-current={
+                        activeMetricGroup === metricGroup ? "page" : undefined
+                      }
+                      className={
+                        activeMetricGroup === metricGroup ? "active" : ""
+                      }
+                      href={reportMetricGroupHref(
+                        metricGroup,
+                        activeView,
+                        reportFilters,
+                      )}
+                      key={metricGroup}
                     >
                       {label}
                     </Link>
                   ))}
                 </nav>
-                <span className="tag report-scope-count">
-                  {pagination?.totalItems ?? activeRows.length}{" "}
-                  {activeCopy.plural}
-                </span>
-                <div className="report-analysis-meta">
-                  <ReportSelectionToolbar
-                    activeSelectedIds={activeSelectedIds}
-                    filterActive={Boolean(selectedIds)}
-                    level={activeSelectionLevel}
-                    workspaceId={currentWorkspaceId}
-                  />
-                </div>
-              </div>
+              ) : null}
+            </div>
 
-              <MetaReportFilters
-                accountCurrencies={accountCurrencies}
-                assets={metaAssets}
-                whatsappInstances={whatsappInstances}
+            <div
+              className="report-strip-group report-strip-period"
+              role="group"
+              aria-label="Período"
+            >
+              <ReportPeriodFilter periodLabel={requestedPeriodLabel} />
+            </div>
+
+            <MetaReportFilters
+              accountCurrencies={accountCurrencies}
+              assets={metaAssets}
+              whatsappInstances={whatsappInstances}
+            />
+
+            <div className="report-strip-group report-strip-selection">
+              <ReportSelectionToolbar
+                activeSelectedIds={activeSelectedIds}
+                filterActive={Boolean(selectedIds)}
+                level={activeSelectionLevel}
+                workspaceId={currentWorkspaceId}
               />
             </div>
 
             <div
-              className="report-toolbar-group report-toolbar-actions"
+              className="report-strip-group report-strip-actions"
               role="group"
               aria-label="Ações"
             >
-              <span className="micro-label report-group-label">Ações</span>
               <div className="report-command-actions">
                 {reportState === "error" ? (
                   <span className="tag">API indisponível</span>
@@ -3183,7 +3144,6 @@ export default async function ReportsPage({
           level={activeView}
           objective={insightObjective}
           objectiveLinks={insightObjectiveLinks}
-          periodLabel={requestedPeriodLabel}
           volume={insightReports.volume}
           volumeTableHref={reportInsightTableHref(
             activeView,
@@ -3193,92 +3153,19 @@ export default async function ReportsPage({
         />
       ) : null}
 
-      {showTable ? (
-        <section
-          className="report-results-overview"
-          aria-label="Resumo dos resultados filtrados"
-        >
-          <div className="report-results-heading">
-            <div className="report-results-title">
-              <BarChart3 aria-hidden="true" size={20} />
-              <div>
-                <span className="eyebrow">Resultados</span>
-                <h2>{activeMetricLabel}</h2>
-              </div>
-            </div>
-            <nav className="report-metric-tabs" aria-label="Grupo de métricas">
-              {(
-                [
-                  ["overview", "Visão geral"],
-                  ["traffic", "Tráfego"],
-                  ["funnel", "Funil"],
-                  ["revenue", "Receita"],
-                ] as const
-              ).map(([metricGroup, label]) => (
-                <Link
-                  aria-current={
-                    activeMetricGroup === metricGroup ? "page" : undefined
-                  }
-                  className={activeMetricGroup === metricGroup ? "active" : ""}
-                  href={reportMetricGroupHref(
-                    metricGroup,
-                    activeView,
-                    reportFilters,
-                  )}
-                  key={metricGroup}
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-
-          <div className="report-summary-strip">
-            {summaryMetrics.map((metric) => (
-              <article key={metric.label}>
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-                <small>{metric.detail}</small>
-              </article>
-            ))}
-          </div>
-
-          {mixedCurrency ? (
-            <CurrencyKpiGroups
-              groups={activeCurrencyGroups.map(currencyKpiGroup)}
-            />
-          ) : activeRateGap.exchangeRateMissing ? (
-            <ExchangeRateMissingNote
-              unconvertedRevenue={activeRateGap.unconvertedRevenue}
-            />
-          ) : null}
-        </section>
-      ) : null}
-
-      {comparisonReports && comparisonTotals ? (
-        <details className="surface-panel report-comparison-panel">
-          <summary>
-            <span>
-              <span className="eyebrow">Comparação entre períodos</span>
-              <strong>
-                Período atual vs. {comparisonReports.report.rangeLabel}
-              </strong>
-            </span>
-            <span className="tag">Abrir comparação</span>
-          </summary>
-          <div className="metric-grid compact report-comparison-grid">
-            <ReportComparisonMetrics
-              currency={activeCurrency}
-              current={currentTotals}
-              metricGroup={activeMetricGroup}
-              mixedCurrency={
-                mixedCurrency ||
-                mixedCurrencyGroups(comparisonReports.report).length > 0
-              }
-              previous={comparisonTotals}
-            />
-          </div>
-        </details>
+      {showTable && mixedCurrency ? (
+        <p className="report-inline-note" role="note">
+          <strong>Por moeda:</strong> as contas de anúncio usam moedas
+          diferentes, então a tabela tem uma linha de total por moeda e os
+          valores nunca são somados.
+          {currencyRateMissing
+            ? " Alguma venda ficou sem cotação PTAX: veja Totais por moeda abaixo da tabela."
+            : null}
+        </p>
+      ) : showTable && activeRateGap.exchangeRateMissing ? (
+        <ExchangeRateMissingNote
+          unconvertedRevenue={activeRateGap.unconvertedRevenue}
+        />
       ) : null}
 
       {activeRows.length > 0 ? (
@@ -3314,6 +3201,16 @@ export default async function ReportsPage({
                 <th className="performance-review-column">Revisão WhatsApp</th>
               </tr>
             </thead>
+            <PerformanceTotalRows
+              currency={activeCurrency}
+              currencyGroups={activeCurrencyGroups}
+              rateGap={activeRateGap}
+              copy={campaignSummaryCopy}
+              metricGroup={activeMetricGroup}
+              pagination={pagination}
+              rows={rows}
+              totals={campaignReports?.report.totals}
+            />
             <tbody>
               {rows.length > 0 ? (
                 rows.map((row) => (
@@ -3366,6 +3263,7 @@ export default async function ReportsPage({
                       currency={activeCurrency}
                       funnelSteps={currentTotals.funnelSteps}
                       metricGroup={activeMetricGroup}
+                      roasScale={roasScale}
                       row={row}
                       realConversationsHref={leadsHref({
                         campaignId: row.id,
@@ -3423,16 +3321,6 @@ export default async function ReportsPage({
                 </tr>
               )}
             </tbody>
-            <PerformanceSummaryFooter
-              currency={activeCurrency}
-              currencyGroups={activeCurrencyGroups}
-              rateGap={activeRateGap}
-              copy={campaignSummaryCopy}
-              metricGroup={activeMetricGroup}
-              pagination={pagination}
-              rows={rows}
-              totals={campaignReports?.report.totals}
-            />
           </table>
         </div>
       ) : null}
@@ -3466,6 +3354,16 @@ export default async function ReportsPage({
                 <th className="performance-review-column">Revisão WhatsApp</th>
               </tr>
             </thead>
+            <PerformanceTotalRows
+              currency={activeCurrency}
+              currencyGroups={activeCurrencyGroups}
+              rateGap={activeRateGap}
+              copy={adSetSummaryCopy}
+              metricGroup={activeMetricGroup}
+              pagination={pagination}
+              rows={adSetRows}
+              totals={adSetReports?.report.totals}
+            />
             <tbody>
               {adSetRows.length > 0 ? (
                 adSetRows.map((row) => (
@@ -3521,6 +3419,7 @@ export default async function ReportsPage({
                       currency={activeCurrency}
                       funnelSteps={currentTotals.funnelSteps}
                       metricGroup={activeMetricGroup}
+                      roasScale={roasScale}
                       row={row}
                       realConversationsHref={leadsHref({
                         campaignId: row.campaignId,
@@ -3579,16 +3478,6 @@ export default async function ReportsPage({
                 </tr>
               )}
             </tbody>
-            <PerformanceSummaryFooter
-              currency={activeCurrency}
-              currencyGroups={activeCurrencyGroups}
-              rateGap={activeRateGap}
-              copy={adSetSummaryCopy}
-              metricGroup={activeMetricGroup}
-              pagination={pagination}
-              rows={adSetRows}
-              totals={adSetReports?.report.totals}
-            />
           </table>
         </div>
       ) : null}
@@ -3622,6 +3511,16 @@ export default async function ReportsPage({
                 <th className="performance-review-column">Revisão WhatsApp</th>
               </tr>
             </thead>
+            <PerformanceTotalRows
+              currency={activeCurrency}
+              currencyGroups={activeCurrencyGroups}
+              rateGap={activeRateGap}
+              copy={adSummaryCopy}
+              metricGroup={activeMetricGroup}
+              pagination={pagination}
+              rows={adRows}
+              totals={adReports?.report.totals}
+            />
             <tbody>
               {adRows.length > 0 ? (
                 adRows.map((row) => (
@@ -3685,6 +3584,7 @@ export default async function ReportsPage({
                       currency={activeCurrency}
                       funnelSteps={currentTotals.funnelSteps}
                       metricGroup={activeMetricGroup}
+                      roasScale={roasScale}
                       row={row}
                       realConversationsHref={leadsHref({
                         campaignId: row.campaignId,
@@ -3744,16 +3644,6 @@ export default async function ReportsPage({
                 </tr>
               )}
             </tbody>
-            <PerformanceSummaryFooter
-              currency={activeCurrency}
-              currencyGroups={activeCurrencyGroups}
-              rateGap={activeRateGap}
-              copy={adSummaryCopy}
-              metricGroup={activeMetricGroup}
-              pagination={pagination}
-              rows={adRows}
-              totals={adReports?.report.totals}
-            />
           </table>
         </div>
       ) : null}
@@ -3767,16 +3657,52 @@ export default async function ReportsPage({
         />
       ) : null}
 
+      {showTable && mixedCurrency ? (
+        <details className="surface-panel report-below-panel report-currency-panel">
+          <summary>
+            <strong>Totais por moeda</strong>
+            <span className="tag">{activeCurrencyGroups.length} moedas</span>
+          </summary>
+          <CurrencyKpiGroups
+            groups={activeCurrencyGroups.map(currencyKpiGroup)}
+          />
+        </details>
+      ) : null}
+
+      {comparisonReports && comparisonTotals ? (
+        <details className="surface-panel report-comparison-panel report-below-panel">
+          <summary>
+            <span>
+              <strong>Comparação entre períodos</strong>
+              <small>
+                Período atual vs. {comparisonReports.report.rangeLabel}
+              </small>
+            </span>
+            <span className="tag">Abrir comparação</span>
+          </summary>
+          <div className="metric-grid compact report-comparison-grid">
+            <ReportComparisonMetrics
+              currency={activeCurrency}
+              current={currentTotals}
+              metricGroup={activeMetricGroup}
+              mixedCurrency={
+                mixedCurrency ||
+                mixedCurrencyGroups(comparisonReports.report).length > 0
+              }
+              previous={comparisonTotals}
+            />
+          </div>
+        </details>
+      ) : null}
+
       {shouldLoadMetaStructure ? (
         <details className="surface-panel meta-diagnostic-panel" open>
           <summary className="meta-diagnostic-summary">
             <span className="meta-diagnostic-copy">
-              <span className="eyebrow">Diagnóstico da sincronização Meta</span>
-              <strong>Estrutura técnica recolhida</strong>
+              <strong>Diagnóstico da sincronização Meta</strong>
               <span>
-                A hierarquia bruta da Meta fica aqui para conferência técnica.
-                Os relatórios principais acima continuam sendo a fonte de
-                análise.
+                Estrutura técnica recolhida: a hierarquia bruta da Meta, para
+                conferência. A tabela acima continua sendo a fonte de análise.
               </span>
             </span>
             <span className="button ghost meta-diagnostic-action">
@@ -3991,12 +3917,14 @@ export default async function ReportsPage({
       ) : (
         <section className="surface-panel meta-diagnostic-collapsed">
           <div className="meta-diagnostic-copy">
-            <span className="eyebrow">Diagnóstico da sincronização Meta</span>
-            <strong>Estrutura técnica sob demanda</strong>
-            <span>
-              Carregue a hierarquia bruta somente quando precisar auditar a
-              sincronização. Ela não bloqueia mais a abertura dos relatórios.
-            </span>
+            <strong>
+              Diagnóstico da sincronização Meta
+              <HelpTip label="Sobre o diagnóstico da sincronização Meta">
+                Estrutura técnica sob demanda: carregue a hierarquia bruta
+                somente quando precisar auditar a sincronização. Ela não
+                bloqueia a abertura dos relatórios.
+              </HelpTip>
+            </strong>
           </div>
           <Link className="button ghost" href={diagnosticHref}>
             Carregar diagnóstico

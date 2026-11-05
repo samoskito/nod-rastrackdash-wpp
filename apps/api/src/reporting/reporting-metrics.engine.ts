@@ -267,6 +267,32 @@ export class ReportingMetricsEngine {
   }
 
   /**
+   * Receita de trafego per day: the same paid purchases (and values) as
+   * trafficRevenueCents, each on the day it happened, so the days add up to
+   * the period total.
+   */
+  dailyTrafficRevenueCents(
+    input: Pick<ReportingMetricsCalculationInput, "events">,
+    dateKey: (date: Date) => string,
+  ): Map<string, number> {
+    const purchases = this.classifyPurchases(
+      input.events.filter((event) => this.isCountableEvent(event)),
+    );
+    const revenueByDay = new Map<string, number>();
+
+    for (const purchase of purchases) {
+      if (purchase.source !== "paid") continue;
+      const day = dateKey(purchase.event.eventOccurredAt);
+      revenueByDay.set(
+        day,
+        (revenueByDay.get(day) ?? 0) + (purchase.event.valueCents ?? 0),
+      );
+    }
+
+    return revenueByDay;
+  }
+
+  /**
    * Leads novos per day: each paid lead once, on the day of its first contact.
    * Later conversations of the same person never add to any day.
    */

@@ -67,15 +67,25 @@ function reportMetrics(overrides: Record<string, unknown> = {}) {
 
 type MetricCard = { label: string; value: string; delta: string };
 
-/** Parses the rendered primary KPI cards in DOM order. */
+/**
+ * Parses the rendered primary KPI cards in DOM order. The Receita trafego
+ * card became the hero of the "Painel de print" (receita + ROAS): it is read
+ * as that same card, after the grid, so the KPI expectations stay the same.
+ */
+/** Removes the card's length-based font style to compare its content. */
+function withoutMetricStyle(html: string): string {
+  return html.replace(/ style="--metric-chars:\d+"/g, "");
+}
+
 function metricCards(html: string): MetricCard[] {
   const grid = html.slice(
     html.indexOf("overview-primary-metrics"),
-    html.indexOf("overview-funnel-panel"),
+    html.indexOf("overview-print-row"),
   );
-  // Cards may carry a hover title, a linked number and a linked delta.
+  // Cards may carry a hover title, a linked number and a linked delta. The
+  // second line only exists for another metric or a state warning ("").
   const pattern =
-    /<div class="metric-card[^"]*"(?: title="[^"]*")?><span>(.*?)<\/span><strong>(.*?)<\/strong><small>(.*?)<\/small><\/div>/g;
+    /<div class="metric-card[^"]*"(?: title="[^"]*")?(?: style="[^"]*")?><span>(.*?)<\/span><strong>(.*?)<\/strong>(?:<small>(.*?)<\/small>)?<\/div>/g;
   const text = (value: string) => value.replace(/<[^>]+>/g, "");
   const cards: MetricCard[] = [];
   let match: RegExpExecArray | null;
@@ -84,7 +94,19 @@ function metricCards(html: string): MetricCard[] {
     cards.push({
       label: match[1]!,
       value: text(match[2]!),
-      delta: text(match[3]!),
+      delta: text(match[3] ?? ""),
+    });
+  }
+
+  const hero =
+    /<section class="overview-hero"[^>]*>.*?<strong class="overview-hero-value">(.*?)<\/strong>.*?<div class="overview-hero-roas"><span class="[^"]*">(.*?)<\/span>/.exec(
+      html,
+    );
+  if (hero) {
+    cards.push({
+      label: "Receita tráfego",
+      value: text(hero[1]!),
+      delta: text(hero[2]!),
     });
   }
 
@@ -283,9 +305,11 @@ describe("overview route", () => {
     const funnelPosition = html.indexOf("overview-funnel-panel");
     const dailyPosition = html.indexOf("daily-comparison");
 
+    // Painel de print: KPIs, then leads + Meta x real side by side, then
+    // the funnel.
     expect(metricsPosition).toBeGreaterThan(-1);
-    expect(funnelPosition).toBeGreaterThan(metricsPosition);
-    expect(dailyPosition).toBeGreaterThan(funnelPosition);
+    expect(dailyPosition).toBeGreaterThan(metricsPosition);
+    expect(funnelPosition).toBeGreaterThan(dailyPosition);
   });
 
   it("renders aggregated campaign metrics returned by the backend", async () => {
@@ -351,7 +375,9 @@ describe("overview route", () => {
     expect(html).not.toContain("Campanha Real");
     expect(html).not.toContain("Segunda Campanha");
     expect(html).toContain("2 campanhas");
-    expect(html.match(/class=\"metric-card/g)).toHaveLength(6);
+    // Receita trafego is the hero card now: 5 KPI cards + the hero.
+    expect(html.match(/class=\"metric-card/g)).toHaveLength(5);
+    expect(html).toContain("overview-hero");
     expect(html).toContain("Investimento");
     expect(html).not.toContain("Cobertura das conversas");
     expect(html).not.toContain("Conversas organicas");
@@ -359,7 +385,7 @@ describe("overview route", () => {
     expect(html).not.toContain("Resumo do workspace");
     expect(html).toContain(">15<");
     expect(html).toContain(">8<");
-    expect(html).toContain("Receita tráfego");
+    expect(html).toContain("Receita do tráfego");
     expect(html).toContain("Funil de conversão");
     expect(html).toContain("Base do funil");
     expect(html).toContain("da etapa anterior");
@@ -369,7 +395,10 @@ describe("overview route", () => {
     expect(html).toContain("Custo por lead qualificado");
     expect(html).toContain("Custo por compra");
     expect(html).toContain("Custo por primeira compra");
-    expect(html).toContain("1 primeira compra");
+    // Compras shows its cost, not a count of first purchases.
+    expect(
+      metricCards(html).find((card) => card.label === "Compras")?.delta,
+    ).toMatch(/^Custo por compra/);
     expect(html).not.toContain("0 recompra");
     expect(html).toContain(">1<");
     expect(html).not.toContain("LeadSubmitted");
@@ -413,7 +442,7 @@ describe("overview route", () => {
     const element = await OverviewPage({});
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("1 primeira compra, 1 recompra");
+    expect(html).not.toContain("1 primeira compra, 1 recompra");
     expect(html).toContain("Custo por recompra");
     expect(html).not.toContain("ROAS com recompra");
   });
@@ -497,7 +526,8 @@ describe("overview route", () => {
     expect(html).toContain("Custo por checkout iniciado");
     // Aggregated IC value 3+2 across campaigns
     expect(html).toContain(">5<");
-    expect(html.match(/class=\"metric-card/g)).toHaveLength(7);
+    expect(html.match(/class=\"metric-card/g)).toHaveLength(6);
+    expect(html).toContain("overview-hero");
   });
 
   it("renders an empty overview state without mock campaign data", async () => {
@@ -694,6 +724,7 @@ describe("overview configurable KPI cards", () => {
       "Lead qualificado",
     ]);
     expect(html).not.toContain("Receita tráfego");
+    expect(html).not.toContain("overview-hero");
     expect(html).not.toContain(">Compras<");
     expect(html).not.toContain("ROAS");
     expect(html).not.toContain("primeira compra");
@@ -777,7 +808,7 @@ describe("overview configurable KPI cards", () => {
       "Receita tráfego",
     ]);
     expect(cards.find((card) => card.label === "Compras")?.delta).toBe(
-      "1 primeira compra",
+      "Custo por compra R$ 100,00",
     );
     expect(cards.find((card) => card.label === "Receita tráfego")?.delta).toBe(
       "ROAS 3.00x",
@@ -809,9 +840,10 @@ describe("overview configurable KPI cards", () => {
     const viewContent = cards.find((card) => card.label === "Pre-qualificado");
 
     expect(viewContent?.value).toBe("12");
-    expect(viewContent?.delta).toBe("Ultimos 7 dias");
+    expect(viewContent?.delta).toBe("");
     expect(viewContent?.delta).not.toContain("R$");
     expect(html).not.toContain("Receita tráfego");
+    expect(html).not.toContain("overview-hero");
     expect(html).not.toContain("ROAS");
   });
 
@@ -928,7 +960,7 @@ describe("overview configurable KPI cards", () => {
       "Receita tráfego",
     ]);
     expect(cards.find((card) => card.label === "Vendas")?.delta).toBe(
-      "1 primeira compra",
+      "Custo por vendas R$ 100,00",
     );
     expect(html).toContain("Custo por vendas");
     expect(html).not.toContain("Custo por compra<");
@@ -955,7 +987,7 @@ function leadsBlockItems(html: string): LeadsBlockItem[] {
     html.indexOf("overview-funnel-panel"),
   );
   const pattern =
-    /data-leads-block="([^"]+)"><dt><span>(.*?)<\/span>.*?<\/dt><dd><strong>(.*?)<\/strong><small>(.*?)<\/small><\/dd>/g;
+    /data-leads-block="([^"]+)"><dt><span>(.*?)<\/span>.*?<\/dt><dd><strong>(.*?)<\/strong>(?:<small>(.*?)<\/small>)?<\/dd>/g;
   const text = (value: string) => value.replace(/<[^>]+>/g, "");
   const items: LeadsBlockItem[] = [];
   let match: RegExpExecArray | null;
@@ -965,7 +997,7 @@ function leadsBlockItems(html: string): LeadsBlockItem[] {
       key: match[1]!,
       label: match[2]!,
       value: text(match[3]!),
-      caption: text(match[4]!),
+      caption: text(match[4] ?? ""),
       href:
         /href="([^"]+)"/.exec(match[3]!)?.[1]?.replace(/&amp;/g, "&") ?? null,
     });
@@ -1036,7 +1068,7 @@ describe("overview leads no período", () => {
     );
     const period = "attribution=paid&since=2026-10-08&until=2026-10-14";
 
-    expect(html).toContain("Leads no período");
+    expect(html).toContain("Quem chamou por anúncio");
     expect(leadsBlockItems(html)).toEqual([
       {
         key: "new",
@@ -1049,21 +1081,21 @@ describe("overview leads no período", () => {
         key: "returning",
         label: "Voltaram por anúncio",
         value: "0",
-        caption: "Já eram leads antes do período",
+        caption: "",
         href: `/leads?${period}&base=returning`,
       },
       {
         key: "repeat",
         label: "Conversaram mais de uma vez",
         value: "38",
-        caption: "2 ou mais conversas no período",
+        caption: "",
         href: `/leads?${period}&base=repeat`,
       },
       {
         key: "conversations",
         label: "Conversas por anúncio",
         value: "570",
-        caption: "Inclui conversas repetidas",
+        caption: "",
         href: null,
       },
     ]);
@@ -1073,9 +1105,10 @@ describe("overview leads no período", () => {
     expect(html).toContain('aria-label="O que é: Conversas por anúncio"');
     // Closed until hovered, focused or tapped (iOS taps toggle it).
     expect(html).toContain('aria-expanded="false"');
-    // The KPI card keeps the headline and opens the same Leads list.
-    expect(html).toContain(
-      `<span>Leads novos</span><strong><a class="kpi-number-link" aria-label="412 - Ver os leads novos na lista de leads" href="/leads?${period.replace(/&/g, "&amp;")}">412</a></strong><small>1º contato no período</small>`,
+    // The KPI card keeps the headline and opens the same Leads list; its
+    // second line is the cost per lead novo (the breakdown lives in the block).
+    expect(withoutMetricStyle(html)).toContain(
+      `<span>Leads novos</span><strong><a class="kpi-number-link" aria-label="412 - Ver os leads novos na lista de leads" href="/leads?${period.replace(/&/g, "&amp;")}">412</a></strong><small>Custo por lead novo R$ 10,00</small>`,
     );
   });
 
@@ -1136,7 +1169,7 @@ describe("overview leads no período", () => {
     const element = await OverviewPage({ searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(createElement("div", null, element));
 
-    expect(html).toContain("Leads no período");
+    expect(html).toContain("Quem chamou por anúncio");
     expect(leadsBlockItems(html).map((item) => item.value)).toEqual([
       "-",
       "-",
@@ -1188,7 +1221,7 @@ describe("overview daily: Meta x conversas reais", () => {
     // API without adConversationsStarted: conversations = novos + retornos.
     expect(html).toContain("Conversas iniciadas pela Meta <strong>5</strong>");
     expect(html).toContain("Conversas iniciadas reais <strong>5</strong>");
-    expect(html).toContain("Conversas conciliadas no período");
+    expect(html).toContain("Conversas conciliadas");
     expect(html).toContain("13/10 - Conversas iniciadas reais: 3");
     expect(html).not.toContain("daily-bar returning");
     expect(html).not.toContain("Leads (evento Lead enviado)");
@@ -1581,7 +1614,7 @@ describe("overview campaign x WhatsApp number cross-filter", () => {
     expect(cards.find((card) => card.label === "Investimento")).toEqual({
       label: "Investimento",
       value: "R$\u00a0100,00",
-      delta: "Ultimos 7 dias",
+      delta: "",
     });
     expect(cards.find((card) => card.label === "Conversas Meta")).toEqual({
       label: "Conversas Meta",
@@ -1626,17 +1659,17 @@ describe("overview campaign x WhatsApp number cross-filter", () => {
     );
     const cards = metricCards(html);
 
-    expect(html).toContain(
+    expect(withoutMetricStyle(html)).toContain(
       '<div class="metric-card partial"><span>Investimento</span><strong>R$\u00a0100,00</strong><small>Campanha inteira · inclui outro número</small></div>',
     );
-    expect(html).toContain(
+    expect(withoutMetricStyle(html)).toContain(
       '<div class="metric-card partial"><span>Conversas Meta</span><strong>10</strong><small>Campanha inteira · inclui outro número</small></div>',
     );
     expect(cards.find((card) => card.label === "Receita tráfego")?.delta).toBe(
       "Receita do número; ROAS indisponível",
     );
     expect(cards.find((card) => card.label === "Lead qualificado")?.delta).toBe(
-      "Ultimos 7 dias",
+      "",
     );
     expect(html).not.toContain("ROAS 3.00x");
     expect(html).not.toContain("metric-card partial unavailable");
@@ -1847,9 +1880,11 @@ describe("overview campaign x WhatsApp number cross-filter", () => {
     );
     const header = html.slice(0, html.indexOf("overview-filter-bar"));
 
-    expect(html).toContain(
-      '<span class="presentation-mask-value">Promo Setembro</span><span class="presentation-mask-placeholder">Campanha oculta</span>',
+    const daily = html.slice(
+      html.indexOf("daily-comparison"),
+      html.indexOf("overview-funnel-panel"),
     );
+    expect(daily).not.toContain("Promo Setembro");
     expect(header).not.toContain("Promo Setembro");
     // Outside the campaign trigger, the name only appears inside a mask.
     // The trigger and the chip strip are the filter's own UI; presentation
@@ -2025,9 +2060,8 @@ describe("overview multi campaigns", () => {
     expect(html).toContain(
       'href="/reports?whatsappInstanceId=instance_centro">Abrir relatórios',
     );
-    expect(html).toContain(
-      '<span class="presentation-mask-value">2 campanhas selecionadas</span><span class="presentation-mask-placeholder">2 campanhas selecionadas</span>',
-    );
+    // The selection count lives in the filters; the chart does not repeat it.
+    expect(html).not.toContain("2 campanhas selecionadas</span>");
   });
 
   // UX §8 test 23 (M5)
@@ -2059,7 +2093,7 @@ describe("overview multi campaigns", () => {
     );
     const cards = metricCards(html);
 
-    expect(html).toContain(
+    expect(withoutMetricStyle(html)).toContain(
       '<div class="metric-card partial"><span>Investimento</span><strong>R$ 100,00</strong><small>Soma das campanhas inteiras · inclui outro número</small></div>',
     );
     expect(cards.find((card) => card.label === "Receita tráfego")?.delta).toBe(

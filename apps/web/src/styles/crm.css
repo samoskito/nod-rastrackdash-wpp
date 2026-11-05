@@ -41,11 +41,26 @@
   gap: 7px;
 }
 
+/* Header: title + refresh, one filter row, stage counts. */
 .crm-header {
   display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.crm-header-top {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px 20px;
-  align-items: end;
+  min-width: 0;
+}
+
+.crm-toolbar {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(5, 8, 7, 0.42);
   min-width: 0;
 }
 
@@ -64,6 +79,7 @@
 
 .crm-header-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
 }
@@ -75,7 +91,6 @@
 
 .crm-filters {
   display: flex;
-  grid-column: 1 / -1;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 10px 12px;
@@ -175,7 +190,6 @@
 
 .crm-summary {
   display: flex;
-  grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: 8px;
   margin: 0;
@@ -572,15 +586,17 @@
     padding: 14px 16px 0;
   }
 
-  .crm-header {
+  .crm-header-top {
     grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 
-  .crm-header-title p {
-    display: none;
+  .crm-toolbar {
+    padding: 10px;
   }
 
   .crm-header-actions {
+    width: 100%;
     justify-content: space-between;
   }
 
@@ -685,7 +701,6 @@
 
 /* nod: board readable with the license locked; moves disabled. */
 .crm-license-locked {
-  grid-column: 1 / -1;
   margin: 0;
   padding: 10px 12px;
   border: 1px solid rgba(255, 196, 82, 0.4);
@@ -694,4 +709,44 @@
   color: var(--ink);
   font-size: 13px;
   line-height: 1.45;
+}
+
+/*
+ * Desktop panning (lib/drag-to-pan): grab the board background and drag
+ * sideways, as in Trello. A thicker, always visible horizontal scrollbar.
+ */
+.crm-board.can-pan {
+  cursor: grab;
+}
+
+.crm-board.is-panning,
+.crm-board.is-panning * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.crm-board:not(.is-mobile) {
+  scrollbar-color: rgba(66, 240, 168, 0.45) rgba(255, 255, 255, 0.06);
+  scrollbar-width: auto;
+}
+
+.crm-board:not(.is-mobile)::-webkit-scrollbar {
+  height: 12px;
+}
+
+.crm-board:not(.is-mobile)::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.crm-board:not(.is-mobile)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(66, 240, 168, 0.45);
+  background-clip: padding-box;
+}
+
+.crm-board:not(.is-mobile)::-webkit-scrollbar-thumb:hover {
+  background: rgba(66, 240, 168, 0.7);
+  background-clip: padding-box;
 }

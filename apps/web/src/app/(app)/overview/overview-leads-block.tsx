@@ -12,7 +12,8 @@ export type OverviewLeadsBlockItem = {
   label: string;
   /** `null` = the API did not send this number (shown as "-"). */
   value: number | null;
-  caption: string;
+  /** Another metric (cost per lead novo); null/absent = no second line. */
+  caption?: string | null;
   hint: string;
   /** Exact Leads list behind the number, when the Leads page can rebuild it. */
   href?: string | null;
@@ -57,11 +58,9 @@ export function overviewLeadsCopy(leadSubmittedOverrideEnabled: boolean) {
 export function OverviewLeadsBlock({
   available,
   items,
-  rangeLabel,
 }: {
   available: boolean;
   items: OverviewLeadsBlockItem[];
-  rangeLabel: string;
 }) {
   return (
     <section
@@ -70,10 +69,8 @@ export function OverviewLeadsBlock({
     >
       <div className="overview-leads-block-heading">
         <div>
-          <span className="eyebrow">Leads no período</span>
           <h2 id="overview-leads-title">Quem chamou por anúncio</h2>
         </div>
-        <span className="tag">{rangeLabel}</span>
       </div>
 
       <dl className="overview-leads-block-grid">
@@ -115,9 +112,11 @@ export function OverviewLeadsBlock({
                     value
                   )}
                 </strong>
-                <small>
-                  {available ? item.caption : "Aguardando resposta da API"}
-                </small>
+                {!available ? (
+                  <small>Aguardando resposta da API</small>
+                ) : item.caption ? (
+                  <small>{item.caption}</small>
+                ) : null}
               </dd>
             </div>
           );

@@ -5,14 +5,15 @@ export default function ProductRouteLoading() {
       aria-busy="true"
       aria-label="Carregando página"
     >
-      <header className="page-header route-loading-header">
-        <div>
-          <span className="skeleton-line skeleton-eyebrow" />
-          <span className="skeleton-line skeleton-title" />
-          <span className="skeleton-line skeleton-copy" />
-        </div>
-        <span className="skeleton-line skeleton-action" />
-      </header>
+      {/* Same shape as PageBar: a short title and the actions on one row. */}
+      <div className="page-bar route-loading-bar" aria-hidden="true">
+        <span className="skeleton-line skeleton-bar-title" />
+        <span className="route-loading-bar-actions">
+          <span className="skeleton-line skeleton-chip" />
+          <span className="skeleton-line skeleton-action" />
+        </span>
+      </div>
+      <span className="skeleton-line skeleton-strip" aria-hidden="true" />
       <div className="route-loading-grid">
         <span className="skeleton-block" />
         <span className="skeleton-block" />

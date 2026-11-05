@@ -27,6 +27,8 @@ import { CopyLinkButton } from "../../../components/copy-link-button";
 import { LinkResultActionForm } from "../../../components/link-result-action-form";
 import { OpsAlertPhonesEditor } from "../../../components/ops-alert-phones-editor";
 import { PendingSubmitButton } from "../../../components/pending-submit-button";
+import { HelpTip } from "../../../components/help-tip";
+import { PageBar } from "../../../components/page-bar";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { TeamActionButton } from "../../../components/team-action-button";
 import { displayTimeZone } from "../../../lib/date-time";
@@ -622,25 +624,20 @@ export default async function SettingsPage() {
 
   return (
     <section className="page-stack page-standard settings-page">
-      <header className="page-header">
-        <div>
-          <span className="eyebrow">Configurações</span>
-          <h1>Central de configurações</h1>
-          <p>
-            Identidade, equipe e automações organizadas por responsabilidade.
-          </p>
-        </div>
-        <div className="header-actions">
-          <span
-            className={`status-chip${workspaceSettings.state === "error" || funnelConfiguration.state === "error" ? " warn" : ""}`}
-          >
-            {workspaceSettings.state === "error" ||
-            funnelConfiguration.state === "error"
-              ? "API indisponível"
-              : "API conectada"}
-          </span>
-        </div>
-      </header>
+      <PageBar
+        title="Configurações"
+        helpLabel="Sobre as configurações"
+        help="Central de configurações: identidade, equipe e automações organizadas por responsabilidade."
+      >
+        <span
+          className={`status-chip${workspaceSettings.state === "error" || funnelConfiguration.state === "error" ? " warn" : ""}`}
+        >
+          {workspaceSettings.state === "error" ||
+          funnelConfiguration.state === "error"
+            ? "API indisponível"
+            : "API conectada"}
+        </span>
+      </PageBar>
 
       <section
         className="settings-overview"
@@ -648,7 +645,6 @@ export default async function SettingsPage() {
       >
         <div className="settings-overview-heading">
           <div>
-            <span className="eyebrow">Estado do workspace</span>
             <h2 id="settings-overview-title">Mapa das configurações</h2>
           </div>
           <span
@@ -748,13 +744,12 @@ export default async function SettingsPage() {
           <span className="settings-domain-number" aria-hidden="true">
             01
           </span>
-          <div>
-            <span className="eyebrow">Conta e workspace</span>
+          <div className="settings-domain-title">
             <h2 id="settings-account-title">Identidade e acesso</h2>
-            <p>
+            <HelpTip label="Sobre identidade e acesso">
               Confira a identidade pública do workspace e o acesso da conta
               atual.
-            </p>
+            </HelpTip>
           </div>
           <span className={`status-chip${isPlatformSupport ? " neutral" : ""}`}>
             {currentAccessLabel}
@@ -873,7 +868,6 @@ export default async function SettingsPage() {
             02
           </span>
           <div>
-            <span className="eyebrow">Equipe</span>
             <h2 id="settings-team-title">Membros e acessos</h2>
             <p>
               {workspaceSettings.state === "error"
@@ -1141,13 +1135,12 @@ export default async function SettingsPage() {
           <span className="settings-domain-number" aria-hidden="true">
             03
           </span>
-          <div>
-            <span className="eyebrow">Jornada</span>
+          <div className="settings-domain-title">
             <h2 id="settings-conversion-title">Jornada</h2>
-            <p>
+            <HelpTip label="Sobre a jornada">
               Controle a ordem e o nome das etapas do funil. As regras de
               conversão ficam em <Link href="/conversions">Conversões</Link>.
-            </p>
+            </HelpTip>
           </div>
           <span className="status-chip">
             {visibleFunnelStageCount} etapa
@@ -1312,13 +1305,12 @@ export default async function SettingsPage() {
           <span className="settings-domain-number" aria-hidden="true">
             05
           </span>
-          <div>
-            <span className="eyebrow">Operação</span>
+          <div className="settings-domain-title">
             <h2 id="settings-ops-alerts-title">Alertas WhatsApp</h2>
-            <p>
+            <HelpTip label="Sobre os alertas WhatsApp">
               Aviso no celular se a instância NOD desconectar ou o webhook ficar
               sem entrega.
-            </p>
+            </HelpTip>
           </div>
           <span
             className={`status-chip${

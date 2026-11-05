@@ -22,6 +22,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { Fragment } from "react";
 import { SubmitButton } from "../../../components/submit-button";
+import { PageBar } from "../../../components/page-bar";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { displayTimeZone } from "../../../lib/date-time";
 import {
@@ -2188,18 +2189,17 @@ export default async function IntegrationsPage({
   return (
     <WorkspaceCurrencyProvider currency={currencySettings?.conversionCurrency}>
     <section className="page-stack page-standard integrations-page">
-      <header className="page-header">
-        <div>
-          <span className="eyebrow">Integrações</span>
-          <h1>Central de integrações</h1>
-          <p>
-            {usesExternalWhatsapp
-              ? "Acompanhe a origem das conversas, as contas Meta, o CRM e o caminho dos eventos desta conta."
-              : "Conecte seus números de WhatsApp, plataformas de atendimento, CRM e a conta de anúncios. Clique em um card para conectar ou gerenciar."}
-          </p>
-        </div>
+      <PageBar
+        title="Integrações"
+        helpLabel="Sobre as integrações"
+        help={
+          usesExternalWhatsapp
+            ? "Acompanhe a origem das conversas, as contas Meta, o CRM e o caminho dos eventos desta conta."
+            : "Conecte seus números de WhatsApp, plataformas de atendimento, CRM e a conta de anúncios. Clique em um card para conectar ou gerenciar."
+        }
+      >
         {isPlatformOperator ? (
-          <div className="header-actions">
+          <>
             <span
               className={`status-chip${hasIntegrationError ? " warn" : ""}`}
             >
@@ -2208,9 +2208,9 @@ export default async function IntegrationsPage({
             <span className="status-chip">
               {integrations.length} provedores
             </span>
-          </div>
+          </>
         ) : null}
-      </header>
+      </PageBar>
 
       {workspacePermissionsUnavailable ? (
         <div className="feedback-banner warn" role="alert">
@@ -2321,7 +2321,6 @@ export default async function IntegrationsPage({
       >
         <header className="integration-domain-heading">
           <div>
-            <span className="eyebrow">Pipeline de sinal</span>
             <h2 id="integration-flow-title">
               Do clique no anúncio ao evento enviado
             </h2>

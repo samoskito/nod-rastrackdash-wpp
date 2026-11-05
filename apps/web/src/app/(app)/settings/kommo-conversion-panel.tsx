@@ -306,7 +306,7 @@ function ConfirmBox({
 /**
  * Kommo é um gatilho de conversão opt-in (mudança de estágio no CRM) que liga
  * cada conexão a canais/rotas já autorizados. Só um negócio Kommo ligado a um
- * lead que já existe no WppTrack converte; o resto fica apenas na auditoria.
+ * lead que já existe no RastrackDash converte; o resto fica apenas na auditoria.
  * Salvar uma regra ou receber o webhook da Kommo (202) nunca confirma entrega
  * ao Meta.
  */
@@ -2056,7 +2056,7 @@ function KommoConnectionCard({
       </details>
 
       <p className="action-note">
-        Só negócios já vinculados a um lead existente no WppTrack (telefone reconhecido
+        Só negócios já vinculados a um lead existente no RastrackDash (telefone reconhecido
         e atribuição de anúncio válida) geram conversão; os demais ficam apenas na
         auditoria. A regra já começa enviando: cada negócio que chegar ao estágio
         escolhido depois de salvar vira conversão, e o aceite (202) do webhook da

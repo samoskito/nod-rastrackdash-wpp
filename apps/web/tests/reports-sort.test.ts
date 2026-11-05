@@ -242,7 +242,14 @@ function pushedUrl() {
 }
 
 function bodyRowNames() {
-  const [, body] = within(table()).getAllByRole("rowgroup");
+  // Rows only: the first tbody holds the highlighted total row.
+  const body = within(table())
+    .getAllByRole("rowgroup")
+    .find(
+      (group) =>
+        group.tagName === "TBODY" &&
+        !group.classList.contains("report-total-body"),
+    )!;
 
   return within(body)
     .getAllByRole("row")

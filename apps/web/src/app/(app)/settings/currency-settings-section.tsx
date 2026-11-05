@@ -6,6 +6,7 @@ import {
   type WorkspaceCurrencySettingsDto,
 } from "@wpptrack/shared";
 import { Coins } from "lucide-react";
+import { HelpTip } from "../../../components/help-tip";
 import { BackofficeActionForm } from "../../../components/backoffice-action-form";
 import { PendingSubmitButton } from "../../../components/pending-submit-button";
 import { PresentationMask } from "../../../components/presentation-mask";
@@ -70,13 +71,12 @@ export function CurrencySettingsSection({
         <span className="settings-domain-number" aria-hidden="true">
           {sectionNumber}
         </span>
-        <div>
-          <span className="eyebrow">Moeda</span>
+        <div className="settings-domain-title">
           <h2 id="settings-currency-title">Moeda</h2>
-          <p>
+          <HelpTip label="Sobre a moeda">
             Moeda do valor das conversões enviadas à Meta e moeda do
             investimento de cada conta de anúncio.
-          </p>
+          </HelpTip>
         </div>
         <span className={`status-chip${settings ? "" : " warn"}`}>
           {settings

@@ -1,3 +1,4 @@
+import { BrandMark } from "../../components/brand";
 import { BrandFooter } from "../../components/brand-footer";
 import { getBrandConfig } from "../../lib/brand";
 import { LoginForm } from "./login-form";
@@ -10,7 +11,10 @@ function asStringParam(
   return Array.isArray(value) ? value[0] : value;
 }
 
-function loginErrorMessage(error: string | undefined): string | null {
+function loginErrorMessage(
+  error: string | undefined,
+  brandName: string,
+): string | null {
   if (!error) {
     return null;
   }
@@ -20,7 +24,7 @@ function loginErrorMessage(error: string | undefined): string | null {
   }
 
   if (error === "google_pending") {
-    return "Este email ainda não foi liberado para acessar o WppTrack.";
+    return `Este email ainda não foi liberado para acessar o ${brandName}.`;
   }
 
   if (error === "google_exchange") {
@@ -58,8 +62,10 @@ export default async function LoginPage({
   searchParams?: Promise<LoginSearchParams>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
+  const brand = getBrandConfig();
   const initialError = loginErrorMessage(
     asStringParam(resolvedSearchParams.error),
+    brand.name,
   );
   const redirectTo = safeRedirectPath(
     asStringParam(resolvedSearchParams.redirectTo),
@@ -70,21 +76,12 @@ export default async function LoginPage({
       : null;
   const googleEnabled =
     process.env.AUTH_GOOGLE_ENABLED?.trim().toLowerCase() === "true";
-  const brand = getBrandConfig();
 
   return (
     <main className="standalone-page login-page">
       <section className="login-panel" aria-labelledby="login-title">
         <div>
-          {brand.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- arbitrary
-            // student-provided logo URL, outside next/image's static domain config.
-            <img className="brand-mark brand-mark-logo" src={brand.logoUrl} alt="" />
-          ) : (
-            <span className="brand-mark" aria-hidden="true">
-              {brand.name.trim().charAt(0).toUpperCase() || "R"}
-            </span>
-          )}
+          <BrandMark brand={brand} />
           <p className="eyebrow">Telemetria de conversões</p>
           <h1 id="login-title">Entrar no {brand.name}</h1>
           <p>

@@ -7,6 +7,24 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **No new migration and no new variable.** Large visual change in the web: forks that customized the files listed in the guide will see merge conflicts.
+
+### Changed
+
+- New layout ported from the SaaS: two-panel glass frame, bundled Outfit and
+  Hanken Grotesk fonts, RastrackDash symbol (replaced by the student logo or
+  initial when `BRAND_NAME`/`BRAND_LOGO_URL` is set), compact page bars with
+  help tips and denser pages. The "RastrackDash · powered by PalmUP" footer
+  stays in the sidebar, content, login and Backoffice.
+- Visão geral as a print panel: traffic revenue + ROAS hero with a daily
+  spend x revenue chart on one scale, print mode, KPI values that shrink
+  instead of being clipped, no repeated period/currency/legend text.
+- Relatórios: single filter strip, totals as the first table row (one per
+  currency), ROAS bar per row, advanced filters folded by default.
+- Leads: resizable table columns; CRM: compact header and drag-to-pan board.
+- API (additive): each `dailyComparison` day carries `spendCents` and
+  `trafficRevenueCents`, which add up to the period totals.
+
 ## [1.3.3] - 2026-11-03
 
 Upgrade notes for students: [`docs/releases/1.3.3.json`](docs/releases/1.3.3.json). **No new migration and no new variable.**

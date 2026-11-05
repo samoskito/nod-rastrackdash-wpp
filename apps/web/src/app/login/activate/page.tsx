@@ -1,3 +1,5 @@
+import { BrandMark } from "../../../components/brand";
+import { getBrandConfig } from "../../../lib/brand";
 import { AccountActivationForm } from "../account-activation-form";
 
 type ActivationSearchParams = Record<string, string | string[] | undefined>;
@@ -24,9 +26,7 @@ export default async function AccountActivationPage({
           aria-labelledby="activation-token-title"
         >
           <div>
-            <span className="brand-mark" aria-hidden="true">
-              W
-            </span>
+            <BrandMark brand={getBrandConfig()} />
             <p className="eyebrow">Primeiro acesso</p>
             <h1 id="activation-token-title">Link indisponível</h1>
             <p>
@@ -50,9 +50,7 @@ export default async function AccountActivationPage({
     <main className="standalone-page login-page">
       <section className="login-panel" aria-labelledby="activation-title">
         <div>
-          <span className="brand-mark" aria-hidden="true">
-            W
-          </span>
+          <BrandMark brand={getBrandConfig()} />
           <p className="eyebrow">Primeiro acesso</p>
           <h1 id="activation-title">Crie sua senha</h1>
           <p>

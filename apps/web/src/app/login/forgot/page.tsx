@@ -1,3 +1,5 @@
+import { BrandMark } from "../../../components/brand";
+import { getBrandConfig } from "../../../lib/brand";
 import { PasswordResetRequestForm } from "../password-reset-forms";
 
 export default async function ForgotPasswordPage() {
@@ -5,9 +7,7 @@ export default async function ForgotPasswordPage() {
     <main className="standalone-page login-page">
       <section className="login-panel" aria-labelledby="forgot-password-title">
         <div>
-          <span className="brand-mark" aria-hidden="true">
-            W
-          </span>
+          <BrandMark brand={getBrandConfig()} />
           <p className="eyebrow">Acesso seguro</p>
           <h1 id="forgot-password-title">Recuperar senha</h1>
           <p>

@@ -59,7 +59,7 @@ describe("integrations route", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     // Hub layout: tabs by category, cards with state, one modal per provider.
-    expect(html).toContain("Central de integrações");
+    expect(html).toContain("<h1>Integrações</h1>");
     expect(html).not.toContain("Mapa das conexões");
     expect(html).not.toContain('aria-label="Atalhos das integrações"');
     expect(html).toContain('role="tablist"');

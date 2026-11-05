@@ -414,7 +414,6 @@ export function ReportInsightsPanel({
   level,
   objective,
   objectiveLinks,
-  periodLabel,
   volume,
   volumeTableHref,
 }: {
@@ -424,7 +423,6 @@ export function ReportInsightsPanel({
   level: ReportInsightLevel;
   objective: ReportInsightObjective;
   objectiveLinks: ReportInsightObjectiveLink[];
-  periodLabel: string;
   volume: ReportInsightFetch;
   volumeTableHref: string;
 }) {
@@ -524,7 +522,7 @@ export function ReportInsightsPanel({
         <div className="report-results-title">
           <Lightbulb aria-hidden="true" size={20} />
           <div>
-            <span className="eyebrow">Insights - {periodLabel}</span>
+            <span className="eyebrow">Insights</span>
             <h2>
               {label} por {copy.singular}
             </h2>

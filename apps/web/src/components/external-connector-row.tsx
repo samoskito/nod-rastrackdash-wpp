@@ -281,7 +281,7 @@ export function ExternalConnectorRow({
                   ) : null}
                   {event.capiActive ? (
                     <div className="connector-cutover-state">
-                      <span className="event-chip">WppTrack envia</span>
+                      <span className="event-chip">RastrackDash envia</span>
                       <small>Desde {formatDate(event.cutoverAt)}</small>
                       <details className="connector-cutover-control rollback">
                         <summary>Reverter para o n8n</summary>
@@ -370,7 +370,7 @@ export function ExternalConnectorRow({
               <small className="reconciliation-ready-copy">
                 {health.reconciliation.events.some((event) => event.capiActive)
                   ? "Corte parcial ativo. Valide cada evento antes de assumir o próximo."
-                  : "Eventos reais reconciliados. O envio WppTrack continua desligado."}
+                  : "Eventos reais reconciliados. O envio RastrackDash continua desligado."}
               </small>
             )}
           </div>

@@ -5,6 +5,7 @@ import {
   type WhatsappConnectionDto,
 } from "@wpptrack/shared";
 import { getManualConversionAccess } from "../../../lib/manual-conversion-access";
+import { PageBar } from "../../../components/page-bar";
 import { serverApiFetch } from "../../../lib/server-api";
 import {
   CrmBoard,
@@ -94,12 +95,9 @@ export default async function CrmPage({
   if (!board) {
     return (
       <section className="crm-page" aria-labelledby="crm-title">
-        <header className="crm-header">
-          <div className="crm-header-title">
-            <span className="eyebrow">Operação</span>
-            <h1 id="crm-title">CRM</h1>
-          </div>
-        </header>
+        <div className="crm-header">
+          <PageBar className="crm-header-top" title="CRM" titleId="crm-title" />
+        </div>
         <div className="crm-empty-state surface-panel" role="alert">
           <strong>Não foi possível carregar o quadro</strong>
           <span>Confira a conexão com a API e atualize a página.</span>

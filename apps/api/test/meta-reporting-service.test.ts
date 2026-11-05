@@ -1246,7 +1246,7 @@ describe("meta reporting service", () => {
     });
 
     expect(report.dailyComparisonAvailable).toBe(true);
-    expect(report.dailyComparison).toEqual([
+    expect(report.dailyComparison).toMatchObject([
       {
         date: "2026-07-01",
         metaConversationsStarted: 100,
@@ -1264,6 +1264,28 @@ describe("meta reporting service", () => {
         returningLeads: 0,
       },
     ]);
+    // Investimento and receita de trafego per day (hero chart of the
+    // Visao geral) add up to the period totals of the summary.
+    const sumDaily = (
+      pick: (
+        point: NonNullable<typeof report.dailyComparison>[number],
+      ) => number | undefined,
+    ) =>
+      report.dailyComparison?.reduce(
+        (total, point) => total + (pick(point) ?? 0),
+        0,
+      );
+    expect(
+      report.dailyComparison?.every(
+        (point) => typeof point.spendCents === "number",
+      ),
+    ).toBe(true);
+    expect(sumDaily((point) => point.spendCents)).toBe(
+      report.summary?.spendCents,
+    );
+    expect(sumDaily((point) => point.trafficRevenueCents)).toBe(
+      report.summary?.trafficRevenueCents,
+    );
     // Lead sent at the entry (no rule override): no separate Lead series.
     expect(report.dailyComparisonLeadEventDeferred).toBe(false);
     // The days add up to "Conversas por anuncio" of the block.

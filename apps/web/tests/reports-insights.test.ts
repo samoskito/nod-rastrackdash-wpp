@@ -885,9 +885,16 @@ describe("reports insights tab", () => {
       "Público 2",
       "Público 1",
     ]);
+    // Short page title (the menu already names the page); the level being
+    // analysed lives in the page help and in the level tabs.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
-      "Insights por conjunto",
+      "Relatórios",
     );
+    expect(
+      screen
+        .getAllByRole("tooltip")
+        .some((tip) => tip.textContent?.includes("Insights por conjunto")),
+    ).toBe(true);
     cleanup();
     vi.restoreAllMocks();
 

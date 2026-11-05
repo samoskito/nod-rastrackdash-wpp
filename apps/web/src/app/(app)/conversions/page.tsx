@@ -26,6 +26,7 @@ import {
 import { loadConversionsData } from "./conversions-data";
 import { ConversionsScreen } from "./conversions-screen";
 import { WorkspaceCurrencyProvider } from "../../../components/workspace-currency";
+import { PageBar } from "../../../components/page-bar";
 import {
   ensureIntegrationEndpointAction,
   loadIntegrationEventPayloadAction,
@@ -79,18 +80,11 @@ export default async function ConversionsPage({
 
   return (
     <section className="page-stack page-standard conversions-page">
-      <header className="page-header">
-        <div>
-          <span className="eyebrow">Conversões</span>
-          <h1>Conversões</h1>
-          <p>
-            Todas as regras que transformam uma conversa em conversão na Meta,
-            em um só lugar: frases, etiquetas, pedidos do catálogo, automações e
-            etapas do CRM, para todos os números ou só para os que você
-            escolher.
-          </p>
-        </div>
-      </header>
+      <PageBar
+        title="Conversões"
+        helpLabel="Sobre as conversões"
+        help="Todas as regras que transformam uma conversa em conversão na Meta, em um só lugar: frases, etiquetas, pedidos do catálogo, automações e etapas do CRM, para todos os números ou só para os que você escolher."
+      />
 
       <WorkspaceCurrencyProvider currency={currencySettings?.conversionCurrency}>
       <ConversionsScreen

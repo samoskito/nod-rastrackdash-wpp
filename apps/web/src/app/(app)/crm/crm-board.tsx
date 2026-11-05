@@ -31,7 +31,9 @@ import {
   useState,
   type TouchEvent,
 } from "react";
+import { PageBar } from "../../../components/page-bar";
 import { Toast, type ToastMessage } from "../../../components/toast";
+import { useDragToPan } from "../../../lib/drag-to-pan";
 import type { ManualConversionAccess } from "../../../lib/manual-conversion-access";
 import { ManualConversionDialog } from "../leads/[leadId]/manual-conversion-dialog";
 import { loadCrmColumnAction, refreshCrmBoardAction } from "./actions";
@@ -441,6 +443,11 @@ export function CrmBoard({
     [columns],
   );
   const empty = crmBoardIsEmpty({ columns });
+  // Desktop: drag the board background sideways (cards keep drag-and-drop).
+  useDragToPan(boardRef, {
+    enabled: !isMobile && !empty && initialBoard.journeyConfigured,
+    cardSelector: ".crm-card",
+  });
   const cardOptions = (column: CrmColumnDto): CrmCardOptions => ({
     showWhatsappNumber: initialBoard.showWhatsappNumber,
     showValue: column.requiresValue,
@@ -472,29 +479,30 @@ export function CrmBoard({
 
   return (
     <section className="crm-page" aria-labelledby="crm-title">
-      <header className="crm-header">
-        <div className="crm-header-title">
-          <span className="eyebrow">Operação</span>
-          <h1 id="crm-title">CRM</h1>
-          <p>
-            Leads de anúncio (CTWA) por etapa da Jornada. Arraste um card para
-            registrar a conversão da etapa.
-          </p>
-        </div>
-        <div className="crm-header-actions">
-          <span className="crm-updated" aria-live="polite">
-            {refreshing ? "Atualizando..." : `Atualizado às ${updatedLabel}`}
+      <div className="crm-header">
+        {/* Title and refresh share one row (density). */}
+        <PageBar
+          className="crm-header-top"
+          title="CRM"
+          titleId="crm-title"
+          helpLabel="Sobre o CRM"
+          help="Leads de anúncio (CTWA) por etapa da Jornada. Arraste um card para registrar a conversão da etapa."
+        >
+          <span className="crm-header-actions">
+            <span className="crm-updated" aria-live="polite">
+              {refreshing ? "Atualizando..." : `Atualizado às ${updatedLabel}`}
+            </span>
+            <button
+              className="button ghost"
+              type="button"
+              onClick={() => void refresh(true, true)}
+              disabled={refreshing}
+            >
+              <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
+              Atualizar
+            </button>
           </span>
-          <button
-            className="button ghost"
-            type="button"
-            onClick={() => void refresh(true, true)}
-            disabled={refreshing}
-          >
-            <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-            Atualizar
-          </button>
-        </div>
+        </PageBar>
         {licenseLocked ? (
           <p className="crm-license-locked" role="status">
             Licença bloqueada: o quadro continua visível, mas mover cards
@@ -502,11 +510,13 @@ export function CrmBoard({
             ser ativada em Backoffice → Licença.
           </p>
         ) : null}
-        <CrmFilters
-          filters={filters}
-          whatsappInstances={whatsappInstances}
-          campaignOptions={campaignOptions}
-        />
+        <div className="crm-toolbar">
+          <CrmFilters
+            filters={filters}
+            whatsappInstances={whatsappInstances}
+            campaignOptions={campaignOptions}
+          />
+        </div>
         {initialBoard.journeyConfigured ? (
           <ul className="crm-summary" aria-label="Total por etapa">
             {summary.map((item) => (
@@ -517,7 +527,7 @@ export function CrmBoard({
             ))}
           </ul>
         ) : null}
-      </header>
+      </div>
 
       {!initialBoard.journeyConfigured ? (
         <div className="crm-empty-state surface-panel">

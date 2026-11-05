@@ -16,19 +16,20 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
-  Route,
   Send,
   Settings2,
   ShieldCheck,
   SquareKanban,
   UsersRound,
   X,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { BrandMark, BrandName } from "./brand";
 import { LogoutButton } from "./logout-button";
 import { BrandFooter } from "./brand-footer";
 import { DataAutoRefresh } from "./data-auto-refresh";
@@ -52,7 +53,7 @@ const navigationIconById: Record<ClientNavigationId, LucideIcon> = {
   reports: BarChart3,
   events: Send,
   integrations: Plug,
-  conversions: Route,
+  conversions: Zap,
   settings: Settings2,
 };
 
@@ -96,18 +97,6 @@ function workspaceRoleLabel(role: WorkspaceListEntryDto["role"]): string {
   }
 
   return role === "admin" ? "administrador" : "analista";
-}
-
-function BrandMark({ brand }: { brand: BrandConfig }) {
-  if (brand.logoUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary
-    // student-provided logo URL, outside next/image's static domain config.
-    return <img className="brand-mark brand-mark-logo" src={brand.logoUrl} alt="" />;
-  }
-
-  return (
-    <span className="brand-mark">{brand.name.trim().charAt(0).toUpperCase() || "R"}</span>
-  );
 }
 
 export function AppShell({
@@ -266,9 +255,9 @@ export function AppShell({
           aria-label={`${brand.name} - ir para a Visão geral`}
           onClick={closeMobileMenu}
         >
-          <BrandMark brand={brand} />
+          <BrandMark brand={brand} gradientId="rastrackdash-r-mobile" />
           <span className="brand-copy">
-            <strong>{brand.name}</strong>
+            <BrandName brand={brand} />
           </span>
         </Link>
         <button
@@ -300,9 +289,9 @@ export function AppShell({
             aria-label={`${brand.name} - ir para a Visão geral`}
             onClick={closeMobileMenu}
           >
-            <BrandMark brand={brand} />
+            <BrandMark brand={brand} gradientId="rastrackdash-r-sidebar" />
             <span className="brand-copy">
-              <strong>{brand.name}</strong>
+              <BrandName brand={brand} />
             </span>
           </Link>
           <button

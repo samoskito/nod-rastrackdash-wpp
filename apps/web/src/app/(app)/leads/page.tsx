@@ -13,6 +13,7 @@ import {
   UserRoundSearch,
 } from "lucide-react";
 import Link from "next/link";
+import { PageBar } from "../../../components/page-bar";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { formatDateTime } from "../../../lib/date-time";
 import { serverApiFetch } from "../../../lib/server-api";
@@ -24,6 +25,7 @@ import {
 } from "./lead-filter-params";
 import { LeadExportMenu } from "./lead-export-menu";
 import { LeadFilters } from "./lead-filters";
+import { LeadsTableHead } from "./leads-table-head";
 
 type LeadsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -353,16 +355,11 @@ export default async function LeadsPage({
 
   return (
     <section className="page-stack page-wide leads-page">
-      <header className="page-header">
-        <div>
-          <span className="eyebrow">Leads</span>
-          <h1>Leads rastreados pelo WhatsApp</h1>
-          <p>
-            Encontre conversas, confirme a atribuição e acompanhe a etapa atual
-            de cada lead.
-          </p>
-        </div>
-        <div className="header-actions">
+      <PageBar
+        title="Leads"
+        helpLabel="Sobre os leads"
+        help="Leads rastreados pelo WhatsApp. Encontre conversas, confirme a atribuição e acompanhe a etapa atual de cada lead."
+      >
           {result.state === "error" ? (
             <span className="status-chip warn">API indisponível</span>
           ) : null}
@@ -399,8 +396,7 @@ export default async function LeadsPage({
               </Link>
             </>
           ) : null}
-        </div>
-      </header>
+      </PageBar>
 
       <LeadFilters applied={appliedFilters} page={page} />
 
@@ -474,7 +470,6 @@ export default async function LeadsPage({
       <section className="lead-results-section" aria-labelledby="lead-results">
         <header className="lead-results-header">
           <div>
-            <span className="eyebrow">Histórico</span>
             <h2 id="lead-results">Conversas recebidas</h2>
             <p>
               {result.pagination.totalItems > 0
@@ -504,18 +499,7 @@ export default async function LeadsPage({
           <>
             <div className="table-wrap leads-table-wrap">
               <table className="leads-table">
-                <thead>
-                  <tr>
-                    <th>Lead</th>
-                    <th>Campanha / origem</th>
-                    <th>Etapa atual</th>
-                    <th>Recebido</th>
-                    <th>Última atividade</th>
-                    <th>
-                      <span className="sr-only">Abrir lead</span>
-                    </th>
-                  </tr>
-                </thead>
+                <LeadsTableHead />
                 <tbody>
                   {leads.map((lead) => (
                     <tr key={lead.id}>

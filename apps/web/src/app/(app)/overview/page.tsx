@@ -46,7 +46,12 @@ import {
   parseCampaignIdsParam,
   setCampaignParams,
 } from "./overview-campaign-params";
+import { HelpTip } from "../../../components/help-tip";
+import { PageBar } from "../../../components/page-bar";
+import { getBrandConfig } from "../../../lib/brand";
 import { OverviewFilters } from "./overview-filters";
+import { OverviewHero, overviewHeroDays } from "./overview-hero";
+import { PrintModeToggle } from "./print-mode-toggle";
 import { dailyComparisonSeries } from "./daily-comparison-series";
 import {
   OverviewLeadsBlock,
@@ -439,23 +444,6 @@ function ratioLabel(value: number | null): string {
   return value === null ? "-" : `${value.toFixed(2)}x`;
 }
 
-function purchaseBreakdownLabel(
-  firstPurchases: number,
-  repurchases: number,
-): string {
-  if (firstPurchases === 0 && repurchases === 0) {
-    return "Nenhuma compra no período";
-  }
-
-  const firstPurchaseLabel = `${firstPurchases} ${firstPurchases === 1 ? "primeira compra" : "primeiras compras"}`;
-
-  if (repurchases === 0) {
-    return firstPurchaseLabel;
-  }
-
-  return `${firstPurchaseLabel}, ${repurchases} ${repurchases === 1 ? "recompra" : "recompras"}`;
-}
-
 /**
  * Curated cost captions apply only while a stage still carries its catalog
  * label. Once the workspace renames a stage (QualifiedLead -> "Cliente
@@ -694,7 +682,6 @@ export default async function OverviewPage({
     reportingAccounts,
     adAccountCurrencies,
   );
-  const selectedAdAccountIds = splitAdAccountIds(filters.adAccountId);
   const campaigns = report.campaigns;
   const campaign = report.summary ?? sumCampaigns(campaigns);
   // Uma moeda só: tudo igual a antes (em real, sem rótulo novo). Duas ou mais
@@ -759,9 +746,6 @@ export default async function OverviewPage({
     report,
     campaignOptions,
   );
-  const campaignName = multiCampaign
-    ? undefined
-    : campaignNames[filters.campaignIds[0] ?? ""];
   const trackedRate =
     dataAvailable && campaign.trackingRate !== null
       ? ratePercent(campaign.trackingRate)
@@ -779,32 +763,6 @@ export default async function OverviewPage({
     ? scopedFunnelSteps
     : [metaConversationStage, ...scopedFunnelSteps];
   const kpiStages = configuredKpiStages(campaign.funnelSteps);
-  const selectedBusiness = reportingAccounts.find(
-    (account) => account.businessId === filters.businessId,
-  );
-  const selectedAccount =
-    selectedAdAccountIds.length === 1
-      ? reportingAccounts.find(
-          (account) => account.adAccountId === selectedAdAccountIds[0],
-        )
-      : undefined;
-  // n campaigns: a count, no names, so nothing to mask (§5.4).
-  const multiScopeLabel = `${campaignCount} campanhas selecionadas`;
-  const scopeLabel = multiCampaign
-    ? multiScopeLabel
-    : hasCampaignFilter && campaignName
-      ? campaignName
-      : (selectedAccount?.adAccountName ??
-        (selectedAdAccountIds.length > 1
-          ? `${selectedAdAccountIds.length} contas de anúncio`
-          : undefined) ??
-        selectedBusiness?.businessName ??
-        "Todas as contas");
-  const scopePlaceholder = multiCampaign
-    ? multiScopeLabel
-    : hasCampaignFilter && campaignName
-      ? "Campanha oculta"
-      : "Conta de anúncios oculta";
   const detailHref = reportsHref(filters);
   const leadsPeriod = {
     since: report.since ?? filters.since,
@@ -819,7 +777,7 @@ export default async function OverviewPage({
       caption:
         costPerLeadLabel !== null
           ? `Custo por lead novo ${costPerLeadLabel}`
-          : leadsCopy.newCaption,
+          : null,
       hint: leadsCopy.new,
       href: newLeadsHref,
       hrefLabel: "Ver os leads novos na lista de leads",
@@ -828,7 +786,6 @@ export default async function OverviewPage({
       key: "returning",
       label: "Voltaram por anúncio",
       value: optionalCount(campaign.returningLeads),
-      caption: "Já eram leads antes do período",
       hint: leadsCopy.returning,
       href: overviewLeadsHref(filters, leadsPeriod, "returning"),
       hrefLabel: "Ver quem voltou por anúncio na lista de leads",
@@ -837,7 +794,6 @@ export default async function OverviewPage({
       key: "repeat",
       label: "Conversaram mais de uma vez",
       value: optionalCount(campaign.repeatConversationLeads),
-      caption: "2 ou mais conversas no período",
       hint: leadsCopy.repeat,
       href: overviewLeadsHref(filters, leadsPeriod, "repeat"),
       hrefLabel: "Ver quem conversou mais de uma vez na lista de leads",
@@ -846,7 +802,6 @@ export default async function OverviewPage({
       key: "conversations",
       label: "Conversas por anúncio",
       value: optionalCount(campaign.adConversationEvents),
-      caption: "Inclui conversas repetidas",
       hint: leadsCopy.conversations,
     },
   ];
@@ -867,7 +822,9 @@ export default async function OverviewPage({
               campaign,
             )
     : "A jornada será exibida quando a API concluir a inicialização.";
-  const metaDelta = (fallback: string) =>
+  // Second line of a Meta KPI: a state warning when the number needs one,
+  // otherwise the given metric (or nothing). Never the period or the currency.
+  const metaDelta = (fallback: string | null) =>
     !dataAvailable
       ? "Aguardando resposta da API"
       : metaByAccount
@@ -892,19 +849,42 @@ export default async function OverviewPage({
         : metaUnsynced || campaignWithoutDelivery
           ? "ROAS indisponível"
           : `ROAS ${ratioLabel(campaign.roasAcquisition)}`;
+  // "ROAS sem cotação" only when the number itself is fine but part of the
+  // revenue had no exchange rate; the other states keep their own message.
+  const revenueCaption =
+    !dataAvailable ||
+    metaByAccount ||
+    metaPartial ||
+    metaUnsynced ||
+    campaignWithoutDelivery ||
+    !rateGap.exchangeRateMissing
+      ? revenueDelta
+      : `ROAS ${exchangeRateMissingLabel}`;
+  // Painel de print: receita + ROAS in the hero card when they make sense.
+  const heroVisible =
+    dataAvailable && !mixedCurrency && hasPurchaseStage(campaign.funnelSteps);
+  const roasAvailable =
+    dataAvailable &&
+    !metaByAccount &&
+    !metaPartial &&
+    !metaUnsynced &&
+    !campaignWithoutDelivery &&
+    !rateGap.exchangeRateMissing &&
+    campaign.roasAcquisition !== null;
+  // Spend bars only when the spend covers exactly what the page shows.
+  const heroShowSpend = !metaHidden && !metaPartial && !metaByAccount;
+  const heroDays =
+    report.dailyComparisonAvailable === true
+      ? overviewHeroDays(report.dailyComparison ?? [])
+      : null;
 
   return (
     <section className="page-stack page-wide overview-page">
       <OverviewPendingProvider>
-        <header className="page-header">
-          <div>
-            <span className="eyebrow">Visão geral</span>
-            <h1>Cockpit da operação</h1>
-            <p>
-              {report.rangeLabel} cruzando investimento, leads novos e eventos
-              enviados ao Pixel.
-            </p>
-          </div>
+        <PageBar
+          title="Visão geral"
+          help={`${report.rangeLabel} cruzando investimento, leads novos e eventos enviados ao Pixel.`}
+        >
           <div className="header-actions" aria-label="Filtros ativos">
             {reportState === "error" ? (
               <span className="status-chip warn">API indisponível</span>
@@ -912,7 +892,9 @@ export default async function OverviewPage({
               <span className="status-chip warn">Filtro inválido</span>
             ) : (
               <>
-                <span className="tag">{report.rangeLabel}</span>
+                {mixedCurrency ? (
+                  <span className="tag currency-badge">Várias moedas</span>
+                ) : null}
                 <span className="tag">
                   {campaignCount === 1
                     ? "1 campanha"
@@ -926,7 +908,8 @@ export default async function OverviewPage({
               </>
             )}
           </div>
-        </header>
+          <PrintModeToggle />
+        </PageBar>
 
         <OverviewFilters
           accountCurrencies={accountCurrencies}
@@ -992,6 +975,40 @@ export default async function OverviewPage({
                 />
               ) : null}
 
+              <div
+                className={`overview-print-top${heroVisible ? " has-hero" : ""}`}
+              >
+                {heroVisible ? (
+                  <OverviewHero
+                    brand={getBrandConfig()}
+                    revenueCents={campaign.trafficRevenueCents}
+                    spendCents={campaign.spendCents}
+                    roasLabel={revenueCaption}
+                    roasAvailable={roasAvailable}
+                    rangeLabel={report.rangeLabel}
+                    currency={reportMoneyCurrency}
+                    days={heroDays}
+                    showSpend={heroShowSpend}
+                    breakdown={[
+                      {
+                        label: "Primeira compra",
+                        value: fmt(campaign.firstPurchaseRevenueCents),
+                      },
+                      {
+                        label: "Recompra",
+                        value: fmt(campaign.repurchaseRevenueCents),
+                      },
+                      ...(heroShowSpend
+                        ? [
+                            {
+                              label: "Investimento",
+                              value: fmt(campaign.spendCents),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                ) : null}
               <div className="metric-grid overview-primary-metrics">
                 <Metric
                   label="Investimento"
@@ -1007,7 +1024,7 @@ export default async function OverviewPage({
                       ? "Veja os totais por moeda abaixo"
                       : reportState === "empty" && !hasCampaignFilter
                         ? "Nenhuma campanha sincronizada"
-                        : report.rangeLabel,
+                        : null,
                   )}
                   partial={dataAvailable && metaPartial}
                   unavailable={!dataAvailable || metaHidden}
@@ -1024,7 +1041,7 @@ export default async function OverviewPage({
                       !mixedCurrency &&
                       metaConversationStage.costCents != null
                       ? `${funnelStageCostLabel(metaConversationStage)} ${stageCostLabel(metaConversationStage)}`
-                      : report.rangeLabel,
+                      : null,
                   )}
                   partial={dataAvailable && metaPartial}
                   unavailable={!dataAvailable || metaHidden}
@@ -1038,9 +1055,11 @@ export default async function OverviewPage({
                   href={dataAvailable ? newLeadsHref : null}
                   hrefLabel="Ver os leads novos na lista de leads"
                   delta={
-                    dataAvailable
-                      ? leadsCopy.newCaption
-                      : "Aguardando resposta da API"
+                    !dataAvailable
+                      ? "Aguardando resposta da API"
+                      : costPerLeadLabel !== null
+                        ? `Custo por lead novo ${costPerLeadLabel}`
+                        : null
                   }
                   unavailable={!dataAvailable}
                 />
@@ -1051,39 +1070,34 @@ export default async function OverviewPage({
                         label={stage.label}
                         value={dataAvailable ? String(stage.value) : "-"}
                         delta={
-                          dataAvailable
-                            ? purchaseBreakdownLabel(
-                                campaign.firstPurchases,
-                                campaign.repurchases,
-                              )
-                            : "Aguardando resposta da API"
-                        }
-                        unavailable={!dataAvailable}
-                      />
-                      <Metric
-                        label="Receita tráfego"
-                        value={
-                          !dataAvailable
-                            ? "-"
-                            : mixedCurrency
-                              ? "Por moeda"
-                              : fmt(campaign.trafficRevenueCents)
-                        }
-                        delta={
                           !dataAvailable
                             ? "Aguardando resposta da API"
-                            : mixedCurrency
-                              ? "ROAS em cada moeda, abaixo"
-                              : metaByAccount ||
-                                  metaPartial ||
-                                  metaUnsynced ||
-                                  campaignWithoutDelivery ||
-                                  !rateGap.exchangeRateMissing
-                                ? revenueDelta
-                                : `ROAS ${exchangeRateMissingLabel}`
+                            : costsHidden || stage.costCents == null
+                              ? null
+                              : `${funnelStageCostLabel(stage)} ${stageCostLabel(stage)}`
                         }
                         unavailable={!dataAvailable}
                       />
+                      {heroVisible ? null : (
+                        <Metric
+                          label="Receita tráfego"
+                          value={
+                            !dataAvailable
+                              ? "-"
+                              : mixedCurrency
+                                ? "Por moeda"
+                                : fmt(campaign.trafficRevenueCents)
+                          }
+                          delta={
+                            !dataAvailable
+                              ? "Aguardando resposta da API"
+                              : mixedCurrency
+                                ? "ROAS em cada moeda, abaixo"
+                                : revenueCaption
+                          }
+                          unavailable={!dataAvailable}
+                        />
+                      )}
                     </Fragment>
                   ) : (
                     <Metric
@@ -1095,16 +1109,15 @@ export default async function OverviewPage({
                           ? "Aguardando resposta da API"
                           : metaByAccount
                             ? "Eventos do número selecionado"
-                            : costsHidden
-                              ? report.rangeLabel
-                              : stage.costCents != null
-                                ? `${funnelStageCostLabel(stage)} ${stageCostLabel(stage)}`
-                                : report.rangeLabel
+                            : costsHidden || stage.costCents == null
+                              ? null
+                              : `${funnelStageCostLabel(stage)} ${stageCostLabel(stage)}`
                       }
                       unavailable={!dataAvailable}
                     />
                   ),
                 )}
+              </div>
               </div>
 
               {dataAvailable && mixedCurrency && !metaHidden ? (
@@ -1120,11 +1133,21 @@ export default async function OverviewPage({
                 />
               ) : null}
 
-              <OverviewLeadsBlock
-                available={dataAvailable}
-                items={leadsBlockItems}
-                rangeLabel={report.rangeLabel}
-              />
+              <div className="overview-print-row">
+                <OverviewLeadsBlock
+                  available={dataAvailable}
+                  items={leadsBlockItems}
+                />
+                <DailyConversationComparison
+                  available={report.dailyComparisonAvailable === true}
+                  detailHref={detailHref}
+                  leadEventDeferred={
+                    report.dailyComparisonLeadEventDeferred === true
+                  }
+                  points={report.dailyComparison ?? []}
+                  reportState={reportState}
+                />
+              </div>
 
               <section
                 className="surface-panel overview-funnel-panel"
@@ -1139,10 +1162,9 @@ export default async function OverviewPage({
                 ) : (
                   <>
                     <div className="overview-section-heading">
-                      <div>
-                        <span className="eyebrow">Funil integrado</span>
+                      <div className="section-title-row">
                         <h2>Conversão por etapas</h2>
-                        <p>{funnelSummary}</p>
+                        <HelpTip label="Sobre o funil">{funnelSummary}</HelpTip>
                       </div>
                     </div>
                     <div className="overview-unavailable" role="status">
@@ -1157,18 +1179,6 @@ export default async function OverviewPage({
                   </>
                 )}
               </section>
-
-              <DailyConversationComparison
-                available={report.dailyComparisonAvailable === true}
-                detailHref={detailHref}
-                leadEventDeferred={
-                  report.dailyComparisonLeadEventDeferred === true
-                }
-                points={report.dailyComparison ?? []}
-                reportState={reportState}
-                scopeLabel={scopeLabel}
-                scopePlaceholder={scopePlaceholder}
-              />
             </>
           )}
         </OverviewResults>
@@ -1279,8 +1289,6 @@ function DailyConversationComparison({
   leadEventDeferred,
   points,
   reportState,
-  scopeLabel,
-  scopePlaceholder,
 }: {
   available: boolean;
   detailHref: string;
@@ -1288,8 +1296,6 @@ function DailyConversationComparison({
   leadEventDeferred: boolean;
   points: ReportDailyComparisonPointDto[];
   reportState: OverviewFetchState;
-  scopeLabel: string;
-  scopePlaceholder: string;
 }) {
   const {
     rows,
@@ -1330,7 +1336,7 @@ function DailyConversationComparison({
   };
   const differenceLabel =
     difference === 0
-      ? "Conversas conciliadas no período"
+      ? "Conversas conciliadas"
       : difference > 0
         ? `${difference} ${difference === 1 ? "conversa" : "conversas"} a mais na Meta`
         : `${Math.abs(difference)} ${Math.abs(difference) === 1 ? "conversa real" : "conversas reais"} a mais`;
@@ -1344,10 +1350,9 @@ function DailyConversationComparison({
       aria-labelledby="daily-comparison-title"
     >
       <div className="daily-comparison-header">
-        <div>
-          <span className="eyebrow">Conciliação diária</span>
+        <div className="section-title-row">
           <h2 id="daily-comparison-title">Meta x conversas reais</h2>
-          <p>
+          <HelpTip label="Como ler a conciliação diária">
             A Meta conta cada conversa iniciada a partir dos anúncios. Conversas
             iniciadas reais são as conversas de anúncio que chegaram aqui no
             mesmo dia, contadas do mesmo jeito: cada nova conversa conta,
@@ -1364,17 +1369,12 @@ function DailyConversationComparison({
                 contato.
               </>
             ) : null}
-          </p>
+          </HelpTip>
         </div>
         <div
           className="daily-comparison-summary"
           aria-label="Resumo do comparativo"
         >
-          <span>
-            <PresentationMask placeholder={scopePlaceholder}>
-              {scopeLabel}
-            </PresentationMask>
-          </span>
           <strong>{differenceLabel}</strong>
         </div>
       </div>
@@ -1416,7 +1416,10 @@ function DailyConversationComparison({
             <svg
               className="daily-comparison-chart"
               viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-              style={{ minWidth: `${viewWidth}px` }}
+              // Short periods fit a half-width card; long ones scroll inside it.
+              style={{
+                minWidth: `${Math.min(viewWidth, Math.max(420, rows.length * 30 + 92))}px`,
+              }}
               role="img"
               aria-label={`Comparação diária. ${seriesSummary}.`}
             >
@@ -1516,7 +1519,8 @@ function Metric({
 }: {
   label: string;
   value: string;
-  delta: ReactNode;
+  /** Another metric (cost per result) or a state warning; null = none. */
+  delta?: ReactNode;
   /** The exact list behind the number (Leads page), when one exists. */
   href?: string | null;
   hrefLabel?: string;
@@ -1530,6 +1534,8 @@ function Metric({
     <div
       className={`metric-card${unavailable ? " unavailable" : ""}${partial ? " partial" : ""}`}
       title={title}
+      // The value font shrinks with its length so it never gets clipped.
+      style={{ "--metric-chars": value.length } as CSSProperties}
     >
       <span>{label}</span>
       <strong>
@@ -1545,7 +1551,7 @@ function Metric({
           value
         )}
       </strong>
-      <small>{delta}</small>
+      {delta ? <small>{delta}</small> : null}
     </div>
   );
 }
@@ -1626,10 +1632,9 @@ function ConversionFunnel({
       aria-label={`Funil de conversão. ${funnelLabel}`}
     >
       <div className="conversion-funnel-heading">
-        <div>
-          <span className="micro-label">Funil integrado</span>
+        <div className="section-title-row">
           <h2>Conversão por etapas</h2>
-          <p>{description}</p>
+          <HelpTip label="Sobre o funil">{description}</HelpTip>
         </div>
         <span className="conversion-funnel-stage-count">
           {stages.length} {stages.length === 1 ? "etapa" : "etapas"}

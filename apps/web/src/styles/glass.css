@@ -1,0 +1,748 @@
+/*
+ * RastrackDash "Vidro grafite" layer (approved option A, 28/10/2026).
+ *
+ * Loaded after every other stylesheet so it only restyles surfaces; it does
+ * not change layout rules, routes or class names. Removing this import from
+ * app/layout.tsx restores the previous look.
+ *
+ * Student edition: the whitelabel (BRAND_NAME / BRAND_LOGO_URL /
+ * BRAND_PRIMARY_COLOR) keeps working on top of this layer, and the residual
+ * footer rules in globals.css stay in force: nothing here hides .brand-footer.
+ *
+ * - Neutral graphite ground with soft blurred patches. Green is an accent
+ *   only, never the background.
+ * - Panels are frosted glass: translucent fill, 1px light border and a 1px
+ *   highlight on the top edge. Dense reading surfaces (tables, modals,
+ *   inputs) stay nearly opaque so text keeps its contrast.
+ * - The menu floats off the edge of the screen with large rounded corners.
+ */
+
+@font-face {
+  font-family: "RastrackDash Outfit";
+  src: url("../app/fonts/outfit-variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "RastrackDash Hanken Grotesk";
+  src: url("../app/fonts/hanken-grotesk-variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-brand: "RastrackDash Outfit", "Segoe UI", sans-serif;
+  --font-display: "RastrackDash Outfit", "Segoe UI", sans-serif;
+  --font-body: "RastrackDash Hanken Grotesk", "Segoe UI", sans-serif;
+
+  /* Secondary text is lighter than before so it reads on glass. */
+  --ink-muted: #93a69f;
+  --border: rgba(255, 255, 255, 0.1);
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8);
+
+  --glass-panel: rgba(255, 255, 255, 0.045);
+  --glass-dense: rgba(15, 20, 19, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-hover: rgba(255, 255, 255, 0.18);
+  --glass-highlight: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(26px) saturate(160%);
+  --glass-radius: 20px;
+  --glass-radius-sm: 14px;
+}
+
+/* Ground: base colour on <html>, soft patches on a fixed layer behind it. */
+html {
+  background: #070a09;
+}
+
+body {
+  background: transparent;
+  background-image: none;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 50% 42% at 62% 18%,
+      rgba(150, 175, 166, 0.14),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 45% 45% at 100% 100%,
+      rgba(100, 128, 120, 0.18),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 38% 40% at 0% 92%,
+      rgba(66, 240, 168, 0.06),
+      transparent 70%
+    );
+}
+
+/* Brand */
+.brand-mark,
+.app-shell .brand-mark {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* Whitelabel: a custom name keeps its coloured tile (BRAND_PRIMARY_COLOR). */
+.brand-mark.brand-mark-letter,
+.app-shell .brand-mark.brand-mark-letter {
+  border: 1px solid rgba(66, 240, 168, 0.42);
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary, var(--mint)),
+    var(--teal)
+  );
+}
+
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 14px rgba(120, 255, 80, 0.22));
+}
+
+.brand-wordmark {
+  display: grid;
+  min-width: 0;
+  line-height: 1;
+}
+
+.brand-wordmark-name {
+  font-family: var(--font-brand);
+  font-size: 18px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.brand-wordmark-light {
+  color: var(--mint);
+  font-weight: 300;
+}
+
+.brand-wordmark-bold {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.brand-wordmark-product {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--mint);
+  font-family: var(--font-brand);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+}
+
+.brand-wordmark-product::before {
+  content: "";
+  flex: 1 1 auto;
+  height: 7px;
+  background: repeating-linear-gradient(
+    115deg,
+    rgba(244, 251, 248, 0.7) 0 1.2px,
+    transparent 1.2px 4px
+  );
+}
+
+/* Glass surfaces */
+.metric-card,
+.surface-panel,
+.quality-card,
+.integration-card,
+.config-card,
+.login-panel {
+  border-color: var(--glass-border);
+  border-radius: var(--glass-radius);
+  background-color: var(--glass-panel);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035) 0%,
+    transparent 40%
+  );
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 var(--glass-highlight);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.metric-card,
+.quality-card {
+  border-radius: var(--glass-radius-sm);
+}
+
+/* Glass inside glass: no second blur (cost) and no second shadow. */
+:is(.surface-panel, .integration-card, .config-card, .app-modal)
+  :is(.metric-card, .surface-panel, .quality-card, .integration-card, .config-card) {
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Tables and long lists read on a denser, unblurred surface. */
+.table-wrap {
+  border-color: var(--glass-border);
+  border-radius: var(--glass-radius-sm);
+  background: rgba(10, 14, 13, 0.72);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.page-header h1,
+.surface-panel h2,
+.panel-title,
+.app-modal-heading h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Floating menu (desktop) */
+@media (min-width: 901px) {
+  .app-shell {
+    --sidebar-width: 276px;
+  }
+
+  .app-shell.sidebar-collapsed {
+    --sidebar-width: 92px;
+  }
+
+  .sidebar {
+    inset: 14px auto 14px 14px;
+    width: calc(var(--sidebar-width) - 14px);
+    height: auto;
+    max-height: none;
+    border: 1px solid var(--glass-border);
+    border-radius: 26px;
+    background: var(--glass-panel);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035) 0%,
+      transparent 40%
+    );
+    box-shadow:
+      var(--shadow),
+      inset 0 1px 0 var(--glass-highlight);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    backdrop-filter: blur(30px) saturate(160%);
+  }
+
+  .sidebar-collapsed .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+.workspace-strip {
+  border-color: var(--glass-border);
+  border-radius: var(--glass-radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.sidebar-nav a {
+  border-radius: 12px;
+}
+
+.sidebar-nav a::after {
+  display: none;
+}
+
+.sidebar-nav a:hover {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-nav a.active {
+  border-color: rgba(66, 240, 168, 0.3);
+  background: rgba(66, 240, 168, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.presentation-mode-toggle,
+.sidebar-toggle {
+  border-radius: 10px;
+}
+
+/* Mobile: glass top bar and a frosted, nearly opaque drawer. */
+@media (max-width: 900px) {
+  .mobile-shell-header {
+    border-bottom-color: var(--glass-border);
+    background: rgba(10, 14, 13, 0.78);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+  }
+
+  .mobile-shell-header .brand-wordmark-name {
+    font-size: 16px;
+  }
+
+  .mobile-shell-header .brand-wordmark-product {
+    display: none;
+  }
+
+  .mobile-menu-toggle {
+    border-color: var(--glass-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .sidebar {
+    inset: 10px auto 10px 10px;
+    height: auto;
+    max-height: none;
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    background: rgba(14, 18, 17, 0.94);
+    -webkit-backdrop-filter: blur(32px) saturate(160%);
+    backdrop-filter: blur(32px) saturate(160%);
+  }
+
+  .mobile-sidebar-backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+}
+
+/* Modals: frosted and nearly opaque; header and footer stay put. */
+.app-modal-backdrop,
+.meta-action-dialog::backdrop,
+.report-ad-preview-dialog::backdrop,
+.event-audit-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+
+.app-modal,
+.meta-action-dialog,
+.event-audit-dialog {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: var(--glass-dense);
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 var(--glass-highlight);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  backdrop-filter: blur(32px) saturate(140%);
+}
+
+.app-modal-header {
+  border-bottom-color: var(--glass-border);
+}
+
+.app-modal-close {
+  border-color: var(--glass-border);
+  border-radius: 10px;
+}
+
+/*
+ * Primary actions: mint gradient with a soft glow. --brand-accent is set by
+ * app/layout.tsx only when the student chose BRAND_PRIMARY_COLOR.
+ */
+.button.primary,
+.login-form button[type="submit"] {
+  border-color: rgba(66, 240, 168, 0.6);
+  background: linear-gradient(
+    145deg,
+    var(--brand-accent, #5af5b6),
+    var(--mint-strong)
+  );
+  color: #03130d;
+  box-shadow:
+    0 10px 26px -14px rgba(23, 200, 131, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Login and standalone pages */
+.login-panel .brand-mark {
+  width: 48px;
+  height: 48px;
+}
+
+/*
+ * App frame "Dois painéis" (approved 28/10/2026): the menu and the content
+ * are two panels with the same 14px margin and 24px corners. The support and
+ * data bars are the content panel's header, 64px each, aligned with the
+ * menu's brand row, and the content scrolls inside the panel.
+ *
+ * The content panel must not get backdrop-filter/transform/filter: app
+ * modals render position: fixed inside it and would be clipped to it.
+ */
+.content {
+  --frame-row: 64px;
+}
+
+.support-context-bar,
+.data-refresh-bar {
+  min-height: var(--frame-row);
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: none;
+}
+
+.support-context-bar {
+  background: rgba(13, 18, 17, 0.9);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+
+.data-refresh-bar {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.support-context-bar > div,
+.data-refresh-bar > div {
+  align-items: center;
+}
+
+/* The state is a badge, not a coloured line: amber = support, mint = live. */
+.support-context-bar > div > span,
+.data-refresh-bar > div > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.support-context-bar > div > span::before,
+.data-refresh-bar > div > span::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.support-context-bar > div > span {
+  border-color: rgba(242, 193, 78, 0.35);
+  background: rgba(242, 193, 78, 0.1);
+  color: var(--amber);
+}
+
+.data-refresh-bar > div > span {
+  border-color: rgba(66, 240, 168, 0.3);
+  background: rgba(66, 240, 168, 0.08);
+  color: var(--mint);
+}
+
+.support-context-bar strong {
+  font-size: 14px;
+}
+
+.support-context-bar .button.ghost {
+  border-color: rgba(242, 193, 78, 0.4);
+  background: rgba(242, 193, 78, 0.06);
+  color: var(--amber);
+}
+
+@media (min-width: 901px) {
+  body:has(.app-shell) {
+    overflow: hidden;
+  }
+
+  /*
+   * The license banner sits above the shell, in the page flow. With it the
+   * frame takes only the height left below the banner: otherwise the bottom
+   * of the content panel (and the residual footer in it) would be cut off.
+   */
+  :root:has(.app-shell) {
+    --sidebar-width: 276px;
+  }
+
+  :root:has(.app-shell.sidebar-collapsed) {
+    --sidebar-width: 92px;
+  }
+
+  :root:has(.app-shell) .license-banner {
+    margin: 14px 14px 0 calc(var(--sidebar-width) + 14px);
+  }
+
+  body:has(> .license-banner):has(.app-shell) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  body:has(> .license-banner) > .app-shell {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  body:has(> .license-banner) .content {
+    height: calc(100% - 28px);
+  }
+
+  .sidebar {
+    border-radius: 24px;
+  }
+
+  /* Brand row = one header row, with the same hairline as the bars. */
+  .app-shell:not(.sidebar-collapsed) .sidebar-topline {
+    box-sizing: border-box;
+    height: var(--frame-row, 64px);
+    margin: -14px -14px 0;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .content {
+    box-sizing: border-box;
+    height: calc(100dvh - 28px);
+    margin: 14px 14px 14px calc(var(--sidebar-width) + 14px);
+    padding-left: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    background-color: rgba(255, 255, 255, 0.03);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      transparent 30%
+    );
+    box-shadow:
+      var(--shadow),
+      inset 0 1px 0 var(--glass-highlight);
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    scrollbar-width: thin;
+    transition: margin-left 180ms ease;
+  }
+}
+
+/* Phone: top bar and content panel are cards with a 10px margin. */
+@media (max-width: 900px) {
+  .mobile-shell-header {
+    top: 10px;
+    margin: 10px 10px 0;
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
+
+  .content {
+    min-height: calc(100dvh - 84px);
+    margin: 10px 10px 0;
+    border: 1px solid var(--glass-border);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background-color: rgba(255, 255, 255, 0.03);
+    overflow: clip;
+  }
+
+  .support-context-bar {
+    top: 74px;
+    padding: 10px 14px;
+  }
+
+  .data-refresh-bar {
+    padding: 10px 14px;
+  }
+}
+
+/* Accessibility: no transparency requested -> solid surfaces, no blur. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-panel: #111715;
+    --glass-dense: #0f1413;
+  }
+
+  .metric-card,
+  .surface-panel,
+  .quality-card,
+  .integration-card,
+  .config-card,
+  .login-panel,
+  .sidebar,
+  .mobile-shell-header,
+  .app-modal,
+  .meta-action-dialog,
+  .event-audit-dialog {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .sidebar {
+    background: #111715;
+  }
+}
+
+/*
+ * Density (Painel de print, approved 28/10/2026): no explanatory header on
+ * top of the pages. A page starts with one compact row (PageBar: short title,
+ * help behind an "i", chips/actions) and the data comes right after.
+ */
+.page-stack {
+  gap: 12px;
+}
+
+@media (min-width: 901px) {
+  .page-stack,
+  .page-stack.page-wide,
+  .page-stack.page-standard,
+  .page-stack.page-narrow {
+    padding: 14px 18px 22px;
+  }
+}
+
+.page-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  min-height: 40px;
+}
+
+.page-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.page-bar-title h1 {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Help "i": hover/focus shows the bubble, a tap pins it (is-open). */
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.help-tip-button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-muted);
+  cursor: help;
+}
+
+.help-tip-button:hover,
+.help-tip-button:focus-visible,
+.help-tip.is-open .help-tip-button {
+  border-color: rgba(66, 240, 168, 0.45);
+  color: var(--mint);
+}
+
+.help-tip-bubble {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -6px;
+  z-index: 120;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(15, 20, 19, 0.98);
+  box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.8);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 120ms ease,
+    visibility 0s linear 120ms;
+}
+
+.help-tip-end .help-tip-bubble {
+  right: -6px;
+  left: auto;
+}
+
+.help-tip:hover .help-tip-bubble,
+.help-tip-button:focus-visible + .help-tip-bubble,
+.help-tip.is-open .help-tip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 120ms ease;
+}
+
+/*
+ * Pages that still use the old header (Backoffice, internal screens): same
+ * compact look without touching their markup. The eyebrow goes and the
+ * paragraph becomes one small muted line.
+ */
+.page-header {
+  gap: 8px 16px;
+  padding-bottom: 0;
+}
+
+.page-header .eyebrow {
+  display: none;
+}
+
+.page-header h1 {
+  font-size: 22px;
+}
+
+.page-header > div > p {
+  margin-top: 4px;
+  font-size: 13px;
+}

@@ -1,5 +1,7 @@
+import { BrandMark } from "../../../components/brand";
 import type { WorkspaceInviteInspectionDto } from "@wpptrack/shared";
 import { cookies } from "next/headers";
+import { getBrandConfig } from "../../../lib/brand";
 import { serverApiFetch } from "../../../lib/server-api";
 import { InviteAcceptForm } from "./invite-accept-form";
 
@@ -52,9 +54,7 @@ export default async function WorkspaceInviteAcceptPage({
       <main className="standalone-page login-page">
         <section className="login-panel" aria-labelledby="invite-title">
           <div>
-            <span className="brand-mark" aria-hidden="true">
-              W
-            </span>
+            <BrandMark brand={getBrandConfig()} />
             <p className="eyebrow">Convite de workspace</p>
             <h1 id="invite-title">Convite indisponível</h1>
             <p>
@@ -78,9 +78,7 @@ export default async function WorkspaceInviteAcceptPage({
     <main className="standalone-page login-page">
       <section className="login-panel" aria-labelledby="invite-title">
         <div>
-          <span className="brand-mark" aria-hidden="true">
-            W
-          </span>
+          <BrandMark brand={getBrandConfig()} />
           <p className="eyebrow">Convite de workspace</p>
           <h1 id="invite-title">{inspection.workspaceName}</h1>
           <p>

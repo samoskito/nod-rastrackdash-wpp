@@ -195,9 +195,11 @@ export function MetaReportFilters({
     applied.compareUntil ||
     pageSize !== defaultPageSize,
   );
-  // Uncontrolled after mount: applying a filter must not fold the panel the
-  // user is working in.
-  const [advancedOpen, setAdvancedOpen] = useState(advancedFilterCount > 0);
+  // Starts folded (the count badge on the summary shows active advanced
+  // filters), so the data stays right under the filter strip. Uncontrolled
+  // after mount: applying a filter must not fold the panel the user is
+  // working in.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   return (
     <form
@@ -316,142 +318,144 @@ export function MetaReportFilters({
               <span className="tag">{advancedFilterCount}</span>
             ) : null}
           </summary>
-          <div className="report-filter-advanced-grid">
-            <label className="filter-field">
-              <span>Buscar em</span>
-              <select
-                className="filter-control"
-                name="nameScope"
-                value={fields.nameScope || "campaign"}
-                onChange={(event) =>
-                  update({ nameScope: event.currentTarget.value })
-                }
-                aria-label="Tipo de filtro por nome"
-              >
-                {nameScopeOptions.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="filter-field">
-              <span>Status</span>
-              <select
-                className="filter-control"
-                name="status"
-                value={fields.status || "all"}
-                onChange={(event) =>
-                  update({ status: event.currentTarget.value })
-                }
-                aria-label="Filtrar por status"
-              >
-                {statusOptions.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="filter-field">
-              <span>Veiculação</span>
-              <select
-                className="filter-control"
-                name="delivery"
-                value={fields.delivery || "all"}
-                onChange={(event) =>
-                  update({ delivery: event.currentTarget.value })
-                }
-                aria-label="Filtrar por veiculação no período"
-              >
-                {deliveryOptions.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="filter-field">
-              <span>Canal</span>
-              <select
-                className="filter-control"
-                name="whatsappClassification"
-                value={fields.whatsappClassification || "whatsapp"}
-                onChange={(event) =>
-                  update({ whatsappClassification: event.currentTarget.value })
-                }
-                aria-label="Filtrar por classificação WhatsApp"
-              >
-                {classificationOptions.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="filter-field">
-              <span>Comparar desde</span>
-              <input
-                className="filter-control"
-                type="date"
-                name="compareSince"
-                value={fields.compareSince}
-                onChange={(event) =>
-                  edit({ compareSince: event.currentTarget.value })
-                }
-                onBlur={flush}
-              />
-            </label>
-            <label className="filter-field overview-date-end">
-              <span>Comparar até</span>
-              <input
-                className="filter-control"
-                type="date"
-                name="compareUntil"
-                value={fields.compareUntil}
-                aria-invalid={compareOrderInvalid ? "true" : undefined}
-                aria-describedby={
-                  compareOrderInvalid ? compareErrorId : undefined
-                }
-                onChange={(event) =>
-                  edit({ compareUntil: event.currentTarget.value })
-                }
-                onBlur={flush}
-              />
-              {compareOrderInvalid ? (
-                <span className="overview-filter-error" id={compareErrorId}>
-                  Fim antes do início
-                </span>
+          <div className="report-advanced-panel">
+            <div className="report-filter-advanced-grid">
+              <label className="filter-field">
+                <span>Buscar em</span>
+                <select
+                  className="filter-control"
+                  name="nameScope"
+                  value={fields.nameScope || "campaign"}
+                  onChange={(event) =>
+                    update({ nameScope: event.currentTarget.value })
+                  }
+                  aria-label="Tipo de filtro por nome"
+                >
+                  {nameScopeOptions.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                <span>Status</span>
+                <select
+                  className="filter-control"
+                  name="status"
+                  value={fields.status || "all"}
+                  onChange={(event) =>
+                    update({ status: event.currentTarget.value })
+                  }
+                  aria-label="Filtrar por status"
+                >
+                  {statusOptions.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                <span>Veiculação</span>
+                <select
+                  className="filter-control"
+                  name="delivery"
+                  value={fields.delivery || "all"}
+                  onChange={(event) =>
+                    update({ delivery: event.currentTarget.value })
+                  }
+                  aria-label="Filtrar por veiculação no período"
+                >
+                  {deliveryOptions.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                <span>Canal</span>
+                <select
+                  className="filter-control"
+                  name="whatsappClassification"
+                  value={fields.whatsappClassification || "whatsapp"}
+                  onChange={(event) =>
+                    update({ whatsappClassification: event.currentTarget.value })
+                  }
+                  aria-label="Filtrar por classificação WhatsApp"
+                >
+                  {classificationOptions.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                <span>Comparar desde</span>
+                <input
+                  className="filter-control"
+                  type="date"
+                  name="compareSince"
+                  value={fields.compareSince}
+                  onChange={(event) =>
+                    edit({ compareSince: event.currentTarget.value })
+                  }
+                  onBlur={flush}
+                />
+              </label>
+              <label className="filter-field overview-date-end">
+                <span>Comparar até</span>
+                <input
+                  className="filter-control"
+                  type="date"
+                  name="compareUntil"
+                  value={fields.compareUntil}
+                  aria-invalid={compareOrderInvalid ? "true" : undefined}
+                  aria-describedby={
+                    compareOrderInvalid ? compareErrorId : undefined
+                  }
+                  onChange={(event) =>
+                    edit({ compareUntil: event.currentTarget.value })
+                  }
+                  onBlur={flush}
+                />
+                {compareOrderInvalid ? (
+                  <span className="overview-filter-error" id={compareErrorId}>
+                    Fim antes do início
+                  </span>
+                ) : null}
+              </label>
+              <label className="filter-field">
+                <span>Itens por página</span>
+                <select
+                  className="filter-control"
+                  name="pageSize"
+                  value={fields.pageSize || defaultPageSize}
+                  onChange={(event) =>
+                    update({ pageSize: event.currentTarget.value })
+                  }
+                >
+                  <option value="10">10 itens</option>
+                  <option value="25">25 itens</option>
+                  <option value="50">50 itens</option>
+                  <option value="100">100 itens</option>
+                </select>
+              </label>
+            </div>
+            <div className="report-filter-footer">
+              <span>
+                {hasFilters
+                  ? "O relatório está usando filtros personalizados."
+                  : "Sem filtros adicionais aplicados."}
+              </span>
+              {hasFilters ? (
+                <Link className="button ghost" href={clearHref}>
+                  Limpar filtros
+                </Link>
               ) : null}
-            </label>
-            <label className="filter-field">
-              <span>Itens por página</span>
-              <select
-                className="filter-control"
-                name="pageSize"
-                value={fields.pageSize || defaultPageSize}
-                onChange={(event) =>
-                  update({ pageSize: event.currentTarget.value })
-                }
-              >
-                <option value="10">10 itens</option>
-                <option value="25">25 itens</option>
-                <option value="50">50 itens</option>
-                <option value="100">100 itens</option>
-              </select>
-            </label>
-          </div>
-          <div className="report-filter-footer">
-            <span>
-              {hasFilters
-                ? "O relatório está usando filtros personalizados."
-                : "Sem filtros adicionais aplicados."}
-            </span>
-            {hasFilters ? (
-              <Link className="button ghost" href={clearHref}>
-                Limpar filtros
-              </Link>
-            ) : null}
+            </div>
           </div>
         </details>
       </div>

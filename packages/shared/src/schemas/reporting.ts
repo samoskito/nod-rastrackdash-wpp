@@ -199,6 +199,10 @@ export const reportDailyComparisonPointSchema = z.object({
   realConversations: nonnegativeIntSchema,
   /** Leads antigos que voltaram por anuncio neste dia. */
   returningLeads: nonnegativeIntSchema.optional(),
+  /** Investimento Meta do dia (linhas diarias dos insights). */
+  spendCents: moneyCentsSchema.optional(),
+  /** Receita de trafego do dia: as mesmas compras pagas do total do periodo. */
+  trafficRevenueCents: moneyCentsSchema.optional(),
 });
 
 /**

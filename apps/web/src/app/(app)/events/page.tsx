@@ -18,6 +18,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { HelpTip } from "../../../components/help-tip";
+import { PageBar } from "../../../components/page-bar";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { getCurrentWorkspace } from "../../../lib/current-workspace";
 import { formatDateTime } from "../../../lib/date-time";
@@ -477,35 +479,29 @@ export default async function EventsPage({
 
   return (
     <section className="page-stack page-wide audit-page">
-      <header className="page-header audit-page-header">
-        <div>
-          <span className="eyebrow">Eventos Meta</span>
-          <h1>Auditoria de conversões</h1>
-          <p>
-            Acompanhe o que foi enviado, o que está aguardando e o que precisa
-            de atenção antes de chegar a Meta.
-          </p>
-        </div>
-        <div className="header-actions">
-          {result.state === "error" ? (
-            <span className="status-chip bad">API indisponível</span>
-          ) : hasAttention ? (
-            <span className="status-chip warn">Requer atenção</span>
-          ) : (
-            <span className="status-chip">Fluxo acompanhado</span>
-          )}
-        </div>
-      </header>
-
-      <nav
-        className="report-view-tabs audit-view-tabs"
-        aria-label="Visões de eventos Meta"
+      <PageBar
+        className="audit-page-bar"
+        title="Eventos Meta"
+        helpLabel="Sobre a auditoria de conversões"
+        help="Auditoria de conversões: acompanhe o que foi enviado, o que está aguardando e o que precisa de atenção antes de chegar a Meta."
       >
-        <Link className="active" href="/events">
-          Conversões
-        </Link>
-        <Link href="/events/purchase-reviews">Revisão de compras</Link>
-      </nav>
+        <nav
+          className="report-view-tabs audit-view-tabs"
+          aria-label="Visões de eventos Meta"
+        >
+          <Link className="active" href="/events">
+            Conversões
+          </Link>
+          <Link href="/events/purchase-reviews">Revisão de compras</Link>
+        </nav>
+        {result.state === "error" ? (
+          <span className="status-chip bad">API indisponível</span>
+        ) : hasAttention ? (
+          <span className="status-chip warn">Requer atenção</span>
+        ) : (
+          <span className="status-chip">Fluxo acompanhado</span>
+        )}
+      </PageBar>
 
       <section
         className="surface-panel audit-command-panel"
@@ -535,10 +531,12 @@ export default async function EventsPage({
             <span className="audit-heading-icon" aria-hidden="true">
               <ShieldAlert size={18} strokeWidth={2.1} />
             </span>
-            <div>
-              <span className="eyebrow">Saúde da entrega</span>
+            <div className="audit-heading-title">
               <h2 id="audit-health-title">Fluxo para a Meta</h2>
-              <p>Estados operacionais primeiro; classificações em seguida.</p>
+              <HelpTip label="Sobre o fluxo para a Meta">
+                Saúde da entrega: estados operacionais primeiro; classificações
+                em seguida.
+              </HelpTip>
             </div>
           </div>
           <span className="status-chip neutral">
@@ -580,8 +578,7 @@ export default async function EventsPage({
           <span className="audit-heading-icon" aria-hidden="true">
             <History size={18} strokeWidth={2.1} />
           </span>
-          <div>
-            <span className="eyebrow">Histórico de entrega</span>
+          <div className="audit-heading-title">
             <h2>Eventos do período</h2>
           </div>
         </div>
@@ -606,10 +603,10 @@ export default async function EventsPage({
                   source: source ?? "",
                 }}
               />
-              <span className="muted">
+              <HelpTip label="Sobre o reenvio em lote" align="end">
                 Até 500 por vez, com os filtros atuais. Eventos já enviados não
                 são reenviados; os com mais de 7 dias ficam de fora.
-              </span>
+              </HelpTip>
             </>
           ) : null}
           {canRetryRejected && result.state !== "error" ? (
@@ -629,6 +626,14 @@ export default async function EventsPage({
 
       <div className="table-wrap audit-table-scroll audit-desktop-history">
         <table className="audit-table">
+          {/* Fixed columns get a fixed width; "Lead e campanha" takes the rest. */}
+          <colgroup>
+            <col className="audit-col-event" />
+            <col className="audit-col-context" />
+            <col className="audit-col-delivery" />
+            <col className="audit-col-time" />
+            <col className="audit-col-actions" />
+          </colgroup>
           <thead>
             <tr>
               <th>Evento / origem</th>
