@@ -96,12 +96,24 @@ function resolveUnnichatConnectionBind(
 ): UnnichatConnectionBind | null {
   // Fase 6.8 (porte do #183): ROI Chat is bound the same way (one connection
   // = one client number = one URL); a URL only ever attributes to its number.
-  if (input.provider !== "unnichat" && input.provider !== "roichat") return null;
+  // GoHighLevel (porte do SaaS #131): bound the same way, but the channel id
+  // is the GHL location (location.id) the Workflow sends, never the phone.
+  if (
+    input.provider !== "unnichat" &&
+    input.provider !== "roichat" &&
+    input.provider !== "gohighlevel"
+  )
+    return null;
   const connectedPhone = input.connectedPhone
     ? normalizePhoneIdentity(input.connectedPhone)
     : undefined;
   const channelName = input.displayName?.trim();
   if (!connectedPhone || !channelName || channelName.length > 120) return null;
+  if (input.provider === "gohighlevel") {
+    const locationId = input.providerChannelId?.trim();
+    if (!locationId || locationId.length > 255) return null;
+    return { providerChannelId: locationId, connectedPhone, channelName };
+  }
   return { providerChannelId: connectedPhone, connectedPhone, channelName };
 }
 
@@ -240,7 +252,9 @@ export class InboundWebhookConnectionsService {
     // Fase 4b: the Unnichat sale automation has its own parser release (and,
     // since 6.8, the ROI Chat purchase received on the number URL).
     const automationParserRelease =
-      connection.provider === "unnichat" || connection.provider === "roichat"
+      connection.provider === "unnichat" ||
+      connection.provider === "roichat" ||
+      connection.provider === "gohighlevel"
         ? await this.prisma.inboundWebhookParserRelease.findFirst({
             where: { provider: connection.provider, version: "automation-v1" },
             select: { id: true, version: true, status: true },
@@ -365,7 +379,9 @@ export class InboundWebhookConnectionsService {
     }
     const unnichatBind = resolveUnnichatConnectionBind(input);
     if (
-      (input.provider === "unnichat" || input.provider === "roichat") &&
+      (input.provider === "unnichat" ||
+        input.provider === "roichat" ||
+        input.provider === "gohighlevel") &&
       !unnichatBind
     ) {
       // The shared schema already requires it; keep the service boundary
@@ -374,7 +390,9 @@ export class InboundWebhookConnectionsService {
       throw new ConflictException(
         input.provider === "roichat"
           ? "Conexões ROI Chat exigem o número de WhatsApp do cliente"
-          : "Conexões Unnichat exigem o número de WhatsApp do cliente",
+          : input.provider === "gohighlevel"
+            ? "Conexões GoHighLevel exigem o ID da localização e o WhatsApp do cliente"
+            : "Conexões Unnichat exigem o número de WhatsApp do cliente",
       );
     }
 

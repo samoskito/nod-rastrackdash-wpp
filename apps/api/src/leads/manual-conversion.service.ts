@@ -157,6 +157,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   umbler: "Umbler",
   unnichat: "Unnichat",
   roichat: "ROI Chat",
+  gohighlevel: "GoHighLevel",
   gupshup: "Gupshup",
   data_crazy: "Data Crazy",
   uazapi: "Uazapi",

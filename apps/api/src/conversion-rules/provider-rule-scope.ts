@@ -128,6 +128,8 @@ export const WHATSAPP_CHANNEL_PROVIDERS = [
   "unnichat",
   "waha",
   "roichat",
+  // GoHighLevel: the location's number (one connection per location).
+  "gohighlevel",
 ] as const;
 /** Payt events (Fase 4a); "Carrinho abandonado" is still beta. */
 export const PAYT_RULE_EVENT_NAMES = [...paytSaleEventNames];
@@ -171,6 +173,7 @@ export function providerRuleOrigin(
       if (provider === "unnichat") return "automation_unnichat";
       if (provider === "roichat") return "automation_roichat";
       if (provider === "webhook") return "automation_webhook";
+      if (provider === "gohighlevel") return "automation_gohighlevel";
       return null;
     }
     default:
@@ -195,6 +198,8 @@ export function providerRuleOriginChannelProviders(
       return ["unnichat"];
     case "automation_roichat":
       return ["roichat"];
+    case "automation_gohighlevel":
+      return ["gohighlevel"];
     case "automation_payt":
     case "automation_braip":
     case "automation_yampi":
@@ -237,7 +242,8 @@ export function providerRuleIsConnectionAutomation(
   return (
     origin === "automation_umbler" ||
     origin === "automation_unnichat" ||
-    origin === "automation_roichat"
+    origin === "automation_roichat" ||
+    origin === "automation_gohighlevel"
   );
 }
 
@@ -357,7 +363,8 @@ export function providerRuleOriginRequiresConnection(
     origin === "automation_payt" ||
     origin === "automation_braip" ||
     origin === "automation_yampi" ||
-    origin === "automation_webhook"
+    origin === "automation_webhook" ||
+    origin === "automation_gohighlevel"
   );
 }
 
@@ -519,6 +526,23 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       labelMatch: null,
       unifiable: false,
       eventNames: [...webhookEventNames],
+    },
+    {
+      // GoHighLevel (porte do SaaS e279af76): the Webhook action of a
+      // Workflow step calls the rule URL (one URL per rule/event, same model
+      // as the Unnichat automation). The Workflow's location.id names the
+      // number; a contact without ctwa_clid is never sent.
+      origin: "automation_gohighlevel",
+      scopes: ["all_numbers", "specific_numbers"],
+      channelProviders: ["gohighlevel"],
+      authorChannelProviders: null,
+      connectionBound: true,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_gohighlevel",
+      ),
+      labelMatch: null,
+      unifiable: false,
+      eventNames: ["LeadSubmitted", "QualifiedLead", "Purchase"],
     },
   ];
   return {

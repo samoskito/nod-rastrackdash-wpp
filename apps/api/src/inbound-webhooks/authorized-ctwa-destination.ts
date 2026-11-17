@@ -26,9 +26,35 @@ export const CTWA_DESTINATION_REASON = "authorized_ctwa_destination";
  * account, campaign or ad set. */
 export const CTWA_DESTINATION_AD_HINT_REASON =
   "authorized_ctwa_destination_ad_hint";
-/** The only provider whose WhatsApp entries may follow the page/pixel path
- * (as in the SaaS). Other providers keep requiring a known ad. */
+/** The historical (Unnichat) provider of the page/pixel path, kept for the
+ * Unnichat-only Meta routing (inherit/override). */
 export const CTWA_DESTINATION_PROVIDER = "unnichat";
+/** Entry providers whose CTWA lead without a (known) ad id may follow the
+ * channel's unique page/pixel destination. Unnichat first; GoHighLevel uses
+ * the same fallback (porte do SaaS e279af76, 26/10/2026). Every other
+ * provider keeps requiring a known ad. */
+export const CTWA_DESTINATION_PROVIDERS = ["unnichat", "gohighlevel"] as const;
+export type CtwaDestinationProvider =
+  (typeof CTWA_DESTINATION_PROVIDERS)[number];
+export function isCtwaDestinationProvider(
+  provider: string | null | undefined,
+): provider is CtwaDestinationProvider {
+  return (CTWA_DESTINATION_PROVIDERS as readonly string[]).includes(
+    provider ?? "",
+  );
+}
+/** sourceTrigger of the materialized entry receipts of those providers. */
+export const CTWA_DESTINATION_SOURCE_TRIGGERS = CTWA_DESTINATION_PROVIDERS.map(
+  (provider) => `inbound_webhook:${provider}`,
+);
+/** Typed provider values for Prisma filters: only the ones this database
+ * schema already knows (fail closed on an empty list). */
+export function ctwaDestinationProviderValues(): InboundWebhookProvider[] {
+  const known = Object.values(InboundWebhookProvider) as string[];
+  return CTWA_DESTINATION_PROVIDERS.filter((provider) =>
+    known.includes(provider),
+  ) as InboundWebhookProvider[];
+}
 
 /** Typed provider value for Prisma filters; null until the provider value
  * exists in this database schema (Unnichat arrives in Fase 4b). Callers must
@@ -58,7 +84,7 @@ export function isCtwaDestinationEntry(event: {
   classificationReason?: string | null;
   adId?: string | null;
 }): boolean {
-  if (event.provider !== CTWA_DESTINATION_PROVIDER) return false;
+  if (!isCtwaDestinationProvider(event.provider)) return false;
   return (
     (event.classificationReason === CTWA_DESTINATION_REASON && !event.adId) ||
     (event.classificationReason === CTWA_DESTINATION_AD_HINT_REASON &&
@@ -138,7 +164,7 @@ export async function resolveCtwaDestination(
   const crmProvider =
     options.crmAnyProvider === true &&
     !!provider &&
-    provider !== CTWA_DESTINATION_PROVIDER &&
+    !isCtwaDestinationProvider(provider) &&
     provider !== "uazapi" &&
     !channel.whatsappInstanceId;
   if (
@@ -151,7 +177,9 @@ export async function resolveCtwaDestination(
     channel.connection?.removedAt ||
     (options.crmAnyProvider === true && !channel.connection) ||
     (channel.connection &&
-      ((provider !== CTWA_DESTINATION_PROVIDER && !crmProvider) ||
+      // Entries/automations: Unnichat and GoHighLevel (same page/pixel
+      // fallback); CRM conversions of other providers use crmProvider.
+      ((!isCtwaDestinationProvider(provider) && !crmProvider) ||
         channel.connection.workspaceId !== channel.workspaceId ||
         channel.connection.id !== channel.connectionId))
   )

@@ -126,8 +126,8 @@ export type InboundWebhookParserResult = {
 export type InboundWebhookParserContext = {
   organizationId?: string;
   /**
-   * Channel phone bound by the connection (Unnichat, ROI Chat), never a
-   * provider payload field.
+   * Channel phone bound by the connection (Unnichat, ROI Chat, GoHighLevel),
+   * never a provider payload field.
    */
   connectedPhone?: string;
   /**

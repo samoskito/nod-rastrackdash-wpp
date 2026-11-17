@@ -230,7 +230,8 @@ it("actual intake accepts typed no-ad entry and retains certification and activa
   expect(
     h.prisma.inboundWebhookEvent.findMany.mock.calls[0][0].where.OR,
   ).toContainEqual({
-    provider: "unnichat",
+    // Unnichat and GoHighLevel share the page/pixel no-ad entry (porte e279af76).
+    provider: { in: ["unnichat", "gohighlevel"] },
     adId: null,
     classificationReason: "authorized_ctwa_destination",
   });

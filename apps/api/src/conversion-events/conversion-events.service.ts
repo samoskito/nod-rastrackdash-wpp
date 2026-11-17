@@ -48,10 +48,10 @@ import {
   resolveConversionCurrency,
 } from "@wpptrack/shared";
 import {
-  CTWA_DESTINATION_PROVIDER,
+  CTWA_DESTINATION_SOURCE_TRIGGERS,
   CTWA_DESTINATION_REASON,
   CTWA_DESTINATION_AD_HINT_REASON,
-  ctwaDestinationProviderValue,
+  ctwaDestinationProviderValues,
   ctwaIntentAuthorized,
   type AuthorizedCtwaDestination,
 } from "../inbound-webhooks/authorized-ctwa-destination";
@@ -885,7 +885,9 @@ export class ConversionEventsService {
           phoneHash: input.phoneHash,
           ctwaClid: input.ctwaClid,
           eventName: "LeadSubmitted",
-          sourceTrigger: `inbound_webhook:${CTWA_DESTINATION_PROVIDER}`,
+          // Unnichat or GoHighLevel page/pixel entry receipts (the channel
+          // and connection below pin the provider).
+          sourceTrigger: { in: CTWA_DESTINATION_SOURCE_TRIGGERS },
           AND: [
             {
               sourcePayload: {
@@ -2592,9 +2594,9 @@ export class ConversionEventsService {
       p.processingMode === "live_production" ||
       p.processingMode === "authorized_replay"
     ) {
-      const provider = ctwaDestinationProviderValue();
+      const providers = ctwaDestinationProviderValues();
       if (
-        !provider ||
+        providers.length === 0 ||
         typeof p.inboundEventId !== "string" ||
         p.connectionId !== intent.connectionId
       )
@@ -2605,7 +2607,7 @@ export class ConversionEventsService {
           workspaceId: intent.workspaceId,
           channelId: intent.channelId,
           connectionId: intent.connectionId,
-          provider,
+          provider: { in: providers },
           hasCtwa: true,
           // No-ad entry, or ad-hint entry whose stored ad id is the log's.
           ...(log.adId

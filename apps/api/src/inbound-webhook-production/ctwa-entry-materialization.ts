@@ -14,6 +14,7 @@ import {
   isCtwaDestinationReason,
   resolveCtwaDestination,
   type CtwaChannel,
+  type CtwaDestinationProvider,
 } from "../inbound-webhooks/authorized-ctwa-destination";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import type { PrismaService } from "../common/prisma/prisma.service";
@@ -124,6 +125,11 @@ export async function materializeCtwaEntry(
       (!adHint || parsed.adId?.trim() !== adHint))
   )
     throw new CtwaEntryMaterializationError("identity_invalid");
+  // Unnichat (historical) or GoHighLevel (same page/pixel fallback, porte do
+  // SaaS e279af76): the receipt keeps its own provider (sourceTrigger,
+  // sourcePayload, lead source).
+  const provider: CtwaDestinationProvider =
+    event.provider === "gohighlevel" ? "gohighlevel" : "unnichat";
   const lead = await leads.upsertFromWhatsappWebhook(
     {
       workspaceId: event.workspaceId,
@@ -131,7 +137,7 @@ export async function materializeCtwaEntry(
       name: parsed.contact.name ?? undefined,
       // Provider-supplied name only fills an empty lead name.
       preserveExistingName: true,
-      source: "unnichat",
+      source: provider,
       preserveExistingSource: true,
       preserveEarliestFirstMessageAt: true,
       ctwaClid: parsed.ctwaClid,
@@ -152,7 +158,7 @@ export async function materializeCtwaEntry(
       channel: {
         id: event.channelId,
         connectionId: event.connectionId,
-        provider: event.provider ?? "unnichat",
+        provider,
       },
       // No ad route: the rule send proves the page/pixel by this receipt.
       destination: {
@@ -166,7 +172,7 @@ export async function materializeCtwaEntry(
     {
       workspaceId: event.workspaceId,
       sourceEventId: event.externalMessageId ?? event.id,
-      sourceTrigger: "inbound_webhook:unnichat",
+      sourceTrigger: `inbound_webhook:${provider}`,
       eventName: "LeadSubmitted",
       eventId,
       dedupeKey: `inbound-webhook:${event.connectionId}:${event.dedupeKey}`,
@@ -178,15 +184,15 @@ export async function materializeCtwaEntry(
       eventOccurredAt: event.occurredAt,
       ctwaDestination: route,
       sourcePayload: {
-        provider: "unnichat",
+        provider,
         connectionId: event.connectionId,
         inboundEventId: event.id,
         channelId: event.channelId,
         processingMode: mode,
       },
       // Once per lead and Meta destination across numbers and rules.
-      // CTWA destination entries are Unnichat-only and always run inside the
-      // caller's transaction (production and replay).
+      // CTWA destination entries (Unnichat, GoHighLevel) always run inside
+      // the caller's transaction (production and replay).
       deferToProviderRule,
       leadLifetimeGuard: {
         channelId: event.channelId,

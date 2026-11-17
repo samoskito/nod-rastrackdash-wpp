@@ -26,6 +26,7 @@ import {
   CTWA_DESTINATION_AD_HINT_REASON,
   CTWA_DESTINATION_REASON,
   ctwaAdUnknown,
+  isCtwaDestinationProvider,
   resolveCtwaDestination,
 } from "./authorized-ctwa-destination";
 import { isBridgedWhatsappProvider } from "./bridged-whatsapp-providers";
@@ -849,7 +850,7 @@ export class InboundWebhookChannelRoutesService {
     const adId = event.adId?.trim();
     if (
       !adId ||
-      event.provider !== "unnichat" ||
+      !isCtwaDestinationProvider(event.provider) ||
       event.classificationReason !== CTWA_DESTINATION_AD_HINT_REASON ||
       (await ctwaAdUnknown(this.metaRouteReader, event.workspaceId, adId))
     )
@@ -888,7 +889,8 @@ export class InboundWebhookChannelRoutesService {
     if (!adId) {
       // Fase 4b: an Unnichat CTWA entry without ad id (ctwa_clid present) is
       // routed to the number's unique authorized page/pixel destination.
-      if (channel.connection.provider === "unnichat") {
+      // GoHighLevel uses the same fallback (porte do SaaS e279af76).
+      if (isCtwaDestinationProvider(channel.connection.provider)) {
         const r = await resolveCtwaDestination(this.prisma, channel);
         return r.kind === "authorized_ctwa_destination"
           ? {
@@ -908,7 +910,7 @@ export class InboundWebhookChannelRoutesService {
     const decision = await this.evaluateAdRoute(channel, adId);
     if (
       decision.classification === "eligible_route_resolved" ||
-      channel.connection.provider !== "unnichat"
+      !isCtwaDestinationProvider(channel.connection.provider)
     )
       return decision;
     return this.ctwaAdHintFallback(channel, adId, decision);

@@ -23,6 +23,7 @@ import {
   providerConversionTechnicalDeliveryStateSchema,
   providerRuleCreateRequestKeySchema,
   readMessagePhraseConfig,
+  integrationEndpointAutomationEvents,
 } from "@wpptrack/shared";
 import type {
   SalesPlatformProviderDto,
@@ -193,13 +194,22 @@ function isUnifiableAutomationOrigin(
  * Origins that may take "Todos os numeros da <plataforma> (todas as
  * conexoes)": the unifiable automations plus the ROI Chat purchase (one
  * connection per number). ROI Chat is new, so it has no legacy per-connection
- * duplicates to "Unificar".
+ * duplicates to "Unificar". GoHighLevel (one connection per location) is new
+ * too: its rule is born for every GHL location of the workspace.
  */
 function supportsCrossConnectionScope(
   origin: ProviderRuleOrigin | null | undefined,
 ): boolean {
-  return isUnifiableAutomationOrigin(origin) || origin === "automation_roichat";
+  return (
+    isUnifiableAutomationOrigin(origin) ||
+    origin === "automation_roichat" ||
+    origin === "automation_gohighlevel"
+  );
 }
+
+/** Events the GoHighLevel Workflow step (Webhook action) may convert. */
+const GOHIGHLEVEL_RULE_EVENTS: readonly string[] =
+  integrationEndpointAutomationEvents.gohighlevel;
 
 /**
  * "Numero removido": the rule can no longer receive anything because the
@@ -867,7 +877,7 @@ export class ProviderConversionRulesService {
             !isPaytAutomation &&
             !webhookRule &&
             connection &&
-            !["umbler", "uazapi", "unnichat", "roichat"].includes(
+            !["umbler", "uazapi", "unnichat", "roichat", "gohighlevel"].includes(
               connection.provider,
             )
           ) {
@@ -902,7 +912,15 @@ export class ProviderConversionRulesService {
             (!supportsCrossConnectionScope(origin) || scope !== "all_numbers")
           ) {
             throw new BadRequestException(
-              "Todas as conexões só existe para automações Unnichat/Umbler/ROI Chat em todos os números",
+              "Todas as conexões só existe para automações Unnichat/Umbler/ROI Chat/GoHighLevel em todos os números",
+            );
+          }
+          if (
+            origin === "automation_gohighlevel" &&
+            !GOHIGHLEVEL_RULE_EVENTS.includes(input.eventName)
+          ) {
+            throw new BadRequestException(
+              "A etapa do GoHighLevel envia Lead recebido, lead qualificado ou compra",
             );
           }
           if (!connection && providerRuleOriginRequiresConnection(origin)) {
@@ -936,7 +954,10 @@ export class ProviderConversionRulesService {
                   ? "webhook"
                   : connection?.provider === "umbler" ||
                     connection?.provider === "unnichat" ||
-                    connection?.provider === "roichat"
+                    connection?.provider === "roichat" ||
+                    // GoHighLevel (porte do SaaS e279af76): the Workflow's
+                    // Webhook action calls the rule URL.
+                    connection?.provider === "gohighlevel"
                   ? connection.provider
                   : null;
           if (endpointAutomationProvider) {
@@ -1607,7 +1628,7 @@ export class ProviderConversionRulesService {
       if (input.crossConnectionScope === true) {
         if (!supportsCrossConnectionScope(origin) || nextScope !== "all_numbers") {
           throw new BadRequestException(
-            "Todas as conexões só existe para automações Unnichat/Umbler/ROI Chat em todos os números",
+            "Todas as conexões só existe para automações Unnichat/Umbler/ROI Chat/GoHighLevel em todos os números",
           );
         }
       }
@@ -1796,7 +1817,7 @@ export class ProviderConversionRulesService {
           const provider = current.parserRelease?.provider;
           const workspaceUrl =
             provider &&
-            ["payt", "braip", "yampi", "unnichat", "umbler"].includes(provider)
+            ["payt", "braip", "yampi", "unnichat", "umbler", "gohighlevel"].includes(provider)
               ? await transaction.integrationEndpoint.findFirst({
                   where: {
                     workspaceId,
@@ -2982,7 +3003,8 @@ export class ProviderConversionRulesService {
           rule.origin === "automation_payt" ||
           rule.origin === "automation_braip" ||
           rule.origin === "automation_yampi" ||
-          rule.origin === "automation_unnichat"
+          rule.origin === "automation_unnichat" ||
+          rule.origin === "automation_gohighlevel"
             ? "provider_automation"
             : rule.origin,
         eventName: "",
@@ -2998,6 +3020,8 @@ export class ProviderConversionRulesService {
               ? { provider: "yampi" }
             : rule.origin === "automation_unnichat"
               ? { provider: "unnichat" }
+            : rule.origin === "automation_gohighlevel"
+              ? { provider: "gohighlevel" }
               : null,
       connection: null,
       messageAuthorScope: rule.messageAuthorScope,

@@ -12,32 +12,73 @@ import { ConversionEventsService } from "../../../src/conversion-events/conversi
 import { MetaCapiAdapter } from "../../../src/conversion-events/meta-capi.adapter";
 import { ConversionEventsQueueService } from "../../../src/common/queue/conversion-events-queue.service";
 import { ConversionEventProcessor } from "../../../src/common/queue/conversion-event.processor";
-export function offline() {
+/**
+ * Synthetic GoHighLevel Workflow call (contact entering through a CTWA ad
+ * whose ad id GHL did not send). No real contact, phone or location.
+ */
+export function goHighLevelEntryWithoutAdId() {
+  return {
+    contact_id: "contact_synthetic_ghl",
+    full_name: "Contato Exemplo",
+    phone: "+5511987650909",
+    date_created: "2026-10-26T11:00:00.000Z",
+    location: { id: "location_synthetic_a", name: "Clínica Exemplo" },
+    workflow: { id: "workflow_synthetic_entry", name: "Entrada" },
+    triggerData: {},
+    contact: {
+      attributionSource: {
+        sessionSource: "Paid Social",
+        medium: "whatsapp",
+        ctwa_clid: "synthetic-ghl-click",
+      },
+      lastAttributionSource: {},
+    },
+    attributionSource: {},
+    customData: {},
+  };
+}
+
+export function offline(
+  options: { provider?: "unnichat" | "gohighlevel" } = {},
+) {
+  const provider = options.provider ?? "unnichat";
   const h = ctwaHarness();
   const p = h.prisma;
-  const payload = JSON.parse(
-    readFileSync(
-      __dirname + "/../fixtures/entry-with-ctwa.json",
-      "utf8",
-    ),
-  );
+  if (provider === "gohighlevel") {
+    h.channel.connection.provider = "gohighlevel";
+    // GHL channels have no routing mode (legacy NULL): no routes and no
+    // manual audit = inherits the client's Meta configuration.
+    (h.channel as any).metaRoutingMode = null;
+    // This edition binds the GHL channel to the location (providerChannelId
+    // = location.id) and keeps the clinic WhatsApp as connectedPhone.
+    h.channel.providerChannelId = "location_synthetic_a";
+  }
+  const payload =
+    provider === "gohighlevel"
+      ? goHighLevelEntryWithoutAdId()
+      : JSON.parse(
+          readFileSync(
+            __dirname + "/../fixtures/entry-with-ctwa.json",
+            "utf8",
+          ),
+        );
   const registry = new InboundWebhookParserRegistry();
   const parsed = registry
     .resolve({
-      provider: "unnichat",
+      provider,
       parserVersion: "v1",
       parserReleaseStatus: "certified",
     })
     .parse(payload, {
       organizationId: "w",
-      connectedPhone: h.channel.providerChannelId,
+      connectedPhone: h.channel.connectedPhone,
     }).events[0]!;
   const now = new Date();
   const before = new Date(now.getTime() - 3600000);
   Object.assign(h.channel, { productionActivatedAt: before });
   Object.assign(h.channel.connection, {
     // This edition also checks the release provider and the delivery provider.
-    parserRelease: { status: "certified", version: "v1", provider: "unnichat" },
+    parserRelease: { status: "certified", version: "v1", provider },
     productionActivatedAt: before,
     removedAt: null,
   });
@@ -46,7 +87,7 @@ export function offline() {
     workspaceId: "w",
     connectionId: "c",
     channelId: "ch",
-    provider: "unnichat",
+    provider,
     adId: null,
     hasCtwa: true,
     classification: "eligible_route_resolved",
@@ -67,7 +108,7 @@ export function offline() {
       id: "d",
       workspaceId: "w",
       connectionId: "c",
-      provider: "unnichat",
+      provider,
       parserVersion: "v1",
       firstReceivedAt: now,
       payloadExpiresAt: new Date(now.getTime() + 86400000),

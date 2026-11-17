@@ -24,6 +24,7 @@ import {
 } from "./providers/sales-platform-sale";
 import type { ParsedUmblerAutomationV1 } from "./providers/umbler/umbler-automation-v1.parser";
 import type { ParsedUnnichatAutomationV1 } from "./providers/unnichat/unnichat-automation-v1.parser";
+import type { ParsedGoHighLevelAutomationV1 } from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
 
 /**
  * Fase 5.3 — roteador das URLs únicas (SaaS 613beb3 + 4cad4963).
@@ -47,7 +48,10 @@ export type IntegrationRoutingProvider =
   | "umbler"
   // Fase 6.8: the ROI Chat purchase arrives on the number's own URL and is
   // routed to its rule (roichat-purchase-ingress.service.ts).
-  | "roichat";
+  | "roichat"
+  // GoHighLevel (porte do SaaS e279af76): one URL per event, routed by the
+  // Workflow's location.id.
+  | "gohighlevel";
 
 const routingRuleSelect = {
   id: true,
@@ -441,7 +445,90 @@ export async function routeUnnichatEvent(
   const channels = (
     await listWorkspaceScopeChannels(client, input.workspaceId)
   ).filter((channel) => channel.provider === "unnichat");
-  const phones = [input.automation.phone];
+  return routeByCtwaEntry(client, paidLeads, {
+    workspaceId: input.workspaceId,
+    ctwaClid,
+    phone: input.automation.phone,
+    rules,
+    channels,
+    receivedAt: input.receivedAt,
+  });
+}
+
+/**
+ * GoHighLevel (URL por regra/evento, same model as Unnichat): the Workflow's
+ * `location.id` names the connected number (the GHL connection bound to that
+ * location in this workspace). Then, exactly like Unnichat, the contact's
+ * ctwa_clid points to the CTWA entry, and only without it does the lead's own
+ * origin decide; both are restricted to the location's number, so a call of
+ * one GHL location is never attributed to another location. A contact
+ * without ctwa_clid is never routed (só lead pago).
+ */
+export async function routeGoHighLevelEvent(
+  client: RoutingClient,
+  paidLeads: PaidLeadResolverLike,
+  input: {
+    workspaceId: string;
+    eventName: string;
+    automation: ParsedGoHighLevelAutomationV1;
+    receivedAt: Date;
+  },
+): Promise<IntegrationRouteDecision> {
+  const ctwaClid = input.automation.ctwaClid;
+  if (!ctwaClid) return unattributed("conversation_without_ad");
+  const rules = await loadRoutingRules(client, {
+    workspaceId: input.workspaceId,
+    provider: "gohighlevel",
+    eventName: input.eventName,
+  });
+  if (rules.length === 0) return unattributed("no_active_rule_for_event");
+
+  const located = await client.inboundWebhookChannel.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      providerChannelId: input.automation.locationId,
+      connection: { is: { provider: "gohighlevel", removedAt: null } },
+    },
+    select: { id: true },
+    take: 20,
+  });
+  const locationChannelIds = new Set(located.map((channel) => channel.id));
+  const channels = (
+    await listWorkspaceScopeChannels(client, input.workspaceId)
+  ).filter(
+    (channel) =>
+      channel.provider === "gohighlevel" && locationChannelIds.has(channel.id),
+  );
+  if (channels.length === 0) return unattributed("location_without_number");
+  return routeByCtwaEntry(client, paidLeads, {
+    workspaceId: input.workspaceId,
+    ctwaClid,
+    phone: input.automation.phone,
+    rules,
+    channels,
+    receivedAt: input.receivedAt,
+  });
+}
+
+/**
+ * Shared tail of the CTWA-entry automations (Unnichat, GoHighLevel): the
+ * LeadSubmitted receipt of the click on one of `channels` decides; else the
+ * paid lead's verified origin, which must also be one of `channels`.
+ */
+async function routeByCtwaEntry(
+  client: RoutingClient,
+  paidLeads: PaidLeadResolverLike,
+  input: {
+    workspaceId: string;
+    ctwaClid: string;
+    phone: string;
+    rules: RoutingRule[];
+    channels: ScopedChannel[];
+    receivedAt: Date;
+  },
+): Promise<IntegrationRouteDecision> {
+  const { rules, channels, ctwaClid } = input;
+  const phones = [input.phone];
   const entries = await client.conversionEventLog.findMany({
     where: {
       workspaceId: input.workspaceId,
@@ -472,7 +559,7 @@ export async function routeUnnichatEvent(
 
   const lead = await paidLeads.resolve({
     workspaceId: input.workspaceId,
-    phone: input.automation.phone,
+    phone: input.phone,
     ctwaProofAnyChannel: true,
   });
   if (lead.status !== "resolved") return unattributed(leadUnresolvedReason(lead));

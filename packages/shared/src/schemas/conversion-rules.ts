@@ -221,6 +221,8 @@ export const providerConversionRuleOrigins = [
   "automation_yampi",
   // Webhook / n8n: o n8n ou o painel chama a URL da regra (uma URL por regra).
   "automation_webhook",
+  // GoHighLevel: a ação Webhook de uma etapa do Workflow chama a URL do evento.
+  "automation_gohighlevel",
 ] as const;
 export const providerConversionRuleOriginSchema = z.enum(
   providerConversionRuleOrigins,

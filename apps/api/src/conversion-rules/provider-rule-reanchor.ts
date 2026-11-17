@@ -19,7 +19,12 @@ import { WHATSAPP_CHANNEL_PROVIDERS } from "./provider-rule-scope";
 export const PROVIDER_RULE_REANCHORED_ACTION =
   "provider_conversion_rule.reanchored";
 
-const SPANNING_AUTOMATION_PROVIDERS = ["unnichat", "umbler", "roichat"] as const;
+const SPANNING_AUTOMATION_PROVIDERS = [
+  "unnichat",
+  "umbler",
+  "roichat",
+  "gohighlevel",
+] as const;
 
 type ReanchorClient = Pick<
   Prisma.TransactionClient,

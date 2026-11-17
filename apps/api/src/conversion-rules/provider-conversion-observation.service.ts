@@ -33,6 +33,8 @@ import {
 } from "../inbound-webhooks/providers/sales-platform-sale";
 import type { ParsedUnnichatAutomationV1 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
 import type { ParsedRoichatAutomationV1 } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
+import type { ParsedGoHighLevelAutomationV1 } from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { isCtwaEntryAutomationProvider } from "../inbound-webhooks/providers/provider-automation-providers";
 import type { ParsedWebhookRuleAutomation } from "../inbound-webhooks/providers/webhook/webhook-automation-v1.parser";
 import {
   resolveWebhookLeadChannel,
@@ -207,6 +209,11 @@ type ParsedProviderAutomation =
   | ParsedSaleAutomationV1
   | (ParsedUnnichatAutomationV1 & {
       provider: "unnichat";
+      automation: "crm_movement";
+      eventName: ConversionEventNameDto;
+    })
+  | (ParsedGoHighLevelAutomationV1 & {
+      provider: "gohighlevel";
       automation: "crm_movement";
       eventName: ConversionEventNameDto;
     })
@@ -422,8 +429,11 @@ export class ProviderConversionObservationService {
     // number's own URL, so that number is always the origin (also for a rule
     // of a single connection).
     const roichat = rule.parserRelease.provider === "roichat";
+    // GoHighLevel: the router proved the number from the Workflow's
+    // location.id; that location is always the origin (never another one).
+    const gohighlevel = rule.parserRelease.provider === "gohighlevel";
     const origin: AutomationCallbackOrigin =
-      (spansConnections || roichat) && input.origin
+      (spansConnections || roichat || gohighlevel) && input.origin
         ? input.origin
         : { connectionId: input.connectionId, channelId: null };
     // A Payt sale is attributed only to a tracked CTWA lead: its verified
@@ -432,7 +442,7 @@ export class ProviderConversionObservationService {
     // (a rule "todas as conexões": then on any number of its scope).
     const purchaseLead =
       isLeadRoutedAutomationProvider(rule.parserRelease.provider) ||
-      rule.parserRelease.provider === "unnichat" ||
+      isCtwaEntryAutomationProvider(rule.parserRelease.provider) ||
       roichat
       ? await this.resolveAutomationPurchaseLead({
           input,
@@ -590,7 +600,7 @@ export class ProviderConversionObservationService {
         ? channel.connectionId
         : input.connectionId;
     const leadResolution =
-      rule.parserRelease.provider === "unnichat" && !channel
+      isCtwaEntryAutomationProvider(rule.parserRelease.provider) && !channel
         ? {
             status: "not_found" as const,
             reasonCode: "paid_lead_not_found" as const,
@@ -599,7 +609,8 @@ export class ProviderConversionObservationService {
         : (purchaseLead ??
           (await this.paidLeads.resolve({
             workspaceId: input.workspaceId,
-            ...(rule.parserRelease.provider === "unnichat" && channel
+            ...(isCtwaEntryAutomationProvider(rule.parserRelease.provider) &&
+            channel
               ? { channelId: channel.id, connectionId: occurrenceConnectionId }
               : {}),
             phone: input.automation.phone,
@@ -1077,7 +1088,7 @@ export class ProviderConversionObservationService {
       // with its own ad attribution. No CTWA page/pixel proof path.
       return this.paidLeads.resolve(base);
     }
-    if (input.rule.parserRelease.provider !== "unnichat") {
+    if (!isCtwaEntryAutomationProvider(input.rule.parserRelease.provider)) {
       return this.paidLeads.resolve({ ...base, ctwaProofAnyChannel: true });
     }
     const own = await this.paidLeads.resolve({
@@ -1086,6 +1097,9 @@ export class ProviderConversionObservationService {
       ...(input.origin.channelId ? { channelId: input.origin.channelId } : {}),
     });
     if (
+      // GoHighLevel: the Workflow's location is the number; the proof of
+      // another location never stands in for it.
+      input.rule.parserRelease.provider === "gohighlevel" ||
       !input.spansConnections ||
       !(own.status === "not_found" && own.reasonCode === "paid_attribution_missing")
     )
@@ -1139,7 +1153,7 @@ export class ProviderConversionObservationService {
     }
 
     if (
-      input.rule.parserRelease.provider === "unnichat" &&
+      isCtwaEntryAutomationProvider(input.rule.parserRelease.provider) &&
       input.purchaseLead?.status === "resolved" &&
       // An ad lead keeps its own channel selection; its CTWA proof is only
       // the production-time fallback destination.
@@ -1152,7 +1166,11 @@ export class ProviderConversionObservationService {
       const spans = automationSpansConnections(input.rule);
       if (
         !channelIds.includes(proof.channelId) ||
-        (!spans && proof.connectionId !== input.connectionId)
+        (!spans && proof.connectionId !== input.connectionId) ||
+        // GoHighLevel: only the proof of the Workflow's own location.
+        (input.rule.parserRelease.provider === "gohighlevel" &&
+          input.origin.channelId !== null &&
+          proof.channelId !== input.origin.channelId)
       )
         return null;
       return this.prisma.inboundWebhookChannel.findFirst({
@@ -1247,17 +1265,23 @@ export class ProviderConversionObservationService {
       });
     }
 
+    // GoHighLevel: the router proved the number (Workflow location.id); the
+    // contact is only looked up on that number, whatever the rule scope.
+    const locationBound =
+      input.rule.parserRelease.provider === "gohighlevel" &&
+      input.origin.channelId !== null;
     // The callback's own connection (and number) first.
-    const ownConnectionId = spans ? input.origin.connectionId : input.connectionId;
+    const ownConnectionId =
+      spans || locationBound ? input.origin.connectionId : input.connectionId;
     const ownChannelIds =
-      spans && input.origin.channelId
+      (spans || locationBound) && input.origin.channelId
         ? channelIds.filter((id) => id === input.origin.channelId)
         : channelIds;
     const recentEvent = await this.prisma.inboundWebhookEvent.findFirst({
       where: {
         workspaceId: input.workspaceId,
         connectionId: ownConnectionId,
-        ...(input.rule.parserRelease.provider === "unnichat"
+        ...(isCtwaEntryAutomationProvider(input.rule.parserRelease.provider)
           ? { hasCtwa: true }
           : {}),
         channelId: { in: ownChannelIds },
@@ -1285,6 +1309,9 @@ export class ProviderConversionObservationService {
       },
     });
     if (recentEvent?.channel) return recentEvent.channel;
+
+    // GoHighLevel: never another location's number (no scope-wide fallback).
+    if (input.rule.parserRelease.provider === "gohighlevel") return null;
 
     if (spans) {
       // Umbler: the number named by the payload (channel.phone) is the
@@ -1551,8 +1578,18 @@ export class ProviderConversionObservationService {
 
   private isUnnichatWithoutCtwa(
     automation: ParsedProviderAutomation,
-  ): automation is Extract<ParsedProviderAutomation, { provider: "unnichat" }> {
-    return automation.provider === "unnichat" && !automation.hasCtwa;
+  ): automation is Extract<
+    ParsedProviderAutomation,
+    { provider: "unnichat" | "gohighlevel" }
+  > {
+    // GoHighLevel: a contact without ctwa_clid (attributionSource nor
+    // lastAttributionSource) is recorded like the Unnichat one: blocked
+    // "ctwa_missing", never a lead, never sent (só lead pago).
+    return (
+      (automation.provider === "unnichat" ||
+        automation.provider === "gohighlevel") &&
+      !automation.hasCtwa
+    );
   }
 
   /** No ctwa_clid, nothing is sent: the callback is kept as a blocked

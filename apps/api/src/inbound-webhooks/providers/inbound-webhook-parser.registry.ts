@@ -1,5 +1,6 @@
 import type { InboundWebhookParser } from "./inbound-webhook-parser";
 import { DataCrazyV1Parser } from "./data-crazy/data-crazy-v1.parser";
+import { GoHighLevelV1Parser } from "./gohighlevel/gohighlevel-v1.parser";
 import { GupshupV1Parser } from "./gupshup/gupshup-v1.parser";
 import { MetaCloudV1Parser } from "./meta-cloud/meta-cloud-v1.parser";
 import { UmblerV1Parser } from "./umbler/umbler-v1.parser";
@@ -58,6 +59,7 @@ function defaultParsers(): InboundWebhookParser[] {
     new DataCrazyV1Parser(),
     new UnnichatV1Parser(),
     new RoichatV1Parser(),
+    new GoHighLevelV1Parser(),
   ];
 }
 

@@ -127,6 +127,12 @@ import {
   type ParsedUnnichatAutomationV1,
   UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
+import {
+  GOHIGHLEVEL_AUTOMATION_V1_PARSER_VERSION,
+  parseGoHighLevelAutomationV1,
+  type ParsedGoHighLevelAutomationV1,
+} from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { isCtwaEntryAutomationProvider } from "../inbound-webhooks/providers/provider-automation-providers";
 import { ROICHAT_PURCHASE_REPEATED_REASON } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
 import {
   WEBHOOK_AUTOMATION_V1_PARSER_VERSION,
@@ -138,11 +144,16 @@ import {
   webhookAutomationConversionIdentity,
 } from "../conversion-rules/webhook-purchase-dedupe";
 
-/** Automation callbacks re-parsed at production time (Umbler, Unnichat, Webhook / n8n). */
+/** Automation callbacks re-parsed at production time (Umbler, Unnichat, GoHighLevel, Webhook / n8n). */
 type ParsedAutomationForProduction =
   | ParsedUmblerAutomationV1
   | (ParsedUnnichatAutomationV1 & {
       provider: "unnichat";
+      automation: "crm_movement";
+      eventName: ConversionEventNameDto;
+    })
+  | (ParsedGoHighLevelAutomationV1 & {
+      provider: "gohighlevel";
       automation: "crm_movement";
       eventName: ConversionEventNameDto;
     })
@@ -856,7 +867,8 @@ export class ProviderConversionProductionService
         ? (lead.ctwaDestination ?? purchaseContext?.ctwaProof)
         : // Webhook / n8n: the verified entry of any lead, like a sale.
           occurrence.provider === "webhook" ||
-            (occurrence.provider === CTWA_DESTINATION_PROVIDER && !lead.adId)
+            // Unnichat and GoHighLevel (same model): only a no-ad lead.
+            (isCtwaEntryAutomationProvider(occurrence.provider) && !lead.adId)
           ? lead.ctwaDestination
           : undefined;
     // No ctwa_clid, nothing is sent: the resolved lead always carries it and a
@@ -2521,6 +2533,9 @@ export class ProviderConversionProductionService
       // Webhook / n8n: the call lands on the lead's own number (any
       // connection), like a sale.
       execution.providerRule.parserRelease?.provider === "webhook" ||
+      // GoHighLevel: the number is the Workflow location's (router proof),
+      // always checked on the execution channel itself.
+      execution.providerRule.parserRelease?.provider === "gohighlevel" ||
       (providerRuleScope(execution.providerRule) === "all_numbers" &&
         providerRuleSpansProviderConnections(execution.providerRule))
     )
@@ -2601,6 +2616,31 @@ export class ProviderConversionProductionService
       return {
         ...parsed.value,
         provider: "unnichat",
+        automation: "crm_movement",
+        eventName: this.supportedEventName(
+          execution.providerRule.conversionRule.eventName,
+        ),
+      };
+    }
+    if (
+      execution.providerRule.parserRelease?.provider === "gohighlevel" &&
+      execution.providerRule.parserRelease.version ===
+        GOHIGHLEVEL_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      // The key and click never depend on the time: re-parsed at the stored
+      // arrival of the call.
+      const parsed = parseGoHighLevelAutomationV1(
+        payload,
+        execution.sourceDelivery.firstReceivedAt,
+      );
+      if (!parsed.ok) {
+        throw new ProviderConversionProductionFailure(
+          "provider_conversion_payload_invalid",
+        );
+      }
+      return {
+        ...parsed.value,
+        provider: "gohighlevel",
         automation: "crm_movement",
         eventName: this.supportedEventName(
           execution.providerRule.conversionRule.eventName,

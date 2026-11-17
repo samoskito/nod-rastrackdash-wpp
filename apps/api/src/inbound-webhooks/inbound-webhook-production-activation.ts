@@ -168,6 +168,26 @@ async function unnichatChannelRoutable(
   );
 }
 
+/**
+ * GoHighLevel (porte do SaaS e279af76): its own valid routes, or the unique
+ * page/pixel destination (same fallback as Unnichat) also makes the number
+ * ready for CTWA leads.
+ */
+async function goHighLevelChannelRoutable(
+  transaction: Prisma.TransactionClient,
+  channel: PersistedInboundWebhookChannel,
+): Promise<boolean> {
+  return (
+    (await hasEligibleInboundMetaRoute(
+      transaction,
+      channel.workspaceId,
+      channel.routes,
+    )) ||
+    (await resolveCtwaDestination(transaction, channel)).kind ===
+      "authorized_ctwa_destination"
+  );
+}
+
 export async function applyInboundWebhookChannelStatus(
   transaction: Prisma.TransactionClient,
   input: {
@@ -192,7 +212,9 @@ export async function applyInboundWebhookChannelStatus(
     input.requireValidMetaRoute &&
     !(current.connection.provider === "unnichat"
       ? await unnichatChannelRoutable(transaction, current)
-      : await hasEligibleInboundMetaRoute(
+      : current.connection.provider === "gohighlevel"
+        ? await goHighLevelChannelRoutable(transaction, current)
+        : await hasEligibleInboundMetaRoute(
           transaction,
           workspaceId,
           current.routes,
@@ -459,7 +481,16 @@ async function assertProductionReady(
                 channel.id,
               ),
             )
-          : await hasEligibleInboundMetaRoute(
+          : connection.provider === "gohighlevel"
+            ? await goHighLevelChannelRoutable(
+                transaction,
+                await requireInboundWebhookChannel(
+                  transaction,
+                  connection.workspaceId,
+                  channel.id,
+                ),
+              )
+            : await hasEligibleInboundMetaRoute(
               transaction,
               connection.workspaceId,
               channel.routes,

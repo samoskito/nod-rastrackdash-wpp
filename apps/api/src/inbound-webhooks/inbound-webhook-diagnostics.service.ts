@@ -23,7 +23,8 @@ type DiagnosticSource =
   | "braip"
   | "roichat"
   | "yampi"
-  | "webhook";
+  | "webhook"
+  | "gohighlevel";
 
 function diagnosticSourceForProvider(
   provider: InboundWebhookProviderDto,

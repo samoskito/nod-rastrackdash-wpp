@@ -94,6 +94,11 @@ import {
   UNNICHAT_AUTOMATION_V1_PARSER_VERSION,
 } from "./providers/unnichat/unnichat-automation-v1.parser";
 import {
+  GOHIGHLEVEL_AUTOMATION_V1_PARSER_VERSION,
+  parseGoHighLevelAutomationV1,
+  type ParsedGoHighLevelAutomationV1,
+} from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
+import {
   parseRoichatAutomationV1,
   type ParsedRoichatAutomationV1,
   ROICHAT_AUTOMATION_V1_NOT_PURCHASE,
@@ -287,10 +292,17 @@ type ParsedUnnichatAutomation = ParsedUnnichatAutomationV1 & {
   // event_name=Lead for every conversion type and must not decide it.
   eventName: ConversionEventNameDto;
 };
+/** Same shape as Unnichat: the event comes from the rule, never the payload. */
+type ParsedGoHighLevelAutomation = ParsedGoHighLevelAutomationV1 & {
+  provider: "gohighlevel";
+  automation: "crm_movement";
+  eventName: ConversionEventNameDto;
+};
 type ParsedAutomation =
   | ParsedUmblerAutomationV1
   | ParsedSaleAutomationV1
   | ParsedUnnichatAutomation
+  | ParsedGoHighLevelAutomation
   | ParsedRoichatAutomationV1
   // Webhook / n8n: the event and the value source come from the rule.
   | ParsedWebhookRuleAutomation;
@@ -2022,6 +2034,8 @@ export class InboundConversionAutomationIngestionService {
         rule.parserRelease.provider !== "webhook" &&
         rule.connection.provider !== "umbler" &&
         rule.connection.provider !== "unnichat" &&
+        // GoHighLevel: the Workflow's Webhook action calls the rule URL.
+        rule.connection.provider !== "gohighlevel" &&
         // Fase 6.8: the ROI Chat rule's own URL is born disabled (the
         // purchase arrives on the number URL); kept here for parity.
         rule.connection.provider !== "roichat") ||
@@ -2068,6 +2082,7 @@ export class InboundConversionAutomationIngestionService {
         rule.parserRelease.provider !== "webhook" &&
         rule.connection.provider !== "umbler" &&
         rule.connection.provider !== "unnichat" &&
+        rule.connection.provider !== "gohighlevel" &&
         // Fase 6.8: the ROI Chat purchase routed from the number URL.
         rule.connection.provider !== "roichat") ||
       rule.connection.removedAt !== null ||
@@ -2223,6 +2238,29 @@ export class InboundConversionAutomationIngestionService {
         },
       };
     }
+    if (
+      rule.parserRelease.provider === "gohighlevel" &&
+      rule.parserRelease.version === GOHIGHLEVEL_AUTOMATION_V1_PARSER_VERSION
+    ) {
+      // Event time = arrival of the call (stored firstReceivedAt on a
+      // re-evaluation), never the contact's date_created.
+      const parsed = parseGoHighLevelAutomationV1(
+        payload,
+        receivedAt ?? new Date(),
+      );
+      if (!parsed.ok) return parsed;
+      return {
+        ok: true,
+        value: {
+          ...parsed.value,
+          provider: "gohighlevel",
+          automation: "crm_movement",
+          eventName: conversionEventNameSchema.parse(
+            rule.conversionRule.eventName,
+          ),
+        },
+      };
+    }
     return { ok: false, errorCode: "automation_parser_unavailable" };
   }
 
@@ -2244,6 +2282,8 @@ export class InboundConversionAutomationIngestionService {
         return "unnichat-automation-v1";
       case "roichat":
         return "roichat-automation-v1";
+      case "gohighlevel":
+        return "gohighlevel-automation-v1";
       case "webhook":
         return "webhook-automation-v1";
       default:
@@ -2331,6 +2371,14 @@ export class InboundConversionAutomationIngestionService {
     const organicWebhook =
       input.parsed.provider === "webhook" &&
       observed.reasonCode === WEBHOOK_NOT_PAID_LEAD_REASON;
+    // GoHighLevel, same rule (só lead pago): a contact without ctwa_clid is
+    // blocked "ctwa_missing" and never sent. Its occurrence key (location,
+    // Workflow, contact, trigger) has no time in it, so the same contact's
+    // call after an ad click carries the SAME key: the organic delivery must
+    // release it, or the paid call would be a duplicate of the organic one.
+    const organicGoHighLevel =
+      input.parsed.provider === "gohighlevel" &&
+      observed.reasonCode === "ctwa_missing";
 
     await this.prisma.inboundWebhookDelivery.updateMany({
       where: {
@@ -2343,6 +2391,9 @@ export class InboundConversionAutomationIngestionService {
       data: {
         ...(organicWebhook
           ? { ingressKey: `webhook-organic:${input.deliveryId}` }
+          : {}),
+        ...(organicGoHighLevel
+          ? { ingressKey: `gohighlevel-organic:${input.deliveryId}` }
           : {}),
         parserVersion: this.automationParserVersion(input.endpoint),
         status: "processed",

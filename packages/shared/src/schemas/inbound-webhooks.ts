@@ -32,6 +32,11 @@ export const inboundWebhookProviders = [
   // certificada por migration) das regras chamadas por uma automacao. O lead
   // pode ter chegado por qualquer conexao de WhatsApp do workspace.
   "webhook",
+  // GoHighLevel (porte do SaaS #128-#133 e #189): uma conexao = uma
+  // localizacao (location.id) = o numero de WhatsApp do cliente. A URL da
+  // conexao recebe a entrada do lead (Workflow com o contato do anuncio); as
+  // etapas do Workflow chamam a URL de cada regra "Etapa no GoHighLevel".
+  "gohighlevel",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",
@@ -219,10 +224,17 @@ export const inboundWebhookConnectionCreateInputSchema = z
     // Fase 4b: obrigatorio so para Unnichat e (Fase 6.8) ROI Chat, cujo
     // webhook de entrada e por conexao/numero e nao traz id de canal.
     connectedPhone: inboundWebhookConnectedPhoneSchema.optional(),
+    // GoHighLevel (porte do SaaS #131): o id da localizacao (location.id),
+    // gravado no numero da conexao. E por ele que a entrada e as etapas do
+    // Workflow acham o numero; nunca e lido de outro campo do webhook.
+    providerChannelId: idSchema.optional(),
   })
   .superRefine((input, context) => {
+    const gohighlevel = input.provider === "gohighlevel";
     const bindsPhone =
-      input.provider === "unnichat" || input.provider === "roichat";
+      input.provider === "unnichat" ||
+      input.provider === "roichat" ||
+      gohighlevel;
     if (bindsPhone && !input.connectedPhone) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -230,7 +242,23 @@ export const inboundWebhookConnectionCreateInputSchema = z
         message:
           input.provider === "roichat"
             ? "Informe o número de WhatsApp conectado ao ROI Chat"
-            : "Informe o número de WhatsApp conectado ao Unnichat",
+            : gohighlevel
+              ? "Informe o número de WhatsApp da localização do GoHighLevel"
+              : "Informe o número de WhatsApp conectado ao Unnichat",
+      });
+    }
+    if (gohighlevel && !input.providerChannelId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["providerChannelId"],
+        message: "Informe o ID da localização do GoHighLevel (Location ID)",
+      });
+    }
+    if (!gohighlevel && input.providerChannelId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["providerChannelId"],
+        message: "Só o GoHighLevel usa o ID da localização",
       });
     }
     if (!bindsPhone && input.connectedPhone !== undefined) {

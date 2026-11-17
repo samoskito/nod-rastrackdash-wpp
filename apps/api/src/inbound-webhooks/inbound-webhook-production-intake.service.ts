@@ -7,6 +7,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import { parseInboundWebhooksConfig } from "../config/deployment-config";
 import { InboundWebhookProductionQueueService } from "./inbound-webhook-production-queue.service";
+import { ctwaDestinationProviderValues } from "./authorized-ctwa-destination";
 
 export const INBOUND_WEBHOOK_PRODUCTION_RECOVERY_TTL_MS = 5 * 60 * 1_000;
 export const INBOUND_WEBHOOK_PRODUCTION_RECOVERY_BATCH_SIZE = 100;
@@ -68,7 +69,8 @@ export class InboundWebhookProductionIntakeService {
         OR: [
           { adId: { not: null } },
           {
-            provider: "unnichat",
+            // Unnichat and GoHighLevel no-ad CTWA entries (page/pixel).
+            provider: { in: ctwaDestinationProviderValues() },
             adId: null,
             classificationReason: "authorized_ctwa_destination",
           },

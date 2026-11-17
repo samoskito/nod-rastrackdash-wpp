@@ -63,6 +63,7 @@ enum DiagnosticSource {
   roichat
   yampi
   webhook
+  gohighlevel
 }
 
 enum DiagnosticSeverity {
@@ -304,6 +305,7 @@ enum InboundWebhookProvider {
   roichat
   yampi
   webhook
+  gohighlevel
 }
 
 enum InboundWebhookParserReleaseStatus {

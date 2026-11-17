@@ -51,11 +51,17 @@ import {
 } from "./inbound-webhook-ingestion.service";
 import { InboundWebhookPayloadEncryptionService } from "./inbound-webhook-payload-encryption.service";
 import {
+  routeGoHighLevelEvent,
   routeSalePlatformSale,
   routeUmblerEvent,
   routeUnnichatEvent,
   type IntegrationRouteDecision,
 } from "./integration-endpoint-routing";
+import {
+  GOHIGHLEVEL_AUTOMATION_V1_INVALID,
+  parseGoHighLevelAutomationV1,
+  type ParsedGoHighLevelAutomationV1,
+} from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
 import { normalizeBraipBody } from "./providers/braip/braip-body";
 import {
   isSalesPlatformProvider,
@@ -120,6 +126,7 @@ const routedProviders = [
   "yampi",
   "unnichat",
   "umbler",
+  "gohighlevel",
 ] as const;
 const DAY_MS = 24 * 60 * 60 * 1_000;
 /** What the rule decided that is not a conversion (review finding M3). */
@@ -147,6 +154,13 @@ type ParsedIntegrationEvent =
       eventName: string;
       externalKey: string;
       automation: ParsedUnnichatAutomationV1;
+    }
+  | {
+      ok: true;
+      provider: "gohighlevel";
+      eventName: string;
+      externalKey: string;
+      automation: ParsedGoHighLevelAutomationV1;
     }
   | {
       ok: true;
@@ -1055,6 +1069,13 @@ export class IntegrationEndpointsService {
           automation: parsed.automation,
           receivedAt,
         });
+      case "gohighlevel":
+        return routeGoHighLevelEvent(this.prisma, this.paidLeads, {
+          workspaceId: endpoint.workspaceId,
+          eventName: parsed.eventName,
+          automation: parsed.automation,
+          receivedAt,
+        });
       case "umbler":
         return routeUmblerEvent(this.prisma, {
           workspaceId: endpoint.workspaceId,
@@ -1121,6 +1142,29 @@ export class IntegrationEndpointsService {
         return {
           ok: true,
           provider: "unnichat",
+          eventName: endpoint.eventName,
+          externalKey: automation.value.externalExecutionKey,
+          automation: automation.value,
+        };
+      }
+      case "gohighlevel": {
+        // Event time = arrival of the call (the stored first arrival on a
+        // retry); `date_created` is the contact's creation, never used.
+        const automation = parseGoHighLevelAutomationV1(
+          payload,
+          receivedAt ?? new Date(),
+        );
+        if (!automation.ok || !endpoint.eventName) {
+          return {
+            ok: false,
+            status: "invalid",
+            reasonCode: GOHIGHLEVEL_AUTOMATION_V1_INVALID,
+            providerStatus: null,
+          };
+        }
+        return {
+          ok: true,
+          provider: "gohighlevel",
           eventName: endpoint.eventName,
           externalKey: automation.value.externalExecutionKey,
           automation: automation.value,

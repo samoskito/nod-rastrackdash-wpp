@@ -48,6 +48,27 @@ const supportedClassifications = new Set<InboundWebhookEventClassification>([
 ]);
 const safeErrorCodePattern = /^[a-z0-9_]{1,120}$/;
 
+/**
+ * GoHighLevel (porte do SaaS #131): the GHL location (location.id) of the
+ * Workflow call names the connection's number. Raw GHL JSON or the n8n
+ * capture envelope [ { body } ], same unwrap as the parser.
+ */
+function goHighLevelLocationId(payload: unknown): string | null {
+  const record = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  const body =
+    record(payload) ??
+    (Array.isArray(payload) && payload.length === 1
+      ? record(record(payload[0])?.body)
+      : null);
+  const locationId = record(body?.location)?.id;
+  if (typeof locationId !== "string") return null;
+  const normalized = locationId.trim();
+  return normalized.length > 0 && normalized.length <= 255 ? normalized : null;
+}
+
 type LoadedDelivery = Prisma.InboundWebhookDeliveryGetPayload<{
   include: {
     workspace: {
@@ -586,6 +607,7 @@ export class InboundWebhookObservationService {
       const connectedPhone = await this.resolveBoundConnectedPhone(
         delivery,
         parser,
+        payload,
       );
 
       return parser.parse(
@@ -615,10 +637,25 @@ export class InboundWebhookObservationService {
   private async resolveBoundConnectedPhone(
     delivery: LoadedDelivery,
     parser: InboundWebhookParser,
+    payload: unknown,
   ): Promise<string | null> {
     // Fase 6.8: the ROI Chat number URL is bound the same way.
-    if (parser.provider !== "unnichat" && parser.provider !== "roichat") {
+    const gohighlevel = parser.provider === "gohighlevel";
+    if (
+      parser.provider !== "unnichat" &&
+      parser.provider !== "roichat" &&
+      !gohighlevel
+    ) {
       return null;
+    }
+    // GoHighLevel: only the channel of the location the Workflow named
+    // (bound when the connection was created), never another one.
+    const locationId = gohighlevel ? goHighLevelLocationId(payload) : null;
+    if (gohighlevel && !locationId) {
+      throw new InboundWebhookDeterministicFailure(
+        "inbound_webhook_gohighlevel_location_missing",
+        "invalid_payload",
+      );
     }
 
     const channel = await this.prisma.inboundWebhookChannel.findFirst({
@@ -626,6 +663,7 @@ export class InboundWebhookObservationService {
         workspaceId: delivery.workspaceId,
         connectionId: delivery.connectionId,
         organizationId: delivery.workspaceId,
+        ...(locationId ? { providerChannelId: locationId } : {}),
       },
       select: {
         connectedPhone: true,
@@ -635,7 +673,9 @@ export class InboundWebhookObservationService {
       throw new InboundWebhookDeterministicFailure(
         parser.provider === "roichat"
           ? "inbound_webhook_roichat_channel_binding_missing"
-          : "inbound_webhook_unnichat_channel_binding_missing",
+          : gohighlevel
+            ? "inbound_webhook_gohighlevel_channel_binding_missing"
+            : "inbound_webhook_unnichat_channel_binding_missing",
         "invalid_payload",
       );
     }

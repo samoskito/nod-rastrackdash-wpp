@@ -50,8 +50,24 @@ import {
 } from "./ctwa-entry-materialization";
 import {
   isCtwaDestinationEntry,
+  isCtwaDestinationProvider,
   isCtwaDestinationReason,
 } from "../inbound-webhooks/authorized-ctwa-destination";
+
+/**
+ * Items processed inside the Meta policy transaction (lockUnnichatMetaPolicy):
+ * every Unnichat item, and a GoHighLevel CTWA entry routed by the channel's
+ * page/pixel destination (same fallback as Unnichat, porte do SaaS e279af76).
+ * Every other item (GoHighLevel with a known ad included) keeps the direct
+ * path.
+ */
+function policyTransactional(event: {
+  provider: string;
+  classificationReason?: string | null;
+  adId?: string | null;
+}): boolean {
+  return event.provider === "unnichat" || isCtwaDestinationEntry(event);
+}
 import { refreshStaleCtwaAdHint } from "../inbound-webhooks/inbound-webhook-channel-routes.service";
 import {
   parseOriginalUnnichatOccurrence,
@@ -158,7 +174,7 @@ export class InboundWebhookProductionService {
       return { status: "unchanged" };
     }
 
-    if (item.event.provider === "unnichat") {
+    if (policyTransactional(item.event)) {
       return this.processUnnichatItem(item);
     }
 
@@ -394,8 +410,10 @@ export class InboundWebhookProductionService {
       connection.workspaceId !== event.workspaceId ||
       event.connectionId !== connection.id ||
       event.channelId !== channel.id ||
-      connection.provider !== "unnichat" ||
-      event.provider !== "unnichat" ||
+      !isCtwaDestinationProvider(connection.provider) ||
+      event.provider !== connection.provider ||
+      // GoHighLevel only reaches this path through the page/pixel entry.
+      (connection.provider !== "unnichat" && !isCtwaDestinationEntry(event)) ||
       delivery.provider !== event.provider ||
       delivery.workspaceId !== event.workspaceId ||
       delivery.connectionId !== connection.id ||
@@ -637,7 +655,7 @@ export class InboundWebhookProductionService {
     conversionEventLogId: string;
     duplicate: boolean;
   }> {
-    if (item.event.provider === "unnichat") return this.materializeUnnichat(item);
+    if (policyTransactional(item.event)) return this.materializeUnnichat(item);
     const event = item.event;
     const connection = event.connection;
     const delivery = event.delivery;
@@ -934,8 +952,10 @@ export class InboundWebhookProductionService {
         delivery.workspaceId,
         // Fase 6.8: ROI Chat binds the number to the connection (one URL per
         // number): the re-parse needs the same bound phone and arrival time
-        // as the observation.
-        connection.provider === "roichat"
+        // as the observation. GoHighLevel too: its parser refuses a call
+        // without the bound number of the location's channel.
+        connection.provider === "roichat" ||
+          connection.provider === "gohighlevel"
           ? item.event.channel?.connectedPhone
           : null,
         connection.provider === "roichat" ? delivery.firstReceivedAt : null,

@@ -47,6 +47,11 @@ export function inboundParserProductionEligible(
         // Webhook / n8n automation parser (certified by migration: the
         // contract is ours, docs/setup/n8n/README.md).
         "webhook",
+        // GoHighLevel entry and Workflow-step parsers: seeded observation_only
+        // (20261117120100, not validated with real events yet). Listed so a
+        // future certification migration needs no code change; while the row
+        // is observation_only nothing of GoHighLevel is sent.
+        "gohighlevel",
       ].includes(release.provider) && release.status === "certified"
     );
   try {

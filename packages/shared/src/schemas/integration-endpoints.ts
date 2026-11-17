@@ -10,8 +10,9 @@ import {
  *
  * - Plataforma de venda (Payt, Braip, Yampi): UMA URL por workspace; o evento vem de cada
  *   postback (compra aprovada, Pix/boleto gerado, carrinho abandonado).
- * - Automação (Unnichat, Umbler): UMA URL por evento, válida para todos os
- *   números do workspace.
+ * - Automação (Unnichat, Umbler, GoHighLevel): UMA URL por evento, válida
+ *   para todos os números do workspace. GoHighLevel: o número é o da conexão
+ *   cuja localização (location.id) veio no Webhook do Workflow.
  *
  * O roteador descobre o número de chegada do lead e entrega o callback à
  * regra dona (a específica do número vence a de todos os números), que segue
@@ -23,6 +24,7 @@ export const integrationEndpointProviders = [
   "yampi",
   "unnichat",
   "umbler",
+  "gohighlevel",
 ] as const;
 export const integrationEndpointProviderSchema = z.enum(
   integrationEndpointProviders,
@@ -46,6 +48,8 @@ export const integrationEndpointAutomationEvents = {
   ],
   // O contrato wpptrack.umbler.automation.v1 só conhece estas duas automações.
   umbler: ["QualifiedLead", "Purchase"],
+  // GoHighLevel: ação Webhook de uma etapa do Workflow (uma URL por regra).
+  gohighlevel: ["LeadSubmitted", "QualifiedLead", "Purchase"],
 } as const;
 
 export function integrationEndpointKindFor(
@@ -187,6 +191,8 @@ export const integrationUnattributedReasons = {
     "A regra do número não converteu (filtro, outro número, lead ou bloqueio; veja os eventos recebidos da regra)",
   multiple_rules_for_event:
     "Duas regras para o mesmo evento neste número — unifique as regras",
+  location_without_number:
+    "Localização do GoHighLevel sem conexão ativa nesta conta",
 } as const;
 export type IntegrationUnattributedReasonDto =
   keyof typeof integrationUnattributedReasons;

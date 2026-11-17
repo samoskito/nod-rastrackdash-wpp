@@ -2,9 +2,9 @@ import type { Prisma } from "@prisma/client";
 import { authorizedCtwaDestinationSchema } from "@wpptrack/shared";
 import {
   CTWA_DESTINATION_AD_HINT_REASON,
-  CTWA_DESTINATION_PROVIDER,
   CTWA_DESTINATION_REASON,
-  ctwaDestinationProviderValue,
+  CTWA_DESTINATION_SOURCE_TRIGGERS,
+  ctwaDestinationProviderValues,
   ctwaIntentAuthorized,
   type AuthorizedCtwaDestination,
 } from "../inbound-webhooks/authorized-ctwa-destination";
@@ -22,8 +22,8 @@ export async function resolveCtwaLeadProof(
     connectionId?: string;
   },
 ): Promise<AuthorizedCtwaDestination | null> {
-  const provider = ctwaDestinationProviderValue();
-  if (!provider || !input.ctwaClid?.trim()) return null;
+  const providers = ctwaDestinationProviderValues();
+  if (providers.length === 0 || !input.ctwaClid?.trim()) return null;
   const logs = await client.conversionEventLog.findMany({
     where: {
       workspaceId: input.workspaceId,
@@ -31,7 +31,8 @@ export async function resolveCtwaLeadProof(
       phoneHash: input.phoneHash,
       ctwaClid: input.ctwaClid,
       eventName: "LeadSubmitted",
-      sourceTrigger: `inbound_webhook:${CTWA_DESTINATION_PROVIDER}`,
+      // Unnichat or GoHighLevel page/pixel entry receipts.
+      sourceTrigger: { in: CTWA_DESTINATION_SOURCE_TRIGGERS },
       // A log ad id is accepted only as the hint of an ad-hint entry, proven
       // below against the stored event decision.
     },
@@ -61,7 +62,7 @@ export async function resolveCtwaLeadProof(
         workspaceId: input.workspaceId,
         channelId: intent.channelId,
         connectionId: intent.connectionId,
-        provider,
+        provider: { in: providers },
         hasCtwa: true,
         ...(log.adId
           ? {

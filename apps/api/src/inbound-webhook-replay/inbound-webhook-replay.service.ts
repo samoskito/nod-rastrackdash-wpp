@@ -1878,8 +1878,10 @@ export class InboundWebhookReplayService {
         delivery.workspaceId,
         // Fase 6.8: ROI Chat binds the number to the connection (one URL per
         // number): the re-parse needs the same bound phone and arrival time
-        // as the observation.
-        connection.provider === "roichat"
+        // as the observation. GoHighLevel too: its parser refuses a call
+        // without the bound number of the location's channel.
+        connection.provider === "roichat" ||
+          connection.provider === "gohighlevel"
           ? item.event.channel?.connectedPhone
           : null,
         connection.provider === "roichat" ? delivery.firstReceivedAt : null,

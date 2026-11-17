@@ -22,7 +22,8 @@ export const diagnosticSources = [
   "braip",
   "roichat",
   "yampi",
-  "webhook"
+  "webhook",
+  "gohighlevel"
 ] as const;
 export const diagnosticSeverities = [
   "info",
