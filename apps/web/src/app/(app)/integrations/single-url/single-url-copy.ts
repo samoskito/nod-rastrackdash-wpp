@@ -36,6 +36,7 @@ export const singleUrlPlatformNames: Record<
   yampi: "Yampi",
   unnichat: "Unnichat",
   umbler: "Umbler Talk",
+  gohighlevel: "GoHighLevel",
 };
 
 /** "na Payt", "no Unnichat", "na Umbler Talk". */
@@ -48,6 +49,7 @@ export const singleUrlPlatformLocatives: Record<
   yampi: "na Yampi",
   unnichat: "no Unnichat",
   umbler: "na Umbler Talk",
+  gohighlevel: "no GoHighLevel",
 };
 
 /** "a Payt", "o Unnichat", "a Umbler Talk" (sujeito de uma frase). */
@@ -60,6 +62,7 @@ export const singleUrlPlatformSubjects: Record<
   yampi: "a Yampi",
   unnichat: "o Unnichat",
   umbler: "a Umbler Talk",
+  gohighlevel: "o GoHighLevel",
 };
 
 /**
@@ -204,7 +207,23 @@ export function singleUrlSetupSteps(
         "Adicione uma ação HTTP (POST) e cole esta URL.",
         "Inclua no corpo o número do canal que atendeu (channel.phone): é assim que a URL acha a regra quando há mais de um número.",
       ];
+    case "gohighlevel":
+      return goHighLevelSetupSteps(eventName);
   }
+}
+
+/** Instrução curta da regra do GoHighLevel (tela da regra e Nova regra). */
+export const goHighLevelWebhookInstruction =
+  "No Workflow do GoHighLevel, adicione a ação Webhook (POST) com esta URL";
+
+/** Passo a passo da etapa do GoHighLevel (uma URL por regra). */
+export function goHighLevelSetupSteps(eventName: string | null = null): string[] {
+  return [
+    `${goHighLevelWebhookInstruction}, na etapa que marca “${eventLabel(eventName)}”.`,
+    "Use a mesma URL em todas as localizações: o sistema descobre o número pela localização (location.id) que o GoHighLevel envia.",
+    "O mesmo contato no mesmo Workflow conta uma vez só; outro Workflow é outra conversão.",
+    "Só conta o contato que veio de um anúncio (com o clique do anúncio): o contato orgânico nunca é enviado.",
+  ];
 }
 
 /** Se um código digitado à mão já apareceu em alguma venda recebida. */

@@ -231,6 +231,16 @@ export function executionReasonLabel(reasonCode: string | null): string {
     roichat_event_not_supported: "Aviso do ROI Chat ignorado (não é entrada nem compra)",
     inbound_webhook_roichat_channel_binding_missing:
       "A conexão do ROI Chat está sem o número do cliente: recrie a conexão informando o número",
+    gohighlevel_v1_invalid_payload:
+      "Corpo do Workflow do GoHighLevel inválido ou incompleto (contato, telefone ou localização)",
+    gohighlevel_automation_v1_invalid_payload:
+      "Formato do Webhook do GoHighLevel não reconhecido",
+    inbound_webhook_gohighlevel_location_missing:
+      "O Workflow do GoHighLevel não enviou a localização (location.id)",
+    inbound_webhook_gohighlevel_channel_binding_missing:
+      "Nenhuma conexão GoHighLevel desta conta é desta localização: crie a conexão com o ID da localização e o WhatsApp do cliente",
+    location_without_number:
+      "Localização do GoHighLevel sem conexão ativa nesta conta",
   };
 
   if (reasonCode.startsWith("provider_conversion_route_")) {

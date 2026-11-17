@@ -275,6 +275,7 @@ export function providerRuleOrigin(
       if (provider === "umbler") return "automation_umbler";
       if (provider === "unnichat") return "automation_unnichat";
       if (provider === "roichat") return "automation_roichat";
+      if (provider === "gohighlevel") return "automation_gohighlevel";
       return "whatsapp_label";
     }
   }
@@ -422,6 +423,8 @@ function triggerDetailForProviderRule(
           : "URL do evento (todas as conexões)";
       return rule.endpoint ? own : null;
     }
+    case "automation_gohighlevel":
+      return "Ação Webhook do Workflow chama a URL da regra";
     case "automation_payt":
       return rule.endpoint ? "URL de postback criada" : null;
     case "automation_braip":

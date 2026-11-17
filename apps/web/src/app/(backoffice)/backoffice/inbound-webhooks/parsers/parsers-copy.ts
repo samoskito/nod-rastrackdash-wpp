@@ -17,6 +17,7 @@ export const parserProviderLabels: Record<
   roichat: "ROI Chat",
   yampi: "Yampi",
   webhook: "Webhook / n8n",
+  gohighlevel: "GoHighLevel",
 };
 
 /** Texto do estado de um leitor (sem jargão de certificação). */

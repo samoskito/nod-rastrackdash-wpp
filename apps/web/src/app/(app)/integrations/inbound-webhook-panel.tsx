@@ -118,6 +118,7 @@ export function inboundWebhookProviderLabel(provider: string): string {
     umbler: "Umbler Talk",
     unnichat: "Unnichat",
     roichat: "ROI Chat",
+    gohighlevel: "GoHighLevel",
     uazapi: "Uazapi",
   };
 
@@ -135,6 +136,8 @@ const inboundPasteInstructions: Record<string, string> = {
     "Cole esta URL na chamada HTTP do fluxo do Unnichat que recebe a conversa do anúncio.",
   roichat:
     "Cole esta URL no webhook deste número no ROI Chat: ela recebe a entrada do lead que veio do anúncio e a compra.",
+  gohighlevel:
+    "No GoHighLevel, crie um Workflow da localização (gatilho de contato/conversa) com a ação Webhook (POST) e cole esta URL: ela recebe a entrada do lead que veio do anúncio.",
 };
 
 /**
@@ -174,7 +177,8 @@ function allowsManualChannelRegistration(provider: string): boolean {
     provider !== "uazapi" &&
     provider !== "data_crazy" &&
     provider !== "unnichat" &&
-    provider !== "roichat"
+    provider !== "roichat" &&
+    provider !== "gohighlevel"
   );
 }
 
@@ -185,6 +189,9 @@ function createDescription(provider: string, allowCreate: boolean): string {
   }
   if (provider === "roichat") {
     return "Dê um nome e informe o número de WhatsApp atendido pelo ROI Chat. Cada número tem a própria URL, que recebe a entrada do lead que veio do anúncio e a compra.";
+  }
+  if (provider === "gohighlevel") {
+    return "Dê um nome e informe o ID da localização do GoHighLevel e o WhatsApp do cliente atendido nela. Uma conexão por localização; só contatos vindos de anúncio (CTWA) viram lead.";
   }
 
   return allowCreate
@@ -420,7 +427,7 @@ export function InboundWebhookPanel({
       ) : null}
       {createOpen && canCreate ? (
         <form
-          className={`inbound-webhook-create${selectedCreateProvider === "unnichat" || selectedCreateProvider === "roichat" ? " has-phone" : ""}`}
+          className={`inbound-webhook-create${selectedCreateProvider === "unnichat" || selectedCreateProvider === "roichat" || selectedCreateProvider === "gohighlevel" ? " has-phone" : ""}`}
           onSubmit={handleCreate}
         >
           {scopedProvider ? (
@@ -497,6 +504,48 @@ export function InboundWebhookPanel({
                 própria URL.
               </span>
             </label>
+          ) : null}
+          {selectedCreateProvider === "gohighlevel" ? (
+            <>
+              <label>
+                <span className="field-label">
+                  ID da localização (Location ID)
+                </span>
+                <input
+                  name="providerChannelId"
+                  autoComplete="off"
+                  minLength={1}
+                  maxLength={255}
+                  required
+                  aria-describedby="gohighlevel-location-help"
+                  disabled={pendingAction === "create"}
+                />
+                <span id="gohighlevel-location-help" className="field-help muted">
+                  No GoHighLevel, em Settings → Business Profile (Location
+                  ID). É o location.id que o Workflow envia.
+                </span>
+              </label>
+              <label>
+                <span className="field-label">Número de WhatsApp do cliente</span>
+                <input
+                  name="connectedPhone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="off"
+                  minLength={8}
+                  maxLength={32}
+                  placeholder="Ex.: +55 11 99999-0001"
+                  required
+                  aria-describedby="gohighlevel-whatsapp-help"
+                  disabled={pendingAction === "create"}
+                />
+                <span id="gohighlevel-whatsapp-help" className="field-help muted">
+                  É o WhatsApp atendido nesta localização (o seu), com DDI e
+                  DDD. Nunca o telefone do lead. Para outra localização, crie
+                  outra conexão.
+                </span>
+              </label>
+            </>
           ) : null}
           <button
             className="button primary"

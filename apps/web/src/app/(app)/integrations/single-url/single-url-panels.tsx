@@ -446,6 +446,7 @@ const unattributedTitles: Record<IntegrationEndpointProviderDto, string> = {
   yampi: "Vendas sem atribuição",
   unnichat: "Eventos sem atribuição",
   umbler: "Eventos sem atribuição",
+  gohighlevel: "Eventos sem atribuição",
 };
 
 export function unattributedTitle(

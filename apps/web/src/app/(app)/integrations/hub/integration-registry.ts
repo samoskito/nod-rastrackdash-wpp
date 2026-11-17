@@ -109,6 +109,7 @@ export const integrationProviderIds = [
   "zapi",
   "meta_cloud",
   "roichat",
+  "gohighlevel",
   "umbler",
   "gupshup",
   "data_crazy",
@@ -134,7 +135,8 @@ export type InboundIntegrationProvider =
   | "gupshup"
   | "data_crazy"
   | "unnichat"
-  | "roichat";
+  | "roichat"
+  | "gohighlevel";
 
 export type CrmIntegrationProvider = "kommo" | "pipedrive";
 
@@ -202,6 +204,8 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   meta_cloud: { file: "meta.svg", surface: "dark" },
   // Neutral wordmark. PENDENTE: official ROI Chat logo.
   roichat: { file: "roichat.svg", surface: "dark" },
+  // White GoHighLevel logo, approved for dark backgrounds (SOURCES.md).
+  gohighlevel: { file: "gohighlevel.svg", surface: "dark" },
   umbler: { file: "umbler.svg", surface: "light" },
   gupshup: { file: "gupshup.svg", surface: "light" },
   data_crazy: { file: "datacrazy.svg", surface: "dark" },
@@ -271,6 +275,20 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     description:
       "Receba as conversas de anúncio e as compras que chegam no ROI Chat (API oficial do WhatsApp), com uma URL por número.",
     gate: { kind: "inbound_provider", provider: "roichat" },
+  },
+  {
+    // Porte do SaaS (#130, e279af76): o Workflow da localização avisa a
+    // entrada do lead; as etapas do Workflow enviam conversões pela URL de
+    // cada regra "Etapa no GoHighLevel". Uma conexão por localização.
+    id: "gohighlevel",
+    name: "Go High Level",
+    category: "whatsapp_official",
+    logo: integrationLogoPath("gohighlevel"),
+    initials: "GHL",
+    logoSurface: logoSurface("gohighlevel"),
+    description:
+      "Receba as conversas de anúncio que chegam no Go High Level e envie conversões das etapas do Workflow (uma URL por regra).",
+    gate: { kind: "inbound_provider", provider: "gohighlevel" },
   },
   {
     id: "zapi",

@@ -60,6 +60,7 @@ const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_roichat",
   "automation_yampi",
   "automation_webhook",
+  "automation_gohighlevel",
 ];
 
 /**
@@ -382,6 +383,9 @@ export function RuleManage({
                     endpoint.eventName === rule.conversionRule.eventName) ||
                   (origin === "automation_umbler" &&
                     endpoint.provider === "umbler" &&
+                    endpoint.eventName === rule.conversionRule.eventName) ||
+                  (origin === "automation_gohighlevel" &&
+                    endpoint.provider === "gohighlevel" &&
                     endpoint.eventName === rule.conversionRule.eventName),
               ) ?? null
             }

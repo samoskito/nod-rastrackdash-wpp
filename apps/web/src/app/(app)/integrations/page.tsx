@@ -1468,6 +1468,28 @@ export default async function IntegrationsPage({
       })}
     </div>
   );
+  // GoHighLevel (porte do SaaS e279af76): a conexão recebe a entrada do lead
+  // (Workflow da localização); as etapas do Workflow enviam conversões pela
+  // URL de cada regra "Etapa no GoHighLevel" (mesmo modelo do Unnichat).
+  const goHighLevelPanel = (
+    <div className="integration-modal-stack">
+      <div className="integration-modal-note">
+        <strong>Entrada do lead e conversões das etapas do Workflow</strong>
+        <p className="muted">
+          Crie uma conexão por localização do GoHighLevel, com o ID da
+          localização e o WhatsApp do cliente. A URL da conexão recebe a
+          entrada do lead que veio do anúncio. Para enviar as etapas do
+          Workflow como conversão (Lead, lead qualificado ou compra), crie uma
+          regra “Etapa no GoHighLevel” em Conversões: cada regra tem a própria
+          URL, que você cola na ação Webhook (POST) do Workflow. Só conta o
+          contato que veio de um anúncio. O leitor do GoHighLevel ainda está
+          em observação nesta versão: você vê o que seria enviado, e nada vai
+          para a Meta até uma atualização liberar o envio.
+        </p>
+      </div>
+      {inboundPanel("gohighlevel")}
+    </div>
+  );
   const paytRulesBlock = (
     <div className="integration-modal-note">
       <strong>Regras de venda</strong>
@@ -2082,6 +2104,7 @@ export default async function IntegrationsPage({
     ...comingSoonPanels,
     meta_cloud: inboundPanel("meta_cloud"),
     roichat: roichatPanel,
+    gohighlevel: goHighLevelPanel,
     umbler: automationUrlsPanel("umbler"),
     gupshup: inboundPanel("gupshup"),
     data_crazy: inboundPanel("data_crazy"),
@@ -2288,6 +2311,7 @@ export default async function IntegrationsPage({
           zapi: [rulesLink],
           meta_cloud: [rulesLink],
           roichat: [rulesLink],
+          gohighlevel: [rulesLink],
           umbler: [rulesLink],
           gupshup: [rulesLink],
           data_crazy: [rulesLink],

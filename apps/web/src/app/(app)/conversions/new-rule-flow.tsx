@@ -50,6 +50,8 @@ import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
 import {
   findEventEndpoint,
+  goHighLevelSetupSteps,
+  goHighLevelWebhookInstruction,
   isSalesPlatform,
 } from "../integrations/single-url/single-url-copy";
 import {
@@ -167,6 +169,8 @@ export function singleUrlProviderFor(
       return "unnichat";
     case "automation_umbler":
       return "umbler";
+    case "automation_gohighlevel":
+      return "gohighlevel";
     default:
       return null;
   }
@@ -480,7 +484,8 @@ export function NewRuleFlow({
                   ? "URL de postback da Payt (exibida uma única vez)"
                   : draft?.origin === "automation_unnichat"
                     ? "URL da regra no Unnichat (exibida uma única vez)"
-                    : draft?.origin === "automation_webhook"
+                    : draft?.origin === "automation_webhook" ||
+                        draft?.origin === "automation_gohighlevel"
                       ? "URL da regra (exibida uma única vez)"
                       : "Endereço da automação (exibido uma única vez)"}
               </span>
@@ -506,6 +511,12 @@ export function NewRuleFlow({
                   draft.eventName,
                 )}
               />
+            ) : draft?.origin === "automation_gohighlevel" ? (
+              <ol className="action-note">
+                {goHighLevelSetupSteps(draft.eventName).map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
             ) : draft?.origin === "automation_webhook" ? (
               <p className="action-note">
                 Use esta URL no n8n ou no painel (POST com o JSON do lead). A
@@ -1028,6 +1039,11 @@ export function ScopeStep({
         <p className="action-note">
           Cada número do ROI Chat tem a própria URL, que já recebe a entrada e
           a compra: a compra de um número nunca vale para outro.
+        </p>
+      ) : automation && draft.origin === "automation_gohighlevel" ? (
+        <p className="action-note">
+          Uma URL por regra serve para todas as localizações do GoHighLevel: o
+          número é o da localização que o Workflow envia, nunca de outra.
         </p>
       ) : automation ? (
         <p className="action-note">
@@ -1557,6 +1573,17 @@ function DetailsStep({
         </>
       ) : null}
 
+      {draft.origin === "automation_gohighlevel" ? (
+        <>
+          <ValueFields draft={draft} onChange={onChange} />
+          <p className="action-note">
+            Depois de criar, você recebe a URL desta regra.{" "}
+            {goHighLevelWebhookInstruction}, na etapa que marca o evento. Só
+            conta o contato que veio de um anúncio.
+          </p>
+        </>
+      ) : null}
+
       {draft.origin === "automation_roichat" ? (
         <RoichatPurchaseFields
           draft={draft}
@@ -1717,6 +1744,8 @@ function SingleUrlAfterCreate({
   const [created, setCreated] = useState<IntegrationEndpointDto | null>(null);
   const endpoint = created ?? existing;
   const sales = isSalesPlatform(provider);
+  // GoHighLevel: one URL per rule (event), pasted in the Workflow's Webhook.
+  const gohighlevel = provider === "gohighlevel";
   const platform =
     provider === "braip" ? "Braip" : provider === "yampi" ? "Yampi" : "Payt";
   const label = sales
@@ -1725,15 +1754,25 @@ function SingleUrlAfterCreate({
       : provider === "yampi"
         ? "URL única da Yampi (cadastre no webhook da loja)"
         : "URL única da Payt (cole em Postback)"
-    : `URL do evento “${ruleEventLabelForOrigin(`automation_${provider}`, eventName)}”`;
+    : gohighlevel
+      ? `URL da regra “${ruleEventLabelForOrigin("automation_gohighlevel", eventName)}” (ação Webhook do Workflow)`
+      : `URL do evento “${ruleEventLabelForOrigin(`automation_${provider}`, eventName)}”`;
 
   return (
     <div className="integration-modal-note single-url-after-create">
-      <strong>{sales ? `URL única da ${platform}` : "URL do evento"}</strong>
+      <strong>
+        {sales
+          ? `URL única da ${platform}`
+          : gohighlevel
+            ? "URL da regra"
+            : "URL do evento"}
+      </strong>
       <p className="muted">
         {sales
           ? `A mesma URL vale para todas as regras e números da ${platform}. Se ela já está na ${platform}, não precisa fazer nada.`
-          : "A mesma URL vale para todos os números da conta. Cole na automação que marca este evento."}
+          : gohighlevel
+            ? `${goHighLevelWebhookInstruction}. Ela vale para todas as localizações conectadas.`
+            : "A mesma URL vale para todos os números da conta. Cole na automação que marca este evento."}
       </p>
       {endpoint ? (
         <IntegrationUrlBox
@@ -1748,7 +1787,13 @@ function SingleUrlAfterCreate({
           provider={provider}
           eventName={sales ? null : eventName}
           ensure={actions.ensure}
-          label={sales ? "Gerar URL única" : "Gerar URL do evento"}
+          label={
+            sales
+              ? "Gerar URL única"
+              : gohighlevel
+                ? "Gerar URL da regra"
+                : "Gerar URL do evento"
+          }
           onReady={setCreated}
         />
       )}

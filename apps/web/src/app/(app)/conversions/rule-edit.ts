@@ -75,6 +75,7 @@ export function ruleEditCapabilities(
       (origin === "whatsapp_label" ||
         origin === "automation_umbler" ||
         origin === "automation_unnichat" ||
+        origin === "automation_gohighlevel" ||
         // Fase 6.8: ROI Chat, valor de reserva opcional (a compra traz o valor).
         origin === "automation_roichat" ||
         // Webhook / n8n: valor fixo ou reserva do valor recebido.
@@ -239,7 +240,8 @@ export function buildRuleUpdatePayload(
   const automation =
     draft.origin === "automation_unnichat" ||
     draft.origin === "automation_umbler" ||
-    draft.origin === "automation_roichat";
+    draft.origin === "automation_roichat" ||
+    draft.origin === "automation_gohighlevel";
   const crossChanged =
     automation &&
     draft.scope === "all_numbers" &&

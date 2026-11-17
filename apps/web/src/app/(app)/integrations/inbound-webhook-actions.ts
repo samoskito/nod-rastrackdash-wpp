@@ -45,6 +45,7 @@ const connectionStatusOperationalErrors = new Set([
 const connectionCreateOperationalErrors = new Set([
   "Conexões Unnichat exigem o número de WhatsApp do cliente",
   "Conexões ROI Chat exigem o número de WhatsApp do cliente",
+  "Conexões GoHighLevel exigem o ID da localização e o WhatsApp do cliente",
 ]);
 const providerObservationUnavailableApiMessage =
   "Versão do leitor do provedor indisponível";
@@ -55,7 +56,9 @@ function providerObservationUnavailableMessage(provider: string): string {
       ? "O Unnichat"
       : provider === "roichat"
         ? "O ROI Chat"
-        : "Este provedor";
+        : provider === "gohighlevel"
+          ? "O GoHighLevel"
+          : "Este provedor";
 
   return `${name} ainda não está liberado nesta instalação: rode as migrations da API e tente de novo.`;
 }
@@ -91,22 +94,36 @@ export async function createInboundWebhookConnectionAction(
   // Unnichat e ROI Chat: o webhook de entrada não traz o canal, então a
   // conexão nasce com o número de WhatsApp do cliente (nunca o telefone do
   // lead).
-  const bindsPhone = provider === "unnichat" || provider === "roichat";
+  // GoHighLevel: uma conexão por localização (location.id) com o WhatsApp
+  // do cliente atendido nela (porte do SaaS #131/#132).
+  const gohighlevel = provider === "gohighlevel";
+  const bindsPhone =
+    provider === "unnichat" || provider === "roichat" || gohighlevel;
   const input = inboundWebhookConnectionCreateInputSchema.safeParse(
     bindsPhone
       ? {
           provider,
           displayName: formText(formData, "displayName"),
           connectedPhone: formText(formData, "connectedPhone"),
+          ...(gohighlevel
+            ? {
+                providerChannelId:
+                  formText(formData, "providerChannelId") ?? undefined,
+              }
+            : {}),
         }
       : { provider, displayName: formText(formData, "displayName") },
   );
 
   if (!input.success) {
     return failure(
-      bindsPhone && formText(formData, "displayName")
-        ? `Informe o número de WhatsApp do cliente atendido pelo ${provider === "roichat" ? "ROI Chat" : "Unnichat"}, com DDI e DDD.`
-        : invalidFormMessage,
+      gohighlevel && formText(formData, "displayName")
+        ? (input.error.issues.find((issue) => issue.code === "custom")
+            ?.message ??
+            "Informe o ID da localização e o WhatsApp do cliente, com DDI e DDD.")
+        : bindsPhone && formText(formData, "displayName")
+          ? `Informe o número de WhatsApp do cliente atendido pelo ${provider === "roichat" ? "ROI Chat" : "Unnichat"}, com DDI e DDD.`
+          : invalidFormMessage,
     );
   }
 

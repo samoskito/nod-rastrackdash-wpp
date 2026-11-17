@@ -24,6 +24,7 @@ instead of a broken image.
 | `unnichat.png` | https://unnichat.com.br/favicon.png (official app symbol, 1046x1046, 8-bit PNG). Same file as the SaaS reference (copied 2026-10-15) | Symbol only (no wordmark found as a file), shown on a light tile. No public brand kit found. |
 | `braip.png` | https://ev.braip.com/img/logo-collor.png (official app symbol on the Braip login page, 458x458), downloaded 2026-10-15. Same file as the SaaS reference (copied 2026-10-27) | Symbol only (wordmark not served as a standalone file). The light rounded container of the app icon was removed (glyph kept, same color, transparent background) so it reads on the dark tile. No public brand kit found. |
 | `kommo.png` | https://www.kommo.com/static/images/pages/support/kommo-logo.png (1200x256) | Dark ink, light tile. No public brand kit found. |
+| `gohighlevel.svg` | https://assets.cdn.filesafe.space/knES3eSWYIsc5YSZ3YLl/media/6a3d48e8e4daecfbb47f2a0b.svg (gohighlevel.com header, "HighLevel"). Same file as the SaaS reference (copied 2026-11-17) | White version, approved for dark backgrounds per https://marketing.gohighlevel.com/brandkit. Shown on the dark tile. |
 
 ## Plain wordmark fallbacks (official file not used)
 
@@ -36,5 +37,4 @@ instead of a broken image.
 | `nod-api.svg`, `zapi.svg` | "Em breve" cards; no public logo kit found; neutral wordmarks. |
 | `yampi.svg` | Fase 6.7: same neutral wordmark placeholder as the SaaS (copied 2026-10-27); no official Yampi artwork with usage terms collected yet. PENDENTE: get the official Yampi logo and its usage permission and swap the file, keeping the name. |
 
-Providers that arrive in later updates (Go High Level)
-add their own logo file and a row here.
+Providers that arrive in later updates add their own logo file and a row here.

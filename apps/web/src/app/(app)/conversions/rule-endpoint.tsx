@@ -19,6 +19,7 @@ import {
 } from "../integrations/unnichat-setup";
 import {
   disableLegacyUrlConfirmText,
+  goHighLevelSetupSteps,
   isSalesPlatform,
   singleUrlLicenseLockedNote,
   singleUrlSetupSteps,
@@ -45,6 +46,7 @@ const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = 
   automation_roichat: "ROI Chat",
   automation_yampi: "Yampi",
   automation_webhook: "n8n",
+  automation_gohighlevel: "GoHighLevel",
 };
 
 // Artigo por plataforma: "na Umbler Talk", "na Payt", mas "no Unnichat".
@@ -52,6 +54,7 @@ const platformLocatives: Partial<Record<ProviderConversionRuleOriginDto, string>
   automation_unnichat: "no Unnichat",
   automation_roichat: "no ROI Chat",
   automation_webhook: "no n8n",
+  automation_gohighlevel: "no GoHighLevel",
 };
 
 function inPlatform(origin: ProviderConversionRuleOriginDto): string {
@@ -149,6 +152,15 @@ function SetupSteps({
       />
     );
   }
+  if (origin === "automation_gohighlevel") {
+    return (
+      <ol className="integration-steps">
+        {goHighLevelSetupSteps(rule.conversionRule.eventName).map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+    );
+  }
   if (origin === "automation_webhook") {
     // Porte do SaaS 098d0950: passo a passo, corpo de exemplo (fictício) e o
     // fluxo pronto do n8n (o guia completo fica em docs/setup/n8n).
@@ -181,6 +193,7 @@ const singleUrlProviders: Partial<
   automation_yampi: "yampi",
   automation_unnichat: "unnichat",
   automation_umbler: "umbler",
+  automation_gohighlevel: "gohighlevel",
 };
 
 /**

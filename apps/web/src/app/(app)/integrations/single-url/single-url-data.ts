@@ -75,6 +75,7 @@ export async function loadSingleUrlData(): Promise<SingleUrlData> {
     yampi,
     unnichat,
     umbler,
+    gohighlevel,
   ] = await Promise.all([
     settle(serverApiFetch<unknown>("/integrations/endpoints")),
     loadDetectedProducts("payt"),
@@ -85,6 +86,7 @@ export async function loadSingleUrlData(): Promise<SingleUrlData> {
     loadUnattributed("yampi"),
     loadUnattributed("unnichat"),
     loadUnattributed("umbler"),
+    loadUnattributed("gohighlevel"),
   ]);
   const parsedEndpoints = integrationEndpointListSchema.safeParse(endpoints);
   return {
@@ -92,6 +94,6 @@ export async function loadSingleUrlData(): Promise<SingleUrlData> {
     paytProducts,
     braipProducts,
     yampiProducts,
-    unattributed: { payt, braip, yampi, unnichat, umbler },
+    unattributed: { payt, braip, yampi, unnichat, umbler, gohighlevel },
   };
 }

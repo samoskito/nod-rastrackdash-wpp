@@ -85,6 +85,8 @@ describe("integration registry", () => {
         "braip",
         // Fase 6.8: ROI Chat (WhatsApp API Oficial, one URL per number).
         "roichat",
+        // GoHighLevel (porte do SaaS e279af76): one connection per location.
+        "gohighlevel",
         // Fase 6.7: Yampi (same base as Braip, open to every workspace).
         "yampi",
         "kommo",
@@ -93,7 +95,6 @@ describe("integration registry", () => {
       ].sort(),
     );
     for (const later of [
-      "gohighlevel",
       "guimo",
     ]) {
       expect(integrationProviderIds as readonly string[]).not.toContain(later);
@@ -155,6 +156,8 @@ describe("integration registry", () => {
       "waha",
       // Fase 6.8: next to WAHA and Meta Cloud.
       "roichat",
+      // GoHighLevel (porte do SaaS): next to ROI Chat.
+      "gohighlevel",
       "zapi",
       "nod_api",
     ]);

@@ -151,6 +151,7 @@ export function automationSingleConnectionNote(origin: string): string {
 export function automationPlatformName(origin: string): string {
   if (origin === "automation_umbler") return "Umbler";
   if (origin === "automation_roichat") return "ROI Chat";
+  if (origin === "automation_gohighlevel") return "GoHighLevel";
   return "Unnichat";
 }
 
@@ -627,7 +628,10 @@ export function buildRulePayload(
       };
     }
     case "automation_umbler":
-    case "automation_unnichat": {
+    case "automation_unnichat":
+    // GoHighLevel: same model as Unnichat (URL per rule/event, the Workflow's
+    // location tells the number).
+    case "automation_gohighlevel": {
       const values = valueFields({ ...draft, eventName }, false);
       if (!values.ok) return values;
       return {

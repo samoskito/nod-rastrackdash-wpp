@@ -109,6 +109,47 @@ describe("inbound webhook server actions", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/integrations");
   });
 
+  it("creates a GoHighLevel connection with the location id and the client WhatsApp", async () => {
+    serverApiFetch.mockResolvedValueOnce({
+      connection: { ...connection, provider: "gohighlevel", parserVersion: "gohighlevel/v1" },
+      secret: firstSecret,
+      webhookUrl: `https://api.wpptrack.test/webhooks/inbound/connection_1?token=${firstSecret}`,
+    });
+    const result = await createInboundWebhookConnectionAction(
+      form({
+        provider: "gohighlevel",
+        displayName: "Clínica Exemplo",
+        providerChannelId: "location_synthetic_a",
+        connectedPhone: "+55 11 99999-0001",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(String(serverApiFetch.mock.calls[0]?.[1]?.body));
+    expect(body).toMatchObject({
+      provider: "gohighlevel",
+      displayName: "Clínica Exemplo",
+      providerChannelId: "location_synthetic_a",
+    });
+    expect(body.connectedPhone).toBeTruthy();
+  });
+
+  it("refuses a GoHighLevel connection without the location id", async () => {
+    const result = await createInboundWebhookConnectionAction(
+      form({
+        provider: "gohighlevel",
+        displayName: "Clínica Exemplo",
+        connectedPhone: "+55 11 99999-0001",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      message: "Informe o ID da localização do GoHighLevel (Location ID)",
+    });
+    expect(serverApiFetch).not.toHaveBeenCalled();
+  });
+
   it("returns Meta Cloud's raw verify token only in the one-time result", async () => {
     const metaConnection = {
       ...connection,
