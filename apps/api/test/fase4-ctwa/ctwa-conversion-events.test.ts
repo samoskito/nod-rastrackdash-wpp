@@ -90,7 +90,9 @@ function harness(
     inboundWebhookEvent: {
       findFirst: vi.fn(async ({ where }: any) =>
         where.id === event.id &&
-        where.provider === "unnichat" &&
+        // Unnichat and GoHighLevel share the page/pixel entry (e279af76).
+        (where.provider === "unnichat" ||
+          where.provider?.in?.includes("unnichat")) &&
         where.adId === null &&
         where.classificationReason === event.classificationReason
           ? event

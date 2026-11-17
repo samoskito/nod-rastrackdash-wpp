@@ -157,6 +157,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "unnichat",
       "waha",
       "roichat",
+      "gohighlevel",
     ],
     connection: "any",
     // O evento vem do status de cada venda; o valor vem da própria venda.
@@ -180,6 +181,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "unnichat",
       "waha",
       "roichat",
+      "gohighlevel",
     ],
     connection: "any",
     // O evento vem do status de cada venda; o valor vem da própria venda.
@@ -204,6 +206,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "unnichat",
       "waha",
       "roichat",
+      "gohighlevel",
     ],
     connection: "any",
     // O evento vem do campo `event` de cada aviso; o valor (só os produtos)
@@ -231,6 +234,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
       "unnichat",
       "waha",
       "roichat",
+      "gohighlevel",
     ],
     connection: "any",
     allowedEvents: [...webhookEventNames],

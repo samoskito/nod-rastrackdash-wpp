@@ -1720,6 +1720,8 @@ describe("provider rules API: Conversões screen support", () => {
         "waha",
         // Fase 6.8: a ROI Chat number is a WhatsApp number too.
         "roichat",
+        // GoHighLevel (porte do SaaS): a location number too.
+        "gohighlevel",
       ],
       // Fase 4b: the Unnichat automation runs on its own connection number.
       automation_unnichat: ["unnichat"],
@@ -1733,9 +1735,12 @@ describe("provider rules API: Conversões screen support", () => {
         "unnichat",
         "waha",
         "roichat",
+        "gohighlevel",
       ],
       // Fase 6.8: the ROI Chat purchase runs on the ROI Chat numbers.
       automation_roichat: ["roichat"],
+      // GoHighLevel (porte do SaaS e279af76): its own location numbers.
+      automation_gohighlevel: ["gohighlevel"],
       // Fase 6.7: the Yampi sale, same base as Braip (any WhatsApp number,
       // ROI Chat numbers included since Fase 6.8).
       automation_yampi: [
@@ -1747,6 +1752,7 @@ describe("provider rules API: Conversões screen support", () => {
         "unnichat",
         "waha",
         "roichat",
+        "gohighlevel",
       ],
       // Webhook / n8n (porte do SaaS 098d0950): a lead of any WhatsApp
       // connection of the student.
@@ -1759,6 +1765,7 @@ describe("provider rules API: Conversões screen support", () => {
         "unnichat",
         "waha",
         "roichat",
+        "gohighlevel",
       ],
     });
     expect(
@@ -1794,6 +1801,8 @@ describe("provider rules API: Conversões screen support", () => {
       automation_payt: [false, true],
       automation_unnichat: [true, true],
       automation_roichat: [true, true],
+      // GoHighLevel: bound to the location's connection, like Unnichat.
+      automation_gohighlevel: [true, true],
       automation_braip: [false, true],
       automation_yampi: [false, true],
       // Webhook / n8n: not bound to one connection, needs a WhatsApp one live.
