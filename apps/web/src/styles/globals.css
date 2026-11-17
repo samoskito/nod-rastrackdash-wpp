@@ -9817,6 +9817,21 @@ html[data-presentation-mode="active"] .provider-conversion-secret {
   gap: 8px;
 }
 
+.provider-conversion-label-reload {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .provider-conversion-label-fallback input {
   width: 100%;
   min-height: 42px;

@@ -37,6 +37,7 @@ import {
   providerRuleCandidateWhere,
   providerRuleScope,
   resolveApplicableProviderRules,
+  type ProviderRuleApplicability,
 } from "../conversion-rules/provider-rule-scope";
 import { InboundWebhookProductionQueueService } from "./inbound-webhook-production-queue.service";
 import {
@@ -533,24 +534,65 @@ export class UazapiProviderConversionService {
       },
       update: { labelIds },
     });
-    if (newIds.length === 0)
+    const skipBase = {
+      workspaceId: input.workspaceId,
+      whatsappInstanceId: input.instance.id,
+    };
+    if (newIds.length === 0) {
+      // Every chat_labels webhook carries the whole label set; most of them
+      // add nothing new, so this stays at debug level.
+      this.logLabelSkip("debug", { ...skipBase, reason: "no_new_label" });
       return { evaluated: false, eligibleExecutionId: null };
+    }
 
     const bridged = await this.bridge.ensureBridge(input.instance);
-    const rules = await this.loadRules(
+    const scoped = await this.loadRuleApplicability(
       input.workspaceId,
       bridged.connectionId,
       bridged.channelId,
       "provider_automation",
     );
-    if (rules.length === 0)
+    for (const { rule, bySpecificRuleIds } of scoped.overridden) {
+      this.logLabelSkip("log", {
+        ...skipBase,
+        reason: "rule_overridden_by_specific",
+        channelId: bridged.channelId,
+        providerRuleId: rule.id,
+        bySpecificRuleIds,
+      });
+    }
+    for (const { rule, canonicalChannelId } of scoped.duplicatePhone) {
+      this.logLabelSkip("log", {
+        ...skipBase,
+        reason: "rule_runs_on_other_channel",
+        channelId: bridged.channelId,
+        providerRuleId: rule.id,
+        canonicalChannelId,
+      });
+    }
+    const rules = scoped.applicable;
+    if (rules.length === 0) {
+      this.logLabelSkip("debug", {
+        ...skipBase,
+        reason: "no_rules",
+        channelId: bridged.channelId,
+        newLabelIds: newIds,
+      });
       return { evaluated: false, eligibleExecutionId: null };
+    }
 
     const channel = await this.prisma.inboundWebhookChannel.findFirst({
       where: { id: bridged.channelId, workspaceId: input.workspaceId },
       select: gatedChannelSelect,
     });
-    if (!channel) return { evaluated: false, eligibleExecutionId: null };
+    if (!channel) {
+      this.logLabelSkip("warn", {
+        ...skipBase,
+        reason: "no_channel",
+        channelId: bridged.channelId,
+      });
+      return { evaluated: false, eligibleExecutionId: null };
+    }
 
     const leadResolution = await this.paidLeads.resolve({
       workspaceId: input.workspaceId,
@@ -567,7 +609,22 @@ export class UazapiProviderConversionService {
     for (const rule of rules) {
       const ruleSnapshot = this.ruleSnapshot(rule, "provider_automation");
       const matched = this.matchLabels(rule, newIds, catalog);
-      if (!matched) continue;
+      if (!matched) {
+        this.logLabelSkip("log", {
+          ...skipBase,
+          reason: "label_not_matched",
+          channelId: bridged.channelId,
+          providerRuleId: rule.id,
+          newLabelIds: newIds,
+          // 0 configured labels on a bound rule means it was saved without
+          // the label list (it only compares names): reload and save it.
+          configuredLabelCount: this.storedLabels(
+            rule.conversionRule.defaultItems,
+          ).length,
+          catalogSize: catalog.length,
+        });
+        continue;
+      }
 
       const occurrenceKey = `uazapi:label:${bridged.channelId}:${rule.id}:${contactKey}:${matched.id}:${externalEventId}`;
       const decision = this.decisionEngine.evaluate({
@@ -594,7 +651,16 @@ export class UazapiProviderConversionService {
           matchedLabel: matched.name,
         },
       });
-      if (!decision) continue;
+      if (!decision) {
+        this.logLabelSkip("log", {
+          ...skipBase,
+          reason: "engine_not_applicable",
+          channelId: bridged.channelId,
+          providerRuleId: rule.id,
+          matchedLabelId: matched.id,
+        });
+        continue;
+      }
       evaluated = true;
       const deliveryId = await this.ensureDelivery({
         workspaceId: input.workspaceId,
@@ -693,6 +759,31 @@ export class UazapiProviderConversionService {
    * replaces every global rule on this channel (and on every channel of the
    * same phone), and a global rule runs once per phone.
    */
+  /**
+   * Structured reason for every label evaluation that stops without a
+   * decision. Ids and label codes only: never a phone, contact or token.
+   */
+  private logLabelSkip(
+    level: "debug" | "log" | "warn",
+    details: {
+      workspaceId: string;
+      whatsappInstanceId: string;
+      reason:
+        | "no_new_label"
+        | "no_rules"
+        | "no_channel"
+        | "label_not_matched"
+        | "rule_overridden_by_specific"
+        | "rule_runs_on_other_channel"
+        | "engine_not_applicable";
+      [key: string]: unknown;
+    },
+  ): void {
+    this.logger[level](
+      JSON.stringify({ event: "uazapi_label_evaluation_skipped", ...details }),
+    );
+  }
+
   private async loadRules(
     workspaceId: string,
     connectionId: string,
@@ -700,6 +791,24 @@ export class UazapiProviderConversionService {
     triggerType: "team_message" | "provider_automation" = "team_message",
     provider: BridgedWhatsappProvider = "uazapi",
   ): Promise<Rule[]> {
+    return (
+      await this.loadRuleApplicability(
+        workspaceId,
+        connectionId,
+        channelId,
+        triggerType,
+        provider,
+      )
+    ).applicable;
+  }
+
+  private async loadRuleApplicability(
+    workspaceId: string,
+    connectionId: string,
+    channelId: string,
+    triggerType: "team_message" | "provider_automation" = "team_message",
+    provider: BridgedWhatsappProvider = "uazapi",
+  ): Promise<ProviderRuleApplicability<Rule>> {
     const candidates = (await this.prisma.providerConversionRuleConfig.findMany(
       {
         where: {
@@ -737,7 +846,7 @@ export class UazapiProviderConversionService {
         })),
         channel: { id: channelId, connectionId, provider },
       })
-    ).applicable;
+    );
   }
 
   private async ensureDelivery(input: {
@@ -1053,14 +1162,55 @@ export class UazapiProviderConversionService {
       );
     }
 
+    // Same source as the saved-connection status check: the student's own
+    // Uazapi URL + token saved with the connection; env only as fallback.
+    const saved = this.savedUazapiConfig(instance);
     const result = await uazapiByo.listLabels(
       instance.providerInstanceId ?? instance.id,
-      this.instanceToken(instance),
+      saved?.token || this.instanceToken(instance),
+      { baseUrl: saved?.baseUrl ?? null },
     );
     return result.labels.map((label) => ({
       name: label.name.trim(),
       keys: this.labelKeys(label.id),
     }));
+  }
+
+  private savedUazapiConfig(
+    instance: UazapiBridgeInstance,
+  ): { baseUrl: string | null; token: string | null } | null {
+    if (
+      !instance.configEncrypted ||
+      !instance.configIv ||
+      !instance.configTag
+    )
+      return null;
+    try {
+      const parsed = JSON.parse(
+        this.tokenEncryption.decrypt({
+          encryptedAccessToken: instance.configEncrypted,
+          tokenIv: instance.configIv,
+          tokenTag: instance.configTag,
+        }),
+      ) as { provider?: unknown; config?: Record<string, unknown> };
+      if (parsed.provider !== "uazapi_byo" || !parsed.config) return null;
+      const read = (value: unknown) =>
+        typeof value === "string" && value.trim() ? value.trim() : null;
+      return {
+        baseUrl: read(parsed.config.baseUrl),
+        token: read(parsed.config.token),
+      };
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: "uazapi_label_config_unreadable",
+          workspaceId: instance.workspaceId,
+          whatsappInstanceId: instance.id,
+          errorName: error instanceof Error ? error.name : "unknown",
+        }),
+      );
+      return null;
+    }
   }
 
   private instanceToken(instance: UazapiBridgeInstance): string | undefined {

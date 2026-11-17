@@ -7,10 +7,22 @@ import { apiFetch } from "../../../lib/api";
 
 export type UazapiTriggerLabel = { id: string; name: string };
 
+/** API route that lists one Uazapi connection's labels (read live). */
+export function whatsappLabelsPath(whatsappInstanceId: string): string {
+  return `/integrations/whatsapp-connections/${encodeURIComponent(whatsappInstanceId)}/labels`;
+}
+
+function labelLoadErrorMessage(error: unknown): string | null {
+  const message = error instanceof Error ? error.message.trim() : "";
+  // apiFetch falls back to "API request failed: <status>" when the API sent
+  // no readable message; that says nothing useful to the student.
+  return message && !message.startsWith("API request failed") ? message : null;
+}
+
 type LabelLoadState =
   | { status: "loading" }
   | { status: "loaded"; labels: WhatsappLabelDto[] }
-  | { status: "error" };
+  | { status: "error"; message: string | null };
 
 /**
  * Live multi-select of the WhatsApp instance's UAZAPI labels/lists for the
@@ -32,26 +44,28 @@ export function UazapiLabelPicker({
   onFallbackChange: (value: string) => void;
 }) {
   const [state, setState] = useState<LabelLoadState>({ status: "loading" });
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
 
     apiFetch<WhatsappLabelDto[]>(
-      `/integrations/whatsapp/instances/${encodeURIComponent(whatsappInstanceId)}/labels`,
+      whatsappLabelsPath(whatsappInstanceId),
     ).then(
       (labels) => {
         if (!cancelled) setState({ status: "loaded", labels });
       },
-      () => {
-        if (!cancelled) setState({ status: "error" });
+      (error: unknown) => {
+        if (!cancelled)
+          setState({ status: "error", message: labelLoadErrorMessage(error) });
       },
     );
 
     return () => {
       cancelled = true;
     };
-  }, [whatsappInstanceId]);
+  }, [whatsappInstanceId, reloadKey]);
 
   function toggleLabel(label: WhatsappLabelDto) {
     const name = label.name.trim();
@@ -126,7 +140,10 @@ export function UazapiLabelPicker({
         <div className="provider-conversion-label-fallback">
           <small className="action-note warn">
             <AlertTriangle size={13} aria-hidden="true" />
-            Não foi possível carregar as etiquetas. Informe o nome manualmente.
+            {state.message
+              ? `Não foi possível carregar as etiquetas: ${state.message}`
+              : "Não foi possível carregar as etiquetas."}{" "}
+            Informe o nome manualmente ou recarregue a lista.
           </small>
           <input
             value={fallbackValue}
@@ -135,6 +152,17 @@ export function UazapiLabelPicker({
             placeholder="Nome exato da etiqueta"
           />
         </div>
+      ) : null}
+
+      {state.status !== "loading" ? (
+        <button
+          type="button"
+          className="provider-conversion-label-reload"
+          onClick={() => setReloadKey((value) => value + 1)}
+        >
+          <RefreshCw size={13} aria-hidden="true" />
+          Recarregar etiquetas
+        </button>
       ) : null}
 
       <small className="action-note">

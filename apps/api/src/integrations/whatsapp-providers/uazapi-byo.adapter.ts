@@ -142,7 +142,8 @@ export class UazapiByoAdapter implements WhatsappProviderAdapter {
   async listLabels(
     instanceRef: string,
     instanceToken?: string | null,
+    options?: { baseUrl?: string | null },
   ): Promise<WhatsappLabelListResult> {
-    return this.uazapi.listLabels(instanceRef, instanceToken);
+    return this.uazapi.listLabels(instanceRef, instanceToken, options);
   }
 }

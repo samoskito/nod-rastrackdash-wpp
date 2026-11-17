@@ -5,7 +5,8 @@ import type {
   ProviderConversionDecisionDto,
   ProviderConversionPaidLeadResolutionDto,
 } from "@wpptrack/shared";
-import { describe, expect, it, vi } from "vitest";
+import { Logger } from "@nestjs/common";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProviderConversionDecisionEngine } from "../../src/conversion-rules/provider-conversion-decision.engine";
 import { ProviderConversionObservationService } from "../../src/conversion-rules/provider-conversion-observation.service";
 import {
@@ -1031,6 +1032,14 @@ function uazapiHarness(
     })),
   };
   const productionQueue = { enqueueProviderConversion: vi.fn(async () => ({})) };
+  // Instance B numbers its labels differently from instance A.
+  const listLabels = vi.fn(async (..._args: unknown[]) => ({
+    labels: [
+      { id: "3", name: "Lead frio" },
+      { id: "7", name: "Comprou" },
+    ],
+  }));
+  const tokenEncryption = { decrypt: vi.fn((..._args: unknown[]) => "") };
   const service = new UazapiProviderConversionService(
     prisma as never,
     env as never,
@@ -1045,20 +1054,19 @@ function uazapiHarness(
     orchestrator as never,
     { resolve: vi.fn(async () => paidLead) } as never,
     productionQueue as never,
-    {
-      require: vi.fn(() => ({
-        // Instance B numbers its labels differently from instance A.
-        listLabels: vi.fn(async () => ({
-          labels: [
-            { id: "3", name: "Lead frio" },
-            { id: "7", name: "Comprou" },
-          ],
-        })),
-      })),
-    } as never,
-    { decrypt: vi.fn() } as never,
+    { require: vi.fn(() => ({ listLabels })) } as never,
+    tokenEncryption as never,
   );
-  return { service, prisma, evaluated, orchestrator, productionQueue };
+  return {
+    service,
+    prisma,
+    evaluated,
+    orchestrator,
+    productionQueue,
+    decisionEngine,
+    listLabels,
+    tokenEncryption,
+  };
 }
 
 function labelRule(input: {
@@ -1513,5 +1521,239 @@ describe("provider rule workspace scope: same phone on two channels", () => {
       externalMessageId: "msg_unknown_phone",
     });
     expect(result.eligibleExecutionId).toBe("execution_global");
+  });
+});
+
+/**
+ * Every label evaluation that stops without a decision now logs why
+ * (uazapi_label_evaluation_skipped), with ids and label codes only: never the
+ * phone, the contact or the token. Before, each exit returned silently and a
+ * rule saved without its label list looked exactly like "nothing happened".
+ */
+describe("Uazapi label evaluation: reason logged at every silent exit", () => {
+  const phone = "5511900000042";
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function spyLogs() {
+    const spies = {
+      debug: vi
+        .spyOn(Logger.prototype, "debug")
+        .mockImplementation(() => undefined),
+      log: vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined),
+      warn: vi
+        .spyOn(Logger.prototype, "warn")
+        .mockImplementation(() => undefined),
+    };
+    const skipped = (level: keyof typeof spies) =>
+      spies[level].mock.calls
+        .map((call) => {
+          try {
+            return JSON.parse(String(call[0]));
+          } catch {
+            return null;
+          }
+        })
+        .filter((entry) => entry?.event === "uazapi_label_evaluation_skipped");
+    const raw = () =>
+      Object.values(spies)
+        .flatMap((spy) => spy.mock.calls.map((call) => String(call[0])))
+        .join("\n");
+    return { skipped, raw };
+  }
+
+  function specificLabelRule() {
+    return {
+      ...labelRule({ id: "specific_tag", scope: "specific_numbers", bound: true }),
+      channels: [{ channelId: "channel_qr_b" }],
+    };
+  }
+
+  async function evaluate(
+    harness: ReturnType<typeof uazapiHarness>,
+    labelIds: string[],
+    instance: Record<string, unknown> = instanceB,
+  ) {
+    return harness.service.evaluateLabels({
+      workspaceId,
+      instance: instance as never,
+      phone,
+      labelIds,
+      externalEventId: "evento_etiqueta_1",
+    });
+  }
+
+  it("no new label (debug)", async () => {
+    const logs = spyLogs();
+    const harness = uazapiHarness([specificLabelRule()]);
+    harness.prisma.uazapiChatLabelState.findUnique.mockResolvedValue({
+      labelIds: ["7"],
+    } as never);
+
+    await evaluate(harness, ["7"]);
+
+    expect(logs.skipped("debug")).toEqual([
+      expect.objectContaining({
+        reason: "no_new_label",
+        workspaceId,
+        whatsappInstanceId: "instance_b",
+      }),
+    ]);
+  });
+
+  it("no rules for the channel (debug)", async () => {
+    const logs = spyLogs();
+    const harness = uazapiHarness([]);
+
+    await evaluate(harness, ["7"]);
+
+    expect(logs.skipped("debug")).toEqual([
+      expect.objectContaining({
+        reason: "no_rules",
+        channelId: "channel_qr_b",
+        newLabelIds: ["7"],
+      }),
+    ]);
+  });
+
+  it("no gated channel (warn)", async () => {
+    const logs = spyLogs();
+    const harness = uazapiHarness([specificLabelRule()]);
+    harness.prisma.inboundWebhookChannel.findFirst.mockResolvedValue(
+      null as never,
+    );
+
+    await evaluate(harness, ["3"]);
+
+    expect(logs.skipped("warn")).toEqual([
+      expect.objectContaining({ reason: "no_channel", channelId: "channel_qr_b" }),
+    ]);
+  });
+
+  it("label did not match the rule, with how many labels the rule has saved", async () => {
+    const logs = spyLogs();
+    const rule = specificLabelRule();
+    // Saved while the picker was failing: no label list, so it only compared
+    // the label code with the name.
+    rule.conversionRule.defaultItems = { uazapiLabels: [] };
+    rule.messageTriggerPhrases = ["7"];
+    const harness = uazapiHarness([rule]);
+
+    await expect(evaluate(harness, ["7"])).resolves.toEqual({
+      evaluated: false,
+      eligibleExecutionId: null,
+    });
+
+    expect(logs.skipped("log")).toEqual([
+      expect.objectContaining({
+        reason: "label_not_matched",
+        providerRuleId: "specific_tag",
+        newLabelIds: ["7"],
+        configuredLabelCount: 0,
+        catalogSize: 2,
+      }),
+    ]);
+  });
+
+  it("a global rule overridden by a specific rule on this number", async () => {
+    const logs = spyLogs();
+    const harness = uazapiHarness([
+      labelRule({ id: "global_tag", scope: "all_numbers" }),
+      specificLabelRule(),
+    ]);
+
+    await evaluate(harness, ["3"]);
+
+    expect(logs.skipped("log")).toContainEqual(
+      expect.objectContaining({
+        reason: "rule_overridden_by_specific",
+        providerRuleId: "global_tag",
+        bySpecificRuleIds: ["specific_tag"],
+      }),
+    );
+  });
+
+  it("the decision engine found the rule not applicable", async () => {
+    const logs = spyLogs();
+    const harness = uazapiHarness([specificLabelRule()]);
+    harness.decisionEngine.evaluate.mockReturnValue(null as never);
+
+    await expect(evaluate(harness, ["3"])).resolves.toEqual({
+      evaluated: false,
+      eligibleExecutionId: null,
+    });
+
+    expect(logs.skipped("log")).toEqual([
+      expect.objectContaining({
+        reason: "engine_not_applicable",
+        providerRuleId: "specific_tag",
+        matchedLabelId: "3",
+      }),
+    ]);
+  });
+
+  it("never logs the phone or the contact", async () => {
+    const logs = spyLogs();
+    const harness = uazapiHarness([
+      labelRule({ id: "global_tag", scope: "all_numbers" }),
+      specificLabelRule(),
+    ]);
+    harness.decisionEngine.evaluate.mockReturnValue(null as never);
+
+    await harness.service.evaluateLabels({
+      workspaceId,
+      instance: instanceB,
+      phone,
+      waChatId: `${phone}@s.whatsapp.net`,
+      labelIds: ["3", "9"],
+      externalEventId: "evento_etiqueta_2",
+    });
+
+    expect(logs.raw()).toContain("uazapi_label_evaluation_skipped");
+    expect(logs.raw()).not.toContain(phone);
+  });
+
+  it("reads the label catalog from the student's saved Uazapi URL and token", async () => {
+    spyLogs();
+    const harness = uazapiHarness([specificLabelRule()]);
+    harness.tokenEncryption.decrypt.mockReturnValue(
+      JSON.stringify({
+        provider: "uazapi_byo",
+        config: {
+          baseUrl: "https://aluno.uazapi.example.test",
+          token: "token-ficticio-salvo",
+        },
+      }),
+    );
+
+    await evaluate(harness, ["3"], {
+      ...instanceB,
+      configEncrypted: "cifrado",
+      configIv: "iv",
+      configTag: "tag",
+    });
+
+    expect(harness.listLabels).toHaveBeenCalledWith(
+      "provider_b",
+      "token-ficticio-salvo",
+      { baseUrl: "https://aluno.uazapi.example.test" },
+    );
+  });
+
+  it("keeps paid-lead-only: a matched label on an untracked contact is ignored_untracked_lead", async () => {
+    spyLogs();
+    const harness = uazapiHarness([specificLabelRule()]);
+    const resolver = (harness.service as any).paidLeads;
+    resolver.resolve.mockResolvedValue({
+      status: "not_found",
+      reasonCode: "paid_attribution_missing",
+    });
+
+    await evaluate(harness, ["3"]);
+
+    expect(harness.evaluated.at(-1)?.decision?.decisionCode).toBe(
+      "ignored_untracked_lead",
+    );
   });
 });

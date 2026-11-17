@@ -35,6 +35,7 @@ export class WhatsappConnectionsController {
     @Inject(AuthService) private readonly authService: AuthService,
     @Inject(WorkspacesService)
     private readonly workspacesService: WorkspacesService,
+    @Inject(WhatsappConnectionsService)
     private readonly connections: WhatsappConnectionsService,
   ) {}
 
@@ -63,6 +64,18 @@ export class WhatsappConnectionsController {
     const context = await this.getContext(refreshToken);
     const connectionId = this.parse(connectionIdSchema.safeParse(id));
     return this.connections.getActivity(context.workspaceId, connectionId);
+  }
+
+  /**
+   * Etiquetas da conexão Uazapi, lidas do servidor Uazapi do aluno (URL +
+   * token salvos na conexão). Só leitura, então continua liberada com a
+   * licença bloqueada. Nunca devolve o token.
+   */
+  @Get(":id/labels")
+  async labels(@AuthToken() refreshToken: string, @Param("id") id: string) {
+    const context = await this.getContext(refreshToken);
+    const connectionId = this.parse(connectionIdSchema.safeParse(id));
+    return this.connections.listLabels(context.workspaceId, connectionId);
   }
 
   @Post()

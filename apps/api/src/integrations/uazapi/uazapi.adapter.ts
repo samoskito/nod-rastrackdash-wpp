@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import {
   RUNTIME_FETCH,
   type RuntimeFetch,
@@ -36,10 +36,20 @@ export type UazapiConnectionResult = {
   providerStatusText?: string | null;
 };
 
+export type UazapiLabelListFailureReason =
+  | "not_configured"
+  | "invalid_base_url"
+  | "http_error"
+  | "invalid_body"
+  | "request_failed";
+
 export type UazapiLabelListResult = {
   status: "success" | "not_configured" | "error";
   message: string | null;
   labels: WhatsappLabelDto[];
+  /** Set on failure, so the screen can explain it in Portuguese. */
+  failureReason?: UazapiLabelListFailureReason;
+  httpStatus?: number;
 };
 
 export type UazapiWebhookConfigurationResult = {
@@ -69,6 +79,7 @@ export type UazapiDeleteInstanceResult = {
 @Injectable()
 export class UazapiAdapter implements IntegrationAdapter {
   readonly provider = "uazapi" as const;
+  private readonly logger = new Logger(UazapiAdapter.name);
 
   constructor(
     @Inject(INTEGRATION_ENV) private readonly env: IntegrationEnv = process.env,
@@ -301,25 +312,41 @@ export class UazapiAdapter implements IntegrationAdapter {
     }
   }
 
+  /**
+   * Lists the instance's label catalog. The base URL is the student's own
+   * Uazapi server saved with the connection (`options.baseUrl`), the same
+   * source the saved-connection status check uses; env UAZAPI_BASE_URL is
+   * only the fallback for an instance without a saved URL. Never throws: the
+   * evaluation path keeps working with an empty catalog, and every failure is
+   * logged with its reason (never the token, the URL or a phone).
+   */
   async listLabels(
     _instanceRef: string,
     instanceToken?: string | null,
+    options?: { baseUrl?: string | null },
   ): Promise<UazapiLabelListResult> {
     const token = this.getInstanceToken(instanceToken);
 
-    const configuredBaseUrl = this.env.UAZAPI_BASE_URL?.trim();
+    const savedBaseUrl = options?.baseUrl?.trim();
+    const baseUrlSource = savedBaseUrl ? "connection" : "env";
+    const configuredBaseUrl = savedBaseUrl || this.env.UAZAPI_BASE_URL?.trim();
     const baseUrl = configuredBaseUrl
       ? normalizeProviderBaseUrl(configuredBaseUrl)
       : null;
 
     if (!baseUrl || !token) {
+      const invalidUrl = Boolean(configuredBaseUrl && !baseUrl);
+      this.warnLabelListFailure({
+        reason: invalidUrl ? "invalid_base_url" : "not_configured",
+        baseUrlSource,
+      });
       return {
-        status: configuredBaseUrl && !baseUrl ? "error" : "not_configured",
-        message:
-          configuredBaseUrl && !baseUrl
-            ? "Invalid UAZAPI_BASE_URL"
-            : "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
+        status: invalidUrl ? "error" : "not_configured",
+        message: invalidUrl
+          ? "Invalid UAZAPI_BASE_URL"
+          : "Missing UAZAPI_BASE_URL or UAZAPI_TOKEN",
         labels: [],
+        failureReason: invalidUrl ? "invalid_base_url" : "not_configured",
       };
     }
 
@@ -335,13 +362,37 @@ export class UazapiAdapter implements IntegrationAdapter {
           },
         },
       );
-      const payload = (await response.json().catch(() => [])) as unknown;
+      const payload = (await response
+        .json()
+        .catch(() => undefined)) as unknown;
 
       if (!response.ok) {
+        this.warnLabelListFailure({
+          reason: "http_error",
+          httpStatus: response.status,
+          baseUrlSource,
+        });
         return {
           status: "error",
           message: `Uazapi HTTP ${response.status}`,
           labels: [],
+          failureReason: "http_error",
+          httpStatus: response.status,
+        };
+      }
+
+      if (!Array.isArray(payload)) {
+        this.warnLabelListFailure({
+          reason: "invalid_body",
+          httpStatus: response.status,
+          baseUrlSource,
+        });
+        return {
+          status: "error",
+          message: "Uazapi labels response is not a list",
+          labels: [],
+          failureReason: "invalid_body",
+          httpStatus: response.status,
         };
       }
 
@@ -351,12 +402,29 @@ export class UazapiAdapter implements IntegrationAdapter {
         labels: this.toLabels(payload),
       };
     } catch (error) {
+      this.warnLabelListFailure({
+        reason: "request_failed",
+        errorName: error instanceof Error ? error.name : "unknown",
+        baseUrlSource,
+      });
       return {
         status: "error",
         message: providerRequestFailureMessage(error),
         labels: [],
+        failureReason: "request_failed",
       };
     }
+  }
+
+  private warnLabelListFailure(details: {
+    reason: UazapiLabelListFailureReason;
+    baseUrlSource: "connection" | "env";
+    httpStatus?: number;
+    errorName?: string;
+  }): void {
+    this.logger.warn(
+      JSON.stringify({ event: "uazapi_label_list_failed", ...details }),
+    );
   }
 
   private async requestInstance(

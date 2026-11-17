@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -23,6 +24,7 @@ import {
   type WhatsappConnectionWebhookTokenRotateResultDto,
   type WhatsappConnectionUpdateInputDto,
   type WhatsappInstanceActivityDto,
+  type WhatsappLabelDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import type { IntegrationEnv } from "../integration.types";
@@ -32,6 +34,7 @@ import { WorkspaceAccessPolicyService } from "../../workspaces/workspace-access-
 import { WhatsappProviderRegistry } from "./whatsapp-provider.registry";
 import { UazapiByoAdapter } from "./uazapi-byo.adapter";
 import type {
+  WhatsappLabelListResult,
   WhatsappProviderConfig,
   WhatsappProviderId,
 } from "./whatsapp-provider.types";
@@ -431,6 +434,67 @@ export class WhatsappConnectionsService {
       beforeSummary: this.metadataSummary(existing),
       afterSummary: { ...this.metadataSummary(existing), status: "suspended" },
     });
+  }
+
+  /**
+   * Label catalog of one Uazapi connection, read live from the student's own
+   * Uazapi server (URL + token saved with the connection). Scoped to the
+   * caller's workspace: a connection of another workspace answers 404, the
+   * same as a missing one. Returns only the label fields, never the token.
+   */
+  async listLabels(
+    workspaceId: string,
+    id: string,
+  ): Promise<WhatsappLabelDto[]> {
+    const connection = await this.findForWorkspace(workspaceId, id);
+    if (connection.provider !== "uazapi_byo" || !this.uazapiByo) {
+      throw new BadRequestException(
+        "Esta conexão não tem etiquetas: só a Uazapi lista etiquetas do WhatsApp.",
+      );
+    }
+    const config = this.decryptConfig(connection);
+    const saved = config?.provider === "uazapi_byo" ? config.config : null;
+    const result = await this.uazapiByo.listLabels(
+      connection.providerInstanceId ?? connection.id,
+      saved?.token?.trim() || null,
+      { baseUrl: saved?.baseUrl ?? null },
+    );
+    if (result.status !== "success") {
+      throw this.labelListError(result);
+    }
+    return result.labels.map((label) => ({
+      id: label.id,
+      name: label.name,
+      colorHex: label.colorHex ?? null,
+      labelId: label.labelId ?? null,
+    }));
+  }
+
+  private labelListError(result: WhatsappLabelListResult): Error {
+    switch (result.failureReason) {
+      case "not_configured":
+        return new BadRequestException(
+          "Esta conexão Uazapi não tem URL ou token salvos. Edite a conexão, salve a URL e o token da instância e recarregue as etiquetas.",
+        );
+      case "invalid_base_url":
+        return new BadRequestException(
+          "A URL da instância Uazapi salva nesta conexão é inválida. Corrija a URL na conexão e recarregue as etiquetas.",
+        );
+      case "http_error":
+        return new BadGatewayException(
+          result.httpStatus === 401 || result.httpStatus === 403
+            ? `A Uazapi recusou o token desta conexão (HTTP ${result.httpStatus}). Confira o token da instância na conexão e recarregue as etiquetas.`
+            : `A Uazapi respondeu com erro ao listar as etiquetas (HTTP ${result.httpStatus ?? "?"}). Confira a instância e tente de novo.`,
+        );
+      case "invalid_body":
+        return new BadGatewayException(
+          "A Uazapi respondeu, mas sem uma lista de etiquetas válida. Confira se a URL salva é a da sua instância Uazapi.",
+        );
+      default:
+        return new BadGatewayException(
+          "Não foi possível falar com o servidor da Uazapi desta conexão. Confira a URL da instância e se ela está no ar, e tente de novo.",
+        );
+    }
   }
 
   async testConnection(

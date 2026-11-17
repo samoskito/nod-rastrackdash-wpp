@@ -238,6 +238,13 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 - **Correção:** defina `INBOUND_WEBHOOKS_ENABLED=true`, `INBOUND_WEBHOOK_ENCRYPTION_KEY=<gerada com node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))">`, `INBOUND_CONVERSION_RULES_ENABLED=true` e `INBOUND_WEBHOOK_PRODUCTION_ENABLED=true` (produção) direto no painel de env do serviço da API; redeploy a API (e o web também, se a versão publicada estiver desatualizada).
 - **Verificação:** com uma conexão WhatsApp/origem já existente, `/conversions` mostra **Nova regra** disponível.
 
+## A regra de etiqueta da Uazapi não dispara (ou não carrega as etiquetas)
+
+- **Diagnóstico:** em **Conversões → Nova regra**, origem **Etiqueta no WhatsApp** com alcance **Números específicos**, a lista de etiquetas mostra "Não foi possível carregar as etiquetas" ou a regra salva nunca dispara quando você aplica a etiqueta na conversa.
+- **Causa provável:** até a versão com esta correção, o painel chamava uma rota que a API não tinha, então a regra era salva **sem a lista de etiquetas** e nunca encontrava a etiqueta aplicada. Depois da correção, o motivo aparece na própria tela: token recusado pela Uazapi, URL da instância inválida ou servidor fora do ar.
+- **Correção:** depois de atualizar, abra a regra com **Números específicos**, clique em **Recarregar etiquetas**, marque a etiqueta e **salve de novo**. Se a tela mostrar um erro, corrija a URL ou o token da sua instância Uazapi na conexão (Integrações → aba WhatsApp) e recarregue. Lembre: só lead de anúncio conta; uma etiqueta aplicada num contato sem clique em anúncio é ignorada (`ignored_untracked_lead`), de propósito.
+- **Verificação:** a lista mostra as etiquetas da sua instância e, no log da API, cada etiqueta que não vira conversão registra o motivo em `uazapi_label_evaluation_skipped` (por exemplo `label_not_matched` com `configuredLabelCount: 0` numa regra salva sem a lista). Falha ao buscar etiquetas aparece como `uazapi_label_list_failed`. Esses logs não trazem telefone nem token.
+
 ## As envs `INBOUND_*` estão ligadas, mas o número não aparece em Conversões
 
 - **Diagnóstico:** `/conversions` abre, mas em **Nova regra → Alcance** não aparece o número que você esperava (ou ele aparece como "Em breve", sem poder escolher).

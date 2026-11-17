@@ -7,6 +7,35 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **No migration and no new variable.** After updating, open each Uazapi label rule with "Números específicos", reload the label list and save it again.
+
+### Fixed
+
+- Uazapi label rules ("Etiqueta no WhatsApp"). The label picker called
+  `GET /integrations/whatsapp/instances/:id/labels`, which no API route
+  served (404), so rules with "Números específicos" were saved without their
+  label list and never matched. The picker now calls the new
+  `GET /integrations/whatsapp-connections/:id/labels` (session required,
+  scoped to the current workspace: another workspace's connection answers
+  404 like a missing one; returns only id/name/color, never the token) and
+  shows the reason in Portuguese when Uazapi refuses the token, the saved URL
+  is invalid or the server is unreachable, with a "Recarregar etiquetas"
+  button.
+- `UazapiAdapter.listLabels` now uses the student's Uazapi URL and token
+  saved with the connection (same source as the connection test), with
+  `UAZAPI_BASE_URL` only as fallback; the label evaluation reads the saved
+  connection config too. A failed lookup still returns an empty catalog to
+  the evaluation, but logs `uazapi_label_list_failed` with the reason (HTTP
+  status, invalid body, invalid URL, request failure), never the token, URL
+  or phone.
+- Every silent exit of the label evaluation now logs
+  `uazapi_label_evaluation_skipped` with its reason: `no_new_label` and
+  `no_rules` (debug), `no_channel` (warn), `label_not_matched` (with the
+  rule's saved label count), `rule_overridden_by_specific`,
+  `rule_runs_on_other_channel` and `engine_not_applicable`. Ids and label
+  codes only. Paid-lead-only is unchanged: a contact without an ad click is
+  still `ignored_untracked_lead`.
+
 ## [1.6.0] - 2026-11-17
 
 Upgrade notes for students: [`docs/releases/1.6.0.json`](docs/releases/1.6.0.json). **Two additive migrations (GoHighLevel) and no new variable.**

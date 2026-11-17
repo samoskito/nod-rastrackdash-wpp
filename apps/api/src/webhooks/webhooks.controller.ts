@@ -1498,6 +1498,9 @@ export class WebhooksController {
           providerTokenEncrypted: true,
           providerTokenIv: true,
           providerTokenTag: true,
+          configEncrypted: true,
+          configIv: true,
+          configTag: true,
         },
       });
       if (!instance) return;

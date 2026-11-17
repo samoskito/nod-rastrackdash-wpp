@@ -84,6 +84,13 @@ export interface WhatsappLabelListResult {
   status: "success" | "not_configured" | "error";
   message: string | null;
   labels: WhatsappLabelDto[];
+  failureReason?:
+    | "not_configured"
+    | "invalid_base_url"
+    | "http_error"
+    | "invalid_body"
+    | "request_failed";
+  httpStatus?: number;
 }
 
 export interface NodApiManagedInstanceDto {
@@ -116,6 +123,8 @@ export interface WhatsappProviderAdapter {
   listLabels?(
     instanceRef: string,
     instanceToken?: string | null,
+    /** Student server URL saved with the connection; env is only the fallback. */
+    options?: { baseUrl?: string | null },
   ): Promise<WhatsappLabelListResult>;
   createManagedInstance?(name?: string): Promise<NodApiManagedInstanceDto>;
   getManagedInstanceStatus?(

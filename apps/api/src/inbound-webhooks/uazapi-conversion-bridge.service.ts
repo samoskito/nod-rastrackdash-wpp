@@ -16,6 +16,10 @@ export type UazapiBridgeInstance = {
   providerTokenEncrypted?: string | null;
   providerTokenIv?: string | null;
   providerTokenTag?: string | null;
+  /** Encrypted saved connection config (Uazapi BYO: student's URL + token). */
+  configEncrypted?: string | null;
+  configIv?: string | null;
+  configTag?: string | null;
 };
 
 export type UazapiBridgeResult = {
