@@ -7,7 +7,9 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **No migration and no new variable.** After updating, open each Uazapi label rule with "Números específicos", reload the label list and save it again.
+## [1.6.1] - 2026-11-17
+
+Upgrade notes for students: [`docs/releases/1.6.1.json`](docs/releases/1.6.1.json). **No migration and no new variable.** After updating, open each Uazapi label rule with "Números específicos", reload the label list and save it again.
 
 ### Fixed
 
