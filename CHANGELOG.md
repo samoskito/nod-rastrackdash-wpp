@@ -7,6 +7,28 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Two additive migrations (GoHighLevel) and no new variable.**
+
+### Added
+
+- GoHighLevel ported from the SaaS (1a5d0139, 057d6e08, a16d4bb9, b1a448f1,
+  4acf991e, e279af76, 60b50756; logo and Hub card from 76d2e309/64bed8b3).
+  One connection per GHL location (`providerChannelId = location.id`, plus the
+  client's WhatsApp); the location's Workflow posts the lead entry
+  (`gohighlevel/v1`). New rule origin "Etapa no GoHighLevel"
+  (`automation_gohighlevel`, reader `gohighlevel/automation-v1`: Lead,
+  QualifiedLead, Purchase), one URL per rule, routed by `location.id`. A CTWA
+  lead without ad id uses the number's authorized page+pixel, like Unnichat.
+  Only paid leads: a contact without `ctwa_clid` is blocked (`ctwa_missing`)
+  and releases its dedupe key (`gohighlevel-organic:<id>`), so the same
+  contact's call after an ad click counts once (same fix as Webhook / n8n).
+  Both readers are seeded `observation_only` (not validated with real events
+  yet, as in the SaaS): nothing from GoHighLevel reaches Meta until a future
+  migration certifies them. Additive migrations
+  `20261117120000_gohighlevel_provider` and
+  `20261117120100_gohighlevel_parser_releases`. Guide:
+  `docs/setup/gohighlevel.md`. Not tested with a real GHL account.
+
 ## [1.5.0] - 2026-11-10
 
 Upgrade notes for students: [`docs/releases/1.5.0.json`](docs/releases/1.5.0.json). **Two additive migrations (Webhook / n8n) and no new variable.**
