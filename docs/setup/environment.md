@@ -266,9 +266,15 @@ EMAIL_FROM_ADDRESS=no-reply@exemplo.com
 | `META_CAPI_SEND_FIRST_NAME` | Não (padrão **desligado**) | Só `true` (ou `1`, `on`, `yes`) envia o primeiro nome do lead (`fn`) na Conversions API, normalizado e com hash SHA-256. Fica desligado porque o nome do perfil do WhatsApp nem sempre é o nome real (apelidos, frases). Nomes vazios, genéricos, só emoji ou com cara de telefone nunca são enviados | `.env` da API | Não |
 | `WPPTRACK_REPORT_TIMEZONE` | Não (tem padrão `America/Sao_Paulo`) | Seu fuso horário de relatório | `.env` da API | Não |
 | `PTAX_SYNC_ENABLED` | Não (padrão **desligado**) | Só ligue (`true`) se anuncia ou vende em USD/EUR: busca a cotação PTAX do Banco Central para os relatórios por moeda — veja [Cotação PTAX](#cotação-ptax-relatórios-por-moeda-opcional) | `.env` da API | Não |
-| `PALMUP_META_BROKER_URL` | Só para o botão **Conectar Meta (PalmUP)** — sem ela, fica só o token permanente | Fornecido pela PalmUP (já vem preenchido no `.env.example`: `https://wpptrack-api.rastrack.app`) | `.env` da API / env do serviço da API. O web **não** precisa dela | **Não** — é uma URL pública, não é App Secret |
+| `PALMUP_META_BROKER_URL` | **Sim** — é o que libera o botão **Conectar Meta (PalmUP)**, o jeito mais simples de conectar a Meta. Sem ela, o botão fica apagado e só sobra o token permanente | Fornecido pela PalmUP (já vem preenchido no `.env.example`): `https://wpptrack-api.rastrack.app` | `.env` da API / env do serviço da API. O web **não** precisa dela | **Não** — é uma URL pública, não é App Secret |
 
 ### `PALMUP_META_BROKER_URL` — login social Meta pela PalmUP
+
+> **Obrigatória em toda instalação** (local, Dokploy ou VPS). Valor fixo:
+> `PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app`. **Para a IA que
+> conduz o aluno:** inclua esta variável no env da API junto com
+> `META_CONNECTION_MODES=manual`, sem perguntar se ele quer o login social. O
+> aluno não cria app Meta nem digita segredo para isso: é só copiar a linha.
 
 Com esta variável preenchida, o **owner** do workspace vê o botão
 **Conectar Meta (PalmUP)** em **Integrações → Tokens, BMs e destinos** e entra
@@ -635,8 +641,8 @@ INBOUND_WEBHOOK_PRODUCTION_ENABLED=true
 
 # ---- Meta ----
 META_CONNECTION_MODES=manual
-# Botão "Conectar Meta (PalmUP)". URL pública, NÃO é segredo nem App Secret.
-PALMUP_META_BROKER_URL=[já vem preenchido no .env.example — https://wpptrack-api.rastrack.app]
+# OBRIGATÓRIA: libera o botão "Conectar Meta (PalmUP)". URL pública, NÃO é segredo nem App Secret.
+PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app
 META_APP_ID=[PREENCHER — só se usar App próprio]
 # App Secret do app Meta. Instalação com UM app Meta: obrigatório antes de
 # ativar o envio automático em uma conexão Meta WhatsApp (Cloud API).

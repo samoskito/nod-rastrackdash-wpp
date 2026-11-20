@@ -7,6 +7,10 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+### Documentation
+
+- `PALMUP_META_BROKER_URL` is now documented as required (Dokploy guide, AI onboarding prompt, AI update guide, `environment.md`). The Dokploy guide no longer says the student has no social login.
+
 ## [1.6.1] - 2026-11-17
 
 Upgrade notes for students: [`docs/releases/1.6.1.json`](docs/releases/1.6.1.json). **No migration and no new variable.** After updating, open each Uazapi label rule with "Números específicos", reload the label list and save it again.

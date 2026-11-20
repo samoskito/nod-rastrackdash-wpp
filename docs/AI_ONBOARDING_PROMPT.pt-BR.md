@@ -98,7 +98,10 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    terceiro caminho — `WPPTRACK_PLATFORM_ADMIN_EMAILS` e cadastro público
    com `AUTH_PUBLIC_REGISTRATION_ENABLED=true` **não concedem** papel de
    plataforma no código atual; (6) definir `META_CONNECTION_MODES=manual`
-   antes da Meta; (7) definir `AUTH_COOKIE_DOMAIN` se frontend/API forem
+   e `PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app` antes da
+   Meta — esta é obrigatória: libera o botão **Conectar Meta (PalmUP)**
+   (login com o Facebook, sem app Meta próprio); é uma URL pública, não é
+   segredo, então inclua sem perguntar; (7) definir `AUTH_COOKIE_DOMAIN` se frontend/API forem
    subdomínios irmãos; (8) redeploy da API após qualquer mudança de env;
    (9) criar/entrar com o primeiro admin e validar `/backoffice/clients`;
    (10) configuração manual da Meta; (11) provedor WhatsApp — Uazapi BYO
@@ -127,10 +130,15 @@ https://github.com/samoskito/nod-rastrackdash-wpp.
    `***` como valor. O e-mail e a senha do admin são específicos do aluno:
    ele deve digitá-los no Dokploy/provedor, nunca commitar ou colar no chat.
 
-   Meta é somente manual no MVP: documente e conduza App ID/token ou token
-   permanente de usuário do sistema, permissões, BM, Pixel, Página,
-   conta de anúncios, validação e seleção de destino. Não apresente login
-   social Facebook/OAuth como alternativa.
+   Meta: o caminho principal é o botão **Conectar Meta (PalmUP)** em
+   Integrações (o owner do workspace entra com o Facebook pelo app Meta da
+   PalmUP; não cria app próprio). Ele só aparece ativo com
+   `PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app` no env da API,
+   por isso essa variável é obrigatória. O token permanente de usuário do
+   sistema continua como alternativa. Depois de conectar, conduza BM, Pixel,
+   Página, conta de anúncios, validação e seleção de destino. Não existe o
+   OAuth antigo com app Meta próprio: não o apresente, e nunca peça o App
+   Secret do app da PalmUP.
 
    SMTP (`EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
    `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM_*`) é **opcional** e nunca

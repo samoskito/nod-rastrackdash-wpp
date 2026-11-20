@@ -163,7 +163,8 @@ No serviço da API, abra o **painel/formulário de variáveis de ambiente do ser
 ### 6.3 Administrador e Meta
 
 - **`SETUP_PLATFORM_ADMIN_EMAIL` e `SETUP_PLATFORM_ADMIN_PASSWORD`** — preencha as duas juntas, diretamente no Dokploy, **antes** do deploy do passo 7. Elas são o caminho oficial e único para criar o primeiro `platform_owner`: no boot seguinte da API, a conta é criada automaticamente (sem console/terminal, sem cadastro público temporário). Detalhe completo do mecanismo — idempotência, promoção de conta existente, quando remover a senha — em [`environment.md`](environment.md#bootstrap-do-primeiro-administrador-por-env--caminho-oficial). Não use `***` como valor, não versione e não cole em chat.
-- **`META_CONNECTION_MODES=manual`** — defina antes da configuração Meta. O MVP do aluno é somente manual, sem login social Facebook/OAuth.
+- **`META_CONNECTION_MODES=manual`** — defina antes da configuração Meta. Não existe o OAuth antigo com app Meta próprio; a Meta entra pelo botão **Conectar Meta (PalmUP)** ou pelo token permanente, por workspace, em `/integrations`.
+- **`PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app`** — **obrigatória.** É o que libera o botão **Conectar Meta (PalmUP)** (login com o Facebook pelo app Meta da PalmUP, sem criar app próprio). Copie exatamente esse valor: é uma URL pública, não é segredo nem App Secret. Sem ela o botão fica apagado. Detalhe em [`environment.md`](environment.md#palmup_meta_broker_url--login-social-meta-pela-palmup).
 
 ### 6.4 E-mail (SMTP, opcional)
 
