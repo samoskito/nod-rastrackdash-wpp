@@ -7,6 +7,12 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One migration.**
+
+### Changed
+
+- GoHighLevel readers (`gohighlevel/v1` and `automation-v1`) are certified by migration `20261120120000_gohighlevel_parser_certification`: new GoHighLevel connections and rules are born sending to Meta; existing ones stay in observation until activated on screen.
+
 ### Documentation
 
 - `PALMUP_META_BROKER_URL` is now documented as required (Dokploy guide, AI onboarding prompt, AI update guide, `environment.md`). The Dokploy guide no longer says the student has no social login.

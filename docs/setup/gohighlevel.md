@@ -13,25 +13,19 @@ cliente:
 é enviado. A chamada orgânica também não "ocupa o lugar" do contato: se o mesmo contato passar
 pela mesma etapa de novo depois de clicar num anúncio, essa chamada conta como a primeira.
 
-## Situação nesta versão: em observação
+## Situação nesta versão: envio liberado
 
 Os dois leitores do GoHighLevel (`gohighlevel` **v1**, a entrada, e **automation-v1**, as etapas)
-chegam **em observação** (`observation_only`), como no SaaS: ainda não foram validados com eventos
-reais de uma conta GoHighLevel. Na prática:
+estão **certificados** a partir da versão que traz a migration
+`20261120120000_gohighlevel_parser_certification`. Na prática:
 
-- você cria a conexão e as regras, cola as URLs no GoHighLevel e vê tudo o que chega (o lead, o
-  motivo de cada chamada e o que **seria** enviado);
-- **nada do GoHighLevel vai para a Meta** enquanto o leitor estiver em observação, mesmo com a
-  conexão ou a regra marcadas para enviar.
+- **conexão e regras novas** nascem enviando para a Meta, como nas outras integrações liberadas;
+- **conexão e regras criadas antes da atualização** continuam em observação: abra a conexão em
+  **Integrações → Go High Level** e cada regra em **Conversões** e clique em ativar o envio. Nada do
+  que chegou antes da ativação é enviado depois;
+- as travas continuam: licença ativa, Meta conectada e destino com pixel e página.
 
-**O que fazer para enviar para a Meta:** nada na sua instalação, por enquanto. No RastrackDash do
-aluno, **Backoffice → Leitores de webhook só mostra** os leitores: não existe botão para
-certificar. Os leitores de outras integrações foram liberados por **atualização** (uma migration
-que marca o leitor como certificado depois da validação com eventos reais; foi assim com a Data
-Crazy). O GoHighLevel vai seguir o mesmo caminho: quando os eventos reais forem validados, uma
-atualização futura certifica os dois leitores. Depois dela, basta atualizar a instalação
-([`update.md`](update.md)) e ligar o envio da conexão e das regras, como nas outras integrações.
-Não marque o leitor como certificado à mão no banco.
+Não marque o leitor como certificado à mão no banco: quem certifica é a migration.
 
 ## Antes de começar
 
@@ -107,26 +101,23 @@ Regras de contagem:
   (por exemplo, "Localização do GoHighLevel sem conexão ativa nesta conta" ou contato sem clique do
   anúncio).
 - **Backoffice → Leitores de webhook:** os leitores `gohighlevel` v1 e automation-v1 aparecem como
-  em observação.
+  certificados.
 
 ## Limites
 
-- Os leitores estão em observação nesta versão: nada vai para a Meta até uma atualização futura
-  certificar os leitores (veja acima).
 - Uma conexão por localização. A localização precisa ter a conexão criada aqui; sem ela, a chamada
   fica "sem atribuição".
 - Só contatos vindos de anúncio de WhatsApp (com `ctwa_clid`). Formulários e outras origens do GHL
   não entram.
-- Não testado nesta versão com uma conta GoHighLevel real: o formato foi portado do SaaS e coberto
-  por testes com dados fictícios. PENDENTE: validar com eventos reais (entrada, etapa com e sem
-  `adId`, contato orgânico) antes da certificação.
+- O formato foi portado do SaaS e coberto por testes com dados fictícios. Na primeira venda ou etapa
+  real, confira em **Conversões → Gerenciar → Eventos recebidos** se o evento saiu para a Meta.
 
 ## Para a IA do repositório
 
 - Provedor `gohighlevel`; leitores `gohighlevel/v1` (entrada) e `gohighlevel/automation-v1`
   (etapas), sementes em `apps/api/prisma/migrations/20261117120100_gohighlevel_parser_releases`
-  como `observation_only`. Certificar = migration nova, aditiva, que faz `UPDATE` só da linha do
-  leitor (veja `20261016090300_validated_parser_certification` da Data Crazy). Não edite migrations existentes.
+  como `observation_only` e certificadas por `20261120120000_gohighlevel_parser_certification`
+  (só `UPDATE` das duas releases). Não edite migrations existentes.
 - Canal: `providerChannelId = location.id`, `connectedPhone` = WhatsApp da localização.
 - Origem da regra `automation_gohighlevel`; roteamento pelo `location.id`
   (`routeGoHighLevelEvent`).
