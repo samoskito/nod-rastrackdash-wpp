@@ -1,0 +1,17 @@
+{
+  "version": "1.7.0",
+  "title": "Envio automático do GoHighLevel liberado",
+  "summary": "Os leitores do GoHighLevel saem da observação: as conversões do Workflow (entrada do lead e etapas Lead, Lead qualificado e Compra) passam a poder ser enviadas para a Meta.",
+  "changes": "GoHighLevel certificado: conexões e regras novas do GoHighLevel nascem enviando, como nas outras integrações liberadas. As que já existem continuam em observação até você ativar o envio na tela.\nDocumentação: PALMUP_META_BROKER_URL agora aparece como obrigatória no guia do Dokploy, no prompt de instalação e no guia de atualização da IA.",
+  "fixes": "",
+  "requirements": "Atualização direta a partir da 1.6.1 (ou de qualquer instalação posterior da main). Mesmas versões de Node, PostgreSQL e Redis. Nenhuma variável nova.",
+  "upgradeGuide": "Backup: faça o backup do banco antes de atualizar, como em toda versão.\nMigration: uma, 20261120120000_gohighlevel_parser_certification. Ela roda sozinha no boot da API e só marca os dois leitores do GoHighLevel como certificados; não altera conexões, regras nem eventos.\nVariáveis de ambiente: nenhuma nova. Confira se a API tem PALMUP_META_BROKER_URL=https://wpptrack-api.rastrack.app (botão Conectar Meta (PalmUP)); se faltar, adicione e refaça o Deploy da API.\nPreservação de customizações: preserve as alterações locais do aluno; a atualização não mexe em arquivos de configuração.\nAtivar o envio: se você já tinha conexão ou regras do GoHighLevel, abra a conexão em Integrações → Go High Level e cada regra em Conversões e ative o envio. Conexões e regras novas já nascem enviando. Nada do que chegou antes da ativação é enviado depois.\nVerificação: Backoffice → Leitores de webhook mostra gohighlevel v1 e automation-v1 como certificados. Na próxima etapa real do Workflow, Conversões → Gerenciar → Eventos recebidos mostra o evento enviado para a Meta.\nNão testado nesta versão: nenhuma conta GoHighLevel real nem instalação real.",
+  "rollback": "Para parar o envio, pause a conexão ou a regra do GoHighLevel na tela; o que foi enviado para a Meta não volta. Para voltar à versão anterior, restaure o backup do banco e faça o deploy da 1.6.1. A migration não apaga nada, então a 1.6.1 também funciona sem restaurar o banco, só que com os leitores certificados.",
+  "minVersion": null,
+  "breakingChange": false,
+  "components": "BOTH",
+  "links": [],
+  "tags": [
+    "gohighlevel"
+  ]
+}

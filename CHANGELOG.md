@@ -7,7 +7,9 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One migration.**
+## [1.7.0] - 2026-11-20
+
+Upgrade notes for students: [`docs/releases/1.7.0.json`](docs/releases/1.7.0.json). **One migration.**
 
 ### Changed
 
