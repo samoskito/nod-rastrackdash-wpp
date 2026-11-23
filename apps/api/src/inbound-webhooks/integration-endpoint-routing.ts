@@ -63,6 +63,7 @@ const routingRuleSelect = {
   createdAt: true,
   productFilterCodes: true,
   ghlPipelineId: true,
+  ghlStageId: true,
   ghlStageName: true,
   conversionRule: {
     select: { triggerType: true, eventName: true, active: true },
@@ -77,8 +78,55 @@ export type RoutingRule = ScopedProviderRule & {
   productFilterCodes: string[];
   /** GoHighLevel "Pipeline + etapa" filter (null = every stage). */
   ghlPipelineId?: string | null;
+  ghlStageId?: string | null;
   ghlStageName?: string | null;
 };
+
+/**
+ * Current GHL stage names by saved stage id (GoHighLevelPipelinesService):
+ * the same source the ingestion uses, so a stage renamed in GHL still routes.
+ */
+export type GoHighLevelStageNameSource = {
+  warmStageNames(workspaceId: string, connectionId: string): Promise<void>;
+  peekStageName(
+    connectionId: string,
+    pipelineId: string,
+    stageId: string,
+  ): string | null;
+};
+
+/**
+ * Rules with the stage name the call is compared with: the CURRENT name by
+ * the saved stage id when known, else the saved name (as the ingestion).
+ */
+export async function withCurrentGoHighLevelStageNames<R extends RoutingRule>(
+  rules: readonly R[],
+  workspaceId: string,
+  stageNames: GoHighLevelStageNameSource | undefined,
+): Promise<R[]> {
+  if (!stageNames) return [...rules];
+  const connections = new Set(
+    rules
+      .filter((rule) => rule.ghlPipelineId && rule.ghlStageId && rule.connectionId)
+      .map((rule) => rule.connectionId!),
+  );
+  for (const connectionId of connections) {
+    try {
+      await stageNames.warmStageNames(workspaceId, connectionId);
+    } catch {
+      // Never blocks the routing: the saved name stays the fallback.
+    }
+  }
+  return rules.map((rule) => {
+    if (!rule.ghlPipelineId || !rule.ghlStageId || !rule.connectionId) return rule;
+    const current = stageNames.peekStageName(
+      rule.connectionId,
+      rule.ghlPipelineId,
+      rule.ghlStageId,
+    );
+    return current ? { ...rule, ghlStageName: current } : rule;
+  });
+}
 
 /**
  * GoHighLevel on the single URL: the candidate rules of a call, in the order
@@ -507,6 +555,8 @@ export async function routeGoHighLevelEvent(
     automation: ParsedGoHighLevelAutomationV1;
     /** Pipeline and stage of the call (opportunity triggers). */
     stage?: { pipelineId: string | null; pipelineStage: string | null };
+    /** Current stage names (renamed stages); without it, the saved names. */
+    stageNames?: GoHighLevelStageNameSource;
     receivedAt: Date;
   },
 ): Promise<IntegrationRouteDecision> {
@@ -519,7 +569,11 @@ export async function routeGoHighLevelEvent(
   });
   if (loaded.length === 0) return unattributed("no_active_rule_for_event");
   const groups = goHighLevelRoutingRuleGroups(
-    loaded,
+    await withCurrentGoHighLevelStageNames(
+      loaded,
+      input.workspaceId,
+      input.stageNames,
+    ),
     input.stage ?? { pipelineId: null, pipelineStage: null },
   );
   if (groups.length === 0) return unattributed("no_active_rule_for_event");
@@ -554,6 +608,13 @@ export async function routeGoHighLevelEvent(
       receivedAt: input.receivedAt,
     });
     if (decision.status === "routed") return decision;
+    // Two stage rules own the call ("unifique"): held, never sent by a rule
+    // without a filter.
+    if (
+      decision.status === "unattributed" &&
+      decision.reasonCode === "multiple_rules_for_event"
+    )
+      return decision;
   }
   return decision;
 }

@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   PayloadTooLargeException,
   ServiceUnavailableException,
   UnsupportedMediaTypeException,
@@ -62,6 +63,7 @@ import {
   parseGoHighLevelAutomationV1,
   type ParsedGoHighLevelAutomationV1,
 } from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { GoHighLevelPipelinesService } from "./gohighlevel-pipelines.service";
 import { readGoHighLevelStageCall } from "./providers/gohighlevel/gohighlevel-automation-v2.parser";
 import { normalizeBraipBody } from "./providers/braip/braip-body";
 import {
@@ -259,6 +261,10 @@ export class IntegrationEndpointsService {
     private readonly paidLeads: ProviderConversionPaidLeadResolver,
     @Inject(InboundConversionAutomationIngestionService)
     private readonly automationIngestion: InboundConversionAutomationIngestionService,
+    // GoHighLevel: current stage names (a renamed stage still routes).
+    @Optional()
+    @Inject(GoHighLevelPipelinesService)
+    private readonly ghlStages?: GoHighLevelPipelinesService,
   ) {}
 
   // ------------------------------------------------------------------ public
@@ -1078,6 +1084,7 @@ export class IntegrationEndpointsService {
           eventName: parsed.eventName,
           automation: parsed.automation,
           stage: parsed.stage,
+          stageNames: this.ghlStages,
           receivedAt,
         });
       case "umbler":

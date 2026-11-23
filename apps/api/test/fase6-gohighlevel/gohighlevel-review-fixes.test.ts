@@ -6,9 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   goHighLevelRoutingRuleGroups,
   pickRoutedRuleOutcome,
+  routeGoHighLevelEvent,
+  withCurrentGoHighLevelStageNames,
   type RoutingRule,
 } from "../../src/inbound-webhooks/integration-endpoint-routing";
 import { GoHighLevelPipelinesController } from "../../src/inbound-webhooks/gohighlevel-pipelines.controller";
+import { parseGoHighLevelAutomationV1 } from "../../src/inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v1.parser";
 import {
   parseGoHighLevelAutomationV2,
   readGoHighLevelStageCall,
@@ -41,17 +44,19 @@ const channel = {
 function rule(
   id: string,
   createdAt: string,
-  stage: { pipelineId: string; stageName: string } | null,
+  stage: { pipelineId: string; stageName: string; stageId?: string } | null,
+  crossConnectionScope = false,
 ): RoutingRule {
   return {
     id,
     scope: "all_numbers",
-    crossConnectionScope: false,
+    crossConnectionScope,
     connectionId: "connection_ghl",
     removedAt: null,
     createdAt: new Date(createdAt),
     productFilterCodes: [],
     ghlPipelineId: stage?.pipelineId ?? null,
+    ghlStageId: stage?.stageId ?? null,
     ghlStageName: stage?.stageName ?? null,
     conversionRule: {
       triggerType: "provider_automation",
@@ -188,5 +193,105 @@ describe("5. Dedupe pelo nome normalizado da etapa", () => {
     expect(key("PROPOSTA  ENVIADA ")).toBe(same);
     expect(key("Próposta enviada")).toBe(same);
     expect(key("Fechado")).not.toBe(same);
+  });
+});
+
+/** Single-URL route with a mocked database: one GHL location, one channel. */
+async function routeCall(
+  rules: RoutingRule[],
+  body: Record<string, unknown>,
+  stageNames?: Parameters<typeof routeGoHighLevelEvent>[2]["stageNames"],
+) {
+  const payload = call(body);
+  const parsed = parseGoHighLevelAutomationV1(payload, new Date());
+  if (!parsed.ok) throw new Error("parse");
+  const prisma = {
+    providerConversionRuleConfig: { findMany: vi.fn(async () => rules) },
+    inboundWebhookChannel: {
+      findMany: vi.fn(async (args: { cursor?: unknown }) =>
+        args.cursor
+          ? []
+          : [
+              {
+                id: "channel_ghl",
+                connectionId: "connection_ghl",
+                organizationId: null,
+                providerChannelId: parsed.value.locationId,
+                status: "active",
+                createdAt: new Date("2026-10-01T00:00:00Z"),
+                lastSeenAt: null,
+                connectedPhone: "5511900000000",
+                connection: { provider: "gohighlevel", status: "production" },
+              },
+            ],
+      ),
+    },
+    conversionEventLog: {
+      findMany: vi.fn(async () => [{ sourcePayload: { channelId: "channel_ghl" } }]),
+    },
+  } as any;
+  return routeGoHighLevelEvent(prisma, { resolve: vi.fn() } as any, {
+    workspaceId: "workspace_1",
+    eventName: "Purchase",
+    automation: parsed.value,
+    stage: readGoHighLevelStageCall(payload),
+    stageNames,
+    receivedAt: new Date(),
+  });
+}
+
+describe("1b. Etapa renomeada no GHL: o roteamento usa o nome atual pelo id salvo", () => {
+  const renamed = () => ({
+    warmStageNames: vi.fn(async () => {}),
+    peekStageName: vi.fn((_c: string, _p: string, stageId: string) =>
+      stageId === "STAGE_WON" ? "Fechado" : null,
+    ),
+  });
+  const rules = () => [
+    rule("rule_v1_old", "2026-10-01T00:00:00Z", null),
+    rule("rule_v2", "2026-11-20T00:00:00Z", {
+      pipelineId: "PIPELINE_A",
+      stageName: "Ganho",
+      stageId: "STAGE_WON",
+    }),
+  ];
+  it("Ganho renomeada para Fechado: a chamada de Fechado vai para a v2", async () => {
+    const source = renamed();
+    expect(
+      await routeCall(rules(), { pipeline_id: "PIPELINE_A", pipleline_stage: "Fechado" }, source),
+    ).toMatchObject({ status: "routed", providerRuleId: "rule_v2" });
+    expect(source.warmStageNames).toHaveBeenCalledWith("workspace_1", "connection_ghl");
+    // Sem a fonte do nome atual, só o nome salvo: a v2 sai e a v1 recebe.
+    expect(
+      await routeCall(rules(), { pipeline_id: "PIPELINE_A", pipleline_stage: "Fechado" }),
+    ).toMatchObject({ status: "routed", providerRuleId: "rule_v1_old" });
+  });
+  it("sem nome no cache (sem token ou API fora), vale o nome salvo", async () => {
+    const source = {
+      warmStageNames: vi.fn(async () => {
+        throw new Error("GHL fora");
+      }),
+      peekStageName: vi.fn(() => null),
+    };
+    const out = await withCurrentGoHighLevelStageNames(rules(), "workspace_1", source);
+    expect(out[1]!.ghlStageName).toBe("Ganho");
+  });
+});
+
+describe("2b. Regras com etapa ambíguas: a chamada fica retida", () => {
+  it("não cai para a regra sem filtro", async () => {
+    const stage = { pipelineId: "PIPELINE_A", stageName: "Ganho" };
+    const decision = await routeCall(
+      [
+        rule("rule_v1_old", "2026-10-01T00:00:00Z", null),
+        rule("rule_v2_a", "2026-11-20T00:00:00Z", stage, true),
+        rule("rule_v2_b", "2026-11-21T00:00:00Z", stage, true),
+      ],
+      { pipeline_id: "PIPELINE_A", pipleline_stage: "Ganho" },
+    );
+    expect(decision).toMatchObject({
+      status: "unattributed",
+      reasonCode: "multiple_rules_for_event",
+    });
   });
 });
