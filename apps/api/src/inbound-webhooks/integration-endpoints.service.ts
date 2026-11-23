@@ -62,6 +62,7 @@ import {
   parseGoHighLevelAutomationV1,
   type ParsedGoHighLevelAutomationV1,
 } from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { readGoHighLevelStageCall } from "./providers/gohighlevel/gohighlevel-automation-v2.parser";
 import { normalizeBraipBody } from "./providers/braip/braip-body";
 import {
   isSalesPlatformProvider,
@@ -161,6 +162,8 @@ type ParsedIntegrationEvent =
       eventName: string;
       externalKey: string;
       automation: ParsedGoHighLevelAutomationV1;
+      /** Pipeline and stage of the call (routes to the matching stage rule). */
+      stage: { pipelineId: string | null; pipelineStage: string | null };
     }
   | {
       ok: true;
@@ -1074,6 +1077,7 @@ export class IntegrationEndpointsService {
           workspaceId: endpoint.workspaceId,
           eventName: parsed.eventName,
           automation: parsed.automation,
+          stage: parsed.stage,
           receivedAt,
         });
       case "umbler":
@@ -1168,6 +1172,7 @@ export class IntegrationEndpointsService {
           eventName: endpoint.eventName,
           externalKey: automation.value.externalExecutionKey,
           automation: automation.value,
+          stage: readGoHighLevelStageCall(payload),
         };
       }
       case "umbler": {

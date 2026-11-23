@@ -145,7 +145,9 @@ function opportunityKey(input: {
     .update("\0", "utf8")
     .update(input.pipelineId ?? "", "utf8")
     .update("\0", "utf8")
-    .update(input.stage, "utf8")
+    // Normalized like the filter: the same opportunity in a renamed stage
+    // (case, accents, spaces) is the same occurrence, never a resend.
+    .update(normalizeGoHighLevelLabel(input.stage), "utf8")
     .digest("hex");
   return `gohighlevel-automation:${digest}`;
 }
@@ -166,6 +168,20 @@ export function goHighLevelStageMatches(
     normalizeGoHighLevelLabel(call.pipelineStage) ===
       normalizeGoHighLevelLabel(rule.ghlStageName)
   );
+}
+
+/** Pipeline id and stage name of a call (null when it has none). */
+export function readGoHighLevelStageCall(payload: unknown): {
+  pipelineId: string | null;
+  pipelineStage: string | null;
+} {
+  const body = unwrapGoHighLevelBody(payload);
+  if (!body) return { pipelineId: null, pipelineStage: null };
+  return {
+    pipelineId: text(body.pipeline_id, 255),
+    pipelineStage:
+      text(body.pipleline_stage, 255) ?? text(body.pipeline_stage, 255),
+  };
 }
 
 /**

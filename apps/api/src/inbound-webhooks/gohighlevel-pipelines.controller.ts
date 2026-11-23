@@ -31,6 +31,9 @@ export class GoHighLevelPipelinesController {
     @Param("connectionId") connectionId: string,
   ) {
     const workspace = await this.workspace(refreshToken);
+    if (!workspace.permissions.canManageIntegrations) {
+      throw new ForbiddenException("Sem permissao para gerenciar integracoes");
+    }
     return this.service.listPipelines(workspace.id, connectionId);
   }
 

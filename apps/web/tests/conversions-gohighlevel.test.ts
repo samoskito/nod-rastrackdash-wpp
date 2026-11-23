@@ -257,3 +257,18 @@ describe("Hub: card do GoHighLevel", () => {
     expect(inboundWebhookProviderLabel("gohighlevel")).toBe("GoHighLevel");
   });
 });
+
+describe("GoHighLevel: remover o token (revisão do #145)", () => {
+  it("diz que o filtro de etapa salvo continua valendo", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const source = readFileSync(
+      resolve(__dirname, "../src/app/(app)/integrations/inbound-webhook-actions.ts"),
+      "utf8",
+    );
+    expect(source).toContain(
+      "O filtro de etapa continua valendo pelo nome salvo; sem token, a lista de etapas não é atualizada.",
+    );
+    expect(source).not.toContain("valem para todas as etapas");
+  });
+});

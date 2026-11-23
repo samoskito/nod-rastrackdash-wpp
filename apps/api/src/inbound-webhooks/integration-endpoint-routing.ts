@@ -25,6 +25,7 @@ import {
 import type { ParsedUmblerAutomationV1 } from "./providers/umbler/umbler-automation-v1.parser";
 import type { ParsedUnnichatAutomationV1 } from "./providers/unnichat/unnichat-automation-v1.parser";
 import type { ParsedGoHighLevelAutomationV1 } from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { goHighLevelStageMatches } from "./providers/gohighlevel/gohighlevel-automation-v2.parser";
 
 /**
  * Fase 5.3 — roteador das URLs únicas (SaaS 613beb3 + 4cad4963).
@@ -61,6 +62,8 @@ const routingRuleSelect = {
   removedAt: true,
   createdAt: true,
   productFilterCodes: true,
+  ghlPipelineId: true,
+  ghlStageName: true,
   conversionRule: {
     select: { triggerType: true, eventName: true, active: true },
   },
@@ -72,7 +75,34 @@ const routingRuleSelect = {
 export type RoutingRule = ScopedProviderRule & {
   createdAt: Date;
   productFilterCodes: string[];
+  /** GoHighLevel "Pipeline + etapa" filter (null = every stage). */
+  ghlPipelineId?: string | null;
+  ghlStageName?: string | null;
 };
+
+/**
+ * GoHighLevel on the single URL: the candidate rules of a call, in the order
+ * they are tried. A rule with a "Pipeline + etapa" filter that does not match
+ * the call is dropped (it would only discard the call as stage_not_in_rule);
+ * the matching filtered rules are tried first, then the rules without a
+ * filter, so a newer stage rule is not shadowed by an older rule for every
+ * stage. Pure: no I/O.
+ */
+export function goHighLevelRoutingRuleGroups<R extends RoutingRule>(
+  rules: readonly R[],
+  call: { pipelineId: string | null; pipelineStage: string | null },
+): R[][] {
+  const staged: R[] = [];
+  const open: R[] = [];
+  for (const rule of rules) {
+    if (!rule.ghlPipelineId || !rule.ghlStageName) {
+      open.push(rule);
+    } else if (goHighLevelStageMatches(rule, call)) {
+      staged.push(rule);
+    }
+  }
+  return [staged, open].filter((group) => group.length > 0);
+}
 
 export type IntegrationRouteDecision =
   | {
@@ -475,17 +505,24 @@ export async function routeGoHighLevelEvent(
     workspaceId: string;
     eventName: string;
     automation: ParsedGoHighLevelAutomationV1;
+    /** Pipeline and stage of the call (opportunity triggers). */
+    stage?: { pipelineId: string | null; pipelineStage: string | null };
     receivedAt: Date;
   },
 ): Promise<IntegrationRouteDecision> {
   const ctwaClid = input.automation.ctwaClid;
   if (!ctwaClid) return unattributed("conversation_without_ad");
-  const rules = await loadRoutingRules(client, {
+  const loaded = await loadRoutingRules(client, {
     workspaceId: input.workspaceId,
     provider: "gohighlevel",
     eventName: input.eventName,
   });
-  if (rules.length === 0) return unattributed("no_active_rule_for_event");
+  if (loaded.length === 0) return unattributed("no_active_rule_for_event");
+  const groups = goHighLevelRoutingRuleGroups(
+    loaded,
+    input.stage ?? { pipelineId: null, pipelineStage: null },
+  );
+  if (groups.length === 0) return unattributed("no_active_rule_for_event");
 
   const located = await client.inboundWebhookChannel.findMany({
     where: {
@@ -504,14 +541,21 @@ export async function routeGoHighLevelEvent(
       channel.provider === "gohighlevel" && locationChannelIds.has(channel.id),
   );
   if (channels.length === 0) return unattributed("location_without_number");
-  return routeByCtwaEntry(client, paidLeads, {
-    workspaceId: input.workspaceId,
-    ctwaClid,
-    phone: input.automation.phone,
-    rules,
-    channels,
-    receivedAt: input.receivedAt,
-  });
+  let decision: IntegrationRouteDecision = unattributed(
+    "no_active_rule_for_event",
+  );
+  for (const rules of groups) {
+    decision = await routeByCtwaEntry(client, paidLeads, {
+      workspaceId: input.workspaceId,
+      ctwaClid,
+      phone: input.automation.phone,
+      rules,
+      channels,
+      receivedAt: input.receivedAt,
+    });
+    if (decision.status === "routed") return decision;
+  }
+  return decision;
 }
 
 /**

@@ -704,6 +704,14 @@ const providerAutomationCreateSchema = z
         });
       }
     }
+    // O valor da oportunidade só existe na regra com pipeline + etapa.
+    if (input.ghlOpportunityValue === true && !input.ghlStage) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "O valor da oportunidade exige o pipeline e a etapa",
+        path: ["ghlOpportunityValue"],
+      });
+    }
     if (!isSalesPlatformProvider(input.automationSource)) {
       refineEventValueFields(input, context, {
         valueOptional:

@@ -241,7 +241,7 @@ export async function updateInboundWebhookGoHighLevelTokenAction(
     return {
       ok: true,
       message: remove
-        ? "Token removido. As regras desta localização valem para todas as etapas."
+        ? "Token removido. O filtro de etapa continua valendo pelo nome salvo; sem token, a lista de etapas não é atualizada."
         : "Token salvo. Agora dá para escolher pipeline e etapa nas regras.",
     };
   } catch (error) {
