@@ -1,5 +1,6 @@
 import { manualConversionSummary } from "./manual-conversion-payload";
 import {
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import {
   leadLifecycleLabel,
   leadSourceLabel,
+  type LeadDeleteResultDto,
   type LeadDetailDto,
   type LeadListItemDto,
   type LeadListPageDto,
@@ -153,6 +155,16 @@ export type UpsertWhatsappLeadInput = {
   /** Fill `name` only while the lead has none; never overwrite an existing one. */
   preserveExistingName?: boolean;
 };
+
+/** Status do log observado (conexão em observação): nunca enviado. */
+const OBSERVATION_LOG_STATUS = "shadow_observed";
+
+/** Execuções de regra que nunca foram para a fila da Meta. */
+const observationExecutionStatuses = new Set<string>([
+  "observed",
+  "blocked",
+  "duplicate",
+]);
 
 @Injectable()
 export class LeadsService {
@@ -821,6 +833,170 @@ export class LeadsService {
         ...inferredConversations.map((lead) => lead.id),
       ]),
     );
+  }
+
+  /**
+   * "Excluir lead" (porte do SaaS #292, gestor do workspace). No aluno não há
+   * lead de observação: só sai o lead SEM NENHUM ENVIO. Recusa (409) o lead
+   * com log de conversão enviado, enfileirado ou de produção, com execução de
+   * regra que foi para a fila da Meta, ou com vínculo de Pipedrive ou de
+   * compra real. Apaga na ordem das FKs: execuções, decisões (versão mais
+   * nova primeiro), logs (soltando diagnóstico e revisão de compra) e o lead.
+   * Conversões já enviadas à Meta não são desfeitas.
+   */
+  async deleteLead(
+    workspaceId: string,
+    leadId: string,
+    actorUserId: string,
+  ): Promise<LeadDeleteResultDto> {
+    return this.prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: { id: leadId, workspaceId },
+        select: { id: true },
+      });
+      if (!lead) throw new NotFoundException("Lead nao encontrado");
+
+      // Vínculos de produção (Pipedrive, compra real): sempre recusam.
+      const [linked] = await tx.$queryRaw<Array<{ linked: boolean }>>`
+        SELECT (
+          EXISTS (SELECT 1 FROM "PipedriveWebhookEvent" p
+            WHERE p."workspaceId" = ${workspaceId} AND p."matchedLeadId" = ${leadId})
+          OR EXISTS (SELECT 1 FROM "ConversionEventLog" c
+            WHERE c."workspaceId" = ${workspaceId} AND c."leadId" = ${leadId}
+              AND (
+                EXISTS (SELECT 1 FROM "PipedriveConversionDedupe" x WHERE x."workspaceId" = c."workspaceId" AND x."conversionEventLogId" = c."id")
+                OR EXISTS (SELECT 1 FROM "ProviderPurchaseClaim" x WHERE x."workspaceId" = c."workspaceId" AND x."conversionEventLogId" = c."id")
+                OR EXISTS (SELECT 1 FROM "PurchaseValueAdjustment" x WHERE x."workspaceId" = c."workspaceId" AND x."conversionEventLogId" = c."id")
+              ))
+          OR EXISTS (SELECT 1 FROM "ProviderPurchaseClaim" x
+            JOIN "ProviderConversionRuleExecution" e
+              ON e."workspaceId" = x."workspaceId" AND e."id" = x."winnerExecutionId"
+            WHERE x."workspaceId" = ${workspaceId}
+              AND (e."leadId" = ${leadId} OR e."providerDecisionId" IN (
+                SELECT d."id" FROM "ProviderConversionDecisionAudit" d
+                WHERE d."leadWorkspaceId" = ${workspaceId} AND d."leadId" = ${leadId})))
+        ) AS "linked"
+      `;
+      if (linked?.linked) {
+        throw new ConflictException(
+          "Este lead tem vínculo de produção (Pipedrive ou compra) e não pode ser excluído.",
+        );
+      }
+
+      const logs = await tx.conversionEventLog.findMany({
+        where: { workspaceId, leadId },
+        select: { id: true, status: true, sentAt: true },
+      });
+      // Só sai lead sem envio: todos os logs observados (nunca enviados) ou
+      // nenhum. Um log enviado/enfileirado/de produção guarda a auditoria, a
+      // trava de uma conversão por lead e a dedupe; apagá-lo permitiria reenvio.
+      if (
+        logs.some(
+          (log) => log.status !== OBSERVATION_LOG_STATUS || log.sentAt !== null,
+        )
+      ) {
+        throw new ConflictException(
+          "Este lead tem conversões enviadas ou na fila da Meta e não pode ser excluído.",
+        );
+      }
+      const logIds = logs.map((log) => log.id);
+      const decisions = await tx.providerConversionDecisionAudit.findMany({
+        where: { leadWorkspaceId: workspaceId, leadId },
+        select: { id: true, decisionVersion: true, createdAt: true },
+      });
+      const decisionIds = decisions.map((decision) => decision.id);
+      const executions = await tx.providerConversionRuleExecution.findMany({
+        where: {
+          workspaceId,
+          OR: [
+            { leadId },
+            ...(decisionIds.length > 0
+              ? [{ providerDecisionId: { in: decisionIds } }]
+              : []),
+          ],
+        },
+        select: { id: true, status: true },
+      });
+
+      if (
+        executions.some(
+          (execution) => !observationExecutionStatuses.has(execution.status),
+        )
+      ) {
+        throw new ConflictException(
+          "Este lead tem conversão de regra enviada ou na fila da Meta e não pode ser excluído.",
+        );
+      }
+      if (decisionIds.length > 0) {
+        const foreignVersions = await tx.providerConversionDecisionAudit.count({
+          where: {
+            supersedesDecisionWorkspaceId: workspaceId,
+            supersedesDecisionId: { in: decisionIds },
+            id: { notIn: decisionIds },
+          },
+        });
+        if (foreignVersions > 0) {
+          throw new ConflictException(
+            "Este lead tem auditoria de regra ligada a outro lead e não pode ser excluído.",
+          );
+        }
+      }
+      if (executions.length > 0) {
+        await tx.providerConversionRuleExecution.deleteMany({
+          where: { workspaceId, id: { in: executions.map((row) => row.id) } },
+        });
+      }
+      // Versões mais novas primeiro: cada uma aponta (Restrict) para a anterior.
+      const ordered = [...decisions].sort(
+        (a, b) =>
+          b.decisionVersion - a.decisionVersion ||
+          b.createdAt.getTime() - a.createdAt.getTime(),
+      );
+      for (const decision of ordered) {
+        await tx.providerConversionDecisionAudit.deleteMany({
+          where: { workspaceId, id: decision.id },
+        });
+      }
+
+      if (logIds.length > 0) {
+        await tx.diagnosticEvent.updateMany({
+          where: { conversionEventLogId: { in: logIds } },
+          data: { conversionEventLogId: null },
+        });
+        await tx.purchaseReview.updateMany({
+          where: { conversionEventLogId: { in: logIds } },
+          data: { conversionEventLogId: null },
+        });
+        await tx.conversionEventLog.deleteMany({
+          where: { workspaceId, id: { in: logIds } },
+        });
+      }
+      // Revisões de compra e respostas de formulário da Meta ficam (SetNull).
+      await tx.lead.deleteMany({ where: { workspaceId, id: leadId } });
+      await tx.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId,
+          actorType: "user",
+          action: "lead.deleted",
+          targetType: "Lead",
+          targetId: leadId,
+          reason: "Workspace manager deleted the lead (Meta sends not undone)",
+          sourceIp: null,
+          resultStatus: "completed",
+          afterSummary: {
+            conversionsRemoved: logIds.length,
+            ruleDecisionsRemoved: decisionIds.length,
+            ruleExecutionsRemoved: executions.length,
+          },
+        },
+      });
+      return {
+        leadId,
+        deleted: true as const,
+        conversionsRemoved: logIds.length,
+      };
+    });
   }
 
   async getLeadDetail(

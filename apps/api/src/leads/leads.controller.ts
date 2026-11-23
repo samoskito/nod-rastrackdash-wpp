@@ -1,13 +1,21 @@
 import {
   BadRequestException,
+  Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
+  HttpCode,
   Inject,
   Param,
   Query,
   Res,
 } from "@nestjs/common";
-import { leadExportQuerySchema, leadListQuerySchema } from "@wpptrack/shared";
+import {
+  LEAD_DELETE_CONFIRMATION,
+  leadExportQuerySchema,
+  leadListQuerySchema,
+} from "@wpptrack/shared";
 import type { Writable } from "node:stream";
 import { AuthToken } from "../auth/auth-user.decorator";
 import { AuthService } from "../auth/auth.service";
@@ -139,5 +147,38 @@ export class LeadsController {
     const workspace = this.workspacesService.getCurrentWorkspace(authenticated);
 
     return this.leadsService.getLeadDetail(workspace.id, leadId);
+  }
+
+  /** "Excluir lead": só gestor do workspace, com a confirmação da tela. */
+  @Delete(":leadId")
+  @HttpCode(200)
+  async remove(
+    @AuthToken() refreshToken: string,
+    @Param("leadId") leadId: string,
+    @Body() body: unknown,
+  ) {
+    const authenticated = await this.authService.getSession(refreshToken);
+    const workspace = this.workspacesService.getCurrentWorkspace(authenticated);
+
+    if (!workspace.permissions.canManageWorkspaceSettings) {
+      throw new ForbiddenException("Sem permissao para excluir leads");
+    }
+    if (
+      !body ||
+      typeof body !== "object" ||
+      (body as Record<string, unknown>).confirmation !==
+        LEAD_DELETE_CONFIRMATION
+    ) {
+      throw new BadRequestException("Confirmacao invalida");
+    }
+    if (!/^[A-Za-z0-9_-]{1,64}$/u.test(leadId)) {
+      throw new BadRequestException("Lead invalido");
+    }
+
+    return this.leadsService.deleteLead(
+      workspace.id,
+      leadId,
+      authenticated.user.id,
+    );
   }
 }

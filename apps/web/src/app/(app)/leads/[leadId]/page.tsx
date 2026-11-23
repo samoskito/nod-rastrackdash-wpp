@@ -3,9 +3,21 @@ import { ArrowLeft, UserRoundX } from "lucide-react";
 import Link from "next/link";
 import { PageBar } from "../../../../components/page-bar";
 import { PresentationMask } from "../../../../components/presentation-mask";
+import { getCurrentWorkspace } from "../../../../lib/current-workspace";
 import { getManualConversionAccess } from "../../../../lib/manual-conversion-access";
 import { serverApiFetch } from "../../../../lib/server-api";
+import { DeleteLeadButton } from "./delete-lead-button";
 import { LeadDetailView, leadStatusLabel } from "./lead-detail-view";
+
+/** "Excluir lead": só gestor do workspace (a API confere de novo). */
+async function getCanDeleteLead(): Promise<boolean> {
+  try {
+    const workspace = await getCurrentWorkspace();
+    return workspace?.permissions?.canManageWorkspaceSettings === true;
+  } catch {
+    return false;
+  }
+}
 
 type LeadDetailParams = {
   leadId: string;
@@ -61,7 +73,10 @@ export default async function LeadDetailPage({
   }
 
   const { lead } = detail;
-  const manualAccess = await getManualConversionAccess();
+  const [manualAccess, canDeleteLead] = await Promise.all([
+    getManualConversionAccess(),
+    getCanDeleteLead(),
+  ]);
 
   return (
     <section className="page-stack page-wide lead-detail-page">
@@ -79,6 +94,12 @@ export default async function LeadDetailPage({
           </PresentationMask>
         </span>
         <span className="status-chip">{leadStatusLabel(lead.status)}</span>
+        {canDeleteLead ? (
+          <DeleteLeadButton
+            leadId={lead.id}
+            leadName={lead.name ?? "Lead sem nome"}
+          />
+        ) : null}
         <Link className="button" href="/leads">
           <ArrowLeft aria-hidden="true" size={17} strokeWidth={2.2} />
           Voltar

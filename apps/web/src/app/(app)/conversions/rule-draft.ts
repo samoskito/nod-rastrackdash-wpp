@@ -647,8 +647,15 @@ export function buildRulePayload(
       // (valor = lead_value; o valor da regra é só reserva opcional; qualquer
       // evento). Sem o filtro a regra fica no leitor anterior: Lead, Lead
       // qualificado ou compra, com o valor fixo.
-      const opportunity = draft.ghlStage !== null;
-      if (!opportunity && !ghlPreviousReaderEvents.includes(eventName)) {
+      // Umbler e Unnichat caem neste case: o filtro e a trava de evento são
+      // só do GoHighLevel.
+      const isGhl = draft.origin === "automation_gohighlevel";
+      const opportunity = isGhl && draft.ghlStage !== null;
+      if (
+        isGhl &&
+        !opportunity &&
+        !ghlPreviousReaderEvents.includes(eventName)
+      ) {
         return {
           ok: false,
           message:

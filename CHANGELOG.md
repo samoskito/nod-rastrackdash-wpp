@@ -7,6 +7,13 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One migration, no new variable.**
+
+### Added
+
+- GoHighLevel: conversion by **pipeline stage** (porte do SaaS #277). A rule "Etapa no GoHighLevel" can pick a pipeline and a stage from a list read from the GHL API (optional Private Integration Token with `opportunities.readonly`, saved encrypted on the connection) and converts when the opportunity enters that stage, with the opportunity `lead_value` (fixed value only as a fallback) and any message-pixel event. Reader `gohighlevel/automation-v2` is seeded already certified by migration `20261123120000_gohighlevel_pipeline_stage` (additive): rules with a stage are born sending. Rules without a stage keep `automation-v1`. Guide: [`docs/setup/gohighlevel.md`](docs/setup/gohighlevel.md#4-conversão-pela-etapa-do-pipeline-oportunidade).
+- Leads: **"Excluir lead"** on the lead page (porte do SaaS #292), only for workspace managers, with typed confirmation and the warning that conversions already sent to Meta are not undone. The API (`DELETE /leads/:id`, audit `lead.deleted`) only deletes a lead with no send at all; a lead with a sent, queued or production conversion, a rule execution that reached the Meta queue, or a Pipedrive / real purchase link is refused (409).
+
 ## [1.7.0] - 2026-11-20
 
 Upgrade notes for students: [`docs/releases/1.7.0.json`](docs/releases/1.7.0.json). **One migration.**

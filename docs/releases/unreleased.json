@@ -1,15 +1,18 @@
 {
   "version": "PENDENTE: versão definida pelo mantenedor",
-  "title": "PENDENTE: título da atualização",
-  "summary": "PENDENTE: benefício e impacto para o aluno",
-  "changes": "PENDENTE: novidades e melhorias incluídas",
+  "title": "GoHighLevel pela etapa do pipeline e Excluir lead",
+  "summary": "Agora a venda ou a qualificação marcada movendo a oportunidade de etapa no GoHighLevel vira conversão na Meta, com o valor da oportunidade. E o gestor pode excluir da tela um lead que nunca teve envio.",
+  "changes": "GoHighLevel pela etapa do pipeline: a regra \"Etapa no GoHighLevel\" ganha o campo Pipeline + etapa. Com o token do GoHighLevel salvo na conexão, você escolhe o pipeline e a etapa numa lista; a regra converte quando a oportunidade entra nessa etapa (gatilho Pipeline Stage Changed + ação Webhook POST com a URL da regra), envia o valor da oportunidade (lead_value) e aceita qualquer evento do pixel de mensagem. A regra já nasce enviando. Regras sem etapa continuam como antes.\nToken do GoHighLevel: nova seção opcional na conexão (Integrações → Go High Level). O token fica criptografado e não é exibido de novo.\nExcluir lead: botão na página do lead, só para quem gerencia o workspace, com confirmação digitada. Só exclui lead sem nenhum envio; conversões já enviadas à Meta não são desfeitas.",
   "fixes": "",
-  "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
-  "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",
-  "rollback": "PENDENTE: procedimento de recuperação verificado e limitações",
+  "requirements": "Mesmas versões de Node, PostgreSQL e Redis. Nenhuma variável de ambiente nova. Para escolher a etapa: um Private Integration Token do GoHighLevel com o escopo opportunities.readonly, por localização.",
+  "upgradeGuide": "Backup: faça o backup do PostgreSQL antes de atualizar, como em toda versão com migration.\nMigration: uma, 20261123120000_gohighlevel_pipeline_stage. Roda sozinha no boot da API. É aditiva: cria colunas vazias (pipeline e etapa na regra, token criptografado na conexão) e cadastra o leitor gohighlevel automation-v2 já certificado. Não altera conexões, regras nem eventos existentes.\nVariáveis de ambiente: nenhuma nova. O token do GoHighLevel usa a INBOUND_WEBHOOK_ENCRYPTION_KEY que já existe; não troque essa chave numa instalação no ar.\nPreservação de customizações: preserve as alterações locais do aluno; a atualização não mexe em .env nem em arquivos de configuração.\nUsar a etapa do pipeline: siga docs/setup/gohighlevel.md, seção 4 (criar o token com opportunities.readonly, colar na conexão, criar uma regra por etapa e montar o Workflow Pipeline Stage Changed + Webhook POST com a URL da regra).\nVerificação: Backoffice → Leitores de webhook mostra gohighlevel automation-v2 como certificado. Na conexão do GoHighLevel aparece Token do GoHighLevel (opcional). Em Nova regra → Etapa no GoHighLevel aparece Pipeline + etapa; com o token salvo, a lista de pipelines carrega. Na página de um lead, o gestor vê Excluir lead.\nPENDENTE: nenhuma conta GoHighLevel real nem instalação de aluno real testada neste repositório; a integração foi validada no SaaS com payload real de mudança de etapa em 23/11/2026.",
+  "rollback": "Para parar o envio, pause a regra na tela; o que já foi para a Meta não volta. Para voltar à versão anterior, faça o deploy da versão anterior: a migration só adiciona colunas e uma linha de leitor, então a versão anterior continua funcionando sem restaurar o banco (as regras com etapa ficam ligadas a um leitor que a versão anterior não conhece e não convertem). Lead excluído não volta, a não ser restaurando o backup do banco.",
   "minVersion": null,
   "breakingChange": false,
   "components": "BOTH",
   "links": [],
-  "tags": []
+  "tags": [
+    "gohighlevel",
+    "leads"
+  ]
 }

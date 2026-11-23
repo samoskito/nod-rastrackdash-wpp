@@ -170,3 +170,16 @@ export type LeadDetailWebhookEventDto = z.infer<
 export type LeadDetailDto = z.infer<typeof leadDetailSchema>;
 export type LeadExportQueryDto = z.infer<typeof leadExportQuerySchema>;
 export type LeadExportFormat = (typeof leadExportFormats)[number];
+
+/**
+ * "Excluir lead" (porte do SaaS #292): resultado. No aluno só sai lead sem
+ * nenhum envio; conversões já enviadas à Meta não são desfeitas.
+ */
+export const leadDeleteResultSchema = z.object({
+  leadId: z.string().min(1),
+  deleted: z.literal(true),
+  conversionsRemoved: z.number().int().nonnegative(),
+});
+export type LeadDeleteResultDto = z.infer<typeof leadDeleteResultSchema>;
+/** Corpo obrigatório do DELETE /leads/:id (confirmação da tela). */
+export const LEAD_DELETE_CONFIRMATION = "EXCLUIR_LEAD";

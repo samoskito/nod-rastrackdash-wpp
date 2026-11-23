@@ -1486,9 +1486,9 @@ export default async function IntegrationsPage({
           Workflow como conversão (Lead, lead qualificado ou compra), crie uma
           regra “Etapa no GoHighLevel” em Conversões: cada regra tem a própria
           URL, que você cola na ação Webhook (POST) do Workflow. Só conta o
-          contato que veio de um anúncio. O leitor do GoHighLevel ainda está
-          em observação nesta versão: você vê o que seria enviado, e nada vai
-          para a Meta até uma atualização liberar o envio.
+          contato que veio de um anúncio. Com o token do GoHighLevel salvo na
+          conexão, a regra também pode converter pela etapa do pipeline da
+          oportunidade.
         </p>
       </div>
       {inboundPanel("gohighlevel")}

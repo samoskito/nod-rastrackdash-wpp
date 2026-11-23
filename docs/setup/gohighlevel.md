@@ -7,6 +7,7 @@ cliente:
 |---|---|---|
 | **Entrada do lead** (um contato que veio de um anúncio de WhatsApp entra no Workflow) | URL da **conexão** GoHighLevel (uma por localização) | Cria (ou atualiza) o lead com o clique do anúncio, conta em "Conversas reais iniciadas" e segue as regras de sempre (Lead recebido, uma vez por lead e pixel). |
 | **Etapa do Workflow** (lead qualificado, compra, Lead recebido) | URL da **regra** "Etapa no GoHighLevel" (uma por regra/evento) | Envia o evento da regra para a Meta, para o lead que veio do anúncio. |
+| **Etapa do pipeline** (a oportunidade muda de etapa: "Pipeline Stage Changed") | URL da **regra** "Etapa no GoHighLevel" com **Pipeline + etapa** escolhidos | Envia o evento da regra com o valor da oportunidade (`lead_value`), só para aquela etapa. |
 
 **Só lead pago.** Só conta o contato que chegou por um anúncio, com o clique do anúncio
 (`ctwa_clid`) no contato do GHL. Um contato orgânico (sem o clique) **nunca** vira lead e **nunca**
@@ -103,8 +104,70 @@ Regras de contagem:
 - **Backoffice → Leitores de webhook:** os leitores `gohighlevel` v1 e automation-v1 aparecem como
   certificados.
 
+## 4. Conversão pela etapa do pipeline (oportunidade)
+
+Use quando a venda ou a qualificação é marcada movendo a **oportunidade** de etapa no pipeline do
+GoHighLevel. A regra escolhe um **pipeline** e uma **etapa**; só a mudança para essa etapa conta.
+O valor enviado é o da oportunidade (`lead_value`, em reais). O leitor desta regra
+(`automation-v2`) já vem **certificado**: a regra nasce enviando, sem etapa de observação.
+
+### 4.1 Criar o token no GoHighLevel (uma vez por localização)
+
+1. No GoHighLevel, na localização, abra **Settings (Configurações) → Private Integrations**.
+2. Clique em **Create new Integration** (criar integração), dê um nome (ex.: "RastrackDash") e
+   marque **só** o escopo **`opportunities.readonly`** (ler oportunidades). Nenhum escopo de
+   escrita é necessário.
+3. Copie o **token** gerado. Ele é um segredo: não cole no chat nem em mensagens.
+
+### 4.2 Colar o token na conexão
+
+1. No RastrackDash, abra **Integrações → Go High Level** e a conexão da localização.
+2. Abra **Token do GoHighLevel (opcional)**, cole o token e clique em **Salvar token**.
+3. O token fica criptografado e **não aparece de novo**; a tela só diz "configurado". Para trocar,
+   use **Trocar token**; para tirar, **Remover token**.
+
+Sem o token a regra não consegue listar os pipelines e vale para **todas** as etapas, só com
+Lead recebido, Lead qualificado ou Compra (o comportamento da seção 3).
+
+### 4.3 Criar uma regra por etapa
+
+1. Em **Conversões → Nova regra**, escolha **"Etapa no GoHighLevel"**, o **evento** e a conexão da
+   localização.
+2. Em **Pipeline + etapa (opcional)**, escolha o **Pipeline** e, logo abaixo, a **Etapa**. A
+   escolha fica recolhida num resumo "Pipeline · Etapa", com **Trocar** e **×** para remover.
+3. Com pipeline e etapa escolhidos vale **qualquer evento** do pixel de mensagem. O campo de valor
+   vira **"Valor fixo de reserva (opcional)"**: ele só é usado quando a oportunidade chega sem
+   `lead_value`. Sem `lead_value` e sem reserva, um evento com valor (ex.: Compra) é ignorado com o
+   motivo na tela.
+4. Crie **uma regra para cada etapa** que vira conversão (ex.: "Proposta enviada" → Lead
+   qualificado; "Ganho" → Compra).
+5. Depois de criar, copie a **URL da regra** (também em **Gerenciar → Endereço e configuração**).
+
+### 4.4 Montar o Workflow no GoHighLevel
+
+1. Crie um **Workflow** com o gatilho **Pipeline Stage Changed** (mudança de etapa do pipeline).
+   Pode filtrar o gatilho pelo mesmo pipeline e etapa da regra.
+2. Adicione a ação **Webhook**, método **POST**, e cole a **URL da regra**. Não precisa de
+   cabeçalho extra.
+3. Publique o Workflow. Um Workflow por etapa/regra deixa o funil mais fácil de conferir.
+
+### 4.5 Como conta
+
+- Só lead pago: a oportunidade precisa de um contato com o clique do anúncio (`ctwa_clid`). Sem o
+  clique, a chamada é **ignorada sem deixar marca**: se o mesmo contato voltar pela mesma etapa
+  depois de clicar num anúncio, essa chamada conta como a primeira.
+- A mesma oportunidade na mesma etapa do mesmo pipeline conta **uma vez**; outra etapa é outra
+  conversão. Lead recebido e Lead qualificado continuam uma vez por lead e pixel.
+- Chamada de outro pipeline ou de outra etapa aparece em **Eventos recebidos** como ignorada
+  ("outra etapa"), nunca como erro.
+- Etapa renomeada no GoHighLevel continua valendo: o RastrackDash confere o nome atual pela API
+  (com o token) e guarda o nome novo quando você salva a regra.
+- Regra **sem** pipeline e etapa continua no leitor da seção 3 (`automation-v1`), sem mudança.
+
 ## Limites
 
+- O token do GoHighLevel só lê pipelines e etapas (`opportunities.readonly`); ele nunca é usado para
+  escrever no GHL.
 - Uma conexão por localização. A localização precisa ter a conexão criada aqui; sem ela, a chamada
   fica "sem atribuição".
 - Só contatos vindos de anúncio de WhatsApp (com `ctwa_clid`). Formulários e outras origens do GHL
@@ -124,3 +187,14 @@ Regras de contagem:
 - Só lead pago: a chamada orgânica é bloqueada (`ctwa_missing`) e libera a chave de dedupe
   (`gohighlevel-organic:<id>`), igual ao Webhook / n8n. Teste:
   `apps/api/test/fase6-gohighlevel/gohighlevel-organic-then-paid.test.ts`.
+- Etapa do pipeline (porte do SaaS #277): leitor `gohighlevel/automation-v2`
+  (`providers/gohighlevel/gohighlevel-automation-v2.parser.ts`), semeado **já certificado** por
+  `20261123120000_gohighlevel_pipeline_stage` (aditiva: colunas `ghlPipelineId`,
+  `ghlPipelineName`, `ghlStageId`, `ghlStageName` na regra e `ghlToken*` AES-GCM na conexão). Só a
+  regra criada com `ghlStage` nasce no v2; sem filtro fica no automation-v1. Sem `ctwa_clid` o v2
+  devolve `contact_not_paid_lead` ignorado, sem execução. Pipelines/etapas:
+  `GET /integrations/inbound-webhooks/:connectionId/gohighlevel-pipelines`; token:
+  `PUT /integrations/inbound-webhooks/:connectionId/gohighlevel-token` (só gestor de integrações;
+  o token nunca volta). Nenhuma variável de ambiente nova. Testes:
+  `apps/api/test/fase6-gohighlevel/gohighlevel-automation-v2.parser.test.ts`,
+  `gohighlevel-pipelines.test.ts` e `gohighlevel-automation-observation.test.ts`.
