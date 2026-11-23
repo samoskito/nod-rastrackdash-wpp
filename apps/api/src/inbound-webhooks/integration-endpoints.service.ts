@@ -64,7 +64,10 @@ import {
   type ParsedGoHighLevelAutomationV1,
 } from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
 import { GoHighLevelPipelinesService } from "./gohighlevel-pipelines.service";
-import { readGoHighLevelStageCall } from "./providers/gohighlevel/gohighlevel-automation-v2.parser";
+import {
+  goHighLevelSingleUrlIngressKey,
+  readGoHighLevelStageCall,
+} from "./providers/gohighlevel/gohighlevel-automation-v2.parser";
 import { normalizeBraipBody } from "./providers/braip/braip-body";
 import {
   isSalesPlatformProvider,
@@ -1177,7 +1180,11 @@ export class IntegrationEndpointsService {
           ok: true,
           provider: "gohighlevel",
           eventName: endpoint.eventName,
-          externalKey: automation.value.externalExecutionKey,
+          externalKey: goHighLevelSingleUrlIngressKey(
+            payload,
+            endpoint.eventName,
+            automation.value,
+          ),
           automation: automation.value,
           stage: readGoHighLevelStageCall(payload),
         };

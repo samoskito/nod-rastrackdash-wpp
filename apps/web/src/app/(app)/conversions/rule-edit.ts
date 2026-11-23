@@ -322,6 +322,13 @@ export function buildRuleUpdatePayload(
       before?.stageId === after?.stageId &&
       before?.stageName === after?.stageName &&
       before?.pipelineName === after?.pipelineName;
+    if (!same && after === null) {
+      return {
+        ok: false,
+        message:
+          "A regra pela etapa do pipeline precisa de um pipeline e uma etapa. Para valer em todas as etapas, crie uma regra sem etapa.",
+      };
+    }
     if (!same) payload.ghlStage = after;
   }
 

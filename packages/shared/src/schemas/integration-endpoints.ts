@@ -195,6 +195,8 @@ export const integrationUnattributedReasons = {
     "Duas regras para o mesmo evento neste número — unifique as regras",
   location_without_number:
     "Localização do GoHighLevel sem conexão ativa nesta conta",
+  stage_without_rule:
+    "Etapa do pipeline do GoHighLevel sem regra (ou chamada sem etapa quando só há regras por etapa)",
 } as const;
 export type IntegrationUnattributedReasonDto =
   keyof typeof integrationUnattributedReasons;

@@ -2593,4 +2593,30 @@ describe("GoHighLevel pipeline stage rule (automation-v2, porte do SaaS #277)", 
       ),
     ).rejects.toThrow(/pipeline e etapa/u);
   });
+
+  it("refuses removing the stage of a v2 rule (it would send every stage change)", async () => {
+    const world = createWorld({ gohighlevel: true });
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        ...base,
+        eventName: "Purchase",
+        ghlOpportunityValue: true,
+        ghlStage: stage,
+      }),
+      "user_1",
+    );
+    await expect(
+      world.service.updateRule(
+        workspaceId,
+        created.rule.id,
+        providerConversionRuleUpdateInputSchema.parse({ ghlStage: null }),
+        "user_1",
+      ),
+    ).rejects.toThrow(/precisa de um pipeline e uma etapa/u);
+    expect(world.providerRules.at(-1)).toMatchObject({
+      ghlPipelineId: "PIPELINE_ID_FICTICIO",
+      ghlStageName: "Proposta enviada",
+    });
+  });
 });

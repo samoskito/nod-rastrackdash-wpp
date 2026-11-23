@@ -4,7 +4,7 @@ import { ForbiddenException } from "@nestjs/common";
 import { providerConversionRuleCreateInputSchema } from "@wpptrack/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
-  goHighLevelRoutingRuleGroups,
+  goHighLevelRoutingCandidates,
   pickRoutedRuleOutcome,
   routeGoHighLevelEvent,
   withCurrentGoHighLevelStageNames,
@@ -13,6 +13,7 @@ import {
 import { GoHighLevelPipelinesController } from "../../src/inbound-webhooks/gohighlevel-pipelines.controller";
 import { parseGoHighLevelAutomationV1 } from "../../src/inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v1.parser";
 import {
+  goHighLevelSingleUrlIngressKey,
   parseGoHighLevelAutomationV2,
   readGoHighLevelStageCall,
 } from "../../src/inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v2.parser";
@@ -69,19 +70,18 @@ function rule(
   } as RoutingRule;
 }
 
-/** The rule the single URL picks for a call: first group that routes. */
+/** The rule the single URL picks for a call (or why it is unattributed). */
 function route(rules: RoutingRule[], body: Record<string, unknown>) {
-  const groups = goHighLevelRoutingRuleGroups(
+  const candidates = goHighLevelRoutingCandidates(
     rules,
     readGoHighLevelStageCall(call(body)),
   );
-  for (const group of groups) {
-    const outcome = pickRoutedRuleOutcome(group, channel, {
-      productCodes: null,
-    });
-    if (outcome.status === "picked") return outcome.rule.id;
-  }
-  return null;
+  if (candidates.status === "unattributed") return candidates.reasonCode;
+  const outcome = pickRoutedRuleOutcome(candidates.rules, channel, {
+    productCodes: null,
+    holdTies: candidates.holdTies,
+  });
+  return outcome.status === "picked" ? outcome.rule.id : outcome.status;
 }
 
 describe("1. URL única: a etapa da chamada escolhe a regra", () => {
@@ -98,11 +98,13 @@ describe("1. URL única: a etapa da chamada escolhe a regra", () => {
     ];
     expect(route(rules, { pipeline_id: "PIPELINE_B", pipleline_stage: "ganho " })).toBe("rule_b");
     expect(route(rules, { pipeline_id: "PIPELINE_A", pipleline_stage: "Ganho" })).toBe("rule_a");
-    // Nenhuma etapa bate: nenhuma regra (não cai na mais antiga).
-    expect(route(rules, { pipeline_id: "PIPELINE_C", pipleline_stage: "Ganho" })).toBeNull();
+    // Nenhuma etapa bate: nenhuma regra (não cai na mais antiga), visível.
+    expect(route(rules, { pipeline_id: "PIPELINE_C", pipleline_stage: "Ganho" })).toBe(
+      "stage_without_rule",
+    );
   });
 
-  it("uma v1 mais antiga ao lado de uma v2: a etapa vai para a v2, as outras para a v1", () => {
+  it("uma v1 mais antiga ao lado de uma v2: a etapa vai para a v2; a v1 nunca pega as outras etapas (sem Purchase em dobro)", () => {
     const rules = [
       rule("rule_v1_old", "2026-10-01T00:00:00Z", null),
       rule("rule_v2", "2026-11-20T00:00:00Z", {
@@ -111,11 +113,72 @@ describe("1. URL única: a etapa da chamada escolhe a regra", () => {
       }),
     ];
     expect(route(rules, { pipeline_id: "PIPELINE_A", pipleline_stage: "Ganho" })).toBe("rule_v2");
-    expect(route(rules, { pipeline_id: "PIPELINE_A", pipleline_stage: "Proposta" })).toBe("rule_v1_old");
+    expect(route(rules, { pipeline_id: "PIPELINE_A", pipleline_stage: "Proposta" })).toBe(
+      "stage_without_rule",
+    );
     // Chamada de Workflow sem oportunidade: só a v1.
+    expect(route(rules, { pipeline_id: null, pipleline_stage: null })).toBe("rule_v1_old");
+  });
+});
+
+describe("2 (SaaS). Precedência por número só depois do filtro de etapa", () => {
+  it("uma v1 de números específicos não pega a chamada da etapa", () => {
+    const specificV1 = {
+      ...rule("rule_v1_specific", "2026-10-01T00:00:00Z", null),
+      scope: "specific_numbers",
+      channels: [{ channelId: "channel_ghl" }],
+    } as RoutingRule;
+    const v2 = rule("rule_v2", "2026-11-20T00:00:00Z", {
+      pipelineId: "PIPELINE_A",
+      stageName: "Ganho",
+    });
     expect(
-      goHighLevelRoutingRuleGroups(rules, { pipelineId: null, pipelineStage: null }),
-    ).toEqual([[rules[0]]]);
+      route([specificV1, v2], { pipeline_id: "PIPELINE_A", pipleline_stage: "Ganho" }),
+    ).toBe("rule_v2");
+  });
+  it("duas regras da mesma etapa (mesmo nível) ficam retidas, sem a mais antiga ganhar", () => {
+    const stage = { pipelineId: "PIPELINE_A", stageName: "Ganho" };
+    expect(
+      route(
+        [
+          rule("rule_v2_a", "2026-11-20T00:00:00Z", stage),
+          rule("rule_v2_b", "2026-11-21T00:00:00Z", stage),
+        ],
+        { pipeline_id: "PIPELINE_A", pipleline_stage: "Ganho" },
+      ),
+    ).toBe("ambiguous");
+  });
+});
+
+describe("4 (SaaS). Chamada com clique e sem etapa, só com regras por etapa", () => {
+  it("fica visível como não atribuída (stage_without_rule), nunca ignorada", () => {
+    const rules = [
+      rule("rule_v2", "2026-11-20T00:00:00Z", { pipelineId: "PIPELINE_A", stageName: "Ganho" }),
+    ];
+    expect(route(rules, { pipeline_id: null, pipleline_stage: null })).toBe(
+      "stage_without_rule",
+    );
+  });
+});
+
+describe("3 (extra). Recibo da URL única: a próxima etapa não é duplicada da anterior", () => {
+  it("a chave de entrada leva oportunidade + etapa; sem oportunidade fica a chave v1", () => {
+    const keyOf = (body: Record<string, unknown>, eventName = "Purchase") => {
+      const payload = call(body);
+      const parsed = parseGoHighLevelAutomationV1(payload, new Date());
+      if (!parsed.ok) throw new Error("parse");
+      return { key: goHighLevelSingleUrlIngressKey(payload, eventName, parsed.value), v1: parsed.value.externalExecutionKey };
+    };
+    const won = keyOf({ pipleline_stage: "Ganho" });
+    const proposal = keyOf({ pipleline_stage: "Proposta enviada" });
+    expect(won.v1).toBe(proposal.v1);
+    expect(won.key).not.toBe(proposal.key);
+    expect(keyOf({ pipleline_stage: "GANHO " }).key).toBe(won.key);
+    const noOpportunity = keyOf({ id: undefined, pipleline_stage: undefined });
+    expect(noOpportunity.key).toBe(noOpportunity.v1);
+    // Evento uma vez por lead: a chave v1 de sempre.
+    const lead = keyOf({ pipleline_stage: "Ganho" }, "LeadSubmitted");
+    expect(lead.key).toBe(lead.v1);
   });
 });
 
@@ -261,10 +324,11 @@ describe("1b. Etapa renomeada no GHL: o roteamento usa o nome atual pelo id salv
       await routeCall(rules(), { pipeline_id: "PIPELINE_A", pipleline_stage: "Fechado" }, source),
     ).toMatchObject({ status: "routed", providerRuleId: "rule_v2" });
     expect(source.warmStageNames).toHaveBeenCalledWith("workspace_1", "connection_ghl");
-    // Sem a fonte do nome atual, só o nome salvo: a v2 sai e a v1 recebe.
+    // Sem a fonte do nome atual, só o nome salvo: nenhuma etapa bate, e a
+    // v1 não pega a etapa (fica visível como não atribuída).
     expect(
       await routeCall(rules(), { pipeline_id: "PIPELINE_A", pipleline_stage: "Fechado" }),
-    ).toMatchObject({ status: "routed", providerRuleId: "rule_v1_old" });
+    ).toMatchObject({ status: "unattributed", reasonCode: "stage_without_rule" });
   });
   it("sem nome no cache (sem token ou API fora), vale o nome salvo", async () => {
     const source = {

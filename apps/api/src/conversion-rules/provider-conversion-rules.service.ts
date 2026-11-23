@@ -1808,6 +1808,17 @@ export class ProviderConversionRulesService {
             "O filtro de pipeline e etapa só existe nas regras do GoHighLevel",
           );
         }
+        // A regra pela etapa (valor da oportunidade, qualquer evento) sem
+        // etapa enviaria toda mudança de etapa: troque a etapa, não a apague.
+        if (
+          input.ghlStage === null &&
+          current.parserRelease?.version ===
+            GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION
+        ) {
+          throw new BadRequestException(
+            "A regra pela etapa do pipeline precisa de um pipeline e uma etapa. Para valer em todas as etapas, crie uma regra sem etapa.",
+          );
+        }
         await transaction.providerConversionRuleConfig.update({
           where: { id: current.id },
           data: {

@@ -170,6 +170,35 @@ export function goHighLevelStageMatches(
   );
 }
 
+/**
+ * Ingress (receipt) key of a call on the single URL: the opportunity key
+ * (opportunity + pipeline + stage) when the call carries one, so the next
+ * stage change of the same contact in the same Workflow is a new receipt,
+ * never a "duplicate" of the previous stage; else the v1 key, as before.
+ */
+export function goHighLevelSingleUrlIngressKey(
+  payload: unknown,
+  eventName: string,
+  base: ParsedGoHighLevelAutomationV1,
+): string {
+  const parsedEvent = conversionEventNameSchema.safeParse(eventName);
+  if (
+    !parsedEvent.success ||
+    conversionEventDedupeMode(parsedEvent.data) === "lifetime"
+  )
+    return base.externalExecutionKey;
+  const body = unwrapGoHighLevelBody(payload);
+  const opportunityId = body ? text(body.id, 255) : null;
+  const { pipelineId, pipelineStage } = readGoHighLevelStageCall(payload);
+  if (!opportunityId || !pipelineStage) return base.externalExecutionKey;
+  return opportunityKey({
+    locationId: base.locationId,
+    opportunityId,
+    pipelineId,
+    stage: pipelineStage,
+  });
+}
+
 /** Pipeline id and stage name of a call (null when it has none). */
 export function readGoHighLevelStageCall(payload: unknown): {
   pipelineId: string | null;

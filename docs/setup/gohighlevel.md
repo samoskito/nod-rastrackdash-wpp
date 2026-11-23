@@ -163,6 +163,12 @@ Lead recebido, Lead qualificado ou Compra (o comportamento da seção 3).
 - Etapa renomeada no GoHighLevel continua valendo: o RastrackDash confere o nome atual pela API
   (com o token) e guarda o nome novo quando você salva a regra.
 - Regra **sem** pipeline e etapa continua no leitor da seção 3 (`automation-v1`), sem mudança.
+- Na URL única do evento, quando existe regra por etapa: a chamada que traz etapa vai só para a regra
+  daquela etapa (a regra sem etapa não pega as outras etapas, para não enviar a mesma compra a cada
+  mudança). Etapa sem regra, ou chamada sem etapa quando só há regras por etapa, aparece como **sem
+  atribuição** ("Etapa do pipeline do GoHighLevel sem regra"). Duas regras para a mesma etapa ficam
+  retidas até você unificar.
+- Para valer em todas as etapas, crie uma regra sem etapa; a regra por etapa não aceita apagar a etapa.
 
 ## Limites
 

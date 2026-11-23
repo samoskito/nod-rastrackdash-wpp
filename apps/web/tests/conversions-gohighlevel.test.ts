@@ -272,3 +272,39 @@ describe("GoHighLevel: remover o token (revisão do #145)", () => {
     expect(source).not.toContain("valem para todas as etapas");
   });
 });
+
+describe("GoHighLevel: editar a regra pela etapa (revisão do SaaS)", () => {
+  it("não deixa apagar a etapa de uma regra que lê a oportunidade", async () => {
+    const { providerRule, numbers, connections, capabilities } = await import("./conversions-fixtures");
+    const { buildRuleUpdatePayload, ruleEditDraft } = await import(
+      "../src/app/(app)/conversions/rule-edit"
+    );
+    const stage = {
+      pipelineId: "PIPELINE_A",
+      pipelineName: "Funil Exemplo",
+      stageId: "STAGE_1",
+      stageName: "Ganho",
+    };
+    const rule = {
+      ...providerRule({
+        id: "rule_ghl_stage",
+        triggerType: "provider_automation",
+        origin: "automation_gohighlevel",
+        eventName: "Purchase",
+        connectionId: "conn_ghl",
+        scope: "all_numbers",
+      }),
+      ghlOpportunityReader: true,
+      ghlStage: stage,
+    };
+    const draft = ruleEditDraft(rule, "automation_gohighlevel");
+    expect(draft.ghlStage).toEqual(stage);
+    const result = buildRuleUpdatePayload(
+      rule,
+      { ...draft, ghlStage: null },
+      { numbers, connections, capabilities },
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { message: string }).message).toMatch(/precisa de um pipeline e uma etapa/u);
+  });
+});
