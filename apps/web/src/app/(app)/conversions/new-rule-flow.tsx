@@ -60,7 +60,9 @@ import {
   ProductFilterPicker,
   type SingleUrlActions,
 } from "../integrations/single-url/single-url-panels";
+import { loadGhlPipelinesAction } from "./actions";
 import type { ConversionScreenActionResult } from "./actions";
+import { GhlStagePicker } from "./ghl-stage-picker";
 import {
   automationPlatformOf,
   contactMessageProviders,
@@ -1233,18 +1235,25 @@ export function ScopeStep({
 export function ValueFields({
   draft,
   onChange,
+  fallback = false,
 }: {
   draft: RuleDraft;
   onChange: (update: Partial<RuleDraft>) => void;
+  /** GoHighLevel: o valor vem da oportunidade; este é só a reserva. */
+  fallback?: boolean;
 }) {
   if (!conversionEventCarriesValue(draft.eventName)) return null;
-  const required = conversionEventRequiresValue(draft.eventName);
+  const required = !fallback && conversionEventRequiresValue(draft.eventName);
 
   return (
     <div className="conversion-field-row">
       <label className="conversion-field">
         <span className="field-label">
-          {required ? "Valor médio" : "Valor médio (opcional)"}
+          {fallback
+            ? "Valor fixo de reserva (opcional)"
+            : required
+              ? "Valor médio"
+              : "Valor médio (opcional)"}
         </span>
         <input
           value={draft.averageValue}
@@ -1575,7 +1584,18 @@ function DetailsStep({
 
       {draft.origin === "automation_gohighlevel" ? (
         <>
-          <ValueFields draft={draft} onChange={onChange} />
+          <ValueFields
+            draft={draft}
+            onChange={onChange}
+            fallback={draft.ghlStage !== null}
+          />
+          <GhlStagePicker
+            connectionId={boundConnectionId}
+            value={draft.ghlStage}
+            onChange={(ghlStage) => onChange({ ghlStage })}
+            load={loadGhlPipelinesAction}
+            disabled={disabled}
+          />
           <p className="action-note">
             Depois de criar, você recebe a URL desta regra.{" "}
             {goHighLevelWebhookInstruction}, na etapa que marca o evento. Só

@@ -10,6 +10,9 @@ import { RuntimeModule } from "../common/runtime/runtime.module";
 import { ConversionRulesModule } from "../conversion-rules/conversion-rules.module";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
 import { InboundWebhookChannelRoutesService } from "./inbound-webhook-channel-routes.service";
+import { GoHighLevelPipelinesController } from "./gohighlevel-pipelines.controller";
+import { GoHighLevelPipelinesService } from "./gohighlevel-pipelines.service";
+import { GhlPipelinesAdapter } from "./providers/gohighlevel/gohighlevel-pipelines.adapter";
 import { InboundConversionAutomationIngestionService } from "./inbound-conversion-automation-ingestion.service";
 import { InboundWebhookConnectionsController } from "./inbound-webhook-connections.controller";
 import { InboundWebhookConnectionsService } from "./inbound-webhook-connections.service";
@@ -62,6 +65,7 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
   controllers: [
     BackofficeIntegrationEventsController,
     BackofficeParserReleasesController,
+    GoHighLevelPipelinesController,
     InboundWebhookConnectionsController,
     InboundWebhookPublicController,
     IntegrationEndpointsController,
@@ -70,6 +74,8 @@ import { WhatsappProvidersModule } from "../integrations/whatsapp-providers/what
   ],
   providers: [
     BackofficeIntegrationEventsService,
+    GhlPipelinesAdapter,
+    GoHighLevelPipelinesService,
     InboundConversionAutomationIngestionService,
     InboundWebhookChannelRoutesService,
     InboundWebhookConnectionsService,

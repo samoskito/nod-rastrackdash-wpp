@@ -34,6 +34,7 @@ import {
 import type { ParsedUnnichatAutomationV1 } from "../inbound-webhooks/providers/unnichat/unnichat-automation-v1.parser";
 import type { ParsedRoichatAutomationV1 } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
 import type { ParsedGoHighLevelAutomationV1 } from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION } from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v2.parser";
 import { isCtwaEntryAutomationProvider } from "../inbound-webhooks/providers/provider-automation-providers";
 import type { ParsedWebhookRuleAutomation } from "../inbound-webhooks/providers/webhook/webhook-automation-v1.parser";
 import {
@@ -418,6 +419,26 @@ export class ProviderConversionObservationService {
     // Fase 4b (as in the SaaS): an Unnichat automation without ctwa_clid is
     // recorded as blocked (ctwa_missing) and nothing reaches Meta.
     if (this.isUnnichatWithoutCtwa(input.automation)) {
+      // GoHighLevel automation-v2 (porte do SaaS #277, leitor de
+      // oportunidade): só lead pago conta. Sem ctwa_clid nas duas fontes a
+      // chamada é ignorada e não deixa marca (sem execução, sem chave): o
+      // mesmo contato chamando depois de clicar no anúncio é uma 1ª chamada.
+      if (
+        input.automation.provider === "gohighlevel" &&
+        rule.parserRelease.version === GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION
+      ) {
+        return {
+          decisionId: null,
+          decisionCode: null,
+          reasonCode: WEBHOOK_NOT_PAID_LEAD_REASON,
+          disposition: "ignored",
+          executionId: null,
+          eligibleExecutionId: null,
+          reviewId: null,
+          channelId: null,
+          leadResolved: false,
+        };
+      }
       return this.recordUnnichatCtwaMissing({ input, rule });
     }
     // Fase 6.1a (porte do #159): the callback's own connection first (and

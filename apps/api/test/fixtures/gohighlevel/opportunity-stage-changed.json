@@ -1,0 +1,36 @@
+[
+  {
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "contact_id": "CONTACT_ID_FICTICIO",
+      "first_name": "Fulana",
+      "full_name": "Fulana Exemplo",
+      "phone": "+5591900000000",
+      "country": "BR",
+      "date_created": "2026-11-01T10:00:00.000Z",
+      "lead_value": 1500.5,
+      "status": "open",
+      "id": "OPPORTUNITY_ID_FICTICIO",
+      "pipeline_id": "PIPELINE_ID_FICTICIO",
+      "pipeline_name": "Funil Exemplo",
+      "pipleline_stage": "Proposta enviada",
+      "location": { "id": "LOCATION_ID_FICTICIO", "name": "Clinica Exemplo" },
+      "workflow": { "id": "WORKFLOW_ID_FICTICIO", "name": "Oportunidade mudou de etapa" },
+      "triggerData": {},
+      "contact": {
+        "attributionSource": {
+          "sessionSource": "Paid Social",
+          "medium": "whatsapp"
+        },
+        "lastAttributionSource": {
+          "sessionSource": "Paid Social",
+          "medium": "whatsapp",
+          "ctwa_clid": "CTWA_CLID_FICTICIO",
+          "adId": "AD_ID_FICTICIO"
+        }
+      },
+      "attributionSource": {},
+      "customData": {}
+    }
+  }
+]

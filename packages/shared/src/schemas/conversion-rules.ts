@@ -130,6 +130,38 @@ export const webhookValueSourceSchema = z.enum(webhookValueSources);
 export type WebhookValueSourceDto = z.infer<typeof webhookValueSourceSchema>;
 
 /**
+ * GoHighLevel (leitor automation-v2, oportunidade que muda de etapa): o valor
+ * do evento é SEMPRE o `lead_value` da oportunidade (em reais); não há valor
+ * fixo. Filtro opcional "Pipeline + etapa" da regra, escolhido numa lista que
+ * vem da API do GHL: a chamada de outra etapa é registrada como ignorada. A
+ * chamada traz `pipeline_id` e o NOME da etapa; o id da etapa fica guardado
+ * só para mostrar o nome atualizado quando ela for renomeada no GHL.
+ */
+export const ghlStageFilterSchema = z.object({
+  pipelineId: z.string().trim().min(1).max(255),
+  pipelineName: z.string().trim().min(1).max(255),
+  stageId: z.string().trim().min(1).max(255),
+  stageName: z.string().trim().min(1).max(255),
+});
+export type GhlStageFilterDto = z.infer<typeof ghlStageFilterSchema>;
+/** Lista de pipelines e etapas de uma localização (GHL, /opportunities/pipelines). */
+export const ghlPipelineOptionsSchema = z.object({
+  tokenConfigured: z.boolean(),
+  pipelines: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      stages: z.array(z.object({ id: z.string(), name: z.string() })),
+    }),
+  ),
+});
+export type GhlPipelineOptionsDto = z.infer<typeof ghlPipelineOptionsSchema>;
+export const ghlTokenUpdateInputSchema = z.object({
+  /** null = remove o token guardado. */
+  token: z.string().trim().min(20).max(512).nullable(),
+});
+
+/**
  * Fase 4a: eventos padrao que um postback da Payt pode virar. O evento vem do
  * status do payload: pago -> Purchase, aguardando pagamento (Pix/boleto
  * gerado) -> InitiateCheckout, carrinho abandonado -> CartAbandoned.
@@ -612,6 +644,10 @@ const providerAutomationCreateSchema = z
     crossConnectionScope: z.boolean().optional(),
     // Webhook / n8n: de onde vem o valor dos eventos com valor (padrao "received").
     webhookValueSource: webhookValueSourceSchema.optional(),
+    // GoHighLevel (leitor automation-v2): o valor vem sempre do lead_value
+    // (a regra não pede valor) e o filtro "Pipeline + etapa" é opcional.
+    ghlOpportunityValue: z.literal(true).optional(),
+    ghlStage: ghlStageFilterSchema.optional(),
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
@@ -674,7 +710,8 @@ const providerAutomationCreateSchema = z
           isRoichatProvider(input.automationSource) ||
           // Webhook / n8n "valor recebido": o valor da regra e so reserva.
           (isWebhookProvider(input.automationSource) &&
-            (input.webhookValueSource ?? "received") === "received"),
+            (input.webhookValueSource ?? "received") === "received") ||
+          input.ghlOpportunityValue === true,
       });
       if (input.productFilterCodes && input.productFilterCodes.length > 0) {
         context.addIssue({
@@ -860,6 +897,8 @@ export const providerConversionRuleUpdateInputSchema = z
     crossConnectionScope: z.boolean().optional(),
     // Webhook / n8n: troca a origem do valor (valor recebido ou valor fixo).
     webhookValueSource: webhookValueSourceSchema.optional(),
+    // GoHighLevel: troca o filtro "Pipeline + etapa" (null limpa o filtro).
+    ghlStage: ghlStageFilterSchema.nullable().optional(),
   })
   .refine((input) => Object.keys(input).length > 0, {
     message: "Informe ao menos um campo para atualizar",
@@ -1117,6 +1156,10 @@ export const providerConversionRuleSchema = z.object({
   crossConnectionScope: z.boolean().optional(),
   // Webhook / n8n: origem do valor (ausente nas outras origens).
   webhookValueSource: webhookValueSourceSchema.optional(),
+  // GoHighLevel: filtro "Pipeline + etapa" (ausente nas outras origens).
+  ghlStage: ghlStageFilterSchema.nullable().optional(),
+  // GoHighLevel: true = regra no leitor de oportunidade (automation-v2), a única com filtro de etapa.
+  ghlOpportunityReader: z.boolean().optional(),
   // Somente "all_numbers" ativa: numeros cobertos cuja conexao nao esta em
   // producao ou cujo canal nao esta ativo, com o motivo. Opcional para
   // aceitar respostas anteriores ao campo (ausente = nenhum pendente).

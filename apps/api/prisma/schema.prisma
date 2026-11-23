@@ -1046,6 +1046,14 @@ model ProviderConversionRuleConfig {
   /// Fase 5.3: códigos de produto/oferta aceitos (vazio = qualquer produto).
   /// Só plataformas de venda (Payt); comparados por código, sem caixa.
   productFilterCodes        String[]                              @default([])
+  /// GoHighLevel automation-v2 (opcional): só converte a etapa escolhida na
+  /// lista do GHL. NULL = qualquer pipeline/etapa. A chamada traz `pipeline_id`
+  /// e o NOME da etapa (`pipleline_stage`, grafia da própria GHL); o id da
+  /// etapa só serve para mostrar o nome atualizado quando ela for renomeada.
+  ghlPipelineId             String?                               @db.VarChar(255)
+  ghlPipelineName           String?                               @db.VarChar(255)
+  ghlStageId                String?                               @db.VarChar(255)
+  ghlStageName              String?                               @db.VarChar(255)
   productionActivatedAt     DateTime?
   removedAt                 DateTime?
   createdByUserId           String?
@@ -1815,6 +1823,13 @@ model InboundWebhookConnection {
   lastDeliveryAt        DateTime?
   lastSuccessfulParseAt DateTime?
   removedAt             DateTime?
+  /// GoHighLevel: Private Integration Token da localização (escopo
+  /// opportunities.readonly), só para listar pipelines/etapas na regra
+  /// (AES-GCM, chave de payload). Opcional; nunca volta em texto puro.
+  ghlTokenCiphertext    String?
+  ghlTokenIv            String?
+  ghlTokenTag           String?
+  ghlTokenKeyVersion    Int?
   /// Meta Cloud only: App ID of the student's own Meta app that delivers this
   /// connection's webhooks (agencies: one app per client BM). Not secret.
   metaAppId             String?

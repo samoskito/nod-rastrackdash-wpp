@@ -49,7 +49,9 @@ export const integrationEndpointAutomationEvents = {
   // O contrato wpptrack.umbler.automation.v1 só conhece estas duas automações.
   umbler: ["QualifiedLead", "Purchase"],
   // GoHighLevel: ação Webhook de uma etapa do Workflow (uma URL por regra).
-  gohighlevel: ["LeadSubmitted", "QualifiedLead", "Purchase"],
+  // Todos os eventos do pixel de mensagem (vida inteira: só LeadSubmitted e
+  // QualifiedLead, pelo catálogo de eventos).
+  gohighlevel: conversionEventNameSchema.options,
 } as const;
 
 export function integrationEndpointKindFor(

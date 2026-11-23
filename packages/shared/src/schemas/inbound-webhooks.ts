@@ -382,6 +382,8 @@ export const inboundWebhookConnectionSchema = z.object({
   productionActivatedAt: dateTimeSchema.nullable(),
   lastDeliveryAt: dateTimeSchema.nullable(),
   lastSuccessfulParseAt: dateTimeSchema.nullable(),
+  /** GoHighLevel only: whether the optional API token is saved (never the token). */
+  goHighLevel: z.object({ tokenConfigured: z.boolean() }).optional(),
   createdAt: dateTimeSchema,
   updatedAt: dateTimeSchema,
   /** Só em conexões Meta Cloud; ausente ou null nos demais provedores. */

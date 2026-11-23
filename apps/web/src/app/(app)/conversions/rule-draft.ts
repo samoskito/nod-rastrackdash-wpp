@@ -1,6 +1,7 @@
 import type {
   ConversionEventNameDto,
   CurrencyCode,
+  GhlStageFilterDto,
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleDto,
   ProviderConversionRuleOriginDto,
@@ -86,7 +87,16 @@ export type RuleDraft = {
    * com o da regra como reserva; "fixed" = sempre o da regra).
    */
   webhookValueSource: WebhookValueSourceDto;
+  /** GoHighLevel: filtro opcional "Pipeline + etapa" (null = toda etapa). */
+  ghlStage: GhlStageFilterDto | null;
 };
+
+/** Eventos de uma regra do GoHighLevel sem o filtro de pipeline e etapa. */
+export const ghlPreviousReaderEvents: readonly ConversionEventNameDto[] = [
+  "QualifiedLead",
+  "Purchase",
+  "LeadSubmitted",
+];
 
 export type DraftContext = {
   numbers: readonly ConversionNumber[];
@@ -131,6 +141,7 @@ export function emptyRuleDraft(
     currency: "",
     productCodes: [],
     webhookValueSource: "received",
+    ghlStage: null,
     catalog: {
       name: "",
       productName: "",
@@ -632,7 +643,19 @@ export function buildRulePayload(
     // GoHighLevel: same model as Unnichat (URL per rule/event, the Workflow's
     // location tells the number).
     case "automation_gohighlevel": {
-      const values = valueFields({ ...draft, eventName }, false);
+      // GoHighLevel: a regra que escolheu pipeline + etapa lê a oportunidade
+      // (valor = lead_value; o valor da regra é só reserva opcional; qualquer
+      // evento). Sem o filtro a regra fica no leitor anterior: Lead, Lead
+      // qualificado ou compra, com o valor fixo.
+      const opportunity = draft.ghlStage !== null;
+      if (!opportunity && !ghlPreviousReaderEvents.includes(eventName)) {
+        return {
+          ok: false,
+          message:
+            "Para este evento, escolha o pipeline e a etapa. Sem etapa, a regra envia só Lead recebido, lead qualificado ou compra.",
+        };
+      }
+      const values = valueFields({ ...draft, eventName }, opportunity);
       if (!values.ok) return values;
       return {
         ok: true,
@@ -641,6 +664,10 @@ export function buildRulePayload(
           triggerType: "provider_automation",
           eventName,
           ...values.value,
+          ...(opportunity && conversionEventCarriesValue(eventName)
+            ? { ghlOpportunityValue: true }
+            : {}),
+          ...(opportunity ? { ghlStage: draft.ghlStage } : {}),
           ...(draft.scope === "all_numbers" && draft.crossConnection
             ? { crossConnectionScope: true }
             : {}),

@@ -22,6 +22,8 @@ import {
   providerRuleCreateRequestKeySchema,
   structuredCatalogTestMessageInputSchema,
   structuredCatalogTestMessageResultSchema,
+  ghlPipelineOptionsSchema,
+  type GhlPipelineOptionsDto,
   type ProviderConversionAutomationAuditDto,
   type ProviderConversionAutomationPayloadDto,
   type ProviderConversionAutomationReprocessBatchResultDto,
@@ -1220,5 +1222,50 @@ export async function reprocessProviderConversionAutomationCallbacksAction(
       "Não foi possível reprocessar os eventos selecionados.",
       "Não deu para confirmar o reprocessamento. Atualize a lista para conferir.",
     );
+  }
+}
+
+export type GhlPipelinesActionResult =
+  | { ok: true; data: GhlPipelineOptionsDto }
+  | { ok: false; message: string };
+
+/**
+ * GoHighLevel (porte do SaaS #277): pipelines e etapas da localização da
+ * conexão, lidos com o token opcional da conexão. Sem token a resposta é uma
+ * lista vazia com tokenConfigured false.
+ */
+export async function loadGhlPipelinesAction(
+  connectionId: string,
+): Promise<GhlPipelinesActionResult> {
+  const generic =
+    "Não deu para carregar os pipelines agora. Tente de novo em instantes.";
+  if (
+    typeof connectionId !== "string" ||
+    !connectionId.trim() ||
+    connectionId.length > 255
+  ) {
+    return { ok: false, message: generic };
+  }
+  try {
+    const response = await serverApiFetch<unknown>(
+      `/integrations/inbound-webhooks/${encodeURIComponent(connectionId.trim())}/gohighlevel-pipelines`,
+    );
+    const parsed = ghlPipelineOptionsSchema.safeParse(response);
+    return parsed.success
+      ? { ok: true, data: parsed.data }
+      : { ok: false, message: generic };
+  } catch (error) {
+    if (apiStatus(error) === 401) {
+      return { ok: false, message: "Sua sessão expirou. Entre de novo para continuar." };
+    }
+    // 502 traz a mensagem da própria API em palavras simples (sem o token).
+    const message = (error as { message?: unknown } | null)?.message;
+    return {
+      ok: false,
+      message:
+        apiStatus(error) === 502 && typeof message === "string" && message.length < 300
+          ? message
+          : generic,
+    };
   }
 }

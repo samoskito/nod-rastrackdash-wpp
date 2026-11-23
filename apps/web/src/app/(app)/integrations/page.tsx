@@ -74,6 +74,7 @@ import {
   saveInboundWebhookChannelRoutesAction,
   setInboundWebhookChannelStatusAction,
   setInboundWebhookConnectionStatusAction,
+  updateInboundWebhookGoHighLevelTokenAction,
 } from "./inbound-webhook-actions";
 import {
   InboundWebhookPanel,
@@ -1418,6 +1419,9 @@ export default async function IntegrationsPage({
         createChannelAction={createInboundWebhookChannelAction}
         setChannelStatusAction={setInboundWebhookChannelStatusAction}
         saveRoutesAction={saveInboundWebhookChannelRoutesAction}
+        updateGoHighLevelTokenAction={
+          updateInboundWebhookGoHighLevelTokenAction
+        }
         licenseLocked={licenseLocked}
         instanceActivities={whatsappConnectionActivities}
       />

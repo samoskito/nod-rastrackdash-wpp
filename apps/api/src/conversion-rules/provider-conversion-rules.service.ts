@@ -23,9 +23,10 @@ import {
   providerConversionTechnicalDeliveryStateSchema,
   providerRuleCreateRequestKeySchema,
   readMessagePhraseConfig,
-  integrationEndpointAutomationEvents,
 } from "@wpptrack/shared";
+import { GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION } from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v2.parser";
 import type {
+  GhlStageFilterDto,
   SalesPlatformProviderDto,
   MessagePhraseConfigDto,
   MessagePhraseValueModeDto,
@@ -207,9 +208,26 @@ function supportsCrossConnectionScope(
   );
 }
 
-/** Events the GoHighLevel Workflow step (Webhook action) may convert. */
-const GOHIGHLEVEL_RULE_EVENTS: readonly string[] =
-  integrationEndpointAutomationEvents.gohighlevel;
+/** Columns of the optional GoHighLevel "Pipeline + etapa" filter (null clears). */
+function ghlStageColumns(stage: GhlStageFilterDto | null) {
+  return {
+    ghlPipelineId: stage?.pipelineId ?? null,
+    ghlPipelineName: stage?.pipelineName ?? null,
+    ghlStageId: stage?.stageId ?? null,
+    ghlStageName: stage?.stageName ?? null,
+  };
+}
+
+/**
+ * Events a GoHighLevel rule WITHOUT the pipeline + stage filter (reader
+ * automation-v1) may convert. A rule with the filter (opportunity reader,
+ * automation-v2) takes every message-pixel event.
+ */
+const GOHIGHLEVEL_RULE_EVENTS: readonly string[] = [
+  "LeadSubmitted",
+  "QualifiedLead",
+  "Purchase",
+];
 
 /**
  * "Numero removido": the rule can no longer receive anything because the
@@ -917,6 +935,7 @@ export class ProviderConversionRulesService {
           }
           if (
             origin === "automation_gohighlevel" &&
+            !(input.triggerType === "provider_automation" && input.ghlStage) &&
             !GOHIGHLEVEL_RULE_EVENTS.includes(input.eventName)
           ) {
             throw new BadRequestException(
@@ -987,17 +1006,46 @@ export class ProviderConversionRulesService {
             );
           }
 
+          const ghlStage =
+            input.triggerType === "provider_automation"
+              ? input.ghlStage
+              : undefined;
           const parserRelease = !bound
             ? null
             : endpointAutomationProvider
-              ? await transaction.inboundWebhookParserRelease.findFirst({
+              ? ((endpointAutomationProvider === "gohighlevel" && ghlStage
+                  ? // GoHighLevel: only a rule that chose pipeline + stage is
+                    // born on the opportunity reader (automation-v2). Without
+                    // the filter the rule stays on automation-v1.
+                    await transaction.inboundWebhookParserRelease.findFirst({
+                      where: {
+                        provider: "gohighlevel",
+                        version: GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION,
+                        status: { not: "retired" },
+                      },
+                    })
+                  : null) ??
+                (await transaction.inboundWebhookParserRelease.findFirst({
                   where: {
                     provider: endpointAutomationProvider,
                     version: "automation-v1",
                     status: { not: "retired" },
                   },
-                })
+                })))
               : (connection?.parserRelease ?? null);
+          // GoHighLevel "Pipeline + etapa" filter: only on a GoHighLevel rule
+          // bound to the opportunity reader.
+          if (
+            ghlStage &&
+            !(
+              connection?.provider === "gohighlevel" &&
+              parserRelease?.version === GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION
+            )
+          ) {
+            throw new BadRequestException(
+              "O filtro de pipeline e etapa só existe nas regras do GoHighLevel",
+            );
+          }
 
           if (bound && !parserRelease) {
             throw new ConflictException(
@@ -1117,6 +1165,7 @@ export class ProviderConversionRulesService {
                     ? null
                     : input.messageAuthorScope,
                 productFilterCodes,
+                ...(ghlStage ? ghlStageColumns(ghlStage) : {}),
                 productionActivatedAt:
                   ruleMode === "production" ? new Date() : null,
                 createdByUserId: actorUserId,
@@ -1746,15 +1795,28 @@ export class ProviderConversionRulesService {
         input.triggerPhrases !== undefined ||
         input.triggerLabels !== undefined ||
         input.messageAuthorScope !== undefined ||
-        input.productFilterCodes !== undefined
+        input.productFilterCodes !== undefined ||
+        input.ghlStage !== undefined
       ) {
         const mode = nextMode ?? current.mode;
+        if (
+          input.ghlStage &&
+          current.parserRelease?.version !==
+            GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION
+        ) {
+          throw new BadRequestException(
+            "O filtro de pipeline e etapa só existe nas regras do GoHighLevel",
+          );
+        }
         await transaction.providerConversionRuleConfig.update({
           where: { id: current.id },
           data: {
             mode,
             ...(input.productFilterCodes !== undefined
               ? { productFilterCodes: input.productFilterCodes }
+              : {}),
+            ...(input.ghlStage !== undefined
+              ? ghlStageColumns(input.ghlStage)
               : {}),
             ...(input.triggerPhrases !== undefined
               ? { messageTriggerPhrases: input.triggerPhrases }
@@ -4865,6 +4927,23 @@ export class ProviderConversionRulesService {
             ? "webhook"
             : null),
       productFilterCodes: rule.productFilterCodes ?? [],
+      ...(rule.parserRelease?.provider === "gohighlevel"
+        ? {
+            ghlOpportunityReader:
+              rule.parserRelease.version ===
+              GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION,
+          }
+        : {}),
+      ...(rule.ghlPipelineId && rule.ghlStageName
+        ? {
+            ghlStage: {
+              pipelineId: rule.ghlPipelineId,
+              pipelineName: rule.ghlPipelineName ?? rule.ghlPipelineId,
+              stageId: rule.ghlStageId ?? rule.ghlStageName,
+              stageName: rule.ghlStageName,
+            },
+          }
+        : {}),
       ...(isWebhookRule(rule)
         ? {
             webhookValueSource: readWebhookValueSource(

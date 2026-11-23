@@ -842,6 +842,14 @@ export class InboundWebhookConnectionsService {
       lastDeliveryAt: lastDeliveryAt?.toISOString() ?? null,
       lastSuccessfulParseAt:
         connection.lastSuccessfulParseAt?.toISOString() ?? null,
+      ...(connection.provider === "gohighlevel"
+        ? {
+            goHighLevel: {
+              // Only whether it is saved: the token never leaves the API.
+              tokenConfigured: Boolean(connection.ghlTokenCiphertext),
+            },
+          }
+        : {}),
       createdAt: connection.createdAt.toISOString(),
       updatedAt: connection.updatedAt.toISOString(),
       metaApp:

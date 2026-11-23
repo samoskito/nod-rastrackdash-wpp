@@ -33,6 +33,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   PayloadTooLargeException,
   ServiceUnavailableException,
   UnsupportedMediaTypeException,
@@ -98,6 +99,14 @@ import {
   parseGoHighLevelAutomationV1,
   type ParsedGoHighLevelAutomationV1,
 } from "./providers/gohighlevel/gohighlevel-automation-v1.parser";
+import { GoHighLevelPipelinesService } from "./gohighlevel-pipelines.service";
+import {
+  GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION,
+  GOHIGHLEVEL_PIPELINE_STAGE_NOT_IN_RULE,
+  GOHIGHLEVEL_VALUE_INVALID,
+  GOHIGHLEVEL_VALUE_MISSING,
+  parseGoHighLevelAutomationV2,
+} from "./providers/gohighlevel/gohighlevel-automation-v2.parser";
 import {
   parseRoichatAutomationV1,
   type ParsedRoichatAutomationV1,
@@ -127,6 +136,11 @@ const ignoredParseErrors = new Set<string>([
   ROICHAT_AUTOMATION_V1_NOT_PURCHASE,
   "yampi_automation_v1_not_purchase",
   "yampi_automation_v1_event_not_in_rule",
+  // GoHighLevel automation-v2: another pipeline/stage than the rule's filter.
+  GOHIGHLEVEL_PIPELINE_STAGE_NOT_IN_RULE,
+  // ... and a value-carrying event whose lead_value is missing/invalid.
+  GOHIGHLEVEL_VALUE_MISSING,
+  GOHIGHLEVEL_VALUE_INVALID,
 ]);
 const ignoredEmptyTemplateReason = "ignored_empty_template";
 const paytLeadOtherChannelMessage =
@@ -353,6 +367,10 @@ export class InboundConversionAutomationIngestionService {
     private readonly productionQueue: InboundWebhookProductionQueueService,
     @Inject(ProviderConversionObservationService)
     private readonly conversionObservation: ProviderConversionObservationService,
+    // GoHighLevel automation-v2: current name of the rule's saved stage.
+    @Optional()
+    @Inject(GoHighLevelPipelinesService)
+    private readonly ghlStages?: GoHighLevelPipelinesService,
   ) {}
 
   async ingest(
@@ -603,6 +621,7 @@ export class InboundConversionAutomationIngestionService {
     // The arrival is read first: a ROI Chat purchase without event_time takes
     // it as its time (re-evaluations pass the stored firstReceivedAt).
     const receivedAt = new Date();
+    await this.warmGhlStageName(endpoint);
     const parsed = this.parseAutomation(endpoint, payload, receivedAt);
     // When the occurrence happened for the production gate (a retry keeps
     // the original receipt time); bookkeeping stays at "now".
@@ -2141,6 +2160,21 @@ export class InboundConversionAutomationIngestionService {
     return normalized.body;
   }
 
+  /** Refreshes the cached current name of the rule's GHL stage (never throws). */
+  private async warmGhlStageName(
+    endpoint: PublicConversionEndpoint,
+  ): Promise<void> {
+    const rule = endpoint.providerRule;
+    if (
+      !this.ghlStages ||
+      rule.parserRelease.provider !== "gohighlevel" ||
+      !rule.ghlStageId ||
+      !rule.connectionId
+    )
+      return;
+    await this.ghlStages.warmStageNames(endpoint.workspaceId, rule.connectionId);
+  }
+
   private parseAutomation(
     endpoint: PublicConversionEndpoint,
     payload: unknown,
@@ -2235,6 +2269,40 @@ export class InboundConversionAutomationIngestionService {
           eventName: conversionEventNameSchema.parse(
             rule.conversionRule.eventName,
           ),
+        },
+      };
+    }
+    if (
+      rule.parserRelease.provider === "gohighlevel" &&
+      rule.parserRelease.version === GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION
+    ) {
+      // Opportunity reader: first arrival, value and stage filter of the rule.
+      const parsed = parseGoHighLevelAutomationV2(
+        payload,
+        receivedAt ?? new Date(),
+        {
+          eventName: rule.conversionRule.eventName,
+          defaultValueCents: rule.conversionRule.defaultValueCents,
+          ghlPipelineId: rule.ghlPipelineId,
+          // The stage may have been renamed in GHL: the current name (by the
+          // saved stage id, cached) wins; the saved name is the fallback.
+          ghlStageName:
+            (rule.connectionId && rule.ghlPipelineId && rule.ghlStageId
+              ? this.ghlStages?.peekStageName(
+                  rule.connectionId,
+                  rule.ghlPipelineId,
+                  rule.ghlStageId,
+                )
+              : null) ?? rule.ghlStageName,
+        },
+      );
+      if (!parsed.ok) return parsed;
+      return {
+        ok: true,
+        value: {
+          ...parsed.value,
+          provider: "gohighlevel",
+          automation: "crm_movement",
         },
       };
     }
@@ -2376,9 +2444,14 @@ export class InboundConversionAutomationIngestionService {
     // Workflow, contact, trigger) has no time in it, so the same contact's
     // call after an ad click carries the SAME key: the organic delivery must
     // release it, or the paid call would be a duplicate of the organic one.
+    // GoHighLevel automation-v2 (leitor de oportunidade, porte do SaaS #277):
+    // sem ctwa_clid a chamada é ignorada sem marca (mesma liberação da chave).
     const organicGoHighLevel =
       input.parsed.provider === "gohighlevel" &&
-      observed.reasonCode === "ctwa_missing";
+      (observed.reasonCode === "ctwa_missing" ||
+        (input.endpoint.providerRule.parserRelease.version ===
+          GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION &&
+          observed.reasonCode === WEBHOOK_NOT_PAID_LEAD_REASON));
 
     await this.prisma.inboundWebhookDelivery.updateMany({
       where: {

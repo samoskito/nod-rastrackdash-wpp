@@ -8,6 +8,7 @@ import {
   inboundWebhookConnectionCreateResultSchema,
   inboundWebhookConnectionRotateSecretResultSchema,
   inboundWebhookConnectionStatusUpdateInputSchema,
+  ghlTokenUpdateInputSchema,
   type InboundWebhookChannelRoutesUpdateInputDto,
   type InboundWebhookProviderDto,
 } from "@wpptrack/shared";
@@ -210,6 +211,44 @@ export async function rotateInboundWebhookSecretAction(
     };
   } catch (error) {
     return failure(licenseLockedMessageFor(error) ?? "Não foi possível rotacionar o segredo desta conexão.");
+  }
+}
+
+/**
+ * GoHighLevel (porte do SaaS #277): salva (ou remove, com remove=1) o Private
+ * Integration Token opcional da localização da conexão. Só escrita: a API só
+ * responde se está configurado; o token nunca volta nem vai para log.
+ */
+export async function updateInboundWebhookGoHighLevelTokenAction(
+  formData: FormData,
+): Promise<InboundWebhookActionResult> {
+  const connectionId = formId(formData, "connectionId");
+  const remove = formData.get("remove") === "1";
+  const input = ghlTokenUpdateInputSchema.safeParse({
+    token: remove ? null : formText(formData, "token"),
+  });
+  if (!connectionId || !input.success) {
+    return failure(
+      "Cole o token completo gerado em Configurações → Private Integrations do GoHighLevel.",
+    );
+  }
+  try {
+    await serverApiFetch<unknown>(
+      `/integrations/inbound-webhooks/${encodeURIComponent(connectionId)}/gohighlevel-token`,
+      { method: "PUT", body: JSON.stringify(input.data) },
+    );
+    revalidatePath(integrationsPath);
+    return {
+      ok: true,
+      message: remove
+        ? "Token removido. As regras desta localização valem para todas as etapas."
+        : "Token salvo. Agora dá para escolher pipeline e etapa nas regras.",
+    };
+  } catch (error) {
+    return failure(
+      licenseLockedMessageFor(error) ??
+        "Não foi possível salvar o token do GoHighLevel.",
+    );
   }
 }
 

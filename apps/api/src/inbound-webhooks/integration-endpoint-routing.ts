@@ -142,7 +142,11 @@ export async function loadRoutingRules(
       parserRelease: {
         is: {
           provider: input.provider,
-          version: "automation-v1",
+          // GoHighLevel: the opportunity reader (automation-v2) routes too.
+          version:
+            input.provider === "gohighlevel"
+              ? { in: ["automation-v1", "automation-v2"] }
+              : "automation-v1",
           status: { not: "retired" },
         },
       },

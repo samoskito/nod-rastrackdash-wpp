@@ -42,6 +42,7 @@ import { InboundWebhookRoutingMode } from "./inbound-webhook-routing-mode";
 import { InboundRecoveryPanel } from "./inbound-recovery-panel";
 import { MetaCloudAppCredentialsPanel } from "./meta-cloud-app-credentials";
 import { MetaCloudWabaSubscriptionPanel } from "./meta-cloud-waba-subscription";
+import { GoHighLevelTokenSection } from "./gohighlevel-token-section";
 import {
   adUnavailableLabel,
   ctwaDestinationReasonLabel,
@@ -82,6 +83,8 @@ export type InboundWebhookPanelProps = {
   createChannelAction: InboundWebhookAction;
   setChannelStatusAction: InboundWebhookAction;
   saveRoutesAction: InboundWebhookAction;
+  /** GoHighLevel: salva/remove o token opcional (só escrita) da conexão. */
+  updateGoHighLevelTokenAction?: InboundWebhookAction;
   /**
    * Scopes the panel to one platform (Integrations hub modal): only its
    * connections are listed and the create form is fixed to it.
@@ -214,6 +217,7 @@ export function InboundWebhookPanel({
   createChannelAction,
   setChannelStatusAction,
   saveRoutesAction,
+  updateGoHighLevelTokenAction,
   provider: scopedProvider,
   allowCreate = true,
   defaultCreateOpen,
@@ -732,6 +736,30 @@ export function InboundWebhookPanel({
                       connectionId={connection.id}
                       canManage={canManage}
                       licenseLocked={licenseLocked}
+                    />
+                  ) : null}
+                  {connection.provider === "gohighlevel" &&
+                  updateGoHighLevelTokenAction ? (
+                    <GoHighLevelTokenSection
+                      configured={
+                        connection.goHighLevel?.tokenConfigured === true
+                      }
+                      canManage={canManage && !licenseLocked}
+                      pending={pendingAction === `ghl-token-${connection.id}`}
+                      onSave={(token) =>
+                        runConnectionAction(
+                          `ghl-token-${connection.id}`,
+                          updateGoHighLevelTokenAction,
+                          { connectionId: connection.id, token },
+                        )
+                      }
+                      onRemove={() =>
+                        runConnectionAction(
+                          `ghl-token-${connection.id}`,
+                          updateGoHighLevelTokenAction,
+                          { connectionId: connection.id, remove: "1" },
+                        )
+                      }
                     />
                   ) : null}
                   {canManage ? (

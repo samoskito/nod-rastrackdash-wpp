@@ -106,6 +106,8 @@ function harness(input: {
   adLead?: boolean;
   /** Contact's CTWA conversations, most recent LAST. */
   events?: Location[];
+  /** Parser release of the rule (default: automation-v1). */
+  release?: typeof automationRelease;
 }) {
   const channelRow = (location: Location) => ({
     id: location.channelId,
@@ -120,7 +122,11 @@ function harness(input: {
   const upserts: any[] = [];
   const prisma = {
     providerConversionRuleConfig: {
-      findFirst: vi.fn(async () => rule),
+      findFirst: vi.fn(async () =>
+        input.release
+          ? { ...rule, parserReleaseId: input.release.id, parserRelease: input.release }
+          : rule,
+      ),
       findMany: vi.fn(async () => []),
     },
     providerConversionRuleExecution: {
@@ -305,5 +311,37 @@ describe("GoHighLevel automation: the Workflow location is the number", () => {
     expect(result).toMatchObject({ reasonCode: "ctwa_missing", disposition: "blocked" });
     expect(h.upserts[0].create).toMatchObject({ status: "blocked", reasonCode: "ctwa_missing" });
     expect(h.paidLeads.resolve).not.toHaveBeenCalled();
+  });
+});
+
+describe("GoHighLevel automation-v2: only a paid lead counts (porte do SaaS #277)", () => {
+  const v2 = { ...automationRelease, id: "release_ghl_automation_v2", version: "automation-v2", status: "certified" };
+
+  it("a contact without ctwa_clid is ignored and leaves no mark (no execution, no key)", async () => {
+    const h = harness({ entries: [locA], release: v2 });
+    const result = await h.observe(locA, false);
+    expect(result).toMatchObject({
+      reasonCode: "contact_not_paid_lead",
+      disposition: "ignored",
+      executionId: null,
+    });
+    expect(h.upserts).toHaveLength(0);
+    expect(h.paidLeads.resolve).not.toHaveBeenCalled();
+    expect(h.decisions.recordInitial).not.toHaveBeenCalled();
+  });
+
+  it("the same contact calling again WITH the click is a first call, evaluated normally", async () => {
+    const h = harness({ entries: [locA], release: v2 });
+    await h.observe(locA, false);
+    const second = await h.observe(locA, true);
+    expect(second.reasonCode).not.toBe("contact_not_paid_lead");
+    expect(second.channelId).toBe(locA.channelId);
+    expect(h.paidLeads.resolve).toHaveBeenCalled();
+  });
+
+  it("v1 keeps recording ctwa_missing exactly as before", async () => {
+    const h = harness({ entries: [locA] });
+    expect(await h.observe(locA, false)).toMatchObject({ reasonCode: "ctwa_missing" });
+    expect(h.upserts).toHaveLength(1);
   });
 });

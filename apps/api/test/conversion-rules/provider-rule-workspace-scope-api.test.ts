@@ -103,7 +103,9 @@ function matches(
   return true;
 }
 
-function createWorld(options: { unnichat?: boolean } = {}) {
+function createWorld(
+  options: { unnichat?: boolean; gohighlevel?: boolean } = {},
+) {
   const releases: Row[] = [
     { id: "release_umbler", provider: "umbler", version: "v1", status: "certified" },
     {
@@ -135,6 +137,25 @@ function createWorld(options: { unnichat?: boolean } = {}) {
       version: "automation-v1",
       status: "certified",
     },
+    // GoHighLevel: entry, Workflow step and opportunity stage (automation-v2,
+    // certified by migration 20261123120000: production direct).
+    ...(options.gohighlevel
+      ? [
+          { id: "release_ghl", provider: "gohighlevel", version: "v1", status: "certified" },
+          {
+            id: "release_ghl_automation",
+            provider: "gohighlevel",
+            version: "automation-v1",
+            status: "certified",
+          },
+          {
+            id: "release_ghl_automation_v2",
+            provider: "gohighlevel",
+            version: "automation-v2",
+            status: "certified",
+          },
+        ]
+      : []),
   ];
   const connections: Row[] = [
     { id: "connection_umbler", provider: "umbler", parserReleaseId: "release_umbler" },
@@ -150,6 +171,9 @@ function createWorld(options: { unnichat?: boolean } = {}) {
           provider: "unnichat",
           parserReleaseId: "release_unnichat",
         }))
+      : []),
+    ...(options.gohighlevel
+      ? [{ id: "connection_ghl", provider: "gohighlevel", parserReleaseId: "release_ghl" }]
       : []),
   ].map((connection) => ({
     workspaceId,
@@ -174,6 +198,9 @@ function createWorld(options: { unnichat?: boolean } = {}) {
           connectionId: `connection_${id}`,
           whatsappInstanceId: null,
         }))
+      : []),
+    ...(options.gohighlevel
+      ? [{ id: "channel_ghl", connectionId: "connection_ghl", whatsappInstanceId: null }]
       : []),
   ].map((channel, index) => ({
     workspaceId,
@@ -2481,5 +2508,89 @@ describe("Fase 6.1c: produção direta (regras nascem enviando)", () => {
     expect(resumed.conversionRule.active).toBe(true);
     expect(resumed.mode).toBe("production");
     expect(resumed.productionActivatedAt).toEqual(expect.any(String));
+  });
+});
+
+describe("GoHighLevel pipeline stage rule (automation-v2, porte do SaaS #277)", () => {
+  const stage = {
+    pipelineId: "PIPELINE_ID_FICTICIO",
+    pipelineName: "Funil Exemplo",
+    stageId: "STAGE_ID_2",
+    stageName: "Proposta enviada",
+  };
+  const base = {
+    name: "Etapa no GHL",
+    triggerType: "provider_automation",
+    scope: "all_numbers",
+    connectionId: "connection_ghl",
+  };
+
+  it("without the stage filter stays on automation-v1 with the v1 event list", async () => {
+    const world = createWorld({ gohighlevel: true });
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({ ...base, eventName: "QualifiedLead" }),
+      "user_1",
+    );
+    expect(created.rule).toMatchObject({
+      parserReleaseId: "release_ghl_automation",
+      origin: "automation_gohighlevel",
+      ghlOpportunityReader: false,
+      mode: "production",
+    });
+    expect(world.providerRules.at(-1)!.ghlPipelineId ?? null).toBeNull();
+    await expect(
+      world.service.createRule(
+        workspaceId,
+        providerConversionRuleCreateInputSchema.parse({ ...base, eventName: "AddToCart" }),
+        "user_1",
+      ),
+    ).rejects.toThrow(/Lead recebido, lead qualificado ou compra/u);
+  });
+
+  it("with the filter is born SENDING on automation-v2, takes any event and stores the stage", async () => {
+    const world = createWorld({ gohighlevel: true });
+    const created = await world.service.createRule(
+      workspaceId,
+      providerConversionRuleCreateInputSchema.parse({
+        ...base,
+        eventName: "AddToCart",
+        ghlOpportunityValue: true,
+        ghlStage: stage,
+      }),
+      "user_1",
+    );
+    // Production direct: certified reader, no observation step for the student.
+    expect(created.rule).toMatchObject({
+      parserReleaseId: "release_ghl_automation_v2",
+      ghlOpportunityReader: true,
+      ghlStage: stage,
+      mode: "production",
+    });
+    expect(world.providerRules.at(-1)).toMatchObject({
+      ghlPipelineId: "PIPELINE_ID_FICTICIO",
+      ghlPipelineName: "Funil Exemplo",
+      ghlStageId: "STAGE_ID_2",
+      ghlStageName: "Proposta enviada",
+    });
+    expect(created.webhookUrl).toMatch(
+      /^https:\/\/api\.wpptrack\.test\/webhooks\/inbound\/conversions\//,
+    );
+  });
+
+  it("refuses the stage filter on a rule of another provider", async () => {
+    const world = createWorld({ gohighlevel: true });
+    await expect(
+      world.service.createRule(
+        workspaceId,
+        providerConversionRuleCreateInputSchema.parse({
+          ...base,
+          connectionId: "connection_umbler",
+          eventName: "QualifiedLead",
+          ghlStage: stage,
+        }),
+        "user_1",
+      ),
+    ).rejects.toThrow(/pipeline e etapa/u);
   });
 });

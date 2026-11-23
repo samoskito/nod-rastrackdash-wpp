@@ -3,7 +3,7 @@ import type {
   ProviderConversionRuleCapabilitiesDto,
   ProviderConversionRuleOriginDto,
 } from "@wpptrack/shared";
-import { webhookEventNames } from "@wpptrack/shared";
+import { conversionEventNameSchema, webhookEventNames } from "@wpptrack/shared";
 import {
   integrationLogoPath,
   integrationProvider,
@@ -138,8 +138,20 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     fallbackChannelProviders: ["gohighlevel"],
     connection: "provider_anchor",
     // Lead qualificado primeiro (padrão): uma regra "Lead recebido" pode
-    // substituir o envio da entrada, então nunca é o padrão.
-    allowedEvents: ["QualifiedLead", "Purchase", "LeadSubmitted"],
+    // substituir o envio da entrada, então nunca é o padrão. Com pipeline e
+    // etapa (leitor de oportunidade) vale todo evento do pixel de mensagem;
+    // Lead e Lead qualificado continuam uma vez por lead (catálogo).
+    allowedEvents: [
+      "QualifiedLead",
+      "Purchase",
+      "LeadSubmitted",
+      ...conversionEventNameSchema.options.filter(
+        (event) =>
+          event !== "QualifiedLead" &&
+          event !== "Purchase" &&
+          event !== "LeadSubmitted",
+      ),
+    ],
   },
   {
     id: "automation_payt",

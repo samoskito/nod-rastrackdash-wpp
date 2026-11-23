@@ -132,6 +132,10 @@ import {
   parseGoHighLevelAutomationV1,
   type ParsedGoHighLevelAutomationV1,
 } from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v1.parser";
+import {
+  GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION,
+  parseGoHighLevelAutomationV2,
+} from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v2.parser";
 import { isCtwaEntryAutomationProvider } from "../inbound-webhooks/providers/provider-automation-providers";
 import { ROICHAT_PURCHASE_REPEATED_REASON } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
 import {
@@ -2620,6 +2624,36 @@ export class ProviderConversionProductionService
         eventName: this.supportedEventName(
           execution.providerRule.conversionRule.eventName,
         ),
+      };
+    }
+    if (
+      execution.providerRule.parserRelease?.provider === "gohighlevel" &&
+      execution.providerRule.parserRelease.version ===
+        GOHIGHLEVEL_AUTOMATION_V2_PARSER_VERSION
+    ) {
+      // Same reading as the ingestion (stored first arrival = same key,
+      // value and stage filter of the rule).
+      const parsed = parseGoHighLevelAutomationV2(
+        payload,
+        execution.sourceDelivery.firstReceivedAt,
+        {
+          eventName: execution.providerRule.conversionRule.eventName,
+          defaultValueCents:
+            execution.providerRule.conversionRule.defaultValueCents,
+          // No stage filter here: it was applied when the call arrived (with
+          // the stage's then-current name); the stored call must not be
+          // re-judged against a name that may have changed since.
+        },
+      );
+      if (!parsed.ok) {
+        throw new ProviderConversionProductionFailure(
+          "provider_conversion_payload_invalid",
+        );
+      }
+      return {
+        ...parsed.value,
+        provider: "gohighlevel",
+        automation: "crm_movement",
       };
     }
     if (

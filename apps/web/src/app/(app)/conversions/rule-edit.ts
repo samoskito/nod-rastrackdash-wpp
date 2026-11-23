@@ -54,6 +54,8 @@ export type RuleEditCapabilities = {
   productFilter: boolean;
   /** Webhook / n8n: "Usar o valor recebido" ou "Valor fixo" (eventos com valor). */
   webhookValueSource: boolean;
+  /** GoHighLevel, leitor de oportunidade: o filtro opcional "Pipeline + etapa". */
+  ghlStage: boolean;
 };
 
 export function ruleEditCapabilities(
@@ -87,6 +89,8 @@ export function ruleEditCapabilities(
       origin === "automation_braip" ||
       origin === "automation_yampi",
     webhookValueSource: carriesValue && origin === "automation_webhook",
+    ghlStage:
+      origin === "automation_gohighlevel" && rule.ghlOpportunityReader === true,
   };
 }
 
@@ -137,6 +141,7 @@ export function ruleEditDraft(
     labels: labels ? [...rule.triggerPhrases] : [],
     productCodes: [...(rule.productFilterCodes ?? [])],
     webhookValueSource: rule.webhookValueSource ?? "received",
+    ghlStage: rule.ghlStage ?? null,
     catalog: {
       name: rule.catalog?.name ?? "",
       productName: rule.catalog?.productName ?? "",
@@ -294,6 +299,8 @@ export function buildRuleUpdatePayload(
       rule,
       draft,
       draft.origin === "automation_roichat" ||
+        // GoHighLevel: o valor da regra é só reserva do lead_value.
+        (draft.origin === "automation_gohighlevel" && capabilities.ghlStage) ||
         (capabilities.webhookValueSource &&
           draft.webhookValueSource === "received"),
     );
@@ -305,6 +312,17 @@ export function buildRuleUpdatePayload(
     ) {
       payload.webhookValueSource = draft.webhookValueSource;
     }
+  }
+
+  if (capabilities.ghlStage) {
+    const before = rule.ghlStage ?? null;
+    const after = draft.ghlStage;
+    const same =
+      before?.pipelineId === after?.pipelineId &&
+      before?.stageId === after?.stageId &&
+      before?.stageName === after?.stageName &&
+      before?.pipelineName === after?.pipelineName;
+    if (!same) payload.ghlStage = after;
   }
 
   if (capabilities.currency) {

@@ -32,6 +32,8 @@ import {
   type RuleEditDraft,
 } from "./rule-edit";
 import { RuleEndpoint } from "./rule-endpoint";
+import { loadGhlPipelinesAction } from "./actions";
+import { GhlStagePicker, type LoadGhlPipelines } from "./ghl-stage-picker";
 import { LeadSubmittedOverrideNotice } from "./lead-submitted-override";
 import {
   ProductFilterPicker,
@@ -129,7 +131,10 @@ export function RuleManage({
   yampiProducts = [],
   singleUrlActions,
   numbersUnavailable = false,
+  loadGhlPipelines = loadGhlPipelinesAction,
 }: {
+  /** GoHighLevel: lista pipelines/etapas da localização (padrão: a server action). */
+  loadGhlPipelines?: LoadGhlPipelines;
   /** GET /channels de alguma conexão falhou: números incompletos. */
   numbersUnavailable?: boolean;
   /** Fase 5.3: URLs únicas/por evento do workspace (sem a chave). */
@@ -351,6 +356,7 @@ export function RuleManage({
             braipProducts={braipProducts}
             yampiProducts={yampiProducts}
             numbersUnavailable={numbersUnavailable}
+            loadGhlPipelines={loadGhlPipelines}
           />
         ) : null}
         {tab === "endpoint" ? (
@@ -434,7 +440,9 @@ function RuleEditForm({
   braipProducts = [],
   yampiProducts = [],
   numbersUnavailable = false,
+  loadGhlPipelines,
 }: {
+  loadGhlPipelines: LoadGhlPipelines;
   numbersUnavailable?: boolean;
   paytProducts?: IntegrationDetectedProductDto[];
   /** Fase 6.5: produtos vistos nas vendas da Braip (filtro de produto). */
@@ -700,9 +708,31 @@ function RuleEditForm({
               showLegend={false}
             />
           ) : (
-            <ValueFields draft={draft} onChange={patch} />
+            <>
+              <ValueFields
+                draft={draft}
+                onChange={patch}
+                fallback={origin === "automation_gohighlevel" && editCaps.ghlStage}
+              />
+              {origin === "automation_gohighlevel" && editCaps.ghlStage ? (
+                <small className="action-note">
+                  O valor enviado é o da oportunidade (lead_value). O valor
+                  fixo só vale quando a chamada vier sem valor.
+                </small>
+              ) : null}
+            </>
           )}
         </fieldset>
+      ) : null}
+
+      {editCaps.ghlStage ? (
+        <GhlStagePicker
+          connectionId={rule.connectionId}
+          value={draft.ghlStage}
+          onChange={(ghlStage) => patch({ ghlStage })}
+          load={loadGhlPipelines}
+          disabled={disabled}
+        />
       ) : null}
 
       {editCaps.currency ? (
