@@ -46,8 +46,12 @@ import {
 } from "../conversion-events/lead-lifetime-conversion-guard";
 import { leadSubmittedRuleOverrideEnabled } from "../conversion-rules/lead-submitted-rule-override";
 import { resolveCtwaLeadProof } from "../conversion-rules/ctwa-lead-proof";
-import type { AuthorizedCtwaDestination } from "../inbound-webhooks/authorized-ctwa-destination";
+import {
+  CTWA_DESTINATION_SOURCE_TRIGGERS,
+  type AuthorizedCtwaDestination,
+} from "../inbound-webhooks/authorized-ctwa-destination";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
+import { MetaConnectionResolverService } from "../integrations/meta/meta-connection-resolver.service";
 import {
   isManualCancelableStatus,
   MANUAL_CONVERSION_AUDIT_CANCEL,
@@ -100,9 +104,10 @@ type LeadRow = {
 export type ManualConversionRoute =
   | {
       kind: "ad";
-      adAccountId: string;
-      businessConnectionId: string;
-      conversionDestinationId: string;
+      adAccountId: string | null;
+      /** Null only on the workspace's legacy (single destination) route. */
+      businessConnectionId: string | null;
+      conversionDestinationId: string | null;
       pixelId: string | null;
       channelId: string | null;
     }
@@ -222,6 +227,12 @@ export class ManualConversionService {
       | (Pick<CrmBoardService, "assertKanbanMove"> &
           Partial<Pick<CrmBoardService, "invalidateWorkspace">>)
       | null = null,
+    @Optional()
+    @Inject(MetaConnectionResolverService)
+    private readonly capiRoutes: Pick<
+      MetaConnectionResolverService,
+      "resolveCapiRoute"
+    > | null = null,
   ) {}
 
   /**
@@ -643,8 +654,85 @@ export class ManualConversionService {
           channelId: proof.channelId,
         };
     }
+    const sent = await this.sentAutomationRoute(client, workspaceId, lead);
+    if (sent) return sent;
     return {
       kind: "none",
+      channelId: await this.leadEntryChannelId(client, workspaceId, lead.id),
+    };
+  }
+
+  /**
+   * The destination the lead's automations already used: the route the
+   * sender itself resolves for this lead's ad (resolveCapiRoute: the legacy
+   * primary destination while BM routing is off, else the ad account's BM
+   * route), accepted only when an automation of this lead was already SENT
+   * to that same pixel. The saved-route preview above is stricter (ad not
+   * synced, a stale ad assignment, an inactive duplicate account row, more
+   * than one authorized destination...) and used to leave a paid lead whose
+   * entry reached the pixel "without pixel". Never a pixel the lead did not
+   * already reach: an ambiguous setup still resolves none.
+   */
+  private async sentAutomationRoute(
+    client: Prisma.TransactionClient,
+    workspaceId: string,
+    lead: LeadRow,
+  ): Promise<ManualConversionRoute | null> {
+    if (!this.capiRoutes || (!lead.adId && !lead.campaignId)) return null;
+    const sent = await client.conversionEventLog.findMany({
+      where: {
+        workspaceId,
+        leadId: lead.id,
+        status: "sent",
+        pixelId: { not: null },
+        // Never the manual pipeline itself, a manual test event, or a CTWA
+        // entry receipt: a Unnichat/GoHighLevel lead whose proof is refused
+        // on purpose (connection revoked, back in observation) must not
+        // reach Meta through the workspace route instead.
+        sourceTrigger: {
+          notIn: [
+            MANUAL_CONVERSION_TRIGGER,
+            "manual_test",
+            ...CTWA_DESTINATION_SOURCE_TRIGGERS,
+          ],
+        },
+      },
+      select: { pixelId: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    const sentPixels = new Set(
+      sent.map((log) => log.pixelId).filter((id): id is string => !!id),
+    );
+    if (sentPixels.size === 0) return null;
+    let route: Awaited<
+      ReturnType<MetaConnectionResolverService["resolveCapiRoute"]>
+    >;
+    try {
+      route = await this.capiRoutes.resolveCapiRoute({
+        workspaceId,
+        adId: lead.adId,
+        campaignId: lead.campaignId,
+      });
+    } catch {
+      return null;
+    }
+    // A destination row is required: the once-per-lead guard and dedupe
+    // (QualifiedLead...) key on it, so a route without one could send twice.
+    if (
+      !route.pixelId ||
+      !route.conversionDestinationId ||
+      !sentPixels.has(route.pixelId)
+    )
+      return null;
+    return {
+      kind: "ad",
+      // Legacy route (no BM connection): send time resolves the ad's own
+      // account, never the legacy selected account.
+      adAccountId: route.businessConnectionId ? route.adAccountId : null,
+      businessConnectionId: route.businessConnectionId,
+      conversionDestinationId: route.conversionDestinationId,
+      pixelId: route.pixelId,
       channelId: await this.leadEntryChannelId(client, workspaceId, lead.id),
     };
   }
