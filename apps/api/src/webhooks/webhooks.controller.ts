@@ -651,7 +651,11 @@ export class WebhooksController {
     // Checkout/Purchase conversion rules against the paid lead of the contact
     // being messaged; never creates or touches a platform lead.
     if (isTeamMessage) {
-      await this.evaluateUazapiTeamMessage(resolvedContext, parsed);
+      await this.evaluateUazapiTeamMessage(
+        resolvedContext,
+        parsed,
+        "organization_member",
+      );
     }
 
     // Labels can arrive on chat updates as well as inbound CTWA messages.
@@ -667,6 +671,15 @@ export class WebhooksController {
 
     // Product rule: Uazapi only creates platform leads for paid CTWA inbound messages.
     if (!isInboundMessage || !parsed.ctwaClid) {
+      // Lead phrase rules (authorScope contact/both) for follow-up messages
+      // of an already paid lead. Fails closed and is logged, never throws.
+      if (isInboundMessage) {
+        await this.evaluateUazapiTeamMessage(
+          resolvedContext,
+          parsed,
+          "contact",
+        );
+      }
       return {
         ...diagnostic,
         conversion: {
@@ -1295,6 +1308,7 @@ export class WebhooksController {
   private async evaluateUazapiTeamMessage(
     context: VerifiedUazapiContext,
     parsed: ParsedUazapiWebhook,
+    authorType: "organization_member" | "contact",
   ): Promise<void> {
     if (!parsed.phone || !parsed.messageText) {
       return;
@@ -1325,11 +1339,13 @@ export class WebhooksController {
         messageText: parsed.messageText,
         externalMessageId: parsed.externalEventId,
         occurredAt: new Date(),
+        authorType,
       });
     } catch (error) {
       this.logger.error(
         JSON.stringify({
           event: "uazapi_team_message_evaluation_failed",
+          authorType,
           workspaceId: context.workspaceId,
           whatsappInstanceId: context.whatsappInstanceId,
           errorName: error instanceof Error ? error.name : "unknown",

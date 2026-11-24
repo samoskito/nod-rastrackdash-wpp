@@ -313,7 +313,7 @@ export function scopeIssue(
   const providers = draftChannelProviders(draft, context.capabilities);
   if (chosen.some((number) => !providers.includes(number.provider))) {
     return draft.origin === "message_phrase" && draft.messageAuthorScope === "contact"
-      ? "Mensagens do contato só são lidas na Umbler. Escolha números da Umbler ou mude “Quem pode enviar”."
+      ? "Mensagens do contato só são lidas na Umbler e na Uazapi. Escolha números dessas conexões ou mude “Quem pode enviar”."
       : "Um dos números escolhidos ainda não funciona com esta origem.";
   }
   if (

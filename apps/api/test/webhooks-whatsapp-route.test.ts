@@ -743,3 +743,85 @@ describe("POST /webhooks/whatsapp/:id", () => {
     expect(call?.[0]).not.toHaveProperty("payloadHash");
   });
 });
+
+describe("Uazapi phrase rules by author", () => {
+  const instance: Instance = {
+    id: "connection-a",
+    workspaceId: "workspace-a",
+    provider: "uazapi_byo",
+    providerInstanceId: "provider-a",
+    webhookTokenHash: hash("valid-token"),
+    status: "active",
+  };
+  const body = (fromMe: boolean, extra: Record<string, unknown> = {}, isGroup = false) => ({
+    instance: "provider-a",
+    chat: { phone: "5511999999999", wa_isGroup: isGroup },
+    message: {
+      id: "5511888888888:3EB0PHRASE",
+      text: "quero fechar",
+      type: "text",
+      fromMe,
+      chatid: "5511999999999@s.whatsapp.net",
+      ...extra,
+    },
+  });
+
+  async function post(payload: Record<string, unknown>, failure?: Error) {
+    const evaluateTeamMessage = vi.fn(async () => {
+      if (failure) throw failure;
+      return { evaluated: false, eligibleExecutionId: null };
+    });
+    const services = defaultServices();
+    const prisma = {
+      whatsappInstance: { findFirst: vi.fn(async () => instance) },
+      metaAd: { findFirst: vi.fn(async () => null) },
+    };
+    const controller = new WebhooksController(
+      services.diagnosticsService as never,
+      services.conversionRulesService as never,
+      services.conversionEventsService as never,
+      services.conversionEventsQueueService as never,
+      services.leadsService as never,
+      { evaluateTeamMessage } as never,
+      prisma as never,
+    );
+    await expect(
+      controller.recordWhatsappConnection("connection-a", payload, "valid-token"),
+    ).resolves.toBeTruthy();
+    return { evaluateTeamMessage, services };
+  }
+
+  it("evaluates a lead follow-up (no ctwa_clid) as contact without creating a lead", async () => {
+    const { evaluateTeamMessage, services } = await post(body(false));
+    expect(evaluateTeamMessage).toHaveBeenCalledTimes(1);
+    expect(evaluateTeamMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ authorType: "contact", phone: "5511999999999" }),
+    );
+    expect(services.leadsService.upsertFromWhatsappWebhook).not.toHaveBeenCalled();
+  });
+
+  it("does not evaluate the lead phrase on the ctwa_clid branch", async () => {
+    const { evaluateTeamMessage, services } = await post(
+      body(false, { referral: { ctwa_clid: "ctwa_phrase_1", source_id: "ad_ref_1" } }),
+    );
+    expect(services.leadsService.upsertFromWhatsappWebhook).toHaveBeenCalledTimes(1);
+    expect(evaluateTeamMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the attendant path as organization_member", async () => {
+    const { evaluateTeamMessage } = await post(body(true));
+    expect(evaluateTeamMessage).toHaveBeenCalledTimes(1);
+    expect(evaluateTeamMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ authorType: "organization_member" }),
+    );
+  });
+
+  it("does not evaluate group messages", async () => {
+    const { evaluateTeamMessage } = await post(body(false, {}, true));
+    expect(evaluateTeamMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not fail the webhook when the lead evaluation throws", async () => {
+    await post(body(false), new Error("boom"));
+  });
+});

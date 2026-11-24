@@ -1041,7 +1041,7 @@ export function offeredRuleOrigins(input: OriginOfferInput): RuleOriginId[] {
  * Números onde a origem roda: Umbler/Unnichat em todas as conexões do
  * provedor (opcionalmente só uma conexão, ex.: editar uma regra ligada a
  * ela). `authorScope` "contact" restringe aos provedores que leem mensagens
- * do contato (hoje só a Umbler).
+ * do contato (hoje Umbler e Uazapi).
  */
 export function numbersForOrigin(
   origin: RuleOriginId,
