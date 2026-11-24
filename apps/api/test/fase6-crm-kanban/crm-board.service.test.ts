@@ -373,6 +373,15 @@ describe("CRM forward-only rule (API)", () => {
     });
   });
 
+  it("a lead in Compra with a failed Purchase (as the board shows it) cannot be moved to Compra again", async () => {
+    await testDb.lead({ id: "failed_buyer" });
+    await testDb.log({ leadId: "failed_buyer", eventName: "Purchase", status: "failed", at: daysAgo(1) });
+    const { service } = harness();
+    await expect(service.assertKanbanMove(WS, "failed_buyer", "Purchase")).rejects.toMatchObject({
+      response: { code: "crm_same_stage" },
+    });
+  });
+
   it("override mode: a deferred lead may be moved to Leads novos (fires LeadSubmitted)", async () => {
     await testDb.lead({ id: "deferred" });
     await testDb.log({

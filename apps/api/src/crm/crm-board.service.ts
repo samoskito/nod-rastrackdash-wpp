@@ -55,7 +55,8 @@ import {
   type CrmStageRank,
 } from "./crm-board-query";
 
-const CRM_TIMEZONE = "America/Sao_Paulo";
+/** Same day boundaries as the Visão geral (WPPTRACK_REPORT_TIMEZONE). */
+const CRM_TIMEZONE = process.env.WPPTRACK_REPORT_TIMEZONE ?? "America/Sao_Paulo";
 /** Board query slower than this is logged as a warning. */
 export const CRM_BOARD_SLOW_QUERY_MS = 2_000;
 

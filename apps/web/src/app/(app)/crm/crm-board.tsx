@@ -545,7 +545,7 @@ export function CrmBoard({
         <div className="crm-empty-state surface-panel">
           <strong>Nenhum lead no período</strong>
           <span>
-            Nenhum lead de anúncio chegou neste período com estes filtros.
+            Nenhum lead de anúncio neste período com estes filtros.
             Amplie o período ou limpe os filtros.
           </span>
         </div>

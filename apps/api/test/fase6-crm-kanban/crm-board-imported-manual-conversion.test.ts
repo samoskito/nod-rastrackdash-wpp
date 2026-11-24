@@ -11,8 +11,11 @@ import {
  * already wrote; the import itself was removed) is read as an ordinary manual
  * conversion. The CRM Kanban (#176) places the lead in that column, so
  * dragging it there again (a new manual conversion, refused by the #153 guard)
- * is never needed. An imported log of another trigger (the external MySQL
- * import) still never counts. PGlite: in-process Postgres, no project database.
+ * is never needed. Since the port of the SaaS #303 an imported log of another
+ * trigger (the external MySQL import) also places the lead after the base
+ * stage, exactly as the Visão geral counts it (every status but skipped); an
+ * imported entry (LeadSubmitted) of another trigger is still not an entry.
+ * PGlite: in-process Postgres, no project database.
  */
 
 const range = {
@@ -46,7 +49,7 @@ beforeEach(async () => {
 });
 
 describe("CRM Kanban: conversão manual com status imported", () => {
-  it("an imported manual QualifiedLead places the lead; other imported logs do not", async () => {
+  it("an imported QualifiedLead places the lead, manual or from the external import (as the Visão geral)", async () => {
     await testDb.lead({ id: "lead_imported" });
     await testDb.lead({ id: "lead_other_import" });
     await testDb.log({
@@ -70,6 +73,31 @@ describe("CRM Kanban: conversão manual com status imported", () => {
     const byLead = Object.fromEntries(rows.map((row) => [row.leadId, row]));
 
     expect(byLead.lead_imported).toMatchObject({ stageRank: 2 });
-    expect(byLead.lead_other_import).toMatchObject({ stageRank: 1 });
+    expect(byLead.lead_other_import).toMatchObject({ stageRank: 2 });
+  });
+
+  it("an imported LeadSubmitted of the external import is not an entry; a skipped stage never counts", async () => {
+    await testDb.lead({ id: "lead_import_entry" });
+    await testDb.log({
+      leadId: "lead_import_entry",
+      eventName: "LeadSubmitted",
+      status: "imported",
+      sourceTrigger: "external_mysql:connector_1",
+      at: at(2),
+    });
+    await testDb.lead({ id: "lead_skipped_stage" });
+    await testDb.log({
+      leadId: "lead_skipped_stage",
+      eventName: "Purchase",
+      status: "skipped",
+      sourceTrigger: "external_mysql:connector_1",
+      at: at(2),
+    });
+    const rows = await testDb.run<{ leadId: string; stageRank: number }>(
+      crmBoardSql(input, 21),
+    );
+    const byLead = Object.fromEntries(rows.map((row) => [row.leadId, row]));
+    expect(byLead.lead_import_entry).toMatchObject({ stageRank: 1 });
+    expect(byLead.lead_skipped_stage).toMatchObject({ stageRank: 1 });
   });
 });

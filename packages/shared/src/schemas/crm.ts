@@ -59,6 +59,12 @@ export const CRM_VALID_CONVERSION_STATUSES = [
   "delivery_unknown",
 ] as const;
 export const CRM_PANEL_ONLY_MANUAL_STATUS = "not_eligible";
+/**
+ * Visão geral counts every conversion event except this status. The CRM board
+ * uses the same definition when a period is selected (the business stage
+ * happened even if the delivery to Meta failed or was blocked).
+ */
+export const CRM_OVERVIEW_EXCLUDED_STATUS = "skipped";
 
 /** Lead origins: only CTWA today; new origins are added here. */
 export const crmLeadOrigins = ["ctwa"] as const;

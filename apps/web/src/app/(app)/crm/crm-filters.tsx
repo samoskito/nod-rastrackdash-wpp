@@ -53,7 +53,7 @@ function instanceLabel(instance: CrmWhatsappInstanceOption): string {
 }
 
 /**
- * CRM filters (design §3): period by lead arrival (default last 30 days),
+ * CRM filters (design §3): period (lead arrival in the first columns, date of the conversion in the others; default last 30 days),
  * WhatsApp number and campaign, all in the URL. Same controls as the Visão
  * Geral (native selects, FilterCombobox for campaigns, Fase 6.3b).
  */
@@ -139,7 +139,7 @@ export function CrmFilters({
       onSubmit={(event) => event.preventDefault()}
     >
       <label className="filter-field">
-        <span>Chegada de</span>
+        <span>De</span>
         <span className="lead-date-control">
           <CalendarDays aria-hidden="true" size={16} strokeWidth={2} />
           <input
