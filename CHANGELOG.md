@@ -7,9 +7,17 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One migration, no new variable.**
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One migration, no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**
 
 ### Added
+
+- Uazapi: **phrase sent by the lead** (porte do SaaS #297). A phrase rule with "Quem pode enviar" = contact or both now fires when the lead writes the phrase (follow-up message without `ctwa_clid`, existing paid lead, never a group). The `ctwa_clid` branch is unchanged. In this edition the capability matrix also changed: contact messages are read on Umbler **and Uazapi** (WAHA stays team only). [Details](docs/setup/whatsapp-providers.md#uazapi-byo-uazapi_byo).
+- Meta: ad accounts **shared with the BM as a partner** (`client_ad_accounts`) are listed together with owned ones, without duplicates (porte do SaaS #299). The permission error now tells the agency to assign the person to the account.
+- Meta: **warning for paid leads on an account without a route** in Integrações › Meta Ads, and a confirmation before deactivating an account that would block leads (porte do SaaS #302). Read-only, no migration. The SaaS confirmation when turning BM routing on was **not** ported: this edition's API has no route that turns it on. [Details](docs/setup/meta-manual.md#aviso-leads-bloqueados-por-falta-de-rota-meta).
+
+### Fixed
+
+- Manual conversion: when neither the saved route nor the CTWA proof resolves, it uses the pixel an automation of the same lead already **sent** to, if the sender would resolve the same one today (porte do SaaS #301). nod adaptation: on the legacy route the send resolves exactly like the preview and fails closed if the destination changed.
 
 - GoHighLevel: conversion by **pipeline stage** (porte do SaaS #277). A rule "Etapa no GoHighLevel" can pick a pipeline and a stage from a list read from the GHL API (optional Private Integration Token with `opportunities.readonly`, saved encrypted on the connection) and converts when the opportunity enters that stage, with the opportunity `lead_value` (fixed value only as a fallback) and any message-pixel event. Reader `gohighlevel/automation-v2` is seeded already certified by migration `20261123120000_gohighlevel_pipeline_stage` (additive): rules with a stage are born sending. Rules without a stage keep `automation-v1`. Guide: [`docs/setup/gohighlevel.md`](docs/setup/gohighlevel.md#4-conversão-pela-etapa-do-pipeline-oportunidade).
 - Leads: **"Excluir lead"** on the lead page (porte do SaaS #292), only for workspace managers, with typed confirmation and the warning that conversions already sent to Meta are not undone. The API (`DELETE /leads/:id`, audit `lead.deleted`) only deletes a lead with no send at all; a lead with a sent, queued or production conversion, a rule execution that reached the Meta queue, or a Pipedrive / real purchase link is refused (409).

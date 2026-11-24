@@ -333,7 +333,11 @@ sem envio, como antes.
   a data (até 90 dias; a Meta só aceita até 7 dias, o resto fica só no
   painel), o valor e, na Compra, o número do pedido. O destino Meta é o mesmo
   das automações do lead (anúncio do lead ou entrada CTWA); você não escolhe o
-  pixel. Antes de gravar, a tela mostra se vai para a Meta e, quando não vai,
+  pixel. Se nenhuma dessas duas rotas resolver, vale o pixel que **já recebeu
+  um envio automático deste lead**, desde que seja o mesmo que o envio usaria
+  hoje; nunca um pixel que o lead não alcançou (outro pixel, nada enviado ou
+  rota ambígua: fica só no painel). Conversão manual antiga que ficou "só no
+  painel" não é reenviada sozinha: cancele e registre de novo. Antes de gravar, a tela mostra se vai para a Meta e, quando não vai,
   por quê. Proteções: o mesmo evento "uma vez por lead" (Lead recebido, Lead
   qualificado...) já enviado por uma regra é recusado; usa o mesmo `event_id`
   da regra, então a Meta nunca conta dois; o mesmo pedido não entra duas vezes
