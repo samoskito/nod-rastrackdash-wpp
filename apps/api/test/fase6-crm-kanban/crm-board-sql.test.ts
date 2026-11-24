@@ -91,14 +91,13 @@ describe("CRM board SQL: stage = most advanced valid conversion", () => {
     });
     // A later purchase does not change when the lead entered the stage.
     await log({ leadId: "lead_buyer", eventName: "Purchase", status: "sent", at: at(0.5), valueCents: 500, currency: "BRL" });
-    // Blocked / failed / skipped / duplicate / shadow never count.
+    // Blocked / failed / duplicate / shadow: the business stage happened.
     for (const status of [
       "pending_meta_context",
       "pending_value",
       "not_configured",
       "failed",
       "error",
-      "skipped",
       "duplicate",
       "shadow_observed",
       "imported",
@@ -106,6 +105,10 @@ describe("CRM board SQL: stage = most advanced valid conversion", () => {
     ])
       await log({ leadId: "lead_blocked", eventName: "Purchase", status, at: at(1) });
 
+    // Every status but skipped places the lead after the base stage (as the
+    // Visão geral counts); a skipped one never does.
+    await lead({ id: "lead_skipped" });
+    await log({ leadId: "lead_skipped", eventName: "Purchase", status: "skipped", at: at(1) });
     const rows = byLead(await run<Row>(crmBoardSql(input(), 21)));
     expect(rows.lead_new).toMatchObject({ stageRank: 1 });
     expect(rows.lead_qualified).toMatchObject({ stageRank: 2 });
@@ -115,8 +118,9 @@ describe("CRM board SQL: stage = most advanced valid conversion", () => {
       currency: "BRL",
     });
     expect(new Date(rows.lead_buyer!.enteredAt).toISOString()).toBe(at(1).toISOString());
-    expect(rows.lead_blocked).toMatchObject({ stageRank: 1 });
-    expect(Object.keys(rows)).toHaveLength(4);
+    expect(rows.lead_blocked).toMatchObject({ stageRank: 3 });
+    expect(rows.lead_skipped).toMatchObject({ stageRank: 1 });
+    expect(Object.keys(rows)).toHaveLength(5);
   });
 
   it("counts a manual conversion registered only in the panel; a canceled one never", async () => {
@@ -308,8 +312,9 @@ describe("CRM board SQL: large workspaces (query shape)", () => {
       }),
       21,
     );
-    // The corrections travel as 2 array parameters, never as IN lists.
-    expect(huge.values.length - small.values.length).toBeLessThanOrEqual(3);
+    // The corrections travel as 2 array parameters + the campaign id per select of the period
+    // union (3 selects), never as IN lists: constant in the number of leads.
+    expect(huge.values.length - small.values.length).toBeLessThanOrEqual(9);
     expect(huge.text).toContain("= ANY(");
     expect(huge.text).not.toMatch(/IN \((\$\d+, ){20,}/u);
     for (const text of [small.text, huge.text]) {
@@ -349,11 +354,11 @@ describe("CRM board SQL: large workspaces (query shape)", () => {
     const totals = Object.fromEntries(
       rows.map((row) => [row.stageRank, Number(row.total)]),
     );
-    // Buyers: g % 3 == 0 up to 3000. Qualified: even g up to 4000 that did
-    // not buy (failed QualifiedLead never counts).
+    // Buyers: g % 3 == 0 up to 3000. Qualified: every g up to 4000 that did
+    // not buy (a failed QualifiedLead counts too, as in the Visão geral).
     const buyers = 1000;
     const qualified = Array.from({ length: 4000 }, (_, i) => i + 1).filter(
-      (g) => g % 2 === 0 && !(g <= 3000 && g % 3 === 0),
+      (g) => !(g <= 3000 && g % 3 === 0),
     ).length;
     expect(totals).toEqual({
       1: 5000 - buyers - qualified,

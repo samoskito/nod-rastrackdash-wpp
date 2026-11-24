@@ -428,10 +428,23 @@ Integrações (Kommo e Pipedrive): o quadro não depende de nenhuma delas.
   em uso, aparece antes a coluna **Conversas iniciadas**, só de leitura. Sem
   nenhuma etapa visível, o quadro mostra "Configure a Jornada".
 - **Onde cada lead fica.** Cada lead aparece uma vez, na etapa mais avançada
-  com conversão válida (enviada ou a caminho da Meta, ou uma conversão manual
-  só no painel). Canceladas, bloqueadas, duplicadas e com falha não contam. O
-  topo mostra o total real de cada coluna; cada coluna mostra 20 cards e
-  "Carregar mais (N restantes)".
+  em que tem conversão. Nas etapas depois de **Leads novos** vale toda
+  conversão, exceto as canceladas (`skipped`), também as que falharam, foram
+  bloqueadas ou recusadas na Meta: a etapa do negócio aconteceu, e é assim que
+  a Visão geral conta (10.6). A entrada (**Leads novos**) mantém a regra
+  estrita: só conta a enviada ou a caminho da Meta, ou a conversão manual só
+  no painel ou importada. O topo mostra o total real de cada coluna; cada
+  coluna mostra 20 cards e "Carregar mais (N restantes)".
+- **Período (igual à Visão geral).** **Leads novos** (e **Conversas
+  iniciadas**) mostra quem **chegou** no período. As outras colunas mostram
+  quem teve a **conversão daquela etapa no período**, pela data da conversão,
+  mesmo que o lead tenha chegado antes. Exemplo: com "Ontem", um lead da
+  semana passada que comprou ontem aparece em Compra; um lead que chegou
+  ontem e comprou hoje continua em Leads novos. Só as conversões dentro do
+  período posicionam o card. Os limites do dia seguem o fuso
+  `WPPTRACK_REPORT_TIMEZONE` (padrão America/Sao_Paulo), o mesmo da Visão
+  geral, então a coluna Compra de um dia bate com as compras daquele dia na
+  Visão geral.
 - **Card.** Nome, telefone, campanha e anúncio (com a miniatura guardada do
   criativo, 10.9, ou a da Meta enquanto o link dela vale), há quantos dias está na etapa, o valor nas colunas de compra e o
   número de WhatsApp quando há mais de uma conexão ativa. O modo apresentação
@@ -447,7 +460,7 @@ Integrações (Kommo e Pipedrive): o quadro não depende de nenhuma delas.
   Pular etapas é permitido, mas só a etapa de destino é enviada. Voltar etapa
   ou soltar na mesma etapa é recusado. Cancelar devolve o card ao lugar.
 - **Membros analistas** veem o quadro e abrem os leads, mas não movem cards.
-- **Filtros** (ficam na URL): período de chegada do lead (padrão: últimos 30
+- **Filtros** (ficam na URL): período (veja acima; padrão: últimos 30
   dias; até 180 dias), número de WhatsApp (conexões ativas) e campanha. O
   quadro se atualiza sozinho a cada 60 segundos e pelo botão **Atualizar**.
 - **Licença bloqueada:** o quadro continua visível, mas os cards não arrastam

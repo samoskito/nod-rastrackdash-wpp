@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 import {
+  CRM_BASE_STAGE_EVENT,
+  CRM_OVERVIEW_EXCLUDED_STATUS,
   CRM_PANEL_ONLY_MANUAL_STATUS,
   CRM_VALID_CONVERSION_STATUSES,
   MANUAL_CONVERSION_TRIGGER,
@@ -14,12 +16,18 @@ import { DEFERRED_ENTRY_ERROR_CODE } from "../leads/lead-cohort";
  *
  * Shape:
  *   stage_def    the board stages (eventName -> rank), one unnest() param pair
- *   period_leads the CTWA leads that arrived in the period (+ number/campaign)
+ *   period_leads the CTWA leads that arrived or converted in the period
  *   valid        DISTINCT ON (leadId): the most advanced valid conversion
  *   deferred     (override mode only) leads with a deferred entry receipt
  *   placed       one row per lead: rank of its column, when it entered it
+ * Period rule: a lead is in the first columns (rank <= base) when it ARRIVED
+ * in the period; in a later column when the conversion that put it there
+ * (eventOccurredAt, same field and day boundaries as the Visão geral) happened
+ * in the period. The stage looks at conversions up to the end of the period,
+ * so "Leads novos" of yesterday does not jump to a purchase made today.
  * Indexes used: Lead(workspaceId, firstMessageAt), Lead(workspaceId,
- * createdAt), ConversionEventLog(leadId). No migration.
+ * createdAt), ConversionEventLog(leadId) and, with a period,
+ * ConversionEventLog(workspaceId, eventName, eventOccurredAt). No migration.
  */
 
 /** Rank of the "Conversas iniciadas" column (override mode). */
@@ -34,7 +42,10 @@ export type CrmPlacementInput = {
   /** Stages with rank >= CRM_BASE_RANK (the base stage included). */
   stages: CrmStageRank[];
   ruleOverride: boolean;
-  /** Lead arrival range (inclusive); null = every lead (single-lead check). */
+  /**
+   * Period (inclusive): lead arrival for the first columns, conversion date
+   * for the later ones; null = every lead (single-lead check).
+   */
   range: { gte: Date; lte: Date } | null;
   whatsappInstanceId?: string | null;
   /** First-contact campaign filter (lead-cohort corrections included). */
@@ -75,19 +86,21 @@ export function crmValidConversionSql(alias = "c"): Prisma.Sql {
   ])}) AND ${column("sourceTrigger")} = ${MANUAL_CONVERSION_TRIGGER}))`;
 }
 
+/**
+ * Conversion that places a lead in a stage column: a valid CRM conversion, or
+ * (stages after the base) any status but skipped, exactly what the Visão geral
+ * counts. Same rule with or without a period, so the kanban move check agrees
+ * with the board.
+ */
+function stageConversionSql(alias: string): Prisma.Sql {
+  const column = (name: string) => Prisma.raw(`${alias}."${name}"`);
+  return Prisma.sql`(${crmValidConversionSql(alias)} OR (${column("eventName")} <> ${CRM_BASE_STAGE_EVENT} AND ${column("status")} <> ${CRM_OVERVIEW_EXCLUDED_STATUS}))`;
+}
+
 function periodLeadsSql(input: CrmPlacementInput): Prisma.Sql {
   const conditions: Prisma.Sql[] = [
     Prisma.sql`l."workspaceId" = ${input.workspaceId}`,
   ];
-  if (input.range) {
-    conditions.push(
-      Prisma.sql`((l."firstMessageAt" >= ${ts(input.range.gte)} AND l."firstMessageAt" <= ${ts(
-        input.range.lte,
-      )}) OR (l."firstMessageAt" IS NULL AND l."createdAt" >= ${ts(
-        input.range.gte,
-      )} AND l."createdAt" <= ${ts(input.range.lte)}))`,
-    );
-  }
   if (input.ctwaOnly !== false) {
     conditions.push(
       Prisma.sql`(l."campaignId" IS NOT NULL OR l."adSetId" IS NOT NULL OR l."adId" IS NOT NULL OR l."ctwaClid" IS NOT NULL)`,
@@ -107,9 +120,33 @@ function periodLeadsSql(input: CrmPlacementInput): Prisma.Sql {
       Prisma.sql`((l."campaignId" = ${input.campaign.campaignId} AND NOT (l.id = ANY(${input.campaign.excludeIds}::text[]))) OR l.id = ANY(${input.campaign.includeIds}::text[]))`,
     );
   }
-  return Prisma.sql`SELECT l.id, COALESCE(l."firstMessageAt", l."createdAt") AS arrived_at
+  const select = (extra?: Prisma.Sql) =>
+    Prisma.sql`SELECT l.id, COALESCE(l."firstMessageAt", l."createdAt") AS arrived_at
     FROM "Lead" l
-    WHERE ${Prisma.join(conditions, " AND ")}`;
+    WHERE ${Prisma.join(extra ? [...conditions, extra] : conditions, " AND ")}`;
+  if (!input.range) return select();
+  // Arrived in the period, or has a board conversion in the period. One
+  // index-friendly select each (Lead(workspaceId, firstMessageAt) / createdAt /
+  // ConversionEventLog), united, instead of a top-level OR. No deliveryChannel
+  // filter: without the Formulários Meta every log here is business messaging.
+  const { gte, lte } = input.range;
+  return Prisma.sql`${select(
+    Prisma.sql`l."firstMessageAt" >= ${ts(gte)} AND l."firstMessageAt" <= ${ts(lte)}`,
+  )}
+    UNION
+    ${select(
+      Prisma.sql`l."firstMessageAt" IS NULL AND l."createdAt" >= ${ts(gte)} AND l."createdAt" <= ${ts(lte)}`,
+    )}
+    UNION
+    ${select(
+      Prisma.sql`l.id IN (
+        SELECT c2."leadId" FROM "ConversionEventLog" c2
+        WHERE c2."workspaceId" = ${input.workspaceId}
+          AND c2."eventName" = ANY(${input.stages.map((stage) => stage.eventName)}::text[])
+          AND c2."eventOccurredAt" >= ${ts(gte)}
+          AND c2."eventOccurredAt" <= ${ts(lte)}
+          AND ${stageConversionSql("c2")})`,
+    )}`;
 }
 
 /** WITH ... placed AS (...): one row per lead of the board. */
@@ -134,6 +171,16 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
     ? Prisma.sql`LEFT JOIN deferred d ON d.lead_id = p.id`
     : Prisma.empty;
 
+  // With a period only the conversions inside it place the lead (the most
+  // advanced of them; one column per lead). Earlier or later ones never count.
+  const inPeriod = input.range
+    ? Prisma.sql`AND c."eventOccurredAt" >= ${ts(input.range.gte)} AND c."eventOccurredAt" <= ${ts(input.range.lte)}`
+    : Prisma.empty;
+  const periodFilter = input.range
+    ? Prisma.sql`WHERE (a.stage_rank <= ${CRM_BASE_RANK}::int AND a.arrived_at >= ${ts(input.range.gte)} AND a.arrived_at <= ${ts(input.range.lte)})
+      OR (a.stage_rank > ${CRM_BASE_RANK}::int AND a.entered_at >= ${ts(input.range.gte)} AND a.entered_at <= ${ts(input.range.lte)})`
+    : Prisma.empty;
+
   return Prisma.sql`WITH stage_def AS (
     SELECT * FROM unnest(${events}::text[], ${ranks}::int[]) AS s(event_name, stage_rank)
   ),
@@ -151,10 +198,11 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
     JOIN "ConversionEventLog" c ON c."leadId" = p.id
     JOIN stage_def s ON s.event_name = c."eventName"
     WHERE c."workspaceId" = ${input.workspaceId}
-      AND ${crmValidConversionSql("c")}
+      AND ${stageConversionSql("c")}
+      ${inPeriod}
     ORDER BY c."leadId", s.stage_rank DESC, c."eventOccurredAt" ASC, c.id ASC
   )${deferredCte},
-  placed AS (
+  placed_all AS (
     SELECT
       p.id AS lead_id,
       p.arrived_at,
@@ -165,6 +213,10 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
     FROM period_leads p
     LEFT JOIN valid v ON v.lead_id = p.id
     ${deferredJoin}
+  ),
+  placed AS (
+    SELECT a.* FROM placed_all a
+    ${periodFilter}
   )`;
 }
 
