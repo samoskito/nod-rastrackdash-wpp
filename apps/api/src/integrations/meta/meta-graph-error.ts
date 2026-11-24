@@ -63,7 +63,7 @@ export class MetaCredentialInvalidError extends Error {
 export const META_RECONNECT_MESSAGE =
   "Reconecte a conta Meta: a autorização foi invalidada ou expirou. A sincronização fica pausada até a reconexão.";
 export const META_PERMISSION_MESSAGE =
-  "Reconecte a conta Meta: esta conta de anúncios perdeu permissão (ex.: ads_read) ou não pertence mais ao Business. A sincronização desta conta fica pausada até a revalidação.";
+  "Reconecte a conta Meta: esta conta de anúncios perdeu permissão (ex.: ads_read) ou não pertence mais ao Business. Se a conta foi compartilhada por um cliente como parceiro, atribua a sua pessoa a esta conta no Gerenciador de Negócios da agência. A sincronização desta conta fica pausada até a revalidação.";
 export const META_RATE_LIMIT_MESSAGE =
   "Aguardando liberação do limite de uso da Meta. A sincronização será retomada automaticamente.";
 

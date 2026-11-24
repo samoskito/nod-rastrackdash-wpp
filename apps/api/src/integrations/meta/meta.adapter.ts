@@ -754,28 +754,75 @@ export class MetaAdapter implements IntegrationAdapter {
     };
   }
 
+  /**
+   * Contas de anuncio do BM: as proprias (`owned_ad_accounts`) mais as que
+   * clientes compartilharam com o BM como parceiro (`client_ad_accounts`).
+   * Proprias primeiro, sem duplicar por id. Se so uma das arestas falhar,
+   * a outra continua valendo; se as duas falharem, o erro sobe.
+   */
   async listOwnedAdAccounts(input: {
     accessToken: string;
     businessId: string;
   }): Promise<MetaAdAccountAssetDto[]> {
-    const response = await this.getGraphList<MetaAdAccountGraphNode>(
-      `/${input.businessId}/owned_ad_accounts`,
-      "id,name,account_status,currency,timezone_name",
-      input.accessToken,
-    );
+    const fields = "id,name,account_status,currency,timezone_name";
+    const [owned, client] = await Promise.allSettled([
+      this.getGraphList<MetaAdAccountGraphNode>(
+        `/${input.businessId}/owned_ad_accounts`,
+        fields,
+        input.accessToken,
+      ),
+      this.getGraphList<MetaAdAccountGraphNode>(
+        `/${input.businessId}/client_ad_accounts`,
+        fields,
+        input.accessToken,
+      ),
+    ]);
 
-    return response
-      .map((item) => ({
-        id: this.asString(item.id),
+    if (owned.status === "rejected" && client.status === "rejected") {
+      throw owned.reason;
+    }
+
+    for (const [edge, result] of [
+      ["owned_ad_accounts", owned],
+      ["client_ad_accounts", client],
+    ] as const) {
+      if (result.status === "rejected") {
+        console.warn("[wpptrack:meta-graph] ad account edge failed", {
+          edge,
+          businessId: input.businessId,
+          message:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+        });
+      }
+    }
+
+    const items = [
+      ...(owned.status === "fulfilled" ? owned.value : []),
+      ...(client.status === "fulfilled" ? client.value : []),
+    ];
+    const accountsById = new Map<string, MetaAdAccountAssetDto>();
+
+    for (const item of items) {
+      const id = this.asString(item.id);
+      const name = this.asString(item.name);
+
+      if (!id || !name || accountsById.has(id)) {
+        continue;
+      }
+
+      accountsById.set(id, {
+        id,
         businessId: input.businessId as string | null,
-        name: this.asString(item.name),
+        name,
         accountStatus: this.asString(item.account_status),
         currency: this.asString(item.currency),
         timezoneName: this.asString(item.timezone_name),
-      }))
-      .filter((item): item is MetaAdAccountAssetDto =>
-        Boolean(item.id && item.name),
-      );
+      });
+    }
+
+    return [...accountsById.values()];
   }
 
   async listBusinessPixels(input: {
