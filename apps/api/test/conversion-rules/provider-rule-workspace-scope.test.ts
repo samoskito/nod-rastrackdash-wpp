@@ -232,9 +232,15 @@ describe("provider rule workspace scope: precedence", () => {
     expect(providerRuleCoversChannel(teamMessage, brandNewQr)).toBe(true);
     expect(providerRuleCoversChannel(teamMessage, umblerChannel)).toBe(true);
     expect(providerRuleCoversChannel(teamMessage, gupshupChannel)).toBe(false);
-    // Contact messages are only evaluated on Umbler in this edition.
+    // Contact messages are evaluated on Umbler and Uazapi (not WAHA).
     expect(providerRuleCoversChannel(contactMessage, umblerChannel)).toBe(true);
-    expect(providerRuleCoversChannel(contactMessage, brandNewQr)).toBe(false);
+    expect(providerRuleCoversChannel(contactMessage, brandNewQr)).toBe(true);
+    expect(
+      providerRuleCoversChannel(contactMessage, {
+        ...brandNewQr,
+        provider: "waha",
+      }),
+    ).toBe(false);
     expect(providerRuleCoversChannel(contactMessage, gupshupChannel)).toBe(
       false,
     );
@@ -998,6 +1004,7 @@ function uazapiHarness(
           : rules,
       ),
       findFirst: vi.fn(),
+      count: vi.fn(async () => rules.length),
     },
   };
   const engine = new ProviderConversionDecisionEngine();
@@ -1258,7 +1265,7 @@ describe("provider rule workspace scope: Uazapi evaluation", () => {
     });
 
     expect(result).toEqual({ evaluated: false, eligibleExecutionId: null });
-    expect(harness.evaluated).toEqual([]);
+    expect(harness.evaluated.map((entry) => entry.decision)).toEqual([null]);
   });
 
   it("gates an unbound rule by the bridged connection", async () => {
@@ -1755,5 +1762,73 @@ describe("Uazapi label evaluation: reason logged at every silent exit", () => {
     expect(harness.evaluated.at(-1)?.decision?.decisionCode).toBe(
       "ignored_untracked_lead",
     );
+  });
+});
+
+describe("Uazapi phrase rules: messages written by the lead", () => {
+  const send = (
+    harness: ReturnType<typeof uazapiHarness>,
+    extra: Record<string, unknown> = {},
+  ) =>
+    harness.service.evaluateTeamMessage({
+      workspaceId,
+      instance: instanceB,
+      phone: "5511999990000",
+      messageText: "vou te passar os valores",
+      externalMessageId: "msg_lead_1",
+      ...extra,
+    });
+  const harnessFor = (authorScope: "team" | "contact" | "both") =>
+    uazapiHarness([
+      messageRule({ id: "global", scope: "all_numbers", bound: false, authorScope }),
+    ]);
+
+  it.each([
+    ["team", "contact", false],
+    ["contact", "contact", true],
+    ["both", "contact", true],
+    ["team", "organization_member", true],
+    ["contact", "organization_member", false],
+    ["both", "organization_member", true],
+  ] as const)("scope %s, author %s -> matches: %s", async (scope, author, matches) => {
+    const harness = harnessFor(scope);
+    const result = await send(harness, { authorType: author });
+    expect(result.eligibleExecutionId !== null).toBe(matches);
+  });
+
+  it("keeps the same occurrence key when the webhook is delivered again", async () => {
+    const harness = harnessFor("contact");
+    await send(harness, { authorType: "contact" });
+    await send(harness, { authorType: "contact" });
+    expect(
+      harness.evaluated.map((entry) => entry.input.occurrence.occurrenceKey),
+    ).toEqual([
+      "uazapi:channel_qr_b:msg_lead_1",
+      "uazapi:channel_qr_b:msg_lead_1",
+    ]);
+  });
+
+  it("evaluates nothing when no rule accepts the contact", async () => {
+    const harness = harnessFor("both");
+    harness.prisma.providerConversionRuleConfig.count.mockResolvedValue(0);
+    await expect(send(harness, { authorType: "contact" })).resolves.toEqual({
+      evaluated: false,
+      eligibleExecutionId: null,
+    });
+    expect(harness.prisma.providerConversionRuleConfig.findMany).not.toHaveBeenCalled();
+    await send(harness);
+    expect(harness.prisma.providerConversionRuleConfig.count).toHaveBeenCalledTimes(1);
+  });
+
+  it("suffixes only the contact fallback key when there is no message id", async () => {
+    const harness = harnessFor("both");
+    const occurredAt = new Date("2026-11-24T12:00:30.000Z");
+    await send(harness, { externalMessageId: null, occurredAt });
+    await send(harness, { externalMessageId: null, occurredAt, authorType: "contact" });
+    const [team, contact] = harness.evaluated.map(
+      (entry) => entry.input.occurrence.occurrenceKey as string,
+    );
+    expect(team).toMatch(/^uazapi:channel_qr_b:[0-9a-f]{64}$/u);
+    expect(contact).toBe(`${team}:contact`);
   });
 });

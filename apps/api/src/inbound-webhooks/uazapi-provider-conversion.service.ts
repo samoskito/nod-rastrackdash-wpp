@@ -117,6 +117,11 @@ export type UazapiTeamMessageInput = {
   messageText: string;
   externalMessageId?: string | null;
   occurredAt?: Date;
+  /**
+   * Who wrote the message. Default organization_member (fromMe=true, team/bot).
+   * contact = the lead wrote it (fromMe=false); only message_phrase rules apply.
+   */
+  authorType?: "organization_member" | "contact";
 };
 
 export type UazapiTeamMessageResult = {
@@ -201,6 +206,25 @@ export class UazapiProviderConversionService {
     }
 
     const provider: BridgedWhatsappProvider = input.provider ?? "uazapi";
+
+    // Organic lead messages: skip bridge and paid-lead lookups unless the
+    // workspace has an enabled phrase rule that accepts contact authors.
+    if (input.authorType === "contact") {
+      const contactRules = await this.prisma.providerConversionRuleConfig.count(
+        {
+          where: {
+            workspaceId: input.workspaceId,
+            removedAt: null,
+            messageAuthorScope: { in: ["contact", "both"] },
+            conversionRule: { active: true, triggerType: "message_phrase" },
+          },
+        },
+      );
+      if (contactRules === 0) {
+        return { evaluated: false, eligibleExecutionId: null };
+      }
+    }
+
     const bridged = await this.bridge.ensureBridge(input.instance, provider);
     const rules = await this.loadRules(
       input.workspaceId,
@@ -235,7 +259,15 @@ export class UazapiProviderConversionService {
     let evaluated = false;
     let eligibleExecutionId: string | null = null;
 
+    const authorType = input.authorType ?? "organization_member";
     for (const rule of rules) {
+      // Lead (contact) messages only ever match phrase rules, never catalog.
+      if (
+        authorType === "contact" &&
+        rule.conversionRule.triggerType !== "message_phrase"
+      ) {
+        continue;
+      }
       const ruleSnapshot = this.ruleSnapshot(
         rule,
         this.teamMessageTriggerType(rule),
@@ -258,9 +290,9 @@ export class UazapiProviderConversionService {
           occurrenceKey,
           eventName: ruleSnapshot.eventName,
           occurredAt: occurredAt.toISOString(),
-          // fromMe=true is always the workspace's team/bot sending from the
-          // connected number; contacts never reach this branch.
-          authorType: "organization_member",
+          // fromMe=true is the workspace's team/bot; fromMe=false is the lead.
+          // The rule's authorScope (decision engine) decides who may fire it.
+          authorType,
           messageText,
         },
       };
@@ -1129,7 +1161,7 @@ export class UazapiProviderConversionService {
 
     // No stable provider message id: fall back to a coarse (minute-bucket)
     // fingerprint so identical retried webhooks still dedupe.
-    return createHash("sha256")
+    const fingerprint = createHash("sha256")
       .update(
         `${input.phone}\u0000${input.messageText}\u0000${occurredAt
           .toISOString()
@@ -1137,6 +1169,10 @@ export class UazapiProviderConversionService {
         "utf8",
       )
       .digest("hex");
+    // Team key stays byte-identical; a lead message gets its own key.
+    return input.authorType === "contact"
+      ? `${fingerprint}:contact`
+      : fingerprint;
   }
 
   private labelEventId(

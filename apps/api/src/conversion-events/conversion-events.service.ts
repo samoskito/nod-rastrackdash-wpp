@@ -44,6 +44,7 @@ import {
 } from "../kommo/kommo-sender-policy";
 import {
   authorizedCtwaDestinationSchema,
+  MANUAL_CONVERSION_TRIGGER,
   normalizeCurrencyCode,
   resolveConversionCurrency,
 } from "@wpptrack/shared";
@@ -3062,6 +3063,21 @@ export class ConversionEventsService {
       : this.connectionResolver;
     // Pixel escolhido no "Reenviar recusado": vale acima da rota do anúncio.
     const chosenDestinationId = retryDestinationIdFromPayload(log.sourcePayload);
+    // nod: a manual conversion registered on the legacy route (BM routing
+    // off) stores the destination without a BM connection. Passing that
+    // destination back would force BM routing here and block the send, so
+    // resolve exactly as the preview did and require the same destination.
+    const legacyManualDestinationId =
+      log.sourceTrigger === MANUAL_CONVERSION_TRIGGER &&
+      !log.metaBusinessConnectionId &&
+      !chosenDestinationId &&
+      !(
+        typeof log.sourcePayload === "object" &&
+        log.sourcePayload !== null &&
+        "ctwaDestination" in log.sourcePayload
+      )
+        ? log.metaConversionDestinationId
+        : null;
     if (log.workspaceId && resolver) {
       try {
         const route = await resolver.resolveCapiRoute({
@@ -3079,12 +3095,20 @@ export class ConversionEventsService {
           ...(log.metaBusinessConnectionId
             ? { businessConnectionId: log.metaBusinessConnectionId }
             : {}),
-          ...(log.metaConversionDestinationId
+          ...(log.metaConversionDestinationId && !legacyManualDestinationId
             ? {
                 conversionDestinationId: log.metaConversionDestinationId,
               }
             : {}),
         });
+        // Fail closed: never another pixel than the one shown on screen.
+        if (
+          legacyManualDestinationId &&
+          route.conversionDestinationId !== legacyManualDestinationId
+        )
+          throw new Error(
+            "O destino Meta deste lead mudou depois do registro manual",
+          );
 
         return this.normalizedDeliveryRoute(route);
       } catch (error) {

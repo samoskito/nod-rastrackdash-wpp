@@ -33,6 +33,7 @@ Tudo isto já existe e continua valendo depois da atualização. Recriar qualque
 
 1. **Confira o que mudou.** Leia a seção `[Unreleased]` (ou a versão mais recente) do [`CHANGELOG.md`](../../CHANGELOG.md). Se a novidade pedir uma **variável de ambiente nova**, anote — ela entra no passo 2. Data Crazy, por exemplo, **não** pede env nova; o **Conectar Meta (PalmUP)** pede `PALMUP_META_BROKER_URL` (pública, veja [a seção dele](#conectar-meta-palmup--login-social-sem-app-meta-próprio)).
 2. **Garanta um backup recente do PostgreSQL.** O Dokploy oferece backup para serviços de banco (o nome da tela varia por versão). Se você nunca configurou, faça um agora, antes do redeploy. Não é burocracia: é o seu "desfazer".
+   **Se você usa Uazapi e a atualização traz a frase enviada pelo lead:** antes do deploy, abra `/conversions` e revise **Quem pode enviar** nas regras de frase. Regras que já estavam como **contato** ou **os dois** passam a disparar com a mensagem do lead (e a enviar à Meta, se estiverem enviando). Pause ou ajuste as que não quiser.
 3. **Escolha um horário calmo.** O redeploy da API leva alguns minutos de build; durante a troca do container, webhooks podem receber erro e os provedores costumam reenviar.
 
 ## Passo 1 — Trazer o código novo

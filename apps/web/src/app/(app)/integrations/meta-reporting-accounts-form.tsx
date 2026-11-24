@@ -1,10 +1,13 @@
 "use client";
 
-import type { MetaAssetsDto } from "@wpptrack/shared";
+import type { MetaAssetsDto, MetaRouteSimulationDto } from "@wpptrack/shared";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchableSelect } from "../../../components/searchable-select";
 import { PresentationMask } from "../../../components/presentation-mask";
 import { SubmitButton } from "../../../components/submit-button";
+import { routeSimulationMessage } from "./meta-orphan-route-text";
+import { MetaRouteSimulationDialog } from "./meta-route-simulation-dialog";
 
 type SaveMetaReportingAccountAction = (
   formData: FormData,
@@ -21,6 +24,10 @@ type MetaReportingAccountsFormProps = {
   assets: MetaAssetsDto;
   loadBusinessAssetsAction: LoadMetaBusinessReportingAssetsAction;
   statusAction: SetMetaReportingAccountStatusAction;
+  /** Read-only preview of the leads that deactivating an account would block. */
+  simulateDeactivationAction?: (
+    reportingAccountId: string,
+  ) => Promise<MetaRouteSimulationDto | null>;
 };
 
 function firstId<T extends { id: string }>(items: T[]): string {
@@ -74,7 +81,63 @@ export function MetaReportingAccountsForm({
   assets,
   loadBusinessAssetsAction,
   statusAction,
+  simulateDeactivationAction,
 }: MetaReportingAccountsFormProps) {
+  const [pendingDeactivation, setPendingDeactivation] = useState<{
+    form: HTMLFormElement;
+    message: string;
+  } | null>(null);
+  const skipSimulationRef = useRef(false);
+  const simulatingRef = useRef(false);
+
+  function submitConfirmed(form: HTMLFormElement | undefined) {
+    skipSimulationRef.current = true;
+
+    try {
+      form?.requestSubmit();
+    } finally {
+      skipSimulationRef.current = false;
+    }
+  }
+
+  async function handleStatusSubmit(
+    event: FormEvent<HTMLFormElement>,
+    account: { id: string; active: boolean },
+  ) {
+    if (skipSimulationRef.current) {
+      skipSimulationRef.current = false;
+      return;
+    }
+
+    if (!account.active || !simulateDeactivationAction) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (simulatingRef.current) {
+      return;
+    }
+
+    simulatingRef.current = true;
+    const form = event.currentTarget;
+    let message: string | null = null;
+
+    try {
+      const simulation = await simulateDeactivationAction(account.id);
+      message = routeSimulationMessage(simulation?.blockedAccounts ?? []);
+    } finally {
+      simulatingRef.current = false;
+    }
+
+    if (message) {
+      setPendingDeactivation({ form, message });
+      return;
+    }
+
+    submitConfirmed(form);
+  }
+
   const [businessId, setBusinessId] = useState(() => initialBusinessId(assets));
   const businessIdRef = useRef(businessId);
   const [availableAdAccounts, setAvailableAdAccounts] = useState(
@@ -280,6 +343,7 @@ export function MetaReportingAccountsForm({
                     <form
                       className="inline-form meta-reporting-account-action"
                       action={statusAction}
+                      onSubmit={(event) => void handleStatusSubmit(event, account)}
                     >
                       <input type="hidden" name="id" value={account.id} />
                       <input
@@ -320,6 +384,19 @@ export function MetaReportingAccountsForm({
           </tbody>
         </table>
       </div>
+      <MetaRouteSimulationDialog
+        open={pendingDeactivation !== null}
+        title="Desativar esta conta?"
+        message={pendingDeactivation?.message ?? ""}
+        confirmLabel="Desativar"
+        onCancel={() => setPendingDeactivation(null)}
+        onConfirm={() => {
+          const form = pendingDeactivation?.form;
+
+          setPendingDeactivation(null);
+          submitConfirmed(form);
+        }}
+      />
     </>
   );
 }

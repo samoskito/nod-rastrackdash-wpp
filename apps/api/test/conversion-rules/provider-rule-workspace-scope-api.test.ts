@@ -475,7 +475,7 @@ describe("provider rules API: workspace scope", () => {
     });
   });
 
-  it("limits a contact-author global phrase to Umbler numbers", async () => {
+  it("limits a contact-author global phrase to Umbler and Uazapi numbers", async () => {
     const world = createWorld();
 
     const { rule } = await world.service.createRule(
@@ -484,7 +484,11 @@ describe("provider rules API: workspace scope", () => {
       "user_1",
     );
 
-    expect(rule.effectiveChannelIds).toEqual(["channel_umbler"]);
+    expect(rule.effectiveChannelIds).toEqual([
+      "channel_umbler",
+      "channel_qr_a",
+      "channel_qr_b",
+    ]);
   });
 
   it("includes a number connected after the global rule automatically", async () => {
@@ -1801,7 +1805,7 @@ describe("provider rules API: Conversões screen support", () => {
     expect(
       capabilities.origins.find((origin) => origin.origin === "message_phrase")
         ?.authorChannelProviders,
-    ).toEqual({ team: ["umbler", "uazapi", "waha"], contact: ["umbler"] });
+    ).toEqual({ team: ["umbler", "uazapi", "waha"], contact: ["umbler", "uazapi"] });
     expect(
       capabilities.origins.find((origin) => origin.origin === "automation_payt"),
     ).toMatchObject({

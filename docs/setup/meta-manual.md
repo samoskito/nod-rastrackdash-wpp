@@ -49,6 +49,29 @@ autorização própria para o destino; o destino padrão do BM não concede esse
 acesso. Conta/destino opcionais são resolvidos pelo anúncio, sem ignorar
 atribuições ambíguas. Veja [ativação e limites de recuperação de CTWA](whatsapp-providers.md#rota-com-qualquer-conta-do-bm-e-ativação-do-meta-cloud).
 
+## Conta de anúncios compartilhada por um cliente (parceiro)
+
+A lista de contas do BM traz as contas **próprias** e as que clientes
+**compartilharam com o seu BM como parceiro**. Se a conta do cliente não
+aparece ou a sincronização dela falha por permissão: no Gerenciador de Negócios
+da **agência**, atribua a essa conta a pessoa (ou o usuário do sistema) dona do
+token. Compartilhar com o BM não basta sem essa atribuição.
+
+## Aviso "Leads bloqueados por falta de rota Meta"
+
+Em **Integrações → Meta Ads**, o painel avisa quando uma conta de anúncios que
+recebeu leads (ou teve eventos bloqueados) nos últimos 7 dias está sem rota:
+conta desativada, sem BM, BM pausada ou sem destino configurado. O aviso mostra
+campanha, quantidade de leads, conta e motivo. Corrija ativando a conta e
+vinculando um destino; se houver eventos bloqueados, use depois **Reenviar
+bloqueados** em **Eventos Meta**. Uma conta desativada bloqueia os envios dela
+mesmo com o roteamento por BM desligado.
+
+Quando a tela mostra o botão **Desativar** de uma conta de relatórios e a
+desativação passaria a bloquear leads, aparece uma confirmação com a
+simulação. A ação continua permitida. O aviso e a simulação são só leitura:
+não alteram nada e não leem tokens.
+
 ## Verificação
 
 - `/integrations` (aba **Anúncios** → card **Meta Ads**) mostra a conexão manual Meta como conectada, os ativos descobertos e o destino (BM/Pixel/Página/conta) selecionado

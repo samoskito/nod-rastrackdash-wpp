@@ -1216,8 +1216,8 @@ export function ScopeStep({
 
       {wrongAuthor.length > 0 ? (
         <p className="action-note">
-          Mensagens do contato só são lidas na Umbler; os números das outras
-          plataformas ficam de fora enquanto “Quem pode enviar” for “Somente
+          Mensagens do contato só são lidas na Umbler e na Uazapi; os números
+          das outras plataformas ficam de fora enquanto “Quem pode enviar” for “Somente
           contato”.
         </p>
       ) : null}

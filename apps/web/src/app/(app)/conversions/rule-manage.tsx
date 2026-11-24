@@ -652,7 +652,7 @@ function RuleEditForm({
               }
             >
               <option value="team">Equipe ou robô</option>
-              <option value="contact">Só o contato (só na Umbler)</option>
+              <option value="contact">Só o contato (Umbler e Uazapi)</option>
               <option value="both">Equipe, robô ou contato</option>
             </select>
           </label>

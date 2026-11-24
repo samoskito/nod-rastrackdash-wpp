@@ -418,7 +418,7 @@ function LegacyAdaptForm({
       )
     ) {
       setError(
-        "Mensagens do contato só são lidas na Umbler. Escolha números da Umbler ou mude “Quem pode enviar”.",
+        "Mensagens do contato só são lidas na Umbler e na Uazapi. Escolha números dessas conexões ou mude “Quem pode enviar”.",
       );
       return;
     }
@@ -527,7 +527,7 @@ function LegacyAdaptForm({
             }
           >
             <option value="team">Equipe ou robô</option>
-            <option value="contact">Só o contato (só na Umbler)</option>
+            <option value="contact">Só o contato (Umbler e Uazapi)</option>
             <option value="both">Equipe, robô ou contato</option>
           </select>
         </label>

@@ -20,6 +20,7 @@ vi.mock(
 );
 
 import { ConversionEventsService } from "../../src/conversion-events/conversion-events.service";
+import { MetaConnectionResolverService } from "../../src/integrations/meta/meta-connection-resolver.service";
 import {
   leadLifetimeMetaEventId,
   pickPriorLeadLifetimeConversion,
@@ -224,7 +225,7 @@ function adRoute(destination = "destination_ad") {
 
 function harness(
   lead: Partial<Record<string, unknown>> = {},
-  options: { route?: unknown } = {},
+  options: { route?: unknown; capiRoute?: Record<string, unknown> } = {},
 ) {
   const { prisma, state } = createDb();
   state.leads.push({
@@ -250,14 +251,23 @@ function harness(
     previewRoute: vi.fn(async () => options.route ?? adRoute()),
   };
   const queue = { enqueueSend: vi.fn(async () => ({ status: "queued" })) };
+  const capiRoutes = {
+    resolveCapiRoute: vi.fn(async () => {
+      if (!options.capiRoute) throw new Error("Rota Meta nao encontrada");
+      return options.capiRoute;
+    }),
+  };
   const service = new ManualConversionService(
     prisma,
     conversions,
     routes as any,
     queue as any,
     {},
+    null,
+    null,
+    capiRoutes as any,
   );
-  return { prisma, state, service, routes, queue };
+  return { prisma, state, service, routes, queue, capiRoutes };
 }
 
 const actor = { userId: "user_1", name: "Ana Dona" };
@@ -1385,5 +1395,266 @@ describe("CRM Kanban source (same manual path, forward only)", () => {
     expect(h.state.audits[0].afterSummary).toMatchObject({
       origin: "lead_detail",
     });
+  });
+});
+
+describe("manual conversion uses the destination the lead's automations already reached", () => {
+  const unresolved = {
+    status: "unresolved",
+    reason: "ad_destination_unresolved",
+    reportingAccountId: null,
+    adAccountId: null,
+    businessConnectionId: null,
+    conversionDestinationId: null,
+    pixelId: null,
+    pageId: null,
+  };
+  const senderRoute = {
+    source: "legacy_oauth",
+    workspaceId: WS,
+    accessToken: "token",
+    reportingAccountId: "reporting_1",
+    adAccountId: "act_1",
+    businessConnectionId: "business_1",
+    credentialId: "credential_1",
+    conversionDestinationId: "destination_main",
+    pixelId: "203700384906958",
+    pageId: "page_main",
+  };
+  const sentEntry = {
+    id: "log_entry",
+    workspaceId: WS,
+    leadId: "lead_1",
+    phoneHash: "hash_1",
+    sourceTrigger: "auto_lead",
+    eventName: "LeadSubmitted",
+    status: "sent",
+    pixelId: "203700384906958",
+    eventOccurredAt: new Date(Date.now() - 2 * 60 * 60_000),
+    createdAt: new Date(),
+    sourcePayload: null,
+  };
+
+  it("paid lead whose auto_lead reached pixel P: manual QualifiedLead previews and sends to P", async () => {
+    const h = harness({}, { route: unresolved, capiRoute: senderRoute });
+    h.state.logs.push({ ...sentEntry });
+
+    const preview = await h.service.preview(WS, "lead_1", input());
+    expect(preview).toMatchObject({
+      willSendToMeta: true,
+      notSentReason: null,
+      destination: { kind: "ad", pixelId: "203700384906958" },
+    });
+    expect(h.capiRoutes.resolveCapiRoute).toHaveBeenCalledWith({
+      workspaceId: WS,
+      adId: "ad_1",
+      campaignId: "campaign_1",
+    });
+
+    const result = await h.service.create(WS, "lead_1", input(), actor);
+    expect(result.outcome).not.toBe("local_only");
+    const manual = h.state.logs.find(
+      (log) => log.sourceTrigger === "manual_conversion",
+    );
+    expect(manual).toMatchObject({
+      status: "ready_to_send",
+      metaAccountId: "act_1",
+      metaBusinessConnectionId: "business_1",
+      metaConversionDestinationId: "destination_main",
+      adId: "ad_1",
+    });
+    expect(h.queue.enqueueSend).toHaveBeenCalledTimes(1);
+  });
+
+  const legacyRoute = {
+    ...senderRoute,
+    adAccountId: "act_legacy_selected",
+    reportingAccountId: null,
+    businessConnectionId: null,
+    credentialId: null,
+  };
+
+  it("legacy route (BM routing off) with its destination row resolves P; the ad's own account decides at send time", async () => {
+    const h = harness(
+      {},
+      {
+        route: { ...unresolved, reason: "business_connection_not_assigned" },
+        capiRoute: legacyRoute,
+      },
+    );
+    h.state.logs.push({ ...sentEntry });
+    const preview = await h.service.preview(WS, "lead_1", input());
+    expect(preview.destination).toMatchObject({
+      kind: "ad",
+      pixelId: "203700384906958",
+    });
+    expect(preview.willSendToMeta).toBe(true);
+    await h.service.create(WS, "lead_1", input(), actor);
+    expect(
+      h.state.logs.find((log) => log.sourceTrigger === "manual_conversion"),
+    ).toMatchObject({
+      metaAccountId: null,
+      metaBusinessConnectionId: null,
+      metaConversionDestinationId: "destination_main",
+    });
+  });
+
+  it("a route without a destination row stays panel-only (no once-per-lead key)", async () => {
+    const h = harness(
+      {},
+      {
+        route: unresolved,
+        capiRoute: { ...legacyRoute, conversionDestinationId: null },
+      },
+    );
+    h.state.logs.push({ ...sentEntry });
+    expect(
+      (await h.service.preview(WS, "lead_1", input())).notSentReason,
+    ).toBe("no_destination");
+  });
+
+  it("QualifiedLead through the fallback is never sent twice", async () => {
+    const h = harness({}, { route: unresolved, capiRoute: senderRoute });
+    h.state.logs.push({ ...sentEntry });
+    await h.service.create(WS, "lead_1", input(), actor);
+    const first = h.state.logs.find(
+      (log) => log.sourceTrigger === "manual_conversion",
+    );
+    first.status = "sent";
+    first.pixelId = "203700384906958";
+    const again = await h.service.preview(WS, "lead_1", input());
+    expect(again.duplicate).toMatchObject({ kind: "lead_already_converted" });
+    expect(again.willSendToMeta).toBe(false);
+    await expect(
+      h.service.create(WS, "lead_1", input(), actor),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(h.queue.enqueueSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("a CTWA entry receipt (Unnichat/GoHighLevel) never opens the workspace route", async () => {
+    const h = harness({}, { route: unresolved, capiRoute: senderRoute });
+    h.state.logs.push({
+      ...sentEntry,
+      sourceTrigger: "inbound_webhook:gohighlevel",
+    });
+    expect(
+      (await h.service.preview(WS, "lead_1", input())).notSentReason,
+    ).toBe("no_destination");
+    expect(h.capiRoutes.resolveCapiRoute).not.toHaveBeenCalled();
+  });
+
+  it("never a pixel the lead did not reach: other pixel, nothing sent, or ambiguous route stay panel-only", async () => {
+    const otherPixel = harness(
+      {},
+      { route: unresolved, capiRoute: { ...senderRoute, pixelId: "999" } },
+    );
+    otherPixel.state.logs.push({ ...sentEntry });
+    expect(
+      (await otherPixel.service.preview(WS, "lead_1", input())).destination
+        .kind,
+    ).toBe("none");
+
+    const notSent = harness({}, { route: unresolved, capiRoute: senderRoute });
+    notSent.state.logs.push({ ...sentEntry, status: "error" });
+    expect(
+      (await notSent.service.preview(WS, "lead_1", input())).notSentReason,
+    ).toBe("no_destination");
+
+    // resolveCapiRoute throws when the connection is ambiguous.
+    const ambiguous = harness({}, { route: unresolved });
+    ambiguous.state.logs.push({ ...sentEntry });
+    expect(
+      (await ambiguous.service.preview(WS, "lead_1", input())).notSentReason,
+    ).toBe("no_destination");
+  });
+
+  it("a resolved saved route still wins (unchanged path)", async () => {
+    const h = harness({}, { capiRoute: senderRoute });
+    h.state.logs.push({ ...sentEntry });
+    const preview = await h.service.preview(WS, "lead_1", input());
+    expect(preview.destination).toMatchObject({
+      kind: "ad",
+      pixelId: "pixel_ad",
+    });
+    expect(h.capiRoutes.resolveCapiRoute).not.toHaveBeenCalled();
+  });
+});
+
+describe("nod: legacy-route manual conversion at send time", () => {
+  const legacyLog = {
+    id: "log_manual",
+    workspaceId: WS,
+    sourceTrigger: "manual_conversion",
+    metaAccountId: null,
+    metaBusinessConnectionId: null,
+    metaConversionDestinationId: "destination_main",
+    campaignId: "campaign_1",
+    adId: "ad_1",
+    sourcePayload: null,
+  };
+
+  function sender(primaryDestinationId: string) {
+    const encryption = { decrypt: vi.fn(() => "token") };
+    const prisma: any = {
+      metaIntegration: {
+        findUnique: vi.fn(async () => ({
+          status: "connected",
+          advancedRoutingEnabled: false,
+          encryptedAccessToken: "x",
+          tokenIv: "iv",
+          tokenTag: "tag",
+          selectedAdAccountId: "act_1",
+          selectedPixelId: "pixel_main",
+          primaryConversionDestinationId: primaryDestinationId,
+        })),
+      },
+      metaAd: { findFirst: vi.fn(async () => ({ adAccountId: "act_1" })) },
+      metaReportingAccount: {
+        findFirst: vi.fn(async () => ({
+          id: "reporting_1",
+          adAccountId: "act_1",
+          active: true,
+          businessConnectionId: null,
+        })),
+      },
+      metaConversionDestination: {
+        findFirst: vi.fn(async ({ where }: any) => ({
+          id: where.id,
+          pixelId: "pixel_main",
+          pageId: "page_main",
+          status: "configured",
+        })),
+      },
+    };
+    const resolver = new MetaConnectionResolverService(
+      prisma,
+      encryption as any,
+    );
+    const service = new ConversionEventsService(
+      prisma,
+      {} as any,
+      {} as any,
+      resolver,
+      undefined as never,
+      {},
+    );
+    return (log: unknown) => (service as any).resolveDeliveryRoute(log);
+  }
+
+  it("sends to the destination the preview showed, without forcing BM routing", async () => {
+    const route = await sender("destination_main")(legacyLog);
+    expect(route).toMatchObject({
+      routeError: null,
+      conversionDestinationId: "destination_main",
+      pixelId: "pixel_main",
+    });
+  });
+
+  it("fails closed when the primary destination changed meanwhile", async () => {
+    const route = await sender("destination_other")(legacyLog);
+    expect(route.pixelId).toBeNull();
+    expect(route.routeError).toBe(
+      "O destino Meta deste lead mudou depois do registro manual",
+    );
   });
 });

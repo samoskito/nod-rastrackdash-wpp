@@ -40,8 +40,9 @@ import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-
  *  - frase da equipe: umbler (observacao de mensagens), uazapi (fromMe=true
  *    no webhook Uazapi/uazapi_byo) e waha (message.any com fromMe=true no
  *    receptor da WAHA GoWS, mesma ponte da Uazapi);
- *  - frase do contato: umbler (o parser marca authorType "contact"); Uazapi
- *    so avalia mensagens da equipe; gupshup/data_crazy/meta_cloud ainda nao
+ *  - frase do contato: umbler (o parser marca authorType "contact") e uazapi
+ *    (fromMe=false sem ctwa_clid, so mensagem de acompanhamento de lead pago);
+ *    a WAHA so avalia a equipe; gupshup/data_crazy/meta_cloud ainda nao
  *    avaliam regras de mensagem (a observacao so aceita eventos umbler);
  *  - catalogo estruturado: umbler, uazapi e waha (mensagem da equipe);
  *  - etiqueta: uazapi (por nome entre instancias); a WAHA nao tem etiqueta;
@@ -110,7 +111,7 @@ export const PROVIDER_RULE_OVERRIDDEN_REASON = "overridden_by_specific_rule";
 /** Providers whose TEAM messages run message_phrase rules. */
 export const MESSAGE_TEAM_CHANNEL_PROVIDERS = ["umbler", "uazapi", "waha"] as const;
 /** Providers whose CONTACT messages run message_phrase rules. */
-export const MESSAGE_CONTACT_CHANNEL_PROVIDERS = ["umbler"] as const;
+export const MESSAGE_CONTACT_CHANNEL_PROVIDERS = ["umbler", "uazapi"] as const;
 /** Providers whose team messages run structured catalog rules (as the SaaS). */
 export const CATALOG_RULE_CHANNEL_PROVIDERS = ["umbler", "uazapi", "waha"] as const;
 /** Providers whose chats expose WhatsApp labels (tags). */

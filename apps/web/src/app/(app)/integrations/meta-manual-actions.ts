@@ -6,6 +6,7 @@ import type {
   MetaManualConnectionTestResultDto,
   MetaOAuthDisconnectResultDto,
   MetaReportingAccountAdRoutingDto,
+  MetaRouteSimulationDto,
 } from "@wpptrack/shared";
 import { metaManualAssetDiscoverySchema } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
@@ -760,6 +761,22 @@ function metaBusinessConnectionPayload(formData: FormData) {
       optionalFormText(formData, "accountSelectionMode") ?? "merge",
     destination,
   };
+}
+
+/**
+ * Read-only previews. A failure returns null: the owner can still confirm the
+ * change, there is just no extra warning.
+ */
+export async function simulateMetaAccountDeactivationAction(
+  reportingAccountId: string,
+): Promise<MetaRouteSimulationDto | null> {
+  try {
+    return await serverApiFetch<MetaRouteSimulationDto>(
+      `/integrations/meta/reporting-accounts/${encodeURIComponent(reportingAccountId)}/deactivation-simulation`,
+    );
+  } catch {
+    return null;
+  }
 }
 
 function requiredFormText(formData: FormData, key: string): string {

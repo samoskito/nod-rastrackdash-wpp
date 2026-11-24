@@ -5,6 +5,7 @@ import { QueueModule } from "../common/queue/queue.module";
 import { RuntimeModule } from "../common/runtime/runtime.module";
 import { CrmModule } from "../crm/crm.module";
 import { ConversionEventsModule } from "../conversion-events/conversion-events.module";
+import { IntegrationsModule } from "../integrations/integrations.module";
 import { InboundWebhookMetaRouteReaderService } from "../inbound-webhooks/inbound-webhook-meta-route-reader.service";
 import { WorkspacesModule } from "../workspaces/workspaces.module";
 import { InboundWebhookPayloadEncryptionService } from "../inbound-webhooks/inbound-webhook-payload-encryption.service";
@@ -22,6 +23,7 @@ import { ManualConversionsController } from "./manual-conversions.controller";
     AuthModule,
     ConversionEventsModule,
     CrmModule,
+    IntegrationsModule,
     PrismaModule,
     QueueModule,
     RuntimeModule,

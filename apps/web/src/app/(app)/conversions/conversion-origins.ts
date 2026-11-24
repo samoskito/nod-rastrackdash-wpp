@@ -336,7 +336,7 @@ export function contactMessageProviders(
   const entry = capabilities?.origins.find(
     (item) => item.origin === "message_phrase",
   );
-  return entry?.authorChannelProviders?.contact ?? ["umbler"];
+  return entry?.authorChannelProviders?.contact ?? ["umbler", "uazapi"];
 }
 
 export type RuleLogo = {

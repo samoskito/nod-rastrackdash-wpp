@@ -50,7 +50,7 @@ export function MessagePhraseFields({
   onChange,
 }: MessagePhraseValues & {
   eventName: ConversionEventNameDto;
-  /** Algum número conectado lê mensagens do contato (hoje só a Umbler). */
+  /** Algum número conectado lê mensagens do contato (hoje Umbler e Uazapi). */
   contactAvailable?: boolean;
   /** Moeda da regra ("" / null = padrão do workspace) para a prévia do valor. */
   currency?: string | null;
@@ -129,7 +129,7 @@ export function MessagePhraseFields({
               value="contact"
               disabled={!contactAvailable && messageAuthorScope !== "contact"}
             >
-              Somente contato (só na Umbler)
+              Somente contato (Umbler e Uazapi)
             </option>
             <option value="both">Equipe, bot ou contato</option>
           </select>

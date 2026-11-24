@@ -114,6 +114,7 @@ import {
   setMetaOAuthAdvancedAdDestinationAction,
   setMetaOAuthAdvancedConnectionStatusAction,
   setMetaOAuthAdvancedRoutingAction,
+  simulateMetaAccountDeactivationAction,
   startMetaPalmupConnectAction,
   testMetaManualConnectionAction,
   testMetaOAuthAdvancedConnectionAction,
@@ -2067,6 +2068,9 @@ export default async function IntegrationsPage({
                       action={saveMetaReportingAccount}
                       loadBusinessAssetsAction={loadMetaBusinessReportingAssets}
                       statusAction={setMetaReportingAccountStatus}
+                      simulateDeactivationAction={
+                        simulateMetaAccountDeactivationAction
+                      }
                     />
                   ) : (
                     <p className="muted">

@@ -116,7 +116,7 @@ O que muda de provedor para provedor é **quais mensagens chegam**:
 
 | Origem | Mensagem do cliente (inbound) | Mensagem do atendente (`fromMe`) |
 |---|---|---|
-| Uazapi (BYO) | Sim | **Sim** — avalia regras de frase/tag do atendente |
+| Uazapi (BYO) | Sim — regras de frase com "Quem pode enviar" = contato ou os dois ([detalhe](#uazapi-byo-uazapi_byo)) | **Sim** — avalia regras de frase/tag do atendente |
 | Umbler Talk | Sim | **Sim** — o payload traz `OrganizationMember`/`Bot` |
 | Gupshup | Sim | Não — envelope Cloud API só traz mensagens recebidas |
 | Data Crazy | Sim | Não — mensagens inbound só viram lead quando têm CTWA |
@@ -512,6 +512,18 @@ Depois, **redeploy da API**. Detalhe de cada variável em
 - Receiver inbound: **pronto** (`/webhooks/whatsapp/:id`).
 - Único provedor com catálogo de labels (`listLabels`) para gatilhos por tag.
 - Avalia mensagem de atendente (`fromMe`) contra regras de frase.
+- **Frase enviada pelo lead.** Regra de frase com **"Quem pode enviar"** =
+  **Somente contato** ou **Equipe, bot ou contato** também dispara quando o
+  **lead** escreve a frase. "Equipe ou bot" nunca dispara com o lead; "Somente
+  contato" nunca dispara com o atendente. Vale só para mensagem de
+  acompanhamento (sem `ctwa_clid`) de um lead de anúncio que já existe; a
+  primeira mensagem do clique (com `ctwa_clid`) e grupos não são avaliados
+  para o contato. Nunca cria lead; catálogo estruturado continua só da equipe;
+  a mesma mensagem reentregue não dispara duas vezes. Não vale na WAHA (lá só
+  a mensagem da equipe é avaliada). **Atenção ao atualizar:** uma regra que já
+  estava como contato ou "os dois" passa a disparar (e a enviar à Meta, se
+  estiver enviando) nos números da Uazapi. Antes do deploy, revise "Quem pode
+  enviar" em `/conversions`; pause a regra se não quiser isso.
 
 ### NOD API (`nod_api`)
 

@@ -38,6 +38,7 @@ import type {
   MetaManualActionResult,
   MetaPalmupPairing,
 } from "./meta-manual-actions";
+import { orphanRouteWarnings } from "./meta-orphan-route-text";
 
 type SetupMode = "quick" | "advanced";
 type DestinationMode = "discovered" | "direct" | "existing";
@@ -2185,6 +2186,37 @@ export function MetaManualConnectionPanel({
     );
   }
 
+  function renderOrphanRouteWarning() {
+    const warnings = orphanRouteWarnings(
+      configuration?.orphanRoutes?.accounts ?? [],
+    );
+
+    if (warnings.length === 0) {
+      return null;
+    }
+
+    const blockedEvents = configuration?.orphanRoutes?.blockedEventCount ?? 0;
+
+    return (
+      <div className="meta-manual-notice warn" role="alert">
+        <TriangleAlert size={16} />
+        <span>
+          <strong>Leads bloqueados por falta de rota Meta</strong>
+          {warnings.map((warning) => (
+            <small key={warning.key}>
+              {warning.message} {warning.advice}
+            </small>
+          ))}
+          {blockedEvents > 0 ? (
+            <small>
+              Depois de corrigir, use Reenviar bloqueados em Eventos.
+            </small>
+          ) : null}
+        </span>
+      </div>
+    );
+  }
+
   function renderOAuthRoutingControl() {
     if (!oauthMode || (configuration?.businessConnections.length ?? 0) === 0) {
       return null;
@@ -2928,6 +2960,7 @@ export function MetaManualConnectionPanel({
             </div>
           </details>
         ) : null}
+        {renderOrphanRouteWarning()}
         {renderOAuthRoutingControl()}
 
         <dialog
