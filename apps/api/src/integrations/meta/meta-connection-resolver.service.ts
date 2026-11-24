@@ -12,6 +12,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { isNormalizedRoutingEnabledFor } from "./meta-orphan-routes";
 import { MetaTokenEncryptionService } from "./meta-token-encryption.service";
 
 type EncryptedCredential = {
@@ -668,21 +669,7 @@ export class MetaConnectionResolverService {
   private async isNormalizedRoutingEnabled(
     workspaceId: string,
   ): Promise<boolean> {
-    const [normalizedConnections, legacy] = await Promise.all([
-      this.prisma.metaBusinessConnection.count({
-        where: { workspaceId },
-      }),
-      this.prisma.metaIntegration.findUnique({
-        where: { workspaceId },
-        select: { advancedRoutingEnabled: true },
-      }),
-    ]);
-
-    if (normalizedConnections === 0) {
-      return false;
-    }
-
-    return legacy ? legacy.advancedRoutingEnabled : true;
+    return isNormalizedRoutingEnabledFor(this.prisma, workspaceId);
   }
 
   private assertNormalizedConnectionActive(connection: {

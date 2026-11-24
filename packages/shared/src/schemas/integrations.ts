@@ -759,6 +759,40 @@ export const metaOAuthAdvancedRoutingInputSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const metaOrphanRouteReasonSchema = z.enum([
+  "account_unknown",
+  "account_inactive",
+  "no_connection",
+  "connection_paused",
+  "no_destination",
+  "destination_not_configured",
+  "legacy_unconfigured",
+]);
+
+/** Ad account that gets paid leads but has no working Meta route right now. */
+export const metaOrphanRouteAccountSchema = z.object({
+  adAccountId: z.string().min(1),
+  adAccountName: z.string().nullable(),
+  reason: metaOrphanRouteReasonSchema,
+  /** Leads of the last 7 days attributed to this account. */
+  leadCount: z.number().int().nonnegative(),
+  /** Events of the last 7 days already blocked with MissingMetaDestination. */
+  blockedEventCount: z.number().int().nonnegative(),
+  /** Up to 3 campaign names, busiest first. */
+  campaignNames: z.array(z.string()).max(3),
+  campaignCount: z.number().int().nonnegative(),
+});
+
+export const metaOrphanRoutesSchema = z.object({
+  accounts: z.array(metaOrphanRouteAccountSchema),
+  blockedEventCount: z.number().int().nonnegative(),
+});
+
+export const metaRouteSimulationSchema = z.object({
+  /** Accounts whose leads would become blocked by the change (not already). */
+  blockedAccounts: z.array(metaOrphanRouteAccountSchema),
+});
+
 export const metaManualConfigurationSchema = z.object({
   workspaceId: z.string().min(1),
   connectionMode: z.enum(["manual", "oauth"]),
@@ -768,7 +802,17 @@ export const metaManualConfigurationSchema = z.object({
   businessConnections: z.array(metaManualBusinessConnectionSchema),
   destinations: z.array(metaConversionDestinationSchema),
   reportingAccounts: z.array(metaReportingAccountSchema),
+  orphanRoutes: metaOrphanRoutesSchema.optional(),
 });
+
+export type MetaOrphanRouteReasonDto = z.infer<
+  typeof metaOrphanRouteReasonSchema
+>;
+export type MetaOrphanRouteAccountDto = z.infer<
+  typeof metaOrphanRouteAccountSchema
+>;
+export type MetaOrphanRoutesDto = z.infer<typeof metaOrphanRoutesSchema>;
+export type MetaRouteSimulationDto = z.infer<typeof metaRouteSimulationSchema>;
 
 export type IntegrationProvider = z.infer<typeof integrationProviderSchema>;
 export type WhatsappConnectionDto = z.infer<

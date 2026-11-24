@@ -26,7 +26,9 @@ import type {
   MetaOAuthAdvancedRoutingInputDto,
   MetaPageAssetDto,
   MetaPixelAssetDto,
+  MetaOrphanRoutesDto,
   MetaReportingAccountAdRoutingDto,
+  MetaRouteSimulationDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { InboundWebhookChannelRoutesService } from "../../inbound-webhooks/inbound-webhook-channel-routes.service";
@@ -34,6 +36,7 @@ import type { IntegrationEnv } from "../integration.types";
 import { INTEGRATION_ENV } from "../integration.types";
 import { MetaAdDestinationRoutingService } from "./meta-ad-destination-routing.service";
 import { MetaAdapter } from "./meta.adapter";
+import { computeOrphanRoutes, simulateRouteChange } from "./meta-orphan-routes";
 import { clearMetaReportingSyncBlocks } from "./meta-reporting-sync-block";
 import { MetaTokenEncryptionService } from "./meta-token-encryption.service";
 
@@ -336,9 +339,12 @@ export class MetaManualConnectionsService {
           ).length
         : 0;
 
+    const orphanRoutes = await this.safeOrphanRoutes(workspaceId);
+
     return {
       workspaceId,
       connectionMode: source,
+      orphanRoutes,
       advancedRoutingEnabled:
         source === "manual"
           ? true
@@ -356,6 +362,41 @@ export class MetaManualConnectionsService {
       reportingAccounts: (reportingAccounts as ReportingAccountRecord[]).map(
         (record) => this.toReportingAccountDto(record),
       ),
+    };
+  }
+
+  /** The warning must never break the configuration screen. */
+  private async safeOrphanRoutes(
+    workspaceId: string,
+  ): Promise<MetaOrphanRoutesDto | undefined> {
+    try {
+      return await computeOrphanRoutes(this.prisma, workspaceId);
+    } catch (error) {
+      this.logger.debug(
+        `Não foi possível calcular contas Meta sem rota: ${error instanceof Error ? error.message : "erro"}`,
+      );
+      return undefined;
+    }
+  }
+
+  /** Accounts whose leads would become blocked by deactivating this account. */
+  async simulateReportingAccountDeactivation(
+    workspaceId: string,
+    reportingAccountId: string,
+  ): Promise<MetaRouteSimulationDto> {
+    const account = await this.prisma.metaReportingAccount.findFirst({
+      where: { id: reportingAccountId, workspaceId },
+      select: { id: true },
+    });
+
+    if (!account) {
+      throw new NotFoundException("Conta Meta não encontrada");
+    }
+
+    return {
+      blockedAccounts: await simulateRouteChange(this.prisma, workspaceId, {
+        deactivateReportingAccountId: reportingAccountId,
+      }),
     };
   }
 

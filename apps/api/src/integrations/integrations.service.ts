@@ -693,6 +693,16 @@ export class IntegrationsService {
     );
   }
 
+  async simulateMetaReportingAccountDeactivation(
+    workspaceId: string,
+    reportingAccountId: string,
+  ) {
+    return this.requireMetaManualConnectionsService().simulateReportingAccountDeactivation(
+      workspaceId,
+      reportingAccountId,
+    );
+  }
+
   async prepareMetaOAuthAdvancedCredential(
     workspaceId: string,
     actorUserId?: string | null,

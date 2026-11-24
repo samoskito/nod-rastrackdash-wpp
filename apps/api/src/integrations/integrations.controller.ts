@@ -559,6 +559,25 @@ export class IntegrationsController {
     );
   }
 
+  /** Read-only: which ad accounts would lose their route if this account were deactivated. */
+  @Get("meta/reporting-accounts/:id/deactivation-simulation")
+  async simulateMetaReportingAccountDeactivation(
+    @AuthToken() refreshToken: string,
+    @Param("id") reportingAccountId: string,
+  ) {
+    const authenticated = await this.authService.getSession(refreshToken);
+    const workspace = this.workspacesService.getCurrentWorkspace(authenticated);
+
+    if (!workspace.permissions.canManageIntegrations) {
+      throw new ForbiddenException("Sem permissão para gerenciar integrações");
+    }
+
+    return this.integrationsService.simulateMetaReportingAccountDeactivation(
+      workspace.id,
+      reportingAccountId,
+    );
+  }
+
   @Get("uazapi/start")
   startUazapi() {
     return this.integrationsService.getUazapiStartAction();
