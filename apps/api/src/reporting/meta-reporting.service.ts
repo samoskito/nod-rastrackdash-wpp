@@ -721,11 +721,14 @@ export class MetaReportingService {
         await this.prisma.metaReportingAccount.update({
           where: { id: account.id },
           data: {
-            syncStatus: "synced",
+            // Parked during this run: keep the "error"/reconnect state that
+            // blockMetaReportingSync wrote instead of showing "synced".
+            ...(accountResult.reportingBlocked
+              ? {}
+              : { syncStatus: "synced", syncError: null }),
             lastSyncedAt: new Date(),
             lastSyncSince: input.since,
             lastSyncUntil: input.until,
-            syncError: null,
           },
         });
 
@@ -885,6 +888,8 @@ export class MetaReportingService {
     campaignsSynced: number;
     adSetsSynced: number;
     adsSynced: number;
+    /** The account was parked during this run (dead token confirmed). */
+    reportingBlocked?: boolean;
   }> {
     const adAccountId = input.account.adAccountId;
     const {
@@ -1166,9 +1171,16 @@ export class MetaReportingService {
       })
       .catch(() => undefined);
 
-    if (thumbnailRefresh?.credentialInvalid) {
-      // Token died mid-sync: park the account (reporting-only breaker) so the
-      // next cycles do not call Meta again until the customer reconnects.
+    let reportingBlocked = false;
+
+    // Token died mid-sync: park the account (reporting-only breaker) so the
+    // next cycles do not call Meta again until the customer reconnects. Only
+    // after /me confirms the token itself is dead (a bad item is not enough).
+    if (
+      thumbnailRefresh?.credentialInvalid &&
+      (await this.isAccessTokenConfirmedDead(input.accessToken))
+    ) {
+      reportingBlocked = true;
       await blockMetaReportingSync(
         this.prisma,
         { id: input.account.id, workspaceId: input.workspaceId },
@@ -1183,6 +1195,7 @@ export class MetaReportingService {
       campaignsSynced: campaigns.length,
       adSetsSynced: adSets.length,
       adsSynced: ads.length,
+      reportingBlocked,
     };
   }
 

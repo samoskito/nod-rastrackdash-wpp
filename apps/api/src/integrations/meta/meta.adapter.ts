@@ -2179,7 +2179,9 @@ export class MetaAdapter implements IntegrationAdapter {
    * customer reconnects, instead of retrying previews on every cycle.
    */
   private throwIfBatchCredentialInvalid<T>(batch: MetaGraphBatchResult<T>): void {
-    if (batch.credentialInvalid) {
+    // Only when the whole batch is dead: one bad item (e.g. a creative of
+    // another business) must not discard the thumbnails that did come back.
+    if (batch.credentialInvalid && batch.results.size === 0) {
       throw new MetaGraphError("Meta Graph batch credential invalid", {
         httpStatus: 401,
         code: 190,

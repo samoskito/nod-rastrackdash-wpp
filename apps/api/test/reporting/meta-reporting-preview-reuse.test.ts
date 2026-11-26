@@ -2,6 +2,10 @@ import { Logger } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetaAdapter } from "../../src/integrations/meta/meta.adapter";
 import {
+  META_RECONNECT_MESSAGE,
+  MetaGraphError,
+} from "../../src/integrations/meta/meta-graph-error";
+import {
   META_PREVIEW_MISS_TTL_MS,
   MetaReportingService,
 } from "../../src/reporting/meta-reporting.service";
@@ -395,6 +399,71 @@ describe("MetaReportingService preview reuse", () => {
     harness.graph.resetCounters();
     await sync(harness, "w1").catch(() => undefined);
     expect(harness.graph.creativeBatches).toBe(0);
+  });
+
+  function harnessWithThumbnails(probe: "dead" | "alive") {
+    const harness = createHarness();
+    seedWorkspace(harness, "w1", [
+      { id: "ra1", businessId: "b1", adAccountId: "act_1" },
+    ]);
+    harness.prisma.metaReportingAccount.rows[0].reportingSyncBlockedAt = null;
+    harness.graph.accounts.set("act_1", fakeAccount([ad("a1", "cr1")]));
+    imageCreative(harness.graph, "cr1");
+    const adapter = new MetaAdapter(
+      { META_GRAPH_SLOW_LOG_MS: "999999" },
+      harness.graph.fetch,
+    );
+    vi.spyOn(adapter, "probeAccessToken").mockImplementation(async () => {
+      if (probe === "dead") {
+        throw new MetaGraphError("Invalid OAuth access token", {
+          httpStatus: 400,
+          code: 190,
+          subcode: 460,
+          type: "OAuthException",
+          isTransient: false,
+        });
+      }
+      return undefined as never;
+    });
+    harness.service = new MetaReportingService(
+      harness.prisma as never,
+      { decrypt: () => TOKEN, fingerprint: () => "fp" } as never,
+      adapter,
+      { reconcileReportingAccount: async () => undefined } as never,
+      new WhatsappCampaignClassifierService(),
+      {} as never,
+      {} as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        refreshCreatives: async () => ({ credentialInvalid: true }),
+      } as never,
+    );
+    return harness;
+  }
+
+  it("parks the account after a thumbnail 190 only when /me confirms the token is dead, and keeps the reconnect state", async () => {
+    const harness = harnessWithThumbnails("dead");
+
+    await sync(harness, "w1");
+    const account = harness.prisma.metaReportingAccount.rows[0];
+
+    expect(account.reportingSyncBlockedAt).toBeInstanceOf(Date);
+    // Not overwritten by the "synced" write that runs after the block.
+    expect(account.syncStatus).toBe("error");
+    expect(account.syncError).toBe(META_RECONNECT_MESSAGE);
+  });
+
+  it("does not park the account when /me shows the token is alive", async () => {
+    const harness = harnessWithThumbnails("alive");
+
+    await sync(harness, "w1");
+    const account = harness.prisma.metaReportingAccount.rows[0];
+
+    expect(account.reportingSyncBlockedAt).toBeNull();
+    expect(account.syncStatus).toBe("synced");
   });
 
   it("uses the creative's own thumbnail for video creatives and never calls /{video}/thumbnails by default", async () => {
