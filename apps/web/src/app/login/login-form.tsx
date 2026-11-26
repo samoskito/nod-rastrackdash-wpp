@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { loginSchema } from "@wpptrack/shared";
 import { apiFetch } from "../../lib/api";
+import { resolvePostLoginPath } from "../../lib/post-login-path";
 
 export function LoginForm({
   initialError = null,
@@ -35,9 +36,10 @@ export function LoginForm({
         method: "POST",
         body: JSON.stringify(payload),
       });
-      window.location.href =
-        redirectTo ??
-        (session.user.platformRole ? "/backoffice/clients" : "/overview");
+      window.location.href = resolvePostLoginPath(
+        redirectTo,
+        session.user.platformRole,
+      );
     } catch {
       setError(
         "Não foi possível autenticar. Confira os dados e tente novamente.",

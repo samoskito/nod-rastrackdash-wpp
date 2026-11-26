@@ -21,6 +21,7 @@ Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unre
 
 ### Fixed
 
+- The installation's platform administrator now lands on Backoffice "Clientes e acessos" (`/backoffice/clients`) after login instead of an empty client workspace. Rule: with no explicit destination (including the bare `/overview` the middleware stores when an unauthenticated visitor opens the app) a platform admin goes to the Backoffice; password login, Google login (API callback) and the `/` route all follow it. An explicit `redirectTo` is honoured; external or invalid paths are still rejected; support-access sessions and regular users are unchanged. No migration, no new variable.
 - New rule for an observation-only reader (XMAX): the modal no longer promises sending to Meta, and the created message says "Regra criada em observação" instead of the server-off notice with the environment variable. The server-off message is kept for the real case (reader released, switch off). No migration, no new variable.
 
 ## [1.8.0] - 2026-11-26
