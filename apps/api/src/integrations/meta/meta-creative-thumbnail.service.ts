@@ -9,6 +9,7 @@ import type { IntegrationEnv } from "../integration.types";
 import { INTEGRATION_ENV } from "../integration.types";
 import { isMetaCdnHost, metaCdnUrlExpiresAt } from "./meta-cdn-url";
 import {
+  isMetaCredentialFatalError,
   MetaGraphError,
   sanitizedMetaGraphReason,
 } from "./meta-graph-error";
@@ -66,6 +67,8 @@ export type MetaCreativeThumbnailRefreshResult = {
   deferred: number;
   rateLimited: boolean;
   budgetExhausted: boolean;
+  /** Meta said the token is dead (190/102): nothing written, no retry. */
+  credentialInvalid?: boolean;
 };
 
 export type StoredCreativeThumbnail = {
@@ -298,6 +301,17 @@ export class MetaCreativeThumbnailService {
         }
 
         const message = this.errorMessage(error);
+
+        if (isMetaCredentialFatalError(error)) {
+          // Dead token: rows stay due (no attempt burned). The reporting sync
+          // parks the account until reconnection, so this is not retried.
+          result.credentialInvalid = true;
+          result.deferred += batch.length;
+          this.logger.warn(
+            `creative thumbnail refresh stopped: Meta credential invalid (${sanitizedMetaGraphReason(error)})`,
+          );
+          return result;
+        }
 
         if (isMetaRateLimitError(error)) {
           // Stop for the rest of this sync (and a cooldown) without burning

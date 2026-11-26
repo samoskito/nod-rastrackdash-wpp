@@ -328,6 +328,75 @@ describe("MetaReportingService preview reuse", () => {
     expect(savedAd(harness, "w1", "a2")?.previewUrl).toBe(url2);
   });
 
+  it("persists the preview miss marker so a restart does not ask Meta again", async () => {
+    const harness = createHarness();
+    seedWorkspace(harness, "w1", [
+      { id: "ra1", businessId: "b1", adAccountId: "act_1" },
+    ]);
+    harness.graph.accounts.set("act_1", fakeAccount([ad("a1", "cr1")]));
+    harness.graph.itemFault = (kind, key) =>
+      kind === "creative" && key === "cr1" ? { kind: "code", code: 500 } : null;
+
+    await sync(harness, "w1");
+    expect(savedAd(harness, "w1", "a1")?.previewMissUntil).toBeInstanceOf(Date);
+
+    // "Restart": new service instance (empty memory), same database.
+    const restarted = createHarness();
+    restarted.prisma = harness.prisma;
+    restarted.graph = harness.graph;
+    const adapter = new MetaAdapter(
+      { META_GRAPH_SLOW_LOG_MS: "999999" },
+      harness.graph.fetch,
+    );
+    restarted.service = new MetaReportingService(
+      harness.prisma as never,
+      { decrypt: () => TOKEN, fingerprint: () => "fp" } as never,
+      adapter,
+      { reconcileReportingAccount: async () => undefined } as never,
+      new WhatsappCampaignClassifierService(),
+      {} as never,
+      {} as never,
+    );
+    harness.graph.itemFault = () => null;
+    imageCreative(harness.graph, "cr1");
+    harness.graph.resetCounters();
+
+    await sync(restarted, "w1");
+    expect(harness.graph.creativeBatches).toBe(0);
+    expect(savedAd(harness, "w1", "a1")?.previewMissUntil).toBeInstanceOf(Date);
+
+    // After the marker expires the creative is requested again and cleared.
+    advanceClock(META_PREVIEW_MISS_TTL_MS + 60_000);
+    harness.graph.resetCounters();
+    await sync(restarted, "w1");
+    expect(harness.graph.creativeSubrequestIds).toEqual(["cr1"]);
+    expect(savedAd(harness, "w1", "a1")?.previewUrl).not.toBeNull();
+    expect(savedAd(harness, "w1", "a1")?.previewMissUntil).toBeNull();
+  });
+
+  it("parks the account (no further Graph calls) when the creative batch answers token invalid", async () => {
+    const harness = createHarness();
+    seedWorkspace(harness, "w1", [
+      { id: "ra1", businessId: "b1", adAccountId: "act_1" },
+    ]);
+    harness.graph.accounts.set("act_1", fakeAccount([ad("a1", "cr1")]));
+    imageCreative(harness.graph, "cr1");
+    harness.prisma.metaReportingAccount.rows[0].reportingSyncBlockedAt = null;
+    harness.graph.batchFault = (kind) =>
+      kind === "creative"
+        ? { kind: "http", status: 400, graphCode: 190 }
+        : null;
+
+    await sync(harness, "w1").catch(() => undefined);
+    const account = harness.prisma.metaReportingAccount.rows[0];
+    expect(account.reportingSyncBlockedAt).toBeInstanceOf(Date);
+
+    harness.graph.batchFault = () => null;
+    harness.graph.resetCounters();
+    await sync(harness, "w1").catch(() => undefined);
+    expect(harness.graph.creativeBatches).toBe(0);
+  });
+
   it("uses the creative's own thumbnail for video creatives and never calls /{video}/thumbnails by default", async () => {
     const harness = createHarness();
     seedWorkspace(harness, "w1", [

@@ -2355,6 +2355,8 @@ model MetaAd {
   creativeId               String?
   thumbnailUrl             String?
   previewUrl               String?
+  /// Marcador persistido: não pedir de novo à Meta o preview deste criativo antes desta data.
+  previewMissUntil         DateTime?
   callToActionType         String?
   detectedPixelIds         String[]                    @default([])
   detectedPageIds          String[]                    @default([])

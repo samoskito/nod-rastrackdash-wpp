@@ -295,14 +295,20 @@ type SavedAdMedia = {
    * (absent or failed). They are not requested again until the TTL expires.
    */
   skipPreviewCreativeIds: Set<string>;
+  /**
+   * Persisted marker (MetaAd.previewMissUntil): epoch ms until which the
+   * creative is not requested again. Survives restarts and deploys.
+   */
+  previewMissUntilByCreative: Map<string, number>;
 };
 
 /**
- * How long a creative that came back absent/failed is not requested again.
- * Kept in memory only (no schema change): a restart forgets it, which costs
- * at most one extra request per such creative.
+ * How long a creative that came back failed (Graph error) is not requested
+ * again. Persisted in MetaAd.previewMissUntil (and mirrored in memory).
  */
 export const META_PREVIEW_MISS_TTL_MS = 24 * 60 * 60 * 1000;
+/** Creative read fine but has no media: Meta rarely changes that. */
+export const META_PREVIEW_ABSENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type AdMediaResolutionCounters = {
   preservedAfterFailure: number;
@@ -910,7 +916,7 @@ export class MetaReportingService {
     const mediaByAdId = new Map(
       ads.map((ad) => [
         ad.id,
-        this.resolveAdMedia(ad, savedMedia, mediaCounters),
+        this.resolveAdMedia(ad, savedMedia, mediaCounters, Date.now()),
       ]),
     );
     this.logPreviewEnrichment({
@@ -1088,6 +1094,7 @@ export class MetaReportingService {
           media: mediaByAdId.get(ad.id) ?? {
             previewUrl: null,
             thumbnailUrl: null,
+            previewMissUntil: null,
           },
           destinationType: adSetById.get(ad.adSetId)?.destinationType ?? null,
           insight: insightByAd.get(ad.id),
@@ -1148,7 +1155,7 @@ export class MetaReportingService {
     // Persisted thumbnails: Meta is called only for new creatives or rows
     // whose backoff elapsed (bounded count and ~30s budget, delivering ads
     // first; paused after a Meta rate limit). Cosmetic: never fails a sync.
-    await this.creativeThumbnails
+    const thumbnailRefresh = await this.creativeThumbnails
       ?.refreshCreatives({
         workspaceId: input.workspaceId,
         accessToken: input.accessToken,
@@ -1158,6 +1165,19 @@ export class MetaReportingService {
         ].map((ad) => ad.creativeId),
       })
       .catch(() => undefined);
+
+    if (thumbnailRefresh?.credentialInvalid) {
+      // Token died mid-sync: park the account (reporting-only breaker) so the
+      // next cycles do not call Meta again until the customer reconnects.
+      await blockMetaReportingSync(
+        this.prisma,
+        { id: input.account.id, workspaceId: input.workspaceId },
+        {
+          reason: "creative_thumbnail_credential_invalid",
+          message: META_RECONNECT_MESSAGE,
+        },
+      ).catch(() => undefined);
+    }
 
     return {
       campaignsSynced: campaigns.length,
@@ -1209,9 +1229,13 @@ export class MetaReportingService {
     ads: MetaAdAsset[],
     savedMedia: SavedAdMedia,
   ): void {
-    const until = Date.now() + META_PREVIEW_MISS_TTL_MS;
-
     for (const ad of ads) {
+      const until =
+        Date.now() +
+        (ad.previewSource === "absent"
+          ? META_PREVIEW_ABSENT_TTL_MS
+          : META_PREVIEW_MISS_TTL_MS);
+
       if (
         ad.creativeId &&
         (ad.previewSource === "absent" || ad.previewSource === "failed") &&
@@ -1239,11 +1263,17 @@ export class MetaReportingService {
         adAccountId: input.account.adAccountId,
         creativeId: { not: null },
       },
-      select: { creativeId: true, previewUrl: true, thumbnailUrl: true },
+      select: {
+        creativeId: true,
+        previewUrl: true,
+        thumbnailUrl: true,
+        previewMissUntil: true,
+      },
     })) as Array<{
       creativeId: string | null;
       previewUrl: string | null;
       thumbnailUrl: string | null;
+      previewMissUntil?: Date | null;
     }>;
     const now = new Date();
     const savedMedia: SavedAdMedia = {
@@ -1251,6 +1281,7 @@ export class MetaReportingService {
       previewByCreative: new Map(),
       thumbnailByCreative: new Map(),
       skipPreviewCreativeIds: new Set(),
+      previewMissUntilByCreative: new Map(),
     };
     const reusableExpiryByCreative = new Map<string, number>();
     const nowMs = now.getTime();
@@ -1273,7 +1304,22 @@ export class MetaReportingService {
       }
 
       if (!row.previewUrl) {
-        if (this.previewMissUntil.has(this.previewMissKey(input, creativeId))) {
+        const persistedUntil = row.previewMissUntil?.getTime() ?? 0;
+
+        if (persistedUntil > nowMs) {
+          savedMedia.previewMissUntilByCreative.set(
+            creativeId,
+            Math.max(
+              persistedUntil,
+              savedMedia.previewMissUntilByCreative.get(creativeId) ?? 0,
+            ),
+          );
+        }
+
+        if (
+          persistedUntil > nowMs ||
+          this.previewMissUntil.has(this.previewMissKey(input, creativeId))
+        ) {
           savedMedia.skipPreviewCreativeIds.add(creativeId);
         }
 
@@ -1318,12 +1364,17 @@ export class MetaReportingService {
     ad: MetaAdAsset,
     savedMedia: SavedAdMedia,
     counters: AdMediaResolutionCounters,
-  ): { previewUrl: string | null; thumbnailUrl: string | null } {
+    nowMs: number,
+  ): {
+    previewUrl: string | null;
+    thumbnailUrl: string | null;
+    previewMissUntil: Date | null;
+  } {
     let previewUrl = ad.previewUrl ?? null;
     let thumbnailUrl = ad.thumbnailUrl ?? null;
 
     if (!ad.creativeId) {
-      return { previewUrl: null, thumbnailUrl };
+      return { previewUrl: null, thumbnailUrl, previewMissUntil: null };
     }
 
     if (ad.previewSource === "failed") {
@@ -1344,7 +1395,27 @@ export class MetaReportingService {
       }
     }
 
-    return { previewUrl, thumbnailUrl };
+    // Persisted "do not ask Meta again before" marker. Set when Graph just
+    // answered without a usable preview; kept while the creative is skipped;
+    // cleared as soon as any preview exists.
+    let previewMissUntil: Date | null = null;
+
+    if (!previewUrl) {
+      if (ad.previewSource === "absent" || ad.previewSource === "failed") {
+        previewMissUntil = new Date(
+          nowMs +
+            (ad.previewSource === "absent"
+              ? META_PREVIEW_ABSENT_TTL_MS
+              : META_PREVIEW_MISS_TTL_MS),
+        );
+      } else if (ad.previewSource === "skipped") {
+        const kept = savedMedia.previewMissUntilByCreative.get(ad.creativeId);
+
+        previewMissUntil = kept && kept > nowMs ? new Date(kept) : null;
+      }
+    }
+
+    return { previewUrl, thumbnailUrl, previewMissUntil };
   }
 
   private logPreviewEnrichment(input: {
@@ -5133,7 +5204,11 @@ export class MetaReportingService {
     workspaceId: string;
     account: MetaReportingAccountRecord;
     ad: MetaAdAsset;
-    media: { previewUrl: string | null; thumbnailUrl: string | null };
+    media: {
+      previewUrl: string | null;
+      thumbnailUrl: string | null;
+      previewMissUntil: Date | null;
+    };
     destinationType: string | null;
     insight?: MetaAdInsight;
     classification: WhatsappClassification;
@@ -5152,6 +5227,7 @@ export class MetaReportingService {
       creativeId: input.ad.creativeId,
       thumbnailUrl: input.media.thumbnailUrl,
       previewUrl: input.media.previewUrl,
+      previewMissUntil: input.media.previewMissUntil,
       callToActionType: input.ad.callToActionType,
       detectedPixelIds: input.ad.detectedPixelIds,
       detectedPageIds: input.ad.detectedPageIds,

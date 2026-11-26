@@ -6,6 +6,7 @@ import {
   liveHttpUrl,
   metaCdnUrlExpiresAt,
 } from "../../src/integrations/meta/meta-cdn-url";
+import { MetaGraphError } from "../../src/integrations/meta/meta-graph-error";
 import {
   creativeThumbnailBackoffMs,
   creativeThumbnailNeedsRefresh,
@@ -363,6 +364,32 @@ describe("meta creative thumbnail service", () => {
       now: new Date(NOW.getTime() + 16 * 60_000),
     });
     expect(metaAdapter.getCreativeThumbnails).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops on a dead token without burning attempts and flags credentialInvalid", async () => {
+    const { rows, service } = createHarness({
+      adapterError: new MetaGraphError("Invalid OAuth access token", {
+        httpStatus: 401,
+        code: 190,
+        subcode: 460,
+        type: "OAuthException",
+        isTransient: false,
+      }),
+    });
+
+    await expect(
+      service.refreshCreatives({
+        workspaceId: "workspace_1",
+        accessToken: "token",
+        creativeIds: ["111", "222"],
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({
+      credentialInvalid: true,
+      deferred: 2,
+      failed: 0,
+    });
+    expect(rows).toHaveLength(0);
   });
 
   it("recognizes Meta rate-limit errors by code or message", () => {
