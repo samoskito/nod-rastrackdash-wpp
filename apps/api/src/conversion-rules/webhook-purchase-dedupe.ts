@@ -7,6 +7,7 @@ import {
   WEBHOOK_MESSAGE_KEY_PREFIX,
   WEBHOOK_REPEAT_WINDOW_SECONDS,
 } from "../inbound-webhooks/providers/webhook/webhook-automation-v1.parser";
+import { XMAX_OPPORTUNITY_KEY_PREFIX } from "../inbound-webhooks/providers/xmax/xmax-automation-v1.parser";
 import type { ProviderConversionDecisionInput } from "./provider-conversion-decision.types";
 
 /**
@@ -28,6 +29,9 @@ const WEBHOOK_MESSAGE_WINDOW_SECONDS = 30 * 24 * 60 * 60;
  *
  * Eventos uma vez por lead (Lead qualificado) ficam fora: seguem a chave
  * vitalicia e a trava de lead-lifetime-conversion-guard.ts.
+ *
+ * XMAX CRM: a oportunidade + o evento identificam a ocorrencia (como o
+ * `message_id`): a mesma oportunidade no mesmo evento nunca vai de novo.
  */
 export function webhookDedupePolicy(
   input: ProviderConversionDecisionInput,
@@ -36,7 +40,8 @@ export function webhookDedupePolicy(
 > | null {
   if (
     input.occurrence.source !== "automation" ||
-    input.occurrence.provider !== "webhook" ||
+    (input.occurrence.provider !== "webhook" &&
+      input.occurrence.provider !== "xmax") ||
     conversionEventDedupeMode(input.rule.eventName) === "lifetime" ||
     input.leadResolution.status !== "resolved"
   ) {
@@ -49,7 +54,10 @@ export function webhookDedupePolicy(
     input.occurrence.channelId ?? "unresolved-channel",
     input.leadResolution.lead.id,
   ];
-  if (input.occurrence.occurrenceKey.startsWith(WEBHOOK_MESSAGE_KEY_PREFIX)) {
+  if (
+    input.occurrence.occurrenceKey.startsWith(WEBHOOK_MESSAGE_KEY_PREFIX) ||
+    input.occurrence.occurrenceKey.startsWith(XMAX_OPPORTUNITY_KEY_PREFIX)
+  ) {
     return {
       mode: "rolling_window",
       scopeKey: [...base, input.occurrence.occurrenceKey].join(":"),

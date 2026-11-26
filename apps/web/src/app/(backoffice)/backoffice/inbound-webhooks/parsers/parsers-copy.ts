@@ -18,6 +18,7 @@ export const parserProviderLabels: Record<
   yampi: "Yampi",
   webhook: "Webhook / n8n",
   gohighlevel: "GoHighLevel",
+  xmax: "XMAX CRM",
 };
 
 /** Texto do estado de um leitor (sem jargão de certificação). */

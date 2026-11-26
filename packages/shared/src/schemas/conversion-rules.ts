@@ -74,6 +74,9 @@ export const providerConversionAutomationSources = [
   // Webhook / n8n (porte do SaaS #235): o n8n, o painel de atendimento ou o
   // robo SDR chama a URL de UMA regra.
   "webhook",
+  // XMAX CRM: a automacao de uma etapa da oportunidade chama a URL de UMA
+  // regra (mesmo modelo do Webhook / n8n, com o corpo da XMAX).
+  "xmax",
 ] as const;
 export const providerConversionAutomationSourceSchema = z.enum(
   providerConversionAutomationSources,
@@ -124,6 +127,35 @@ export function isWebhookProvider(
   provider: string | null | undefined,
 ): provider is typeof WEBHOOK_PROVIDER {
   return provider === WEBHOOK_PROVIDER;
+}
+/**
+ * XMAX CRM (porte do SaaS, docs/integrations/xmax-crm-opportunity.md): cada
+ * automacao "a oportunidade entrou na etapa X" do CRM da XMAX chama a URL de
+ * UMA regra (uma URL por evento). O evento vem da regra, nunca da etapa do
+ * corpo. O corpo so identifica a oportunidade (`ID_oportunidade`) e o lead
+ * (`Telefone_oportunidade` ou o primeiro contato). A XMAX nao cria lead: o
+ * lead pago vem da conexao de WhatsApp do aluno. Mesmo modelo do Webhook /
+ * n8n (todos os numeros, uma regra por evento, so lead pago), com o valor
+ * SEMPRE fixo na regra (por enquanto a XMAX nao manda valor).
+ */
+export const XMAX_PROVIDER = "xmax" as const;
+/** Todos os eventos do pixel de mensagem (vida inteira: Lead e Lead qualificado). */
+export const xmaxEventNames = conversionEventNameSchema.options;
+export function isXmaxProvider(
+  provider: string | null | undefined,
+): provider is typeof XMAX_PROVIDER {
+  return provider === XMAX_PROVIDER;
+}
+/**
+ * Origens que seguem o modelo do Webhook / n8n (URL da regra, todos os
+ * numeros, uma regra por evento, so lead pago de qualquer conexao).
+ */
+export const webhookFamilyProviders = [WEBHOOK_PROVIDER, XMAX_PROVIDER] as const;
+export type WebhookFamilyProvider = (typeof webhookFamilyProviders)[number];
+export function isWebhookFamilyProvider(
+  provider: string | null | undefined,
+): provider is WebhookFamilyProvider {
+  return (webhookFamilyProviders as readonly string[]).includes(provider ?? "");
 }
 export const webhookValueSources = ["received", "fixed"] as const;
 export const webhookValueSourceSchema = z.enum(webhookValueSources);
@@ -255,6 +287,8 @@ export const providerConversionRuleOrigins = [
   "automation_webhook",
   // GoHighLevel: a ação Webhook de uma etapa do Workflow chama a URL do evento.
   "automation_gohighlevel",
+  // XMAX CRM: a automacao de uma etapa da oportunidade chama a URL da regra.
+  "automation_xmax",
 ] as const;
 export const providerConversionRuleOriginSchema = z.enum(
   providerConversionRuleOrigins,
@@ -651,12 +685,24 @@ const providerAutomationCreateSchema = z
   })
   .superRefine((input, context) => {
     refineRuleScopeChannels(input, context);
-    if (isWebhookProvider(input.automationSource)) {
-      if (!(webhookEventNames as readonly string[]).includes(input.eventName)) {
+    if (isWebhookFamilyProvider(input.automationSource)) {
+      const xmax = isXmaxProvider(input.automationSource);
+      const allowed: readonly string[] = xmax
+        ? xmaxEventNames
+        : webhookEventNames;
+      if (!allowed.includes(input.eventName)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Este evento nao pode ser enviado por webhook",
           path: ["eventName"],
+        });
+      }
+      // XMAX: o valor e sempre o fixo da regra (a XMAX nao manda valor).
+      if (xmax && input.webhookValueSource === "received") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "A regra da XMAX usa sempre o valor fixo",
+          path: ["webhookValueSource"],
         });
       }
       if (input.scope !== "all_numbers") {

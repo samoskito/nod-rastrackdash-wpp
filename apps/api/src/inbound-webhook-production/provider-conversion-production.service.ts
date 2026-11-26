@@ -43,6 +43,7 @@ import {
   authorizedCtwaDestinationSchema,
   conversionEventNameSchema,
   conversionEventRequiresValue,
+  isWebhookFamilyProvider,
   normalizeCurrencyCode,
   providerConversionDecisionSchema,
   type ConversionEventCustomDataDto,
@@ -138,11 +139,11 @@ import {
 } from "../inbound-webhooks/providers/gohighlevel/gohighlevel-automation-v2.parser";
 import { isCtwaEntryAutomationProvider } from "../inbound-webhooks/providers/provider-automation-providers";
 import { ROICHAT_PURCHASE_REPEATED_REASON } from "../inbound-webhooks/providers/roichat/roichat-automation-v1.parser";
+import { type ParsedWebhookRuleAutomation } from "../inbound-webhooks/providers/webhook/webhook-automation-v1.parser";
 import {
-  WEBHOOK_AUTOMATION_V1_PARSER_VERSION,
-  parseWebhookForRule,
-  type ParsedWebhookRuleAutomation,
-} from "../inbound-webhooks/providers/webhook/webhook-automation-v1.parser";
+  parseWebhookFamilyForRule,
+  webhookFamilyParserVersion,
+} from "../inbound-webhooks/providers/webhook/webhook-family";
 import {
   WEBHOOK_EVENT_REPEATED_REASON,
   webhookAutomationConversionIdentity,
@@ -869,8 +870,8 @@ export class ProviderConversionProductionService
     let ctwaProof =
       isSalesPlatformProvider(occurrence.provider)
         ? (lead.ctwaDestination ?? purchaseContext?.ctwaProof)
-        : // Webhook / n8n: the verified entry of any lead, like a sale.
-          occurrence.provider === "webhook" ||
+        : // Webhook / n8n and XMAX CRM: the verified entry of any lead, like a sale.
+          isWebhookFamilyProvider(occurrence.provider) ||
             // Unnichat and GoHighLevel (same model): only a no-ad lead.
             (isCtwaEntryAutomationProvider(occurrence.provider) && !lead.adId)
           ? lead.ctwaDestination
@@ -1196,7 +1197,7 @@ export class ProviderConversionProductionService
       // message_id is the same event_id at Meta, whatever the execution).
       const webhookIdentity =
         !purchaseKey &&
-        occurrence.provider === "webhook" &&
+        isWebhookFamilyProvider(occurrence.provider) &&
         dedupePolicy.mode === "rolling_window"
           ? webhookAutomationConversionIdentity({
               workspaceId: execution.workspaceId,
@@ -1209,7 +1210,7 @@ export class ProviderConversionProductionService
         (automationIdentity
           ? `provider-automation:${occurrence.provider}:${automationIdentity}`
           : webhookIdentity
-            ? `provider-automation:webhook:${webhookIdentity}`
+            ? `provider-automation:${occurrence.provider}:${webhookIdentity}`
             : `provider-conversion:${execution.id}`);
       // Once-per-lead events only: the same lead identity already converted
       // for this Meta destination by another number or by the CTWA entry.
@@ -1280,7 +1281,7 @@ export class ProviderConversionProductionService
             : dedupePolicy.mode === "rolling_window"
               ? occurrence.provider === "roichat"
                 ? ROICHAT_PURCHASE_REPEATED_REASON
-                : occurrence.provider === "webhook"
+                : isWebhookFamilyProvider(occurrence.provider)
                   ? WEBHOOK_EVENT_REPEATED_REASON
                   : "purchase_within_24h"
               : "qualified_lead_already_materialized";
@@ -1342,7 +1343,7 @@ export class ProviderConversionProductionService
             : automationIdentity
               ? `${occurrence.provider}_${conversionEventMetaEventIdPrefix(eventName)}_${automationIdentity}`
               : webhookIdentity
-                ? `webhook_${conversionEventMetaEventIdPrefix(eventName)}_${webhookIdentity}`
+                ? `${occurrence.provider}_${conversionEventMetaEventIdPrefix(eventName)}_${webhookIdentity}`
                 : lifetimeIdentity
                   ? this.leadLifetimeMetaEventId(
                       execution.workspaceId,
@@ -2536,7 +2537,7 @@ export class ProviderConversionProductionService
       ) ||
       // Webhook / n8n: the call lands on the lead's own number (any
       // connection), like a sale.
-      execution.providerRule.parserRelease?.provider === "webhook" ||
+      isWebhookFamilyProvider(execution.providerRule.parserRelease?.provider) ||
       // GoHighLevel: the number is the Workflow location's (router proof),
       // always checked on the execution channel itself.
       execution.providerRule.parserRelease?.provider === "gohighlevel" ||
@@ -2585,14 +2586,16 @@ export class ProviderConversionProductionService
     execution: ExecutionRecord,
   ): ParsedAutomationForProduction {
     const payload = this.decryptedPayload(execution);
+    const webhookProvider = execution.providerRule.parserRelease?.provider;
     if (
-      execution.providerRule.parserRelease?.provider === "webhook" &&
-      execution.providerRule.parserRelease.version ===
-        WEBHOOK_AUTOMATION_V1_PARSER_VERSION
+      isWebhookFamilyProvider(webhookProvider) &&
+      execution.providerRule.parserRelease?.version ===
+        webhookFamilyParserVersion(webhookProvider)
     ) {
       // Same reading as the ingestion (stored first arrival = same key, the
-      // rule's event and value source).
-      const parsed = parseWebhookForRule(
+      // rule's event and value source). XMAX CRM: its own body reader.
+      const parsed = parseWebhookFamilyForRule(
+        webhookProvider,
         payload,
         execution.sourceDelivery.firstReceivedAt,
         execution.providerRule.conversionRule,

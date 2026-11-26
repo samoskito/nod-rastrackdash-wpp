@@ -83,6 +83,24 @@ export class CrmTestDb {
         currency text
       );
       CREATE INDEX ON "ConversionEventLog" ("leadId");
+      CREATE TYPE "ProviderConversionExecutionStatus" AS ENUM ('observed', 'eligible', 'materialized', 'duplicate', 'blocked', 'failed');
+      CREATE TABLE "ProviderConversionDecisionAudit" (
+        id text PRIMARY KEY,
+        "workspaceId" text NOT NULL,
+        "eventName" text NOT NULL
+      );
+      CREATE TABLE "ProviderConversionRuleExecution" (
+        id text PRIMARY KEY,
+        "workspaceId" text NOT NULL,
+        "leadId" text,
+        status "ProviderConversionExecutionStatus" NOT NULL,
+        "occurredAt" timestamp(3) NOT NULL,
+        "valueCents" integer,
+        currency text,
+        "providerDecisionWorkspaceId" text,
+        "providerDecisionId" text
+      );
+      CREATE INDEX ON "ProviderConversionRuleExecution" ("leadId");
     `);
     return this;
   }
@@ -93,7 +111,43 @@ export class CrmTestDb {
   }
 
   async reset(): Promise<void> {
-    await this.db.exec(`DELETE FROM "ConversionEventLog"; DELETE FROM "Lead";`);
+    await this.db.exec(
+      `DELETE FROM "ProviderConversionRuleExecution"; DELETE FROM "ProviderConversionDecisionAudit"; DELETE FROM "ConversionEventLog"; DELETE FROM "Lead";`,
+    );
+  }
+
+  /** Rule execution (status "observed" by default) and its decision. */
+  async execution(seed: {
+    leadId: string | null;
+    eventName: string;
+    at: Date;
+    status?: string;
+    valueCents?: number | null;
+    currency?: string | null;
+    workspaceId?: string;
+  }): Promise<string> {
+    this.sequence += 1;
+    const id = `exe_${String(this.sequence).padStart(6, "0")}`;
+    const workspaceId = seed.workspaceId ?? CRM_TEST_WS;
+    await this.db.query(
+      `INSERT INTO "ProviderConversionDecisionAudit" (id, "workspaceId", "eventName") VALUES ($1, $2, $3)`,
+      [`dec_${id}`, workspaceId, seed.eventName],
+    );
+    await this.db.query(
+      `INSERT INTO "ProviderConversionRuleExecution" (id, "workspaceId", "leadId", status, "occurredAt", "valueCents", currency, "providerDecisionWorkspaceId", "providerDecisionId")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $2, $8)`,
+      [
+        id,
+        workspaceId,
+        seed.leadId,
+        seed.status ?? "observed",
+        seed.at.toISOString(),
+        seed.valueCents ?? null,
+        seed.currency ?? null,
+        `dec_${id}`,
+      ],
+    );
+    return id;
   }
 
   async close(): Promise<void> {

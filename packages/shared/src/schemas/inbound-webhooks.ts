@@ -37,6 +37,10 @@ export const inboundWebhookProviders = [
   // conexao recebe a entrada do lead (Workflow com o contato do anuncio); as
   // etapas do Workflow chamam a URL de cada regra "Etapa no GoHighLevel".
   "gohighlevel",
+  // XMAX CRM: so existe como release de parser (xmax automation-v1, nasce
+  // EM OBSERVACAO) das regras chamadas pelas etapas da oportunidade. Nao cria
+  // lead nem tem conexao propria: o lead pago vem da conexao de WhatsApp.
+  "xmax",
 ] as const;
 export const inboundWebhookParserReleaseStatuses = [
   "observation_only",

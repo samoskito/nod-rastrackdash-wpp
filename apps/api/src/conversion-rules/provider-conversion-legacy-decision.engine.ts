@@ -127,7 +127,9 @@ export class ProviderConversionLegacyDecisionEngine {
       (isSalesPlatformProvider(input.occurrence.provider) ||
         input.occurrence.provider === "roichat" ||
         // Webhook / n8n "valor recebido": the call carries the value.
-        input.occurrence.provider === "webhook") &&
+        input.occurrence.provider === "webhook" ||
+        // XMAX CRM: none yet (fixed value); a future value field lands here.
+        input.occurrence.provider === "xmax") &&
       input.occurrence.observedValueCents
     ) {
       return this.eligible(

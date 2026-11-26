@@ -1,5 +1,9 @@
 import { manualConversionSummary } from "./manual-conversion-payload";
 import {
+  loadObservedLeadConversions,
+  type ObservedLeadConversion,
+} from "./observed-lead-conversions";
+import {
   ConflictException,
   Inject,
   Injectable,
@@ -11,6 +15,7 @@ import { RUNTIME_ENV, type RuntimeEnv } from "../common/runtime/runtime.module";
 import {
   leadLifecycleLabel,
   leadSourceLabel,
+  PROVIDER_OBSERVATION_EVENT_STATUS,
   type LeadDeleteResultDto,
   type LeadDetailDto,
   type LeadListItemDto,
@@ -232,7 +237,7 @@ export class LeadsService {
     const adIds = Array.from(
       new Set(leads.map((lead) => lead.adId).filter(Boolean)),
     ) as string[];
-    const [conversionLogs, adHierarchy] = await Promise.all([
+    const [conversionLogs, adHierarchy, observedConversions] = await Promise.all([
       leadIds.length
         ? (this.prisma.conversionEventLog.findMany({
             where: {
@@ -261,6 +266,7 @@ export class LeadsService {
             },
           }) as Promise<AdHierarchyRecord[]>)
         : Promise.resolve([]),
+      loadObservedLeadConversions(this.prisma, workspaceId, leadIds),
     ]);
     const hierarchyByAdId = new Map(adHierarchy.map((ad) => [ad.adId, ad]));
     const resolvedLeads = leads.map((lead) => {
@@ -301,17 +307,24 @@ export class LeadsService {
         eventsByLead.set(log.leadId, events);
       }
     }
+    const observedByLead = this.observedEventsByLead(observedConversions);
 
     return {
-      items: resolvedLeads.map((lead) =>
-        this.toDto(
+      items: resolvedLeads.map((lead) => {
+        const stage = this.lifecycleWithObservation(
           lead,
-          this.currentLifecycleEvent(lead, eventsByLead.get(lead.id)),
+          eventsByLead.get(lead.id),
+          observedByLead.get(lead.id),
+        );
+        return this.toDto(
+          lead,
+          stage.eventName,
           lead.campaignId
             ? (campaignNameById.get(lead.campaignId) ?? null)
             : null,
-        ),
-      ),
+          stage.observation,
+        );
+      }),
       pagination: {
         page,
         pageSize,
@@ -999,6 +1012,62 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Apaga um evento de teste (regra em observação) do lead: a execução
+   * observada sai e, com ela, a linha "Em observação" do lead e a etapa que
+   * ela dava em Leads e no CRM. Só execução "observed" (nunca foi para a fila
+   * da Meta); a decisão e o recebimento continuam na auditoria da regra.
+   */
+  async deleteObservedEvent(
+    workspaceId: string,
+    leadId: string,
+    executionId: string,
+    actorUserId: string,
+  ): Promise<{ executionId: string; deleted: true }> {
+    return this.prisma.$transaction(async (tx) => {
+      const execution = await tx.providerConversionRuleExecution.findFirst({
+        where: { id: executionId, workspaceId, leadId },
+        select: { id: true, status: true, providerRuleId: true },
+      });
+      if (!execution) {
+        throw new NotFoundException("Evento em observação não encontrado");
+      }
+      if (execution.status !== "observed") {
+        throw new ConflictException(
+          "Este evento não está mais em observação e não pode ser excluído.",
+        );
+      }
+      // Venda observada (Payt, Braip, Yampi): a trava de observação da venda
+      // aponta para a execução (Restrict) e sai junto. A de produção nunca
+      // aponta para uma execução observada.
+      await tx.providerPurchaseClaim.deleteMany({
+        where: {
+          workspaceId,
+          effectMode: "observation",
+          winnerExecutionId: execution.id,
+        },
+      });
+      await tx.providerConversionRuleExecution.deleteMany({
+        where: { workspaceId, id: execution.id, status: "observed" },
+      });
+      await tx.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId,
+          actorType: "user",
+          action: "lead.observed_event_deleted",
+          targetType: "ProviderConversionRuleExecution",
+          targetId: execution.id,
+          reason: "Workspace manager deleted a test event (rule in observation)",
+          sourceIp: null,
+          resultStatus: "completed",
+          afterSummary: { leadId, providerRuleId: execution.providerRuleId },
+        },
+      });
+      return { executionId: execution.id, deleted: true as const };
+    });
+  }
+
   async getLeadDetail(
     workspaceId: string,
     leadId: string,
@@ -1127,28 +1196,18 @@ export class LeadsService {
         : Promise.resolve(adSets),
     ]);
     const campaignName = resolvedCampaigns[0]?.name ?? null;
-    const currentEventName = this.currentLifecycleEvent(
+    const observedConversions = await loadObservedLeadConversions(
+      this.prisma,
+      workspaceId,
+      [lead.id],
+    );
+    const stage = this.lifecycleWithObservation(
       resolvedLead,
       new Set(conversionLogs.map((event) => event.eventName)),
+      new Set(observedConversions.map((event) => event.eventName)),
     );
-
-    return {
-      lead: this.toDto(resolvedLead, currentEventName, campaignName),
-      attribution: {
-        campaignName,
-        adSetName: resolvedAdSets[0]?.name ?? null,
-        adName: ads[0]?.name ?? null,
-        creative: {
-          // Persisted image (served by our API) wins; otherwise only a
-          // not-yet-expired CTWA/Meta CDN URL is returned (oe= expiry).
-          thumbnailUrl:
-            liveHttpUrl(lead.ctwaThumbnailUrl) ??
-            liveHttpUrl(ad?.thumbnailUrl ?? null),
-          destinationUrl: this.publicHttpUrl(lead.ctwaSourceUrl),
-          thumbnailVersion,
-        },
-      },
-      conversionEvents: conversionLogs.map((event) => ({
+    const logEvents: LeadDetailDto["conversionEvents"] = conversionLogs.map(
+      (event) => ({
         id: event.id ?? "",
         eventName: event.eventName,
         status: event.status ?? "unknown",
@@ -1174,7 +1233,59 @@ export class LeadsService {
         sentAt: event.sentAt?.toISOString() ?? null,
         createdAt: event.createdAt.toISOString(),
         manual: manualConversionSummary(event),
-      })),
+      }),
+    );
+    // Regra em observação: o evento aparece como apareceria em produção, com
+    // a marca "Em observação" (nada foi para a Meta).
+    const observedEvents: LeadDetailDto["conversionEvents"] =
+      observedConversions.map((event) => ({
+        id: event.executionId,
+        eventName: event.eventName,
+        status: PROVIDER_OBSERVATION_EVENT_STATUS,
+        sourceTrigger: event.sourceTrigger,
+        pixelId: null,
+        campaignId: lead.campaignId ?? null,
+        adSetId: lead.adSetId ?? null,
+        adId: lead.adId ?? null,
+        errorCode: null,
+        errorMessage: "Regra em observação: nada foi enviado à Meta.",
+        occurredAt: event.occurredAt.toISOString(),
+        sentAt: null,
+        createdAt: event.createdAt.toISOString(),
+        manual: null,
+        observation: { executionId: event.executionId },
+      }));
+    const conversionEvents =
+      observedEvents.length > 0
+        ? [...logEvents, ...observedEvents].sort(
+            (a, b) =>
+              b.occurredAt.localeCompare(a.occurredAt) ||
+              b.createdAt.localeCompare(a.createdAt),
+          )
+        : logEvents;
+
+    return {
+      lead: this.toDto(
+        resolvedLead,
+        stage.eventName,
+        campaignName,
+        stage.observation,
+      ),
+      attribution: {
+        campaignName,
+        adSetName: resolvedAdSets[0]?.name ?? null,
+        adName: ads[0]?.name ?? null,
+        creative: {
+          // Persisted image (served by our API) wins; otherwise only a
+          // not-yet-expired CTWA/Meta CDN URL is returned (oe= expiry).
+          thumbnailUrl:
+            liveHttpUrl(lead.ctwaThumbnailUrl) ??
+            liveHttpUrl(ad?.thumbnailUrl ?? null),
+          destinationUrl: this.publicHttpUrl(lead.ctwaSourceUrl),
+          thumbnailVersion,
+        },
+      },
+      conversionEvents,
       webhookEvents: webhookLogs.map((event) => ({
         id: event.id,
         source: event.source,
@@ -1296,11 +1407,13 @@ export class LeadsService {
     lead: LeadRecord,
     lastEventName: string | null,
     campaignName: string | null,
+    stageObservation = false,
   ): LeadListItemDto {
     const resolvedLastEventName =
       lastEventName ?? this.inferredLastEventName(lead);
 
     return {
+      ...(stageObservation ? { stageObservation: true } : {}),
       id: lead.id,
       workspaceId: lead.workspaceId,
       name: lead.name,
@@ -1391,6 +1504,43 @@ export class LeadsService {
     }
 
     return lead.firstMessageAt ? "LeadSubmitted" : null;
+  }
+
+  private observedEventsByLead(
+    observed: ObservedLeadConversion[],
+  ): Map<string, Set<string>> {
+    const byLead = new Map<string, Set<string>>();
+    for (const event of observed) {
+      const events = byLead.get(event.leadId) ?? new Set<string>();
+      events.add(event.eventName);
+      byLead.set(event.leadId, events);
+    }
+    return byLead;
+  }
+
+  /**
+   * Stage of the lead counting the events of rules in observation, as it
+   * would be in production. `observation` = only those events put the lead
+   * in this stage (the screen shows "Em observação").
+   */
+  private lifecycleWithObservation(
+    lead: LeadRecord,
+    eventNames: ReadonlySet<string> | undefined,
+    observedEventNames: ReadonlySet<string> | undefined,
+  ): { eventName: string | null; observation: boolean } {
+    const real = this.currentLifecycleEvent(lead, eventNames);
+    if (!observedEventNames || observedEventNames.size === 0) {
+      return { eventName: real, observation: false };
+    }
+    const withObserved = this.currentLifecycleEvent(
+      lead,
+      new Set([...(eventNames ?? []), ...observedEventNames]),
+    );
+    return {
+      eventName: withObserved,
+      observation:
+        withObserved !== real && observedEventNames.has(withObserved ?? ""),
+    };
   }
 
   private currentLifecycleEvent(

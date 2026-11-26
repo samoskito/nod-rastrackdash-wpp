@@ -24,7 +24,8 @@ type DiagnosticSource =
   | "roichat"
   | "yampi"
   | "webhook"
-  | "gohighlevel";
+  | "gohighlevel"
+  | "xmax";
 
 function diagnosticSourceForProvider(
   provider: InboundWebhookProviderDto,

@@ -1798,6 +1798,18 @@ describe("provider rules API: Conversões screen support", () => {
         "roichat",
         "gohighlevel",
       ],
+      // XMAX CRM: same model (the XMAX creates no lead).
+      automation_xmax: [
+        "umbler",
+        "gupshup",
+        "uazapi",
+        "meta_cloud",
+        "data_crazy",
+        "unnichat",
+        "waha",
+        "roichat",
+        "gohighlevel",
+      ],
     });
     expect(
       capabilities.origins.find((origin) => origin.origin === "automation_webhook"),
@@ -1838,6 +1850,8 @@ describe("provider rules API: Conversões screen support", () => {
       automation_yampi: [false, true],
       // Webhook / n8n: not bound to one connection, needs a WhatsApp one live.
       automation_webhook: [false, true],
+      // XMAX CRM: same model as Webhook / n8n.
+      automation_xmax: [false, true],
     });
     // Unnichat: any catalog event (the rule chooses it), never unified.
     expect(

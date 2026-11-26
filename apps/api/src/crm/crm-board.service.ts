@@ -625,6 +625,8 @@ export class CrmBoardService {
         valueCents:
           withValue && row.valueCents != null ? Number(row.valueCents) : null,
         currency: withValue && row.valueCents != null ? row.currency : null,
+        // Regra em observação: o card fica na etapa com a marca.
+        ...(row.observed === true ? { observation: true } : {}),
         whatsappInstance:
           instance && instance.name.trim()
             ? { id: instance.id, name: instance.name }

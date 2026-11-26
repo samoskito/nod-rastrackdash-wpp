@@ -252,6 +252,37 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     allowedEvents: [...webhookEventNames],
   },
   {
+    // XMAX CRM: a automação de etapa da XMAX chama a URL de uma regra (uma
+    // por evento), como o Webhook / n8n. A XMAX não cria lead: só converte o
+    // contato que já veio do anúncio, em qualquer conexão de WhatsApp do
+    // aluno. Valor sempre fixo (o da regra).
+    id: "automation_xmax",
+    kind: "provider",
+    label: "Etapa no CRM da XMAX",
+    description:
+      "Quando a oportunidade muda de etapa no CRM da XMAX e a automação chama a URL da regra, para o contato que veio do anúncio.",
+    logoProvider: null,
+    fallbackChannelProviders: [
+      "umbler",
+      "gupshup",
+      "uazapi",
+      "meta_cloud",
+      "data_crazy",
+      "unnichat",
+      "waha",
+      "roichat",
+      "gohighlevel",
+    ],
+    connection: "any",
+    allowedEvents: [
+      "QualifiedLead",
+      "Purchase",
+      ...conversionEventNameSchema.options.filter(
+        (event) => event !== "QualifiedLead" && event !== "Purchase",
+      ),
+    ],
+  },
+  {
     id: "kommo",
     kind: "crm",
     label: "Etapa no Kommo",

@@ -262,6 +262,7 @@ export function providerRuleOrigin(
   if (rule.automationSource === "roichat") return "automation_roichat";
   if (rule.automationSource === "yampi") return "automation_yampi";
   if (rule.automationSource === "webhook") return "automation_webhook";
+  if (rule.automationSource === "xmax") return "automation_xmax";
 
   switch (rule.conversionRule.triggerType) {
     case "message_phrase":
@@ -389,7 +390,7 @@ export function observationCanonicalWarning(
   return `Em ${where}: a regra global roda num canal com o envio desligado; outro canal do mesmo número já envia.`;
 }
 
-function triggerDetailForProviderRule(
+export function triggerDetailForProviderRule(
   rule: ProviderConversionRuleDto,
   origin: ProviderConversionRuleOriginDto,
 ): string | null {
@@ -449,6 +450,12 @@ function triggerDetailForProviderRule(
           : rule.conversionRule.defaultValueCents
             ? `Valor recebido (reserva: ${formatMoney(rule.conversionRule.defaultValueCents, rule.conversionRule.defaultCurrency ?? "BRL")})`
             : "Valor recebido na chamada";
+    case "automation_xmax":
+      // XMAX CRM: a automação da etapa chama a URL; o valor é sempre o fixo.
+      return webhookEventCarriesValue(rule.conversionRule.eventName) &&
+        rule.conversionRule.defaultValueCents
+        ? `Valor fixo de ${formatMoney(rule.conversionRule.defaultValueCents, rule.conversionRule.defaultCurrency ?? "BRL")}`
+        : "Etapa da XMAX chama a URL da regra";
   }
 }
 
@@ -1101,7 +1108,8 @@ export function ineligibleNumbers(
     origin === "automation_payt" ||
       origin === "automation_braip" ||
       origin === "automation_yampi" ||
-      origin === "automation_webhook"
+      origin === "automation_webhook" ||
+      origin === "automation_xmax"
       ? originChannelProviders(origin, capabilities)
       : capabilities.origins
           .filter(
@@ -1110,7 +1118,8 @@ export function ineligibleNumbers(
               item.origin !== "automation_braip" &&
               item.origin !== "automation_yampi" &&
               // Webhook / n8n: any WhatsApp number, like a sale.
-              item.origin !== "automation_webhook",
+              item.origin !== "automation_webhook" &&
+              item.origin !== "automation_xmax",
           )
           .flatMap((item) => item.channelProviders),
   );

@@ -52,6 +52,11 @@ export function inboundParserProductionEligible(
         // future certification migration needs no code change; while the row
         // is observation_only nothing of GoHighLevel is sent.
         "gohighlevel",
+        // XMAX CRM opportunity-stage parser: seeded observation_only
+        // (20261126120100, not tested with a real XMAX call yet). Listed so a
+        // future certification migration needs no code change; while the row
+        // is observation_only nothing of XMAX is sent.
+        "xmax",
       ].includes(release.provider) && release.status === "certified"
     );
   try {

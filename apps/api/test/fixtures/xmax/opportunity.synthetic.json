@@ -1,0 +1,15 @@
+{
+  "Nome": "",
+  "Email": "",
+  "Telefone": "",
+  "Tags": "",
+  "Queue_name": "",
+  "Queue_id": "",
+  "Queue_id_v2": "12",
+  "ID_oportunidade": "90001",
+  "Titulo_oportunidade": "Lead Teste",
+  "Etapa_oportunidade": "3 Negociação",
+  "Telefone_oportunidade": "5511900000002",
+  "Email_oportunidade": "lead.teste@example.com",
+  "Contatos_oportunidade": "[]"
+}

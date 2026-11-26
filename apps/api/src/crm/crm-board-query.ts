@@ -67,6 +67,8 @@ export type CrmPlacedRow = {
   arrivedAt: Date;
   valueCents: number | null;
   currency: string | null;
+  /** The stage came from a rule in observation (nothing sent to Meta). */
+  observed?: boolean;
 };
 
 const ts = (date: Date) => Prisma.sql`CAST(${date.toISOString()} AS timestamp(3))`;
@@ -146,7 +148,29 @@ function periodLeadsSql(input: CrmPlacementInput): Prisma.Sql {
           AND c2."eventOccurredAt" >= ${ts(gte)}
           AND c2."eventOccurredAt" <= ${ts(lte)}
           AND ${stageConversionSql("c2")})`,
+    )}
+    UNION
+    ${select(
+      Prisma.sql`l.id IN (
+        SELECT e2."leadId" FROM "ProviderConversionRuleExecution" e2
+        JOIN "ProviderConversionDecisionAudit" d2
+          ON d2."workspaceId" = e2."providerDecisionWorkspaceId" AND d2.id = e2."providerDecisionId"
+        WHERE e2."workspaceId" = ${input.workspaceId}
+          AND ${observedExecutionSql("e2")}
+          AND d2."eventName" = ANY(${input.stages.map((stage) => stage.eventName)}::text[])
+          AND e2."occurredAt" >= ${ts(gte)}
+          AND e2."occurredAt" <= ${ts(lte)})`,
     )}`;
+}
+
+/**
+ * Event recognized by a provider rule in observation for the lead (execution
+ * "observed", see leads/observed-lead-conversions): it places the card as it
+ * would in production, flagged "Em observação". Never a ConversionEventLog,
+ * so the Visão geral and the reports never count it.
+ */
+function observedExecutionSql(alias: string): Prisma.Sql {
+  return Prisma.raw(`${alias}."status" = 'observed' AND ${alias}."leadId" IS NOT NULL`);
 }
 
 /** WITH ... placed AS (...): one row per lead of the board. */
@@ -176,6 +200,9 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
   const inPeriod = input.range
     ? Prisma.sql`AND c."eventOccurredAt" >= ${ts(input.range.gte)} AND c."eventOccurredAt" <= ${ts(input.range.lte)}`
     : Prisma.empty;
+  const observedInPeriod = input.range
+    ? Prisma.sql`AND e."occurredAt" >= ${ts(input.range.gte)} AND e."occurredAt" <= ${ts(input.range.lte)}`
+    : Prisma.empty;
   const periodFilter = input.range
     ? Prisma.sql`WHERE (a.stage_rank <= ${CRM_BASE_RANK}::int AND a.arrived_at >= ${ts(input.range.gte)} AND a.arrived_at <= ${ts(input.range.lte)})
       OR (a.stage_rank > ${CRM_BASE_RANK}::int AND a.entered_at >= ${ts(input.range.gte)} AND a.entered_at <= ${ts(input.range.lte)})`
@@ -188,19 +215,43 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
     ${periodLeadsSql(input)}
   ),
   valid AS (
-    SELECT DISTINCT ON (c."leadId")
-      c."leadId" AS lead_id,
-      s.stage_rank,
-      c."eventOccurredAt" AS entered_at,
-      c."valueCents" AS value_cents,
-      c."currency" AS currency
-    FROM period_leads p
-    JOIN "ConversionEventLog" c ON c."leadId" = p.id
-    JOIN stage_def s ON s.event_name = c."eventName"
-    WHERE c."workspaceId" = ${input.workspaceId}
-      AND ${stageConversionSql("c")}
-      ${inPeriod}
-    ORDER BY c."leadId", s.stage_rank DESC, c."eventOccurredAt" ASC, c.id ASC
+    SELECT DISTINCT ON (x.lead_id)
+      x.lead_id, x.stage_rank, x.entered_at, x.value_cents, x.currency, x.observed
+    FROM (
+      SELECT
+        c."leadId" AS lead_id,
+        s.stage_rank,
+        c."eventOccurredAt" AS entered_at,
+        c."valueCents" AS value_cents,
+        c."currency" AS currency,
+        false AS observed,
+        c.id AS row_id
+      FROM period_leads p
+      JOIN "ConversionEventLog" c ON c."leadId" = p.id
+      JOIN stage_def s ON s.event_name = c."eventName"
+      WHERE c."workspaceId" = ${input.workspaceId}
+        AND ${stageConversionSql("c")}
+        ${inPeriod}
+      UNION ALL
+      SELECT
+        e."leadId" AS lead_id,
+        s.stage_rank,
+        e."occurredAt" AS entered_at,
+        e."valueCents" AS value_cents,
+        e."currency" AS currency,
+        true AS observed,
+        e.id AS row_id
+      FROM period_leads p
+      JOIN "ProviderConversionRuleExecution" e ON e."leadId" = p.id
+      JOIN "ProviderConversionDecisionAudit" d
+        ON d."workspaceId" = e."providerDecisionWorkspaceId" AND d.id = e."providerDecisionId"
+      JOIN stage_def s ON s.event_name = d."eventName"
+      WHERE e."workspaceId" = ${input.workspaceId}
+        AND ${observedExecutionSql("e")}
+        ${observedInPeriod}
+    ) x
+    -- Same stage: the real conversion wins over the observed one.
+    ORDER BY x.lead_id, x.stage_rank DESC, x.observed ASC, x.entered_at ASC, x.row_id ASC
   )${deferredCte},
   placed_all AS (
     SELECT
@@ -209,7 +260,8 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
       CASE WHEN v.lead_id IS NOT NULL THEN v.stage_rank ELSE ${fallbackRank} END AS stage_rank,
       CASE WHEN v.lead_id IS NOT NULL THEN v.entered_at ELSE p.arrived_at END AS entered_at,
       v.value_cents,
-      v.currency
+      v.currency,
+      COALESCE(v.observed, false) AS observed
     FROM period_leads p
     LEFT JOIN valid v ON v.lead_id = p.id
     ${deferredJoin}
@@ -220,7 +272,7 @@ export function crmPlacementCte(input: CrmPlacementInput): Prisma.Sql {
   )`;
 }
 
-const placedColumns = Prisma.sql`x.lead_id AS "leadId", x.stage_rank AS "stageRank", x.entered_at AS "enteredAt", x.arrived_at AS "arrivedAt", x.value_cents AS "valueCents", x.currency AS "currency"`;
+const placedColumns = Prisma.sql`x.lead_id AS "leadId", x.stage_rank AS "stageRank", x.entered_at AS "enteredAt", x.arrived_at AS "arrivedAt", x.value_cents AS "valueCents", x.currency AS "currency", x.observed AS "observed"`;
 
 /**
  * Board: the first `limit` cards of every column plus each column's total,

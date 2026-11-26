@@ -3,6 +3,9 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import {
   conversionEventNameSchema,
   conversionEventRequiresValue,
+  isWebhookFamilyProvider,
+  isXmaxProvider,
+  type WebhookFamilyProvider,
   type WebhookValueSourceDto,
 } from "@wpptrack/shared";
 import type { Prisma } from "@prisma/client";
@@ -17,6 +20,9 @@ import { readWebhookValueSource } from "../inbound-webhooks/providers/webhook/we
  * - uma regra por evento (uma URL por evento: duas fariam o mesmo trabalho);
  * - evento com valor: "received" (valor do corpo, o da regra e reserva
  *   opcional) ou "fixed" (o da regra, obrigatorio quando o evento exige).
+ *
+ * A XMAX CRM segue as mesmas regras (uma regra por evento DA XMAX), com o
+ * valor sempre fixo.
  */
 export const WEBHOOK_ALL_NUMBERS_MESSAGE =
   "A regra de webhook vale para todos os números";
@@ -26,15 +32,29 @@ export const WEBHOOK_EVENT_TAKEN_MESSAGE =
   "Este evento já tem uma regra de webhook; use a URL dela";
 export const WEBHOOK_FIXED_VALUE_MESSAGE =
   "Informe o valor fixo (ticket médio) para usar valor fixo";
+export const XMAX_EVENT_TAKEN_MESSAGE =
+  "Este evento já tem uma regra da XMAX; use a URL dela";
+export const XMAX_FIXED_VALUE_ONLY_MESSAGE =
+  "A regra da XMAX usa sempre o valor fixo";
 
+/** Webhook / n8n or XMAX CRM rule (same model): its provider, else null. */
+export function webhookFamilyProviderOf(rule: {
+  conversionRule: { triggerType: string };
+  parserRelease?: { provider: string } | null;
+}): WebhookFamilyProvider | null {
+  const provider = rule.parserRelease?.provider;
+  return rule.conversionRule.triggerType === "provider_automation" &&
+    isWebhookFamilyProvider(provider)
+    ? provider
+    : null;
+}
+
+/** Webhook / n8n or XMAX CRM rule (URL per rule, every number). */
 export function isWebhookRule(rule: {
   conversionRule: { triggerType: string };
   parserRelease?: { provider: string } | null;
 }): boolean {
-  return (
-    rule.conversionRule.triggerType === "provider_automation" &&
-    rule.parserRelease?.provider === "webhook"
-  );
+  return webhookFamilyProviderOf(rule) !== null;
 }
 
 /** Serializa a criacao de regras de webhook do workspace (trava da transacao). */
@@ -53,17 +73,24 @@ export async function assertWebhookEventFree(
   transaction: Prisma.TransactionClient,
   workspaceId: string,
   eventName: string,
+  provider: WebhookFamilyProvider = "webhook",
 ): Promise<void> {
   const existing = await transaction.providerConversionRuleConfig.findFirst({
     where: {
       workspaceId,
       removedAt: null,
       conversionRule: { triggerType: "provider_automation", eventName },
-      parserRelease: { is: { provider: "webhook" } },
+      parserRelease: { is: { provider } },
     },
     select: { id: true },
   });
-  if (existing) throw new ConflictException(WEBHOOK_EVENT_TAKEN_MESSAGE);
+  if (existing) {
+    throw new ConflictException(
+      isXmaxProvider(provider)
+        ? XMAX_EVENT_TAKEN_MESSAGE
+        : WEBHOOK_EVENT_TAKEN_MESSAGE,
+    );
+  }
 }
 
 export function assertWebhookCreate(input: {
@@ -113,9 +140,15 @@ export function assertWebhookUpdate(
   if (input.scope === "specific_numbers" || input.channelIds) {
     throw new BadRequestException(WEBHOOK_ALL_NUMBERS_MESSAGE);
   }
-  const source =
-    input.webhookValueSource ??
-    readWebhookValueSource(current.conversionRule.defaultItems);
+  // XMAX CRM: always the rule's fixed value (no value field yet).
+  const xmax = isXmaxProvider(current.parserRelease?.provider);
+  if (xmax && input.webhookValueSource === "received") {
+    throw new BadRequestException(XMAX_FIXED_VALUE_ONLY_MESSAGE);
+  }
+  const source = xmax
+    ? "fixed"
+    : (input.webhookValueSource ??
+      readWebhookValueSource(current.conversionRule.defaultItems));
   const eventName = conversionEventNameSchema.safeParse(
     current.conversionRule.eventName,
   );

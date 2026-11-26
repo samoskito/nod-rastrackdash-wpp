@@ -1,11 +1,13 @@
 import type { ManualConversionAccess } from "../../../../lib/manual-conversion-access";
 import {
   conversionEventBuilderLabel,
+  PROVIDER_OBSERVATION_EVENT_STATUS,
   type LeadDetailConversionEventDto,
   type LeadDetailDto,
 } from "@wpptrack/shared";
 import { formatDateTime } from "../../../../lib/date-time";
 import { CreativePreview } from "./creative-preview";
+import { DeleteObservedEventButton } from "./delete-observed-event-button";
 import {
   CancelManualConversionButton,
   ManualConversionButton,
@@ -106,7 +108,15 @@ function conversionStatusTone(event: {
       event.errorCode === "MetaEventTimeExpired")
   )
     return " warn";
-  if (["not_eligible", "skipped", "imported", "shadow_observed"].includes(event.status))
+  if (
+    [
+      "not_eligible",
+      "skipped",
+      "imported",
+      "shadow_observed",
+      PROVIDER_OBSERVATION_EVENT_STATUS,
+    ].includes(event.status)
+  )
     return " neutral";
   return statusTone(event.status);
 }
@@ -141,6 +151,7 @@ function eventStatusLabel(
     error: "Falhou",
     imported: "Importado",
     shadow_observed: "Observado em sombra",
+    [PROVIDER_OBSERVATION_EVENT_STATUS]: "Em observação",
     not_eligible: "Não elegível para CAPI",
     skipped: "Descartado",
   };
@@ -162,7 +173,59 @@ function triggerLabel(trigger: string) {
     auto_lead: "Entrada do WhatsApp",
   };
 
-  return labels[trigger] ?? trigger;
+  return labels[trigger] ?? ruleTriggerLabel(trigger) ?? trigger;
+}
+
+const ruleProviderLabels: Record<string, string> = {
+  umbler: "Umbler Talk",
+  unnichat: "Unnichat",
+  gohighlevel: "GoHighLevel",
+  webhook: "Webhook / n8n",
+  xmax: "XMAX CRM",
+  payt: "Payt",
+  braip: "Braip",
+  yampi: "Yampi",
+  roichat: "RoiChat",
+  uazapi: "NOD API",
+  waha: "WAHA",
+};
+
+/** Rule of a platform (inbound_webhook:<provider>:<trigger>): "Regra da XMAX CRM". */
+function ruleTriggerLabel(trigger: string): string | null {
+  const [prefix, provider] = trigger.split(":");
+  if (prefix !== "inbound_webhook" || !provider) return null;
+  return `Regra · ${ruleProviderLabels[provider] ?? provider}`;
+}
+
+/** "Em observação" row: nothing went to the Meta; "Excluir teste" removes it. */
+function ObservationMeta({
+  leadId,
+  event,
+  canManage,
+  onChanged,
+}: {
+  leadId: string;
+  event: LeadDetailConversionEventDto;
+  canManage: boolean;
+  onChanged?: () => void;
+}) {
+  if (!event.observation) return null;
+  return (
+    <span className="manual-conversion-meta">
+      <span className="manual-conversion-meta-head">
+        <span className="event-chip neutral">Teste, sem envio à Meta</span>
+      </span>
+      {canManage ? (
+        <span className="manual-conversion-meta-action">
+          <DeleteObservedEventButton
+            leadId={leadId}
+            executionId={event.observation.executionId}
+            onDeleted={onChanged}
+          />
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function sourceLabel(source: string | null) {
@@ -310,6 +373,9 @@ export function LeadDetailView({
                 ? eventNameLabel(lead.lastEventName)
                 : "Sem evento"}
             </strong>
+            {lead.stageObservation ? (
+              <span className="event-chip neutral">Em observação</span>
+            ) : null}
           </footer>
         </section>
 
@@ -412,6 +478,14 @@ export function LeadDetailView({
                           canManage={manualAccess.canManage}
                           onChanged={onChanged}
                         />
+                        <ObservationMeta
+                          leadId={lead.id}
+                          event={event}
+                          canManage={
+                            manualAccess.canManage && !manualAccess.licenseLocked
+                          }
+                          onChanged={onChanged}
+                        />
                       </td>
                       <td>
                         <PresentationMask placeholder="Pixel oculto">
@@ -448,6 +522,14 @@ export function LeadDetailView({
                           leadId={lead.id}
                           event={event}
                           canManage={manualAccess.canManage}
+                          onChanged={onChanged}
+                        />
+                        <ObservationMeta
+                          leadId={lead.id}
+                          event={event}
+                          canManage={
+                            manualAccess.canManage && !manualAccess.licenseLocked
+                          }
                           onChanged={onChanged}
                         />
                       </dd>

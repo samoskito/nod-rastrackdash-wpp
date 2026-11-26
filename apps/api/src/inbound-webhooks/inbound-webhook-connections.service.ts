@@ -155,7 +155,8 @@ export class InboundWebhookConnectionsService {
       // URL (hub).
       // WAHA is a WhatsApp connection (Integrações → WhatsApp) whose own
       // receiver uses the waha parser release; it has no generic connection.
-      // Webhook / n8n: automation rules only (URL per rule in Conversoes).
+      // Webhook / n8n and XMAX CRM: automation rules only (URL per rule in
+      // Conversoes).
       providers: inboundWebhookProviders
         .filter(
           (provider) =>
@@ -164,7 +165,8 @@ export class InboundWebhookConnectionsService {
             provider !== "braip" &&
             provider !== "yampi" &&
             provider !== "waha" &&
-            provider !== "webhook",
+            provider !== "webhook" &&
+            provider !== "xmax",
         )
         .map((provider) => {
           const release = releaseByProvider.get(provider);

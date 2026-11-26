@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LeadsService } from "../src/leads/leads.service";
 
 function createHarness() {
+  const observedExecutions: Array<Record<string, unknown>> = [];
   const db = {
     leads: [
       {
@@ -126,9 +127,14 @@ function createHarness() {
     metaAd: {
       findMany: vi.fn(async () => db.ads),
     },
+    // Rules in observation: none unless a test adds one.
+    providerConversionRuleExecution: {
+      findMany: vi.fn(async () => observedExecutions),
+    },
   };
 
   return {
+    observedExecutions,
     db,
     prisma,
     service: new LeadsService(prisma as never),
@@ -944,5 +950,93 @@ describe("leads service base repeat (conversaram mais de uma vez)", () => {
         AND: [{ id: { in: ["lead_1", "lead_twice"] } }],
       },
     });
+  });
+});
+
+describe("leads service: rules in observation (Em observação)", () => {
+  function observedPurchase(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "exec_obs_1",
+      leadId: "lead_1",
+      occurredAt: new Date("2026-07-02T03:20:00.000Z"),
+      createdAt: new Date("2026-07-02T03:20:01.000Z"),
+      valueCents: 49_700,
+      currency: "BRL",
+      providerDecision: { eventName: "Purchase" },
+      providerRule: {
+        conversionRule: { eventName: "QualifiedLead", triggerType: "provider_automation" },
+        parserRelease: { provider: "xmax" },
+        connection: { provider: "xmax" },
+      },
+      ...overrides,
+    };
+  }
+
+  it("lists the observed event on the lead page, marked and never as sent", async () => {
+    const { prisma, service, observedExecutions } = createHarness();
+    observedExecutions.push(observedPurchase());
+
+    const detail = await service.getLeadDetail("workspace_1", "lead_1");
+
+    expect(prisma.providerConversionRuleExecution.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "workspace_1", status: "observed", leadId: { in: ["lead_1"] } },
+      }),
+    );
+    expect(detail.conversionEvents.map((event) => event.id)).toEqual([
+      "exec_obs_1",
+      "conversion_1",
+    ]);
+    expect(detail.conversionEvents[0]).toMatchObject({
+      eventName: "Purchase",
+      status: "provider_observation",
+      sourceTrigger: "inbound_webhook:xmax:provider_automation",
+      sentAt: null,
+      pixelId: null,
+      observation: { executionId: "exec_obs_1" },
+    });
+    // Stage as in production (Purchase), flagged.
+    expect(detail.lead).toMatchObject({
+      lastEventName: "Purchase",
+      status: "converted",
+      stageObservation: true,
+    });
+  });
+
+  it("no mark when a real conversion already gives the same stage", async () => {
+    const { service, observedExecutions } = createHarness();
+    observedExecutions.push(
+      observedPurchase({ providerDecision: { eventName: "QualifiedLead" } }),
+    );
+
+    const detail = await service.getLeadDetail("workspace_1", "lead_1");
+
+    expect(detail.lead.lastEventName).toBe("QualifiedLead");
+    expect(detail.lead.stageObservation).toBeUndefined();
+  });
+
+  it("Leads list moves the stage of the lead with the mark", async () => {
+    const { service, observedExecutions } = createHarness();
+    observedExecutions.push(observedPurchase());
+
+    const page = await service.listLeadsPage("workspace_1", {
+      page: 1,
+      pageSize: 25,
+    } as never);
+
+    expect(page.items[0]).toMatchObject({
+      id: "lead_1",
+      lastEventName: "Purchase",
+      stageObservation: true,
+    });
+  });
+
+  it("without observed executions nothing changes (production path)", async () => {
+    const { service } = createHarness();
+
+    const detail = await service.getLeadDetail("workspace_1", "lead_1");
+
+    expect(detail.conversionEvents.map((event) => event.id)).toEqual(["conversion_1"]);
+    expect(detail.lead.stageObservation).toBeUndefined();
   });
 });

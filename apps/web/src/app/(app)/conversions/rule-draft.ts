@@ -12,7 +12,11 @@ import {
   conversionEventRequiresValue,
 } from "@wpptrack/shared";
 import { eventLabel } from "../integrations/single-url/single-url-copy";
-import { webhookRuleForEvent } from "./webhook-view";
+import {
+  isWebhookFamilyOrigin,
+  webhookRuleForEvent,
+  webhookSourceOfOrigin,
+} from "./webhook-view";
 import {
   automationPlatformOf,
   contactMessageProviders,
@@ -350,7 +354,14 @@ function webhookPayload(
   if (definition.allowedEvents && !definition.allowedEvents.includes(eventName)) {
     return { ok: false, message: "Esta origem não reconhece o evento escolhido." };
   }
-  const existing = webhookRuleForEvent(context.webhookRules ?? [], eventName);
+  const source = webhookSourceOfOrigin(draft.origin);
+  // XMAX CRM: sempre o valor fixo da regra.
+  const valueSource = source === "xmax" ? "fixed" : draft.webhookValueSource;
+  const existing = webhookRuleForEvent(
+    context.webhookRules ?? [],
+    eventName,
+    source,
+  );
   if (existing) {
     return {
       ok: false,
@@ -364,11 +375,15 @@ function webhookPayload(
   }
   if (
     carries &&
-    draft.webhookValueSource === "fixed" &&
+    valueSource === "fixed" &&
     conversionEventRequiresValue(eventName) &&
     !cents
   ) {
-    return { ok: false, message: "Informe o ticket médio." };
+    return {
+      ok: false,
+      message:
+        source === "xmax" ? "Informe o valor da conversão." : "Informe o ticket médio.",
+    };
   }
   return {
     ok: true,
@@ -378,9 +393,9 @@ function webhookPayload(
       channelIds: [],
       mode: "observation",
       triggerType: "provider_automation",
-      automationSource: "webhook",
+      automationSource: source,
       eventName,
-      ...(carries ? { webhookValueSource: draft.webhookValueSource } : {}),
+      ...(carries ? { webhookValueSource: valueSource } : {}),
       ...(cents ? { defaultValueCents: cents } : {}),
       ...(cents && draft.currency ? { defaultCurrency: draft.currency } : {}),
     },
@@ -554,7 +569,7 @@ export function buildRulePayload(
   if (issue) return { ok: false, message: issue };
 
   // Webhook / n8n: sem conexão no pedido (a API escolhe a âncora).
-  if (draft.origin === "automation_webhook") {
+  if (isWebhookFamilyOrigin(draft.origin)) {
     return webhookPayload(draft, draft.eventName, name, context);
   }
 

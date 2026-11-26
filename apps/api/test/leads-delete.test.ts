@@ -199,3 +199,90 @@ describe("Excluir lead (aluno: só lead sem nenhum envio)", () => {
     expect(member.service.deleteLead).not.toHaveBeenCalled();
   });
 });
+
+describe("Excluir evento de teste (regra em observação)", () => {
+  function observed(execution: { id: string; status: string } | null) {
+    const calls: string[] = [];
+    const tx: any = {
+      providerConversionRuleExecution: {
+        findFirst: vi.fn(async () =>
+          execution ? { ...execution, providerRuleId: "rule_1" } : null,
+        ),
+        deleteMany: vi.fn(async ({ where }: any) => {
+          calls.push(`execution.delete:${where.id}:${where.status}`);
+          return { count: 1 };
+        }),
+      },
+      providerPurchaseClaim: {
+        deleteMany: vi.fn(async ({ where }: any) => {
+          calls.push(`claim.delete:${where.effectMode}:${where.winnerExecutionId}`);
+          return { count: 0 };
+        }),
+      },
+      auditLog: {
+        create: vi.fn(async () => {
+          calls.push("auditLog.create");
+        }),
+      },
+      conversionEventLog: { deleteMany: vi.fn() },
+    };
+    const prisma: any = { $transaction: vi.fn(async (fn: any) => fn(tx)) };
+    return { service: new LeadsService(prisma, {} as any), tx, calls };
+  }
+
+  it("deletes only the observed execution (and its observation sale lock) and audits it", async () => {
+    const h = observed({ id: "exec_1", status: "observed" });
+    await expect(
+      h.service.deleteObservedEvent(W, "lead_1", "exec_1", "manager"),
+    ).resolves.toEqual({ executionId: "exec_1", deleted: true });
+    expect(h.tx.providerConversionRuleExecution.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "exec_1", workspaceId: W, leadId: "lead_1" } }),
+    );
+    expect(h.calls).toEqual([
+      "claim.delete:observation:exec_1",
+      "execution.delete:exec_1:observed",
+      "auditLog.create",
+    ]);
+    // Never touches the conversion logs (sent conversions stay).
+    expect(h.tx.conversionEventLog.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["eligible", "materialized", "blocked", "failed"])(
+    "refuses (409) an execution %s: only test events leave",
+    async (status) => {
+      const h = observed({ id: "exec_1", status });
+      await expect(
+        h.service.deleteObservedEvent(W, "lead_1", "exec_1", "manager"),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(h.calls).toEqual([]);
+    },
+  );
+
+  it("404 for an execution of another lead or workspace", async () => {
+    const h = observed(null);
+    await expect(
+      h.service.deleteObservedEvent(W, "lead_1", "exec_x", "manager"),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(h.calls).toEqual([]);
+  });
+
+  it("DELETE only for who manages the conversion rules", async () => {
+    const service: any = { deleteObservedEvent: vi.fn(async () => ({ deleted: true })) };
+    const auth: any = { getSession: vi.fn(async () => ({ user: { id: "user_1" } })) };
+    const make = (canManageIntegrations: boolean) =>
+      new LeadsController(
+        auth,
+        { getCurrentWorkspace: vi.fn(() => ({ id: W, permissions: { canManageIntegrations } })) } as any,
+        service,
+      );
+    await expect(
+      make(false).removeObservedEvent("session", "lead_1", "exec_1"),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      make(true).removeObservedEvent("session", "lead_1", "exec/../x"),
+    ).rejects.toThrow("Evento invalido");
+    await make(true).removeObservedEvent("session", "lead_1", "exec_1");
+    expect(service.deleteObservedEvent).toHaveBeenCalledTimes(1);
+    expect(service.deleteObservedEvent).toHaveBeenCalledWith(W, "lead_1", "exec_1", "user_1");
+  });
+});

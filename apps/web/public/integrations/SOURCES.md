@@ -36,5 +36,6 @@ instead of a broken image.
 | `uazapi.svg` | No official logo file could be retrieved with a verifiable source (docs.uazapi.com was not reachable when this was prepared); neutral wordmark until the owner provides the file. |
 | `nod-api.svg`, `zapi.svg` | "Em breve" cards; no public logo kit found; neutral wordmarks. |
 | `yampi.svg` | Fase 6.7: same neutral wordmark placeholder as the SaaS (copied 2026-10-27); no official Yampi artwork with usage terms collected yet. PENDENTE: get the official Yampi logo and its usage permission and swap the file, keeping the name. |
+| `xmax.svg` | XMAX CRM (conversões pelas etapas da oportunidade, 2026-11-26); plain wordmark placeholder, no official XMAX artwork with usage terms collected yet. PENDENTE: get the official XMAX logo and its usage permission and swap the file, keeping the name. |
 
 Providers that arrive in later updates add their own logo file and a row here.

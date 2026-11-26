@@ -86,10 +86,13 @@ export class InboundWebhookPublicController {
     @Headers("content-type") contentType: string | undefined,
     @Headers("x-attempt") providerAttempt: unknown,
     @RawBody() rawBody: Buffer | undefined,
+    // XMAX CRM (and any rule URL): the token may also go in this header when
+    // the platform cannot keep it in the URL. The query token wins.
+    @Headers("x-wpptrack-webhook-token") headerToken?: unknown,
   ) {
     return this.conversionAutomationIngestion.ingest({
       endpointId,
-      token,
+      token: token ?? headerToken,
       contentType,
       providerAttempt,
       rawBody,

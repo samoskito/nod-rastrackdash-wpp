@@ -89,6 +89,13 @@ export function reprocessSummary(
   return parts.length > 0 ? `${parts.join(", ")}.` : "Nada mudou.";
 }
 
+/**
+ * Regra em observação (ex.: XMAX CRM antes do teste real): cada chamada
+ * aparece aqui, marcada, e nada vai para a Meta.
+ */
+export const receivedObservationNote =
+  "as chamadas aparecem aqui como chegaram, mas nada vai para a Meta enquanto a regra estiver em observação.";
+
 export function reprocessConfirmText(
   count: number,
   mode: "observation" | "production",
@@ -270,6 +277,11 @@ export function ReceivedEvents({
 
   return (
     <div className="conversion-received">
+      {mode === "observation" ? (
+        <p className="action-note conversion-received-observation-mode">
+          <strong>Em observação</strong>: {receivedObservationNote}
+        </p>
+      ) : null}
       <dl className="conversion-executions-summary conversion-received-summary">
         <div>
           <dt>Recebidos</dt>
