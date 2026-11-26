@@ -28,6 +28,29 @@ export const metaCloudWabaSubscriptionLookupInputSchema = z
   })
   .strict();
 
+/**
+ * standard: POST /{WABA_ID}/subscribed_apps sem corpo (a Meta entrega na URL
+ * de callback configurada no app). agency_central_app: o mesmo POST com
+ * override_callback_uri (a URL desta conexão) e verify_token (o token de
+ * verificação desta conexão), para uma agência usar um único app Meta para
+ * todos os clientes.
+ */
+export const metaCloudWabaSubscriptionModeSchema = z.enum([
+  "standard",
+  "agency_central_app",
+]);
+
+/**
+ * Token de verificação desta conexão (o mesmo mostrado ao criar a conexão ou
+ * ao gerar nova URL). Usado só para a Meta confirmar a URL; nunca gravado.
+ */
+export const metaCloudWabaVerifyTokenSchema = z
+  .string()
+  .trim()
+  .min(8, "Cole o token de verificação completo desta conexão.")
+  .max(512, "Token de verificação longo demais.")
+  .regex(/^[^\s]+$/, "O token de verificação não pode ter espaços.");
+
 export const metaCloudWabaSubscriptionSubscribeInputSchema = z
   .object({
     wabaId: metaCloudWabaIdSchema,
@@ -37,8 +60,28 @@ export const metaCloudWabaSubscriptionSubscribeInputSchema = z
         message: "Confirme explicitamente a inscrição do app na WABA.",
       }),
     }),
+    mode: metaCloudWabaSubscriptionModeSchema.default("standard"),
+    verifyToken: metaCloudWabaVerifyTokenSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.mode === "agency_central_app" && !value.verifyToken) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["verifyToken"],
+        message:
+          "No modo App central da agência, cole o token de verificação desta conexão.",
+      });
+    }
+    if (value.mode === "standard" && value.verifyToken) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["verifyToken"],
+        message:
+          "O token de verificação só é usado no modo App central da agência.",
+      });
+    }
+  });
 
 export const metaCloudWabaSubscribedAppSchema = z.object({
   appId: z.string().min(1),
@@ -67,7 +110,55 @@ export const metaCloudWabaSubscriptionOutcomeSchema = z.enum([
   "subscribed",
   "already_subscribed",
   "subscribe_unconfirmed",
+  /** App central: a Meta aceitou e a reconsulta mostra a URL desta conexão. */
+  "override_set",
+  /** App central: a Meta aceitou, mas a reconsulta não mostra a URL desta conexão. */
+  "override_unconfirmed",
 ]);
+
+/**
+ * Para onde um nível (WABA, número, app) aponta, comparado com a URL desta
+ * conexão. this_connection: a URL desta conexão; other_connection_here: outra
+ * conexão deste painel; other_url: outro endereço; none: sem desvio nesse
+ * nível; unknown: não deu para ler (a Meta não respondeu ou não deu acesso).
+ */
+export const metaCloudWabaCallbackTargetSchema = z.enum([
+  "this_connection",
+  "other_connection_here",
+  "other_url",
+  "none",
+  "unknown",
+]);
+
+export const metaCloudWabaCallbackStatusSchema = z.object({
+  /** URL de callback desta conexão (sem token); null sem API_PUBLIC_URL. */
+  expectedUrl: z.string().nullable(),
+  /** Desvio da WABA (override_callback_uri do app desta conexão na WABA). */
+  wabaOverride: metaCloudWabaCallbackTargetSchema,
+  /** Só o domínio do outro endereço (nunca caminho nem parâmetros). */
+  wabaOverrideHost: z.string().nullable(),
+  /** URL de callback do app (nível do app), lida com o app token. */
+  appCallback: metaCloudWabaCallbackTargetSchema,
+  /** O campo messages está assinado no app? null quando não deu para ler. */
+  appMessagesField: z.boolean().nullable(),
+  /** Desvio de cada número (vence o desvio da WABA). */
+  phoneOverrides: z.array(
+    z.object({
+      phoneNumberId: z.string().min(1),
+      target: metaCloudWabaCallbackTargetSchema,
+    }),
+  ),
+  /**
+   * Onde a Meta entrega as mensagens desta WABA para este app, pela ordem
+   * da Meta (número > WABA > app).
+   */
+  effective: z.enum([
+    "this_connection",
+    "elsewhere",
+    "unknown",
+    "not_subscribed",
+  ]),
+});
 
 export const metaCloudWabaSubscriptionStatusSchema = z.object({
   connectionId: z.string().min(1),
@@ -78,6 +169,8 @@ export const metaCloudWabaSubscriptionStatusSchema = z.object({
   phoneNumbers: z.array(metaCloudWabaPhoneNumberSchema),
   channelCheck: metaCloudWabaChannelCheckSchema,
   outcome: metaCloudWabaSubscriptionOutcomeSchema,
+  mode: metaCloudWabaSubscriptionModeSchema,
+  callback: metaCloudWabaCallbackStatusSchema,
   checkedAt: z.string().datetime(),
 });
 
@@ -96,6 +189,9 @@ export const metaCloudWabaErrorCodeSchema = z.enum([
   "rate_limited",
   "graph_unavailable",
   "subscribe_failed",
+  "verify_token_mismatch",
+  "callback_url_unavailable",
+  "override_verification_failed",
 ]);
 
 export type MetaCloudWabaSubscriptionLookupInputDto = z.infer<
@@ -112,5 +208,14 @@ export type MetaCloudWabaPhoneNumberDto = z.infer<
 >;
 export type MetaCloudWabaSubscriptionStatusDto = z.infer<
   typeof metaCloudWabaSubscriptionStatusSchema
+>;
+export type MetaCloudWabaSubscriptionMode = z.infer<
+  typeof metaCloudWabaSubscriptionModeSchema
+>;
+export type MetaCloudWabaCallbackTarget = z.infer<
+  typeof metaCloudWabaCallbackTargetSchema
+>;
+export type MetaCloudWabaCallbackStatusDto = z.infer<
+  typeof metaCloudWabaCallbackStatusSchema
 >;
 export type MetaCloudWabaErrorCode = z.infer<typeof metaCloudWabaErrorCodeSchema>;

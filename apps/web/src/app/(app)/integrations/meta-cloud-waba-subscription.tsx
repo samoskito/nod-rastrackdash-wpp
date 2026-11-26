@@ -1,6 +1,11 @@
 "use client";
 
-import type { MetaCloudWabaSubscriptionStatusDto } from "@wpptrack/shared";
+import type {
+  MetaCloudWabaCallbackStatusDto,
+  MetaCloudWabaCallbackTarget,
+  MetaCloudWabaSubscriptionMode,
+  MetaCloudWabaSubscriptionStatusDto,
+} from "@wpptrack/shared";
 import { AlertTriangle, Check, Link2, Search } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
@@ -19,11 +24,35 @@ const outcomeLabels: Record<MetaCloudWabaSubscriptionStatusDto["outcome"], strin
   already_subscribed: "Este app já estava inscrito; nada foi alterado.",
   subscribe_unconfirmed:
     "A Meta aceitou o pedido, mas a reconsulta ainda não mostra este app. Consulte de novo em alguns minutos.",
+  override_set:
+    "Inscrição feita com a URL desta conexão e confirmada na Meta (reconsultado agora).",
+  override_unconfirmed:
+    "A Meta aceitou o pedido, mas a reconsulta ainda não mostra a URL desta conexão nesta WABA. Consulte de novo em alguns minutos.",
 };
+
+/** Frase simples para cada destino lido na Meta. */
+const targetLabels: Record<MetaCloudWabaCallbackTarget, string> = {
+  this_connection: "a URL desta conexão",
+  other_connection_here: "a URL de outra conexão deste painel",
+  other_url: "outro endereço, fora deste painel",
+  none: "nenhuma",
+  unknown: "não deu para ler",
+};
+
+/** Erros que não são falha da Meta: o guia manual não ajuda. */
+const noManualGuideCodes = new Set<string>([
+  "invalid_input",
+  "verify_token_mismatch",
+  "callback_url_unavailable",
+]);
 
 /** Erros em que o guia manual ajuda (falhas da Meta, não de sessão/licença). */
 function showsManualGuide(failure: Failure): boolean {
-  return failure.status !== 403 && failure.status !== 423 && failure.code !== "invalid_input";
+  return (
+    failure.status !== 403 &&
+    failure.status !== 423 &&
+    !(failure.code && noManualGuideCodes.has(failure.code))
+  );
 }
 
 export function MetaCloudWabaSubscriptionPanel({
@@ -37,6 +66,10 @@ export function MetaCloudWabaSubscriptionPanel({
 }) {
   const [wabaId, setWabaId] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  const [mode, setMode] = useState<MetaCloudWabaSubscriptionMode>("standard");
+  const [verifyToken, setVerifyToken] = useState("");
+  const central = mode === "agency_central_app";
+  const verifyFieldId = `waba-verify-${connectionId}`;
   const [busy, setBusy] = useState<"lookup" | "subscribe" | null>(null);
   const [status, setStatus] = useState<MetaCloudWabaSubscriptionStatusDto | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -44,28 +77,44 @@ export function MetaCloudWabaSubscriptionPanel({
   const wabaFieldId = `waba-id-${connectionId}`;
   const disabled = !canManage || licenseLocked || busy !== null;
   const ready = wabaId.trim().length > 0 && accessToken.trim().length > 0;
+  const subscribeReady = ready && (!central || verifyToken.trim().length > 0);
 
   async function run(kind: "lookup" | "subscribe") {
     if (disabled || !ready) return;
+    if (kind === "subscribe" && !subscribeReady) return;
     if (
       kind === "subscribe" &&
       !window.confirm(
-        "Inscrever o app Meta desta conexão na WABA informada? A Meta passa a entregar as mensagens dessa WABA para este app. Outros apps inscritos não são removidos.",
+        central
+          ? "Inscrever o app central da agência na WABA informada, apontando esta WABA para a URL desta conexão? A Meta confere a URL antes de aceitar. Outros apps inscritos não são removidos."
+          : "Inscrever o app Meta desta conexão na WABA informada? A Meta passa a entregar as mensagens dessa WABA para este app. Outros apps inscritos não são removidos.",
       )
     ) {
       return;
     }
 
     const input = { wabaId: wabaId.trim(), accessToken: accessToken.trim() };
-    // O token sai da tela já: nunca é reexibido nem guardado no navegador.
+    const centralVerifyToken = verifyToken.trim();
+    // Os tokens saem da tela já: nunca são reexibidos nem guardados no navegador.
     setAccessToken("");
+    setVerifyToken("");
     setBusy(kind);
     setFailure(null);
     try {
       const result =
         kind === "lookup"
           ? await lookupMetaCloudWabaAction(connectionId, input)
-          : await subscribeMetaCloudWabaAction(connectionId, { ...input, confirm: true });
+          : await subscribeMetaCloudWabaAction(
+              connectionId,
+              central
+                ? {
+                    ...input,
+                    confirm: true,
+                    mode: "agency_central_app",
+                    verifyToken: centralVerifyToken,
+                  }
+                : { ...input, confirm: true },
+            );
       if (result.ok) {
         setStatus(result.data);
       } else {
@@ -93,11 +142,58 @@ export function MetaCloudWabaSubscriptionPanel({
         <h3 id={`waba-heading-${connectionId}`}>Inscrição do app na sua WABA</h3>
       </div>
 
+      <fieldset className="meta-waba-mode" disabled={disabled}>
+        <legend className="field-label">Qual app Meta entrega as mensagens desta conexão?</legend>
+        <label>
+          <input
+            type="radio"
+            name={`waba-mode-${connectionId}`}
+            value="standard"
+            checked={!central}
+            onChange={() => setMode("standard")}
+          />
+          <span>
+            <strong>App desta conexão (padrão)</strong>
+            <span className="muted">
+              {" "}
+              A Meta entrega na URL configurada no próprio app (Webhooks). Serve para um app por
+              cliente ou um app só na instalação.
+            </span>
+          </span>
+        </label>
+        <label>
+          <input
+            type="radio"
+            name={`waba-mode-${connectionId}`}
+            value="agency_central_app"
+            checked={central}
+            onChange={() => setMode("agency_central_app")}
+          />
+          <span>
+            <strong>App central da agência</strong>
+            <span className="muted">
+              {" "}
+              Um único app da agência para todos os clientes. A inscrição aponta esta WABA para a URL
+              desta conexão, sem mexer na URL do app.
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
       <ol className="meta-waba-steps">
-        <li>
-          <strong>Confirmar a URL (handshake):</strong> no app Meta, em Webhooks, cole a URL de
-          callback e o verify token e clique em verificar e salvar.
-        </li>
+        {central ? (
+          <li>
+            <strong>Preparar o app central (uma vez só):</strong> o cliente compartilha a WABA com o
+            Business Manager da agência como parceiro, e um usuário do sistema da agência recebe acesso
+            a essa WABA. A URL de Webhooks do app pode ser qualquer uma sua: esta inscrição aponta só
+            esta WABA para esta conexão.
+          </li>
+        ) : (
+          <li>
+            <strong>Confirmar a URL (handshake):</strong> no app Meta, em Webhooks, cole a URL de
+            callback e o verify token e clique em verificar e salvar.
+          </li>
+        )}
         <li>
           <strong>Assinar o campo messages no app:</strong> na mesma tela de Webhooks, assine o campo
           <code> messages</code> do objeto WhatsApp Business Account.
@@ -166,6 +262,35 @@ export function MetaCloudWabaSubscriptionPanel({
             ser colado de novo a cada ação.
           </span>
         </div>
+        {central ? (
+          <div className="meta-waba-field">
+            <label htmlFor={verifyFieldId} className="field-label">
+              Token de verificação desta conexão
+            </label>
+            <input
+              id={verifyFieldId}
+              name="metaVerifyToken"
+              type="password"
+              autoComplete="new-password"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              spellCheck={false}
+              value={verifyToken}
+              onChange={(event) => setVerifyToken(event.target.value)}
+              placeholder="Cole a cada inscrição"
+              disabled={disabled}
+              aria-describedby={`${verifyFieldId}-help`}
+              data-presentation-sensitive-field="true"
+            />
+            <span id={`${verifyFieldId}-help`} className="field-help muted">
+              O verify token mostrado quando esta conexão foi criada. A Meta usa esse token para conferir
+              a URL desta conexão antes de aceitar. Se você não tem mais, use “Gerar nova URL” nesta
+              conexão: no Meta Cloud o endereço continua o mesmo e só este token muda. No app central, o
+              token do app Meta acima é o do usuário do sistema da agência, com acesso a esta WABA. O
+              token de verificação é usado só nesta inscrição: não é salvo e não volta para a tela.
+            </span>
+          </div>
+        ) : null}
         <div className="meta-waba-actions">
           <button className="button" type="submit" disabled={disabled || !ready}>
             <Search size={15} aria-hidden="true" />
@@ -174,11 +299,15 @@ export function MetaCloudWabaSubscriptionPanel({
           <button
             className="button primary"
             type="button"
-            disabled={disabled || !ready}
+            disabled={disabled || !subscribeReady}
             onClick={() => void run("subscribe")}
           >
             <Link2 size={15} aria-hidden="true" />
-            {busy === "subscribe" ? "Inscrevendo..." : "Inscrever este app"}
+            {busy === "subscribe"
+              ? "Inscrevendo..."
+              : central
+                ? "Inscrever com a URL desta conexão"
+                : "Inscrever este app"}
           </button>
         </div>
       </form>
@@ -223,6 +352,8 @@ export function MetaCloudWabaStatusView({
           {outcomeLabels[status.outcome]}
         </span>
       </div>
+
+      <MetaCloudWabaCallbackView callback={status.callback} />
 
       {status.channelCheck.status === "mismatch" ? (
         <p className="action-note warn">
@@ -272,6 +403,72 @@ export function MetaCloudWabaStatusView({
   );
 }
 
+/**
+ * Para onde a Meta entrega as mensagens desta WABA, em palavras simples,
+ * pela ordem da Meta: desvio do número > desvio da WABA > URL do app.
+ */
+export function MetaCloudWabaCallbackView({
+  callback,
+}: {
+  callback: MetaCloudWabaCallbackStatusDto;
+}) {
+  const headline: Record<MetaCloudWabaCallbackStatusDto["effective"], string> = {
+    this_connection: "As mensagens desta WABA chegam nesta conexão.",
+    elsewhere: "As mensagens desta WABA estão indo para outro lugar, não para esta conexão.",
+    unknown: "Não deu para confirmar para onde vão as mensagens desta WABA.",
+    not_subscribed: "Sem a inscrição do app, a Meta não entrega as mensagens desta WABA.",
+  };
+  const wabaLine =
+    callback.wabaOverride === "this_connection"
+      ? "aponta para a URL desta conexão (App central da agência ativo)."
+      : callback.wabaOverride === "none"
+        ? "nenhum; vale a URL configurada no app."
+        : callback.wabaOverride === "other_url" && callback.wabaOverrideHost
+          ? `aponta para outro endereço (${callback.wabaOverrideHost}).`
+          : `aponta para ${targetLabels[callback.wabaOverride]}.`;
+  const phonesElsewhere = callback.phoneOverrides.filter(
+    (phone) => phone.target === "other_url" || phone.target === "other_connection_here",
+  ).length;
+
+  return (
+    <div className="meta-waba-callback">
+      <span className="micro-label">Para onde a Meta entrega</span>
+      <p
+        className={`action-note${callback.effective === "this_connection" ? "" : " warn"}`}
+        data-callback-effective={callback.effective}
+      >
+        {headline[callback.effective]}
+      </p>
+      <ul>
+        <li>
+          <strong>Desvio desta WABA:</strong> {wabaLine}
+        </li>
+        <li>
+          <strong>URL configurada no app:</strong>{" "}
+          {callback.appCallback === "none" ? "nenhuma." : `${targetLabels[callback.appCallback]}.`}
+          {callback.appMessagesField === true ? " Campo messages assinado." : null}
+          {callback.appMessagesField === false
+            ? " Campo messages não assinado no app: assine em Webhooks do app."
+            : null}
+        </li>
+        {phonesElsewhere > 0 ? (
+          <li>
+            <strong>Números com desvio próprio:</strong>{" "}
+            {phonesElsewhere === 1
+              ? "1 número desta WABA aponta para outro lugar (o desvio do número vence o da WABA)."
+              : `${phonesElsewhere} números desta WABA apontam para outro lugar (o desvio do número vence o da WABA).`}
+          </li>
+        ) : null}
+      </ul>
+      {callback.expectedUrl ? (
+        <p className="muted">
+          URL desta conexão: <code>{callback.expectedUrl}</code>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function MetaCloudWabaManualGuide() {
   return (
     <details className="meta-waba-manual">
@@ -287,8 +484,14 @@ export function MetaCloudWabaManualGuide() {
           é <code>success: true</code>.
         </li>
         <li>
-          Confira com um GET no mesmo caminho: o app da instalação precisa aparecer na lista. Não apague
-          outros apps.
+          App central da agência: no mesmo POST, envie <code>override_callback_uri</code> com a URL desta
+          conexão e <code>verify_token</code> com o token de verificação desta conexão. Atenção: um POST
+          sem parâmetros apaga o desvio desta WABA.
+        </li>
+        <li>
+          Confira com um GET no mesmo caminho: o app da instalação precisa aparecer na lista (no App
+          central, com <code>override_callback_uri</code> igual à URL desta conexão). Não apague outros
+          apps.
         </li>
         <li>
           O WABA ID fica no Gerenciador do WhatsApp (configurações da conta) e em WhatsApp → Configuração da

@@ -8,9 +8,12 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
+  MetaCloudWabaCallbackStatusDto,
+  MetaCloudWabaCallbackTarget,
   MetaCloudWabaErrorCode,
   MetaCloudWabaPhoneNumberDto,
   MetaCloudWabaSubscribedAppDto,
+  MetaCloudWabaSubscriptionMode,
   MetaCloudWabaSubscriptionStatusDto,
 } from "@wpptrack/shared";
 import { PrismaService } from "../common/prisma/prisma.service";
@@ -20,6 +23,8 @@ import {
   type RuntimeEnv,
   type RuntimeFetch,
 } from "../common/runtime/runtime.module";
+import { parseInboundWebhooksConfig } from "../config/deployment-config";
+import { matchesInboundWebhookSecret } from "./inbound-webhook-ingestion.service";
 import { connectionNotFoundMessage } from "./inbound-webhook-production-activation";
 import { isProvisionalProviderChannelId } from "./inbound-webhook-provisional-channel";
 import {
@@ -50,7 +55,7 @@ type GraphResult = {
 type Operation = "lookup" | "subscribe";
 
 /** Em qual etapa o erro da Graph aconteceu (muda a mensagem). */
-type GraphStep = "token" | "waba_read" | "subscribe_post";
+type GraphStep = "token" | "waba_read" | "subscribe_post" | "override_post";
 
 export type MetaCloudWabaRequest = {
   workspaceId: string;
@@ -63,7 +68,32 @@ export type MetaCloudWabaRequest = {
   sourceIp?: string | null;
 };
 
-type Ctx = MetaCloudWabaRequest & { deadline: number };
+export type MetaCloudWabaSubscribeRequest = MetaCloudWabaRequest & {
+  /** standard (padrão): sem desvio. agency_central_app: com desvio da WABA. */
+  mode?: MetaCloudWabaSubscriptionMode;
+  /**
+   * Token de verificação desta conexão (só no modo App central). Conferido
+   * contra o hash da conexão e repassado à Meta nesta chamada; nunca gravado,
+   * logado, auditado ou devolvido.
+   */
+  verifyToken?: string;
+};
+
+/** Máximo de números consultados para ver o desvio por número. */
+const maxPhoneOverrideChecks = 20;
+
+type Ctx = MetaCloudWabaSubscribeRequest & {
+  deadline: number;
+  mode: MetaCloudWabaSubscriptionMode;
+  /** URL de callback desta conexão (sem token), ou null sem API_PUBLIC_URL. */
+  expectedUrl: string | null;
+};
+
+type SubscribedAppsRead = {
+  apps: MetaCloudWabaSubscribedAppDto[];
+  /** override_callback_uri do app desta conexão na WABA, se houver. */
+  thisAppOverride: string | null;
+};
 
 /**
  * Erro com mensagem em português e `code` estável para a tela. Nunca carrega
@@ -116,7 +146,77 @@ const messages = {
     "A Meta respondeu com um erro inesperado. Tente de novo em instantes; se continuar, confira pelo Graph API Explorer.",
   subscribeFailed:
     "A Meta não confirmou a inscrição do app na WABA. Tente de novo ou faça a inscrição manual pelo Graph API Explorer.",
+  verifyTokenMismatch:
+    "Esse não é o token de verificação desta conexão. Cole o token mostrado quando a conexão foi criada. Se você não tem mais, clique em “Gerar nova URL” nesta conexão: no Meta Cloud o endereço continua o mesmo e só o token de verificação muda (as mensagens continuam sendo conferidas pela assinatura do app).",
+  callbackUrlUnavailable:
+    "A API não tem um endereço público em HTTPS (API_PUBLIC_URL) para montar a URL desta conexão. A Meta só entrega em HTTPS. Configure API_PUBLIC_URL com o endereço público da API e reinicie a API.",
+  overrideVerificationFailed:
+    "A Meta não aceitou a URL desta conexão como destino desta WABA. Antes de aceitar, a Meta chama essa URL para conferir o token de verificação. Confira se a API está no ar no endereço público em HTTPS (API_PUBLIC_URL) e se o token de verificação colado é o desta conexão, e tente de novo.",
 } as const;
+
+/** origin + caminho, sem barra final, sem parâmetros. */
+function normalizeCallbackUrl(value: string): { origin: string; path: string } | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return {
+      origin: url.origin.toLowerCase(),
+      path: url.pathname.replace(/\/+$/, "") || "/",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Compara uma URL lida na Meta com a URL desta conexão. */
+export function classifyMetaCloudCallbackUrl(
+  value: unknown,
+  expectedUrl: string | null,
+  connectionId: string,
+): MetaCloudWabaCallbackTarget {
+  if (typeof value !== "string" || value.trim() === "") return "none";
+  const found = normalizeCallbackUrl(value.trim());
+  if (!found) return "other_url";
+  const expected = expectedUrl ? normalizeCallbackUrl(expectedUrl) : null;
+  if (!expected || expected.origin !== found.origin) return "other_url";
+  if (expected.path === found.path) return "this_connection";
+  const match = /^\/webhooks\/inbound\/([^/]+)$/.exec(found.path);
+  if (!match) return "other_url";
+  let id: string;
+  try {
+    id = decodeURIComponent(match[1] ?? "");
+  } catch {
+    return "other_url";
+  }
+  return id === connectionId ? "this_connection" : "other_connection_here";
+}
+
+/** Só o domínio do outro endereço; nunca caminho ou parâmetros. */
+function callbackHost(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).host || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * URL de callback desta conexão, a mesma que a tela mostra ao criar a
+ * conexão (no Meta Cloud ela não leva token). null sem API_PUBLIC_URL.
+ */
+function connectionCallbackUrl(env: RuntimeEnv, connectionId: string): string | null {
+  try {
+    const config = parseInboundWebhooksConfig(env);
+    if (!config.enabled || !config.apiPublicUrl) return null;
+    return new URL(
+      `/webhooks/inbound/${encodeURIComponent(connectionId)}`,
+      config.apiPublicUrl,
+    ).toString();
+  } catch {
+    return null;
+  }
+}
 
 @Injectable()
 export class MetaCloudWabaSubscriptionService {
@@ -139,15 +239,20 @@ export class MetaCloudWabaSubscriptionService {
   }
 
   subscribe(
-    input: MetaCloudWabaRequest,
+    input: MetaCloudWabaSubscribeRequest,
   ): Promise<MetaCloudWabaSubscriptionStatusDto> {
     return this.run("subscribe", input);
   }
 
   private async run(
     operation: Operation,
-    input: MetaCloudWabaRequest,
+    input: MetaCloudWabaSubscribeRequest,
   ): Promise<MetaCloudWabaSubscriptionStatusDto> {
+    // A consulta nunca muda nada na Meta: o modo só vale na inscrição.
+    const mode: MetaCloudWabaSubscriptionMode =
+      operation === "subscribe" && input.mode === "agency_central_app"
+        ? "agency_central_app"
+        : "standard";
     const connection = await this.prisma.inboundWebhookConnection.findFirst({
       where: {
         id: input.connectionId,
@@ -160,6 +265,7 @@ export class MetaCloudWabaSubscriptionService {
         provider: true,
         metaAppId: true,
         metaAppSecretEncrypted: true,
+        secretHash: true,
       },
     });
 
@@ -175,9 +281,33 @@ export class MetaCloudWabaSubscriptionService {
       );
     }
 
-    const ctx: Ctx = { ...input, deadline: Date.now() + this.timeouts.totalMs };
+    const ctx: Ctx = {
+      ...input,
+      mode,
+      expectedUrl: connectionCallbackUrl(this.env, connection.id),
+      deadline: Date.now() + this.timeouts.totalMs,
+    };
     let status: MetaCloudWabaSubscriptionStatusDto;
     try {
+      if (mode === "agency_central_app") {
+        // Antes de qualquer chamada à Meta: a Meta confere a URL com este
+        // token (GET hub.verify_token); se não for o da conexão, o nosso
+        // handshake recusaria e a Meta também.
+        if (!matchesInboundWebhookSecret(connection.secretHash, input.verifyToken)) {
+          throw new MetaCloudWabaError(
+            "verify_token_mismatch",
+            messages.verifyTokenMismatch,
+            422,
+          );
+        }
+        if (!ctx.expectedUrl || !ctx.expectedUrl.startsWith("https://")) {
+          throw new MetaCloudWabaError(
+            "callback_url_unavailable",
+            messages.callbackUrlUnavailable,
+            422,
+          );
+        }
+      }
       // App da conexão (App ID + App Secret salvos nela); sem eles, o app da
       // instalação (META_APP_ID + META_APP_SECRET). Nunca mistura os dois.
       const app = resolveMetaCloudAppSecret(connection, this.env);
@@ -186,6 +316,7 @@ export class MetaCloudWabaSubscriptionService {
       await this.safeAudit(operation, input, {
         resultStatus: "failed",
         summary: {
+          mode,
           errorCode:
             error instanceof MetaCloudWabaError ? error.code : "unexpected",
         },
@@ -197,7 +328,10 @@ export class MetaCloudWabaSubscriptionService {
     await this.safeAudit(operation, input, {
       resultStatus: status.thisAppSubscribed ? "subscribed" : "not_subscribed",
       summary: {
+        mode,
         outcome: status.outcome,
+        callbackEffective: status.callback.effective,
+        wabaOverride: status.callback.wabaOverride,
         thisAppSubscribed: status.thisAppSubscribed,
         subscribedAppsCount: status.apps.length,
         otherAppsCount: status.apps.filter((app) => !app.isThisApp).length,
@@ -244,33 +378,209 @@ export class MetaCloudWabaSubscriptionService {
     const phoneNumbers = await this.readPhoneNumbers(input);
     const channelCheck = await this.checkChannels(input, phoneNumbers);
 
-    let apps = await this.readSubscribedApps(input, appId);
+    let read = await this.readSubscribedApps(input, appId);
     let outcome: MetaCloudWabaSubscriptionStatusDto["outcome"] = "lookup";
+    const subscribed = () => read.apps.some((app) => app.isThisApp);
+    const overrideTarget = () =>
+      classifyMetaCloudCallbackUrl(
+        read.thisAppOverride,
+        input.expectedUrl,
+        input.connectionId,
+      );
 
-    if (operation === "subscribe") {
-      if (apps.some((app) => app.isThisApp)) {
+    if (operation === "subscribe" && input.mode === "standard") {
+      // Padrão: só inscreve quem ainda não está inscrito. Um POST sem corpo
+      // apagaria um desvio existente, então um app já inscrito fica intacto.
+      if (subscribed()) {
         outcome = "already_subscribed";
       } else {
         await this.subscribeThisApp(input);
         // Reconsulta: a tela mostra o estado real da Meta, não a suposição.
-        apps = await this.readSubscribedApps(input, appId);
-        outcome = apps.some((app) => app.isThisApp)
-          ? "subscribed"
-          : "subscribe_unconfirmed";
+        read = await this.readSubscribedApps(input, appId);
+        outcome = subscribed() ? "subscribed" : "subscribe_unconfirmed";
+      }
+    } else if (operation === "subscribe") {
+      // App central da agência: inscreve (ou reinscreve) o app com o desvio
+      // da WABA para a URL desta conexão. Já apontando para cá, nada muda.
+      if (subscribed() && overrideTarget() === "this_connection") {
+        outcome = "already_subscribed";
+      } else {
+        await this.subscribeThisApp(input, {
+          overrideCallbackUri: input.expectedUrl as string,
+          verifyToken: input.verifyToken as string,
+        });
+        read = await this.readSubscribedApps(input, appId);
+        outcome =
+          subscribed() && overrideTarget() === "this_connection"
+            ? "override_set"
+            : "override_unconfirmed";
       }
     }
+
+    const callback = await this.readCallbackStatus(input, {
+      appId,
+      appSecret,
+      subscribed: subscribed(),
+      thisAppOverride: read.thisAppOverride,
+      phoneNumbers,
+    });
 
     return {
       connectionId: input.connectionId,
       wabaId: input.wabaId,
       thisAppId: appId,
-      thisAppSubscribed: apps.some((app) => app.isThisApp),
-      apps,
+      thisAppSubscribed: subscribed(),
+      apps: read.apps,
       phoneNumbers,
       channelCheck,
       outcome,
+      mode: input.mode,
+      callback,
       checkedAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Para onde a Meta entrega as mensagens desta WABA para este app, pela
+   * ordem da Meta: desvio do número > desvio da WABA > URL do app. As
+   * leituras do app e dos números são só para mostrar na tela: se falharem,
+   * viram "unknown" e nunca derrubam a consulta nem a inscrição.
+   */
+  private async readCallbackStatus(
+    input: Ctx,
+    options: {
+      appId: string;
+      appSecret: string;
+      subscribed: boolean;
+      thisAppOverride: string | null;
+      phoneNumbers: MetaCloudWabaPhoneNumberDto[];
+    },
+  ): Promise<MetaCloudWabaCallbackStatusDto> {
+    const classify = (value: unknown) =>
+      classifyMetaCloudCallbackUrl(value, input.expectedUrl, input.connectionId);
+    const wabaOverride = options.subscribed
+      ? classify(options.thisAppOverride)
+      : "none";
+    const app = await this.readAppCallback(input, options.appId, options.appSecret);
+    const appCallback =
+      app.callbackUrl === undefined ? "unknown" : classify(app.callbackUrl);
+
+    const phoneOverrides: MetaCloudWabaCallbackStatusDto["phoneOverrides"] = [];
+    if (options.subscribed) {
+      for (const phone of options.phoneNumbers.slice(0, maxPhoneOverrideChecks)) {
+        phoneOverrides.push({
+          phoneNumberId: phone.id,
+          target: await this.readPhoneOverride(input, phone.id, classify),
+        });
+      }
+    }
+
+    const resolve = (phoneTarget: MetaCloudWabaCallbackTarget) => {
+      if (phoneTarget !== "none" && phoneTarget !== "unknown") return phoneTarget;
+      if (wabaOverride !== "none" && wabaOverride !== "unknown") return wabaOverride;
+      return appCallback;
+    };
+    let effective: MetaCloudWabaCallbackStatusDto["effective"];
+    if (!options.subscribed) {
+      effective = "not_subscribed";
+    } else {
+      // Número que não deu para ler segue a WABA (a Meta não exige desvio
+      // por número; quase sempre não há).
+      const targets = (phoneOverrides.length > 0
+        ? phoneOverrides.map((phone) => phone.target)
+        : ["none" as const]
+      ).map(resolve);
+      if (targets.some((target) => target === "other_url" || target === "other_connection_here")) {
+        effective = "elsewhere";
+      } else if (targets.every((target) => target === "this_connection")) {
+        effective = "this_connection";
+      } else {
+        effective = "unknown";
+      }
+    }
+
+    return {
+      expectedUrl: input.expectedUrl,
+      wabaOverride,
+      wabaOverrideHost:
+        wabaOverride === "other_url" ? callbackHost(options.thisAppOverride) : null,
+      appCallback,
+      appMessagesField: app.messagesField,
+      phoneOverrides,
+      effective,
+    };
+  }
+
+  /**
+   * GET /{app-id}/subscriptions com o app token (montado só aqui): URL de
+   * callback do app e se o campo messages está assinado. undefined = não
+   * deu para ler.
+   */
+  private async readAppCallback(
+    input: Ctx,
+    appId: string,
+    appSecret: string,
+  ): Promise<{ callbackUrl: string | null | undefined; messagesField: boolean | null }> {
+    try {
+      const result = await this.graph(
+        "GET",
+        `/${encodeURIComponent(appId)}/subscriptions`,
+        { bearer: `${appId}|${appSecret}`, deadline: input.deadline },
+      );
+      if (result.body.error) return { callbackUrl: undefined, messagesField: null };
+      const data = Array.isArray(result.body.data) ? result.body.data : [];
+      const entry = data
+        .map((raw) => (raw ?? {}) as Record<string, unknown>)
+        .find((item) => item.object === "whatsapp_business_account");
+      if (!entry) return { callbackUrl: null, messagesField: false };
+      const fields = Array.isArray(entry.fields) ? entry.fields : [];
+      const messagesField = fields.some((field) =>
+        typeof field === "string"
+          ? field === "messages"
+          : (field as { name?: unknown } | null)?.name === "messages",
+      );
+      return {
+        callbackUrl:
+          typeof entry.callback_url === "string" && entry.active !== false
+            ? entry.callback_url
+            : null,
+        messagesField,
+      };
+    } catch {
+      return { callbackUrl: undefined, messagesField: null };
+    }
+  }
+
+  /** GET /{PHONE_ID}?fields=webhook_configuration (desvio por número). */
+  private async readPhoneOverride(
+    input: Ctx,
+    phoneNumberId: string,
+    classify: (value: unknown) => MetaCloudWabaCallbackTarget,
+  ): Promise<MetaCloudWabaCallbackTarget> {
+    try {
+      const result = await this.graph(
+        "GET",
+        `/${encodeURIComponent(phoneNumberId)}`,
+        {
+          bearer: input.accessToken,
+          deadline: input.deadline,
+          query: { fields: "webhook_configuration" },
+        },
+      );
+      if (result.body.error) return "unknown";
+      const config = result.body.webhook_configuration;
+      if (!config || typeof config !== "object") return "none";
+      const { phone_number: phone, whatsapp_business_account: waba, application } =
+        config as Record<string, unknown>;
+      // Se a Meta repetir no número a URL da WABA ou do app, não é desvio
+      // próprio do número.
+      if (typeof phone !== "string" || !phone.trim() || phone === waba || phone === application) {
+        return "none";
+      }
+      return classify(phone);
+    } catch {
+      return "unknown";
+    }
   }
 
   /**
@@ -485,7 +795,7 @@ export class MetaCloudWabaSubscriptionService {
   private async readSubscribedApps(
     input: Ctx,
     appId: string,
-  ): Promise<MetaCloudWabaSubscribedAppDto[]> {
+  ): Promise<SubscribedAppsRead> {
     const result = await this.graph(
       "GET",
       `/${encodeURIComponent(input.wabaId)}/subscribed_apps`,
@@ -498,6 +808,7 @@ export class MetaCloudWabaSubscriptionService {
 
     const data = Array.isArray(result.body.data) ? result.body.data : [];
     const apps: MetaCloudWabaSubscribedAppDto[] = [];
+    let thisAppOverride: string | null = null;
     for (const raw of data) {
       const item = (raw ?? {}) as Record<string, unknown>;
       // v17+ devolve whatsapp_business_api_data; versões antigas, id/name.
@@ -517,20 +828,46 @@ export class MetaCloudWabaSubscriptionService {
         name: typeof node.name === "string" ? node.name : null,
         isThisApp: id === appId,
       });
+      // O desvio fica no item (fora de whatsapp_business_api_data).
+      if (id === appId && typeof item.override_callback_uri === "string") {
+        thisAppOverride = item.override_callback_uri.trim() || null;
+      }
     }
-    return apps;
+    return { apps, thisAppOverride };
   }
 
-  /** Só POST, sem override_callback_uri; nunca DELETE nem outros apps. */
-  private async subscribeThisApp(input: Ctx): Promise<void> {
+  /**
+   * Só POST; nunca DELETE nem outros apps. Sem `override`, vai sem corpo
+   * (modo padrão). Com `override`, leva override_callback_uri e verify_token
+   * (modo App central): a Meta confere a URL com um GET de verificação antes
+   * de aceitar.
+   */
+  private async subscribeThisApp(
+    input: Ctx,
+    override?: { overrideCallbackUri: string; verifyToken: string },
+  ): Promise<void> {
     const result = await this.graph(
       "POST",
       `/${encodeURIComponent(input.wabaId)}/subscribed_apps`,
-      { bearer: input.accessToken, deadline: input.deadline },
+      {
+        bearer: input.accessToken,
+        deadline: input.deadline,
+        ...(override
+          ? {
+              json: {
+                override_callback_uri: override.overrideCallbackUri,
+                verify_token: override.verifyToken,
+              },
+            }
+          : {}),
+      },
     );
 
     if (result.body.error) {
-      throw this.mapGraphError(result.body.error, "subscribe_post");
+      throw this.mapGraphError(
+        result.body.error,
+        override ? "override_post" : "subscribe_post",
+      );
     }
 
     if (result.body.success !== true) {
@@ -558,6 +895,16 @@ export class MetaCloudWabaSubscriptionService {
         422,
       );
     }
+    // App central: a Meta recusa a URL (falha no GET de verificação ou URL
+    // inválida) com 100/2200 ou um código não documentado. PENDENTE: o
+    // código exato não está na documentação pública da Meta.
+    if (step === "override_post" && (code === 100 || code === 2200 || code === undefined || code > 2)) {
+      return new MetaCloudWabaError(
+        "override_verification_failed",
+        messages.overrideVerificationFailed,
+        422,
+      );
+    }
     if (code === 100) {
       return step === "token"
         ? new MetaCloudWabaError("token_invalid", messages.tokenInvalid, 422)
@@ -579,7 +926,13 @@ export class MetaCloudWabaSubscriptionService {
   private async graph(
     method: "GET" | "POST",
     path: string,
-    options: { bearer: string; deadline: number; query?: Record<string, string> },
+    options: {
+      bearer: string;
+      deadline: number;
+      query?: Record<string, string>;
+      /** Corpo JSON (só o POST com desvio). Nunca logado. */
+      json?: Record<string, string>;
+    },
   ): Promise<GraphResult> {
     const version = this.env.META_GRAPH_API_VERSION?.trim() || defaultGraphApiVersion;
     const url = new URL(`https://graph.facebook.com/${version}${path}`);
@@ -601,7 +954,11 @@ export class MetaCloudWabaSubscriptionService {
     try {
       const response = await this.fetchImpl(url.toString(), {
         method,
-        headers: { Authorization: `Bearer ${options.bearer}` },
+        headers: {
+          Authorization: `Bearer ${options.bearer}`,
+          ...(options.json ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(options.json ? { body: JSON.stringify(options.json) } : {}),
         signal: controller.signal,
       });
       let body: GraphResult["body"] = {};

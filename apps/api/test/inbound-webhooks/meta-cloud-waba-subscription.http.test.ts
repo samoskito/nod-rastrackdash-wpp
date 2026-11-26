@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { createHash } from "node:crypto";
 import { UnauthorizedException } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
@@ -11,6 +12,8 @@ import {
   RUNTIME_ENV,
   RUNTIME_FETCH,
 } from "../../src/common/runtime/runtime.module";
+import { InboundWebhookMetaCloudVerificationService } from "../../src/inbound-webhooks/inbound-webhook-meta-cloud-verification.service";
+import { InboundWebhookPublicController } from "../../src/inbound-webhooks/inbound-webhook-public.controller";
 import { MetaCloudWabaSubscriptionController } from "../../src/inbound-webhooks/meta-cloud-waba-subscription.controller";
 import {
   META_CLOUD_WABA_RATE_LIMITS,
@@ -20,6 +23,7 @@ import {
 import {
   META_CLOUD_WABA_TIMEOUTS,
   MetaCloudWabaSubscriptionService,
+  classifyMetaCloudCallbackUrl,
   type MetaCloudWabaTimeouts,
 } from "../../src/inbound-webhooks/meta-cloud-waba-subscription.service";
 import { encryptMetaCloudAppSecret } from "../../src/inbound-webhooks/meta-cloud-app-secret";
@@ -37,7 +41,14 @@ const OTHER_APP = { id: "999888777666555", name: "Outro CRM" };
 const bearer = "Bearer synthetic-session";
 const base = "/integrations/inbound-webhooks/conn_meta/meta-cloud/waba-subscription";
 
-type GraphCall = { method: string; path: string; query: URLSearchParams; auth: string };
+type GraphCall = {
+  method: string;
+  path: string;
+  query: URLSearchParams;
+  auth: string;
+  body: string | null;
+  contentType: string | null;
+};
 
 type DebugData = {
   app_id?: string;
@@ -82,6 +93,12 @@ function graphFake() {
     delayMs: 0,
     hangPath: null as null | string,
     calls: [] as GraphCall[],
+    /** GET /{APP_ID}/subscriptions (null = a Meta recusa). */
+    appSubscriptions: null as null | unknown[],
+    /** webhook_configuration do número (undefined = sem o campo). */
+    phoneWebhookConfiguration: undefined as undefined | Record<string, string>,
+    /** O POST com desvio grava o override_callback_uri no item deste app. */
+    postAppliesOverride: true,
   };
   const fetchImpl = vi.fn(async (input: string | URL, init?: RequestInit) => {
     if (state.networkFailure) throw new TypeError(`fetch failed ${String(input)}`);
@@ -99,8 +116,17 @@ function graphFake() {
       });
     if (state.hangPath === path) await wait(60_000);
     if (state.delayMs > 0) await wait(state.delayMs);
-    const auth = String((init?.headers as Record<string, string>)?.Authorization ?? "");
-    state.calls.push({ method, path, query: url.searchParams, auth });
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const auth = String(headers.Authorization ?? "");
+    const body = typeof init?.body === "string" ? init.body : null;
+    state.calls.push({
+      method,
+      path,
+      query: url.searchParams,
+      auth,
+      body,
+      contentType: headers["Content-Type"] ?? null,
+    });
 
     if (path === "/debug_token") {
       if (state.debugTopLevelError) return json({ error: state.debugTopLevelError }, 400);
@@ -114,7 +140,19 @@ function graphFake() {
       return json({ data: state.phoneNumbers });
     }
     if (path === `/${PHONE_ID}`) {
+      if (url.searchParams.get("fields") === "webhook_configuration") {
+        return json({
+          id: PHONE_ID,
+          ...(state.phoneWebhookConfiguration
+            ? { webhook_configuration: state.phoneWebhookConfiguration }
+            : {}),
+        });
+      }
       return json({ id: PHONE_ID, display_phone_number: "+55 11 4000-0000" });
+    }
+    if (path === `/${APP_ID}/subscriptions`) {
+      if (!state.appSubscriptions) return json({ error: { code: 100 } }, 400);
+      return json({ data: state.appSubscriptions });
     }
     if (path === `/${WABA_ID}/subscribed_apps`) {
       if (method === "GET") {
@@ -123,8 +161,18 @@ function graphFake() {
       }
       if (method === "POST") {
         if (state.postError) return json({ error: state.postError }, 400);
+        const parsed = body ? (JSON.parse(body) as Record<string, string>) : {};
+        const override = parsed.override_callback_uri;
+        // Igual à Meta: reinscrever sem corpo apaga o desvio deste app.
+        state.subscribed = state.subscribed.filter(
+          (item) =>
+            (item as { whatsapp_business_api_data?: { id?: string } }).whatsapp_business_api_data?.id !== APP_ID,
+        );
         if (state.postAddsApp) {
-          state.subscribed.push({ whatsapp_business_api_data: { id: APP_ID, name: "App da instalação" } });
+          state.subscribed.push({
+            whatsapp_business_api_data: { id: APP_ID, name: "App da instalação" },
+            ...(override && state.postAppliesOverride ? { override_callback_uri: override } : {}),
+          });
         }
         return json({ success: true });
       }
@@ -269,6 +317,9 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
       "GET /debug_token",
       `GET /${WABA_ID}/phone_numbers`,
       `GET /${WABA_ID}/subscribed_apps`,
+      // Leituras só para a tela (URL do app e desvio por número).
+      `GET /${APP_ID}/subscriptions`,
+      `GET /${PHONE_ID}`,
     ]);
     // debug_token usa o app token montado no servidor; as demais, o token do aluno.
     expect(h.state.calls[0]!.auth).toBe(`Bearer ${APP_ID}|${APP_SECRET}`);
@@ -313,7 +364,10 @@ describe("Meta Cloud: consulta e inscrição do app na WABA", () => {
     expect(subscribeCalls.map((c) => `${c.method} ${c.path}`)).toEqual([
       `POST /${WABA_ID}/subscribed_apps`,
       `GET /${WABA_ID}/subscribed_apps`,
+      `GET /${APP_ID}/subscriptions`,
+      `GET /${PHONE_ID}`,
     ]);
+    expect(posts[0]!.body).toBeNull();
     expect(h.audits.at(-1)!.data).toMatchObject({
       action: "inbound_webhook.meta_cloud_waba_subscribe",
       resultStatus: "subscribed",
@@ -693,5 +747,363 @@ describe("Meta Cloud WABA: app Meta salvo na conexão (agências, um app por BM)
     expect(res.body.code).toBe("meta_app_not_configured");
     expect(res.body.message).toContain("Salve o App ID e o App Secret de novo");
     expect(h.fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// App central da agência: inscrição com desvio da WABA (override_callback_uri)
+// ---------------------------------------------------------------------------
+
+// Valor sintético: não é credencial real.
+const VERIFY_TOKEN = "synthetic-verify-token-0123456789abcdef";
+const PUBLIC_URL = "https://api.agencia-sintetica.test";
+const CONNECTION_URL = `${PUBLIC_URL}/webhooks/inbound/conn_meta`;
+const centralEnv = {
+  META_APP_ID: APP_ID,
+  META_APP_SECRET: APP_SECRET,
+  META_GRAPH_API_VERSION: "v25.0",
+  INBOUND_WEBHOOKS_ENABLED: "true",
+  API_PUBLIC_URL: `${PUBLIC_URL}/`,
+  INBOUND_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+};
+const sha256 = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
+const centralBody = {
+  ...subscribeBody,
+  mode: "agency_central_app",
+  verifyToken: VERIFY_TOKEN,
+};
+
+async function centralFixture(env: Record<string, string | undefined> = centralEnv) {
+  const h = await fixture({ env });
+  Object.assign(h.connections[0]!, { secretHash: sha256(VERIFY_TOKEN) });
+  return h;
+}
+
+function thisAppItem(override?: string) {
+  return {
+    whatsapp_business_api_data: { id: APP_ID, name: "App da agência" },
+    ...(override ? { override_callback_uri: override } : {}),
+  };
+}
+
+describe("App central da agência: inscrição com desvio da WABA", () => {
+  it("envia override_callback_uri (URL desta conexão) e verify_token no corpo do POST, reconsulta e mostra o desvio ativo", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [{ whatsapp_business_api_data: OTHER_APP }];
+    h.state.appSubscriptions = [
+      {
+        object: "whatsapp_business_account",
+        callback_url: "https://agencia-sintetica.test/webhook-padrao",
+        active: true,
+        fields: [{ name: "messages", version: "v25.0" }],
+      },
+    ];
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(200);
+
+    expect(res.body).toMatchObject({
+      outcome: "override_set",
+      mode: "agency_central_app",
+      thisAppSubscribed: true,
+      callback: {
+        expectedUrl: CONNECTION_URL,
+        wabaOverride: "this_connection",
+        wabaOverrideHost: null,
+        appCallback: "other_url",
+        appMessagesField: true,
+        effective: "this_connection",
+      },
+    });
+    const posts = h.state.calls.filter((c) => c.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.path).toBe(`/${WABA_ID}/subscribed_apps`);
+    expect(posts[0]!.contentType).toBe("application/json");
+    expect(JSON.parse(posts[0]!.body ?? "{}")).toEqual({
+      override_callback_uri: CONNECTION_URL,
+      verify_token: VERIFY_TOKEN,
+    });
+    // O token de verificação nunca vai na URL.
+    expect(posts[0]!.query.has("verify_token")).toBe(false);
+    expect(h.state.calls.some((c) => c.method === "DELETE")).toBe(false);
+    // O outro app continua inscrito.
+    expect(res.body.apps.map((a: { appId: string }) => a.appId)).toContain(OTHER_APP.id);
+    // Nem a resposta nem a auditoria carregam o token de verificação ou o do aluno.
+    const everything = JSON.stringify({ body: res.body, audits: h.audits });
+    expect(everything).not.toContain(VERIFY_TOKEN);
+    expect(everything).not.toContain(STUDENT_TOKEN);
+    expect(h.audits.at(-1)!.data).toMatchObject({
+      action: "inbound_webhook.meta_cloud_waba_subscribe",
+      afterSummary: expect.objectContaining({
+        mode: "agency_central_app",
+        outcome: "override_set",
+        wabaOverride: "this_connection",
+      }),
+    });
+  });
+
+  it("app já inscrito sem desvio: reinscreve com o desvio (POST), sem DELETE", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem()];
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(200);
+
+    expect(res.body.outcome).toBe("override_set");
+    expect(h.state.calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(h.state.calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("desvio já aponta para esta conexão: nada é enviado (already_subscribed)", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(`${CONNECTION_URL}/`)];
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(200);
+
+    expect(res.body).toMatchObject({
+      outcome: "already_subscribed",
+      callback: { wabaOverride: "this_connection", effective: "this_connection" },
+    });
+    expect(h.state.calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("a Meta aceita mas a reconsulta não mostra o desvio: override_unconfirmed", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+    h.state.postAppliesOverride = false;
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(200);
+
+    expect(res.body).toMatchObject({
+      outcome: "override_unconfirmed",
+      callback: { wabaOverride: "none" },
+    });
+  });
+
+  it("token de verificação errado: recusa antes de chamar a Meta", async () => {
+    const h = await centralFixture();
+
+    const res = await h.api
+      .post(base)
+      .set("Authorization", bearer)
+      .send({ ...centralBody, verifyToken: "outro-token-de-verificacao" })
+      .expect(422);
+
+    expect(res.body.code).toBe("verify_token_mismatch");
+    expect(res.body.message).toContain("Gerar nova URL");
+    expect(h.fetchImpl).not.toHaveBeenCalled();
+    expect(JSON.stringify(h.audits)).not.toContain("outro-token-de-verificacao");
+  });
+
+  it("sem API_PUBLIC_URL em HTTPS: recusa antes de chamar a Meta", async () => {
+    const h = await centralFixture({ ...centralEnv, API_PUBLIC_URL: "http://localhost:3333" });
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(422);
+
+    expect(res.body.code).toBe("callback_url_unavailable");
+    expect(h.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("modo App central sem token de verificação e modo padrão com token: 400 sem eco", async () => {
+    const h = await centralFixture();
+
+    const missing = await h.api
+      .post(base)
+      .set("Authorization", bearer)
+      .send({ ...subscribeBody, mode: "agency_central_app" })
+      .expect(400);
+    expect(missing.body.code).toBe("invalid_input");
+    expect(missing.body.message).toContain("token de verificação");
+
+    const extra = await h.api
+      .post(base)
+      .set("Authorization", bearer)
+      .send({ ...subscribeBody, verifyToken: VERIFY_TOKEN })
+      .expect(400);
+    expect(extra.body.code).toBe("invalid_input");
+    expect(JSON.stringify(extra.body)).not.toContain(VERIFY_TOKEN);
+    expect(h.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("a Meta recusa a URL (falha na verificação): override_verification_failed", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+    h.state.postError = { code: 2200 };
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(422);
+
+    expect(res.body.code).toBe("override_verification_failed");
+    expect(res.body.message).toContain("HTTPS");
+    expect(JSON.stringify(res.body)).not.toContain(VERIFY_TOKEN);
+  });
+
+  it("modo padrão com o app já inscrito e um desvio ativo: não envia nada (o desvio fica)", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(CONNECTION_URL)];
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(subscribeBody).expect(200);
+
+    expect(res.body).toMatchObject({
+      outcome: "already_subscribed",
+      mode: "standard",
+      callback: { wabaOverride: "this_connection" },
+    });
+    expect(h.state.calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("consulta nunca envia nada, mesmo se o corpo pedir o modo App central", async () => {
+    const h = await centralFixture();
+    await h.api
+      .post(`${base}/lookup`)
+      .set("Authorization", bearer)
+      .send({ ...lookupBody, mode: "agency_central_app" })
+      .expect(400);
+    expect(h.fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("estado do destino: desvio da WABA, URL do app e desvio por número", () => {
+  it("desvio para outra conexão deste painel", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(`${PUBLIC_URL}/webhooks/inbound/conn_outra`)];
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      wabaOverride: "other_connection_here",
+      wabaOverrideHost: null,
+      effective: "elsewhere",
+    });
+  });
+
+  it("desvio para outro endereço: mostra só o domínio, nunca caminho ou parâmetros", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem("https://crm-terceiro.test/hook/abc?token=segredo-de-terceiro")];
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      wabaOverride: "other_url",
+      wabaOverrideHost: "crm-terceiro.test",
+      effective: "elsewhere",
+    });
+    expect(JSON.stringify(res.body)).not.toContain("segredo-de-terceiro");
+    expect(JSON.stringify(res.body)).not.toContain("/hook/abc");
+  });
+
+  it("sem desvio: vale a URL do app (lida com o app token) e o campo messages", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem()];
+    h.state.appSubscriptions = [
+      { object: "whatsapp_business_account", callback_url: CONNECTION_URL, active: true, fields: ["messages"] },
+    ];
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      wabaOverride: "none",
+      appCallback: "this_connection",
+      appMessagesField: true,
+      effective: "this_connection",
+      phoneOverrides: [{ phoneNumberId: PHONE_ID, target: "none" }],
+    });
+    const appRead = h.state.calls.find((c) => c.path === `/${APP_ID}/subscriptions`);
+    expect(appRead!.auth).toBe(`Bearer ${APP_ID}|${APP_SECRET}`);
+  });
+
+  it("URL do app ilegível e sem desvio: destino desconhecido, sem derrubar a consulta", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem()];
+    h.state.appSubscriptions = null;
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      appCallback: "unknown",
+      appMessagesField: null,
+      effective: "unknown",
+    });
+  });
+
+  it("desvio do número vence o da WABA", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(CONNECTION_URL)];
+    h.state.phoneWebhookConfiguration = {
+      phone_number: "https://outro-destino.test/numero",
+      whatsapp_business_account: CONNECTION_URL,
+      application: "https://agencia-sintetica.test/webhook-padrao",
+    };
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      wabaOverride: "this_connection",
+      phoneOverrides: [{ phoneNumberId: PHONE_ID, target: "other_url" }],
+      effective: "elsewhere",
+    });
+  });
+
+  it("app não inscrito: not_subscribed", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({ effective: "not_subscribed", phoneOverrides: [] });
+  });
+
+  it("classifyMetaCloudCallbackUrl compara origem e caminho", () => {
+    expect(classifyMetaCloudCallbackUrl(CONNECTION_URL, CONNECTION_URL, "conn_meta")).toBe("this_connection");
+    expect(classifyMetaCloudCallbackUrl(`${CONNECTION_URL}/`, CONNECTION_URL, "conn_meta")).toBe("this_connection");
+    expect(
+      classifyMetaCloudCallbackUrl("https://API.agencia-sintetica.test/webhooks/inbound/conn_meta", CONNECTION_URL, "conn_meta"),
+    ).toBe("this_connection");
+    expect(classifyMetaCloudCallbackUrl(`${PUBLIC_URL}/webhooks/inbound/x`, CONNECTION_URL, "conn_meta")).toBe(
+      "other_connection_here",
+    );
+    expect(classifyMetaCloudCallbackUrl("https://outro.test/webhooks/inbound/conn_meta", CONNECTION_URL, "conn_meta")).toBe(
+      "other_url",
+    );
+    expect(classifyMetaCloudCallbackUrl("", CONNECTION_URL, "conn_meta")).toBe("none");
+    expect(classifyMetaCloudCallbackUrl(null, CONNECTION_URL, "conn_meta")).toBe("none");
+    expect(classifyMetaCloudCallbackUrl("não é url", CONNECTION_URL, "conn_meta")).toBe("other_url");
+  });
+});
+
+describe("handshake da URL usada no desvio", () => {
+  it("o GET de verificação da Meta na URL desta conexão devolve o challenge só com o token desta conexão", async () => {
+    const prisma = {
+      inboundWebhookConnection: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === "conn_meta" ? { secretHash: sha256(VERIFY_TOKEN) } : null,
+        ),
+      },
+    };
+    const module = await Test.createTestingModule({
+      controllers: [InboundWebhookPublicController],
+      providers: [
+        InboundWebhookMetaCloudVerificationService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    })
+      .useMocker(() => ({}))
+      .compile();
+    const app = module.createNestApplication<NestExpressApplication>({ logger: false });
+    apps.push(app);
+    await app.init();
+    const path = new URL(CONNECTION_URL).pathname;
+
+    const ok = await request(app.getHttpServer())
+      .get(path)
+      .query({ "hub.mode": "subscribe", "hub.verify_token": VERIFY_TOKEN, "hub.challenge": "1158201444" })
+      .expect(200);
+    expect(ok.text).toBe("1158201444");
+
+    await request(app.getHttpServer())
+      .get(path)
+      .query({ "hub.mode": "subscribe", "hub.verify_token": "token-errado", "hub.challenge": "1" })
+      .expect(401);
+    await request(app.getHttpServer())
+      .get("/webhooks/inbound/conn_outra")
+      .query({ "hub.mode": "subscribe", "hub.verify_token": VERIFY_TOKEN, "hub.challenge": "1" })
+      .expect(401);
   });
 });

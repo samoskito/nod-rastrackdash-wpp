@@ -1,15 +1,20 @@
 {
   "version": "PENDENTE: versão definida pelo mantenedor",
-  "title": "PENDENTE: título da atualização",
-  "summary": "PENDENTE: benefício e impacto para o aluno",
-  "changes": "PENDENTE: novidades e melhorias incluídas",
+  "title": "App central da agência no Meta WhatsApp (Cloud API)",
+  "summary": "Agências podem usar um único app Meta para todos os clientes no Meta WhatsApp (Cloud API). Na inscrição da WABA de cada cliente, o painel aponta essa WABA para a URL da conexão do cliente, sem criar um app por cliente. O cartão da conexão passa a mostrar, em palavras simples, para onde a Meta entrega as mensagens de cada WABA.",
+  "changes": "Inscrição do app na sua WABA: novo modo \"App central da agência\". Você escolhe o modo, preenche o WABA ID, o token do usuário do sistema da agência e o token de verificação da conexão, e clica em \"Inscrever com a URL desta conexão\". A Meta confere a URL da conexão antes de aceitar. O modo padrão continua igual e é o selecionado.\nCartão da conexão Meta Cloud: novo quadro \"Para onde a Meta entrega\", depois de Consultar ou Inscrever. Ele diz se as mensagens da WABA chegam nesta conexão, vão para outra conexão do painel, para outro endereço (só o domínio aparece) ou seguem a URL do app, e se o campo messages está assinado no app. Também avisa quando um número tem desvio próprio.\nSegurança: os tokens usados na inscrição não são salvos nem exibidos de novo. O painel nunca remove apps nem desvios. A assinatura das mensagens continua conferida com o App Secret do app (o da conexão ou o META_APP_SECRET).",
   "fixes": "",
-  "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
-  "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",
-  "rollback": "PENDENTE: procedimento de recuperação verificado e limitações",
+  "requirements": "Mesmas versões de Node, PostgreSQL e Redis. Nenhuma variável de ambiente nova. Para o App central da agência: um app Meta da agência com o campo messages assinado; META_APP_ID e META_APP_SECRET desse app na API (ou o mesmo App ID e App Secret salvos em cada conexão); a WABA do cliente compartilhada com o BM da agência como parceiro; um usuário do sistema da agência com acesso à WABA; API_PUBLIC_URL em HTTPS.",
+  "upgradeGuide": "Backup: faça o backup do PostgreSQL antes de atualizar, como de costume. Esta versão não muda o banco.\nMigration: nenhuma.\nVariáveis de ambiente: nenhuma nova. Quem for usar o App central da agência pode colocar META_APP_ID e META_APP_SECRET do app central no env da API (Dokploy ou .env, nunca em chat) e reiniciar a API. Quem já tem um app por cliente salvo em cada conexão não precisa mudar nada.\nPreservação de customizações: preserve as alterações locais do aluno; a atualização não mexe em .env nem em arquivos de configuração.\nUsar o App central: siga docs/setup/whatsapp-providers.md, seção \"App central da agência\".\nVerificação: em Integrações → WhatsApp → WhatsApp Cloud API → abrir a conexão, o bloco \"Inscrição do app na sua WABA\" mostra a escolha \"App desta conexão (padrão)\" / \"App central da agência\". Clique em Consultar: aparece o quadro \"Para onde a Meta entrega\". Depois de inscrever no App central, o quadro mostra \"As mensagens desta WABA chegam nesta conexão.\" e \"aponta para a URL desta conexão (App central da agência ativo)\".\nNão testado nesta versão: nenhuma WABA real, app Meta real nem instalação de aluno real foi usada; o envio do desvio, o GET de verificação da Meta na URL da conexão e a leitura do desvio foram testados só com respostas simuladas da Meta. PENDENTE: confirmar com uma WABA real o código de erro da Meta quando a verificação da URL falha e o formato de webhook_configuration por número.",
+  "rollback": "Para voltar à versão anterior, faça o deploy da versão anterior; não há migration, então não precisa restaurar o banco. Um desvio já criado numa WABA continua na Meta depois de voltar a versão (a versão anterior não lê nem remove o desvio). Para tirar o desvio, faça POST <WABA ID>/subscribed_apps sem parâmetros no Graph API Explorer, com um token do mesmo app: a Meta volta a entregar na URL do app.",
   "minVersion": null,
   "breakingChange": false,
   "components": "BOTH",
   "links": [],
-  "tags": []
+  "tags": [
+    "meta-cloud",
+    "whatsapp",
+    "agencia",
+    "webhook"
+  ]
 }
