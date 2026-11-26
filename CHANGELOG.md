@@ -7,7 +7,9 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Three migrations (two for XMAX CRM), no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**
+## [1.8.0] - 2026-11-26
+
+Upgrade notes for students: [`docs/releases/1.8.0.json`](docs/releases/1.8.0.json). **Three migrations (two for XMAX CRM), no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**
 
 ### Added
 
