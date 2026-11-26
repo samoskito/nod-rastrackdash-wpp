@@ -247,7 +247,7 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     initials: "Uz",
     logoSurface: logoSurface("uazapi_byo"),
     description:
-      "Conecte a sua instância Uazapi (leia o QR code no celular) e receba as conversas dos anúncios.",
+      "Conecte a sua instância Uazapi (URL e token da sua instância) e receba as conversas dos anúncios.",
     gate: { kind: "whatsapp_provider", provider: "uazapi_byo" },
   },
   {
