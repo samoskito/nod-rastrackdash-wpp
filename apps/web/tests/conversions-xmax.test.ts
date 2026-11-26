@@ -407,6 +407,45 @@ describe("XMAX CRM: the observed call is visible in Eventos recebidos", () => {
   });
 });
 
+describe("XMAX CRM Nova regra flow copy", () => {
+  function renderFlow(origin: "automation_xmax" | "automation_webhook") {
+    return render(
+      createElement(NewRuleFlow, {
+        offeredOrigins: [origin],
+        initialOrigin: origin,
+        numbers,
+        connections,
+        capabilities: capabilitiesWithXmax,
+        createAction: vi.fn(),
+        confirmAction: vi.fn(),
+        onFinished: () => undefined,
+        webhookRules: [],
+      }),
+    );
+  }
+
+  it("XMAX: helper names the XMAX automation and value is only the fixed one", async () => {
+    const user = setupUser();
+    const { container } = renderFlow("automation_xmax");
+    await user.selectOptions(screen.getByLabelText("Evento"), "InitiateCheckout");
+    const text = container.textContent ?? "";
+    expect(text).toContain("A automação da etapa no CRM da XMAX chama a URL desta regra");
+    expect(text).toContain("Uma regra por evento.");
+    expect(text).not.toMatch(/n8n|robô/u);
+    expect(text).toContain("Exige valor: o valor fixo desta regra.");
+    expect(text).not.toMatch(/extra[ií]do da mensagem/u);
+  });
+
+  it("Webhook / n8n keeps its own helper and value copy", async () => {
+    const user = setupUser();
+    const { container } = renderFlow("automation_webhook");
+    await user.selectOptions(screen.getByLabelText("Evento"), "InitiateCheckout");
+    const text = container.textContent ?? "";
+    expect(text).toContain("O n8n, o painel ou o robô chama a URL desta regra");
+    expect(text).toMatch(/fixo ou extra[ií]do da mensagem/u);
+  });
+});
+
 describe("XMAX CRM Nova regra flow", () => {
   it("skips Alcance, picks the first free XMAX event and shows the rule URL once", async () => {
     const user = setupUser();

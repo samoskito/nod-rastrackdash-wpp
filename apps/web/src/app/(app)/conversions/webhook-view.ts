@@ -145,6 +145,14 @@ export function xmaxBodyExample(): string {
   );
 }
 
+/** XMAX só tem o valor fixo da regra (nada é extraído da chamada). */
+export function xmaxEventDescription(description: string): string {
+  return description.replace(
+    /Exige valor:[^.]*\./u,
+    "Exige valor: o valor fixo desta regra.",
+  );
+}
+
 /** XMAX CRM: o mínimo, se a XMAX deixar montar o corpo da chamada. */
 export function xmaxMinimalBodyExample(): string {
   return JSON.stringify(

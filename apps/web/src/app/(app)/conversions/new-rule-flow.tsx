@@ -49,6 +49,7 @@ import {
   webhookRuleForEvent,
   webhookRuleName,
   isObservationOnlyOrigin,
+  xmaxEventDescription,
 } from "./webhook-view";
 import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
@@ -945,7 +946,13 @@ function EventStep({
       </label>
       <div className="provider-conversion-event-hint">
         <span className="micro-label">{accentEventCopy(metadata.label)}</span>
-        <small>{accentEventCopy(metadata.description)}</small>
+        <small>
+          {accentEventCopy(
+            draft.origin === "automation_xmax"
+              ? xmaxEventDescription(metadata.description)
+              : metadata.description,
+          )}
+        </small>
       </div>
       {/* Produção direta: toda regra nova já nasce enviando (menos o
           Webhook / n8n, que começa em observação). */}
@@ -954,7 +961,14 @@ function EventStep({
         eventName={definition.lockedEvent ?? draft.eventName}
         mode={webhook ? "observation" : "production"}
       />
-      {webhook ? (
+      {draft.origin === "automation_xmax" ? (
+        <p className="action-note">
+          A automação da etapa no CRM da XMAX chama a URL desta regra quando a
+          oportunidade entra na etapa. Vale para os leads de qualquer número
+          conectado; o evento enviado à Meta é o escolhido aqui. Uma regra por
+          evento.
+        </p>
+      ) : webhook ? (
         <p className="action-note">
           O n8n, o painel ou o robô chama a URL desta regra quando o evento
           acontece. Vale para os leads de qualquer número conectado; o evento
