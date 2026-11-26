@@ -313,12 +313,13 @@ describe("CRM board SQL: large workspaces (query shape)", () => {
       21,
     );
     // The corrections travel as 2 array parameters + the campaign id per select of the period
-    // union (3 selects), never as IN lists: constant in the number of leads.
-    expect(huge.values.length - small.values.length).toBeLessThanOrEqual(9);
+    // union (4 selects, the last one for rules in observation), never as IN
+    // lists: constant in the number of leads.
+    expect(huge.values.length - small.values.length).toBeLessThanOrEqual(12);
     expect(huge.text).toContain("= ANY(");
     expect(huge.text).not.toMatch(/IN \((\$\d+, ){20,}/u);
     for (const text of [small.text, huge.text]) {
-      expect(text).toContain('DISTINCT ON (c."leadId")');
+      expect(text).toContain("DISTINCT ON (x.lead_id)");
       expect(text).toContain("row_number() OVER (PARTITION BY p.stage_rank");
       expect(text).toContain("count(*) OVER (PARTITION BY p.stage_rank)");
       expect(text).toContain("x.rn <=");
@@ -366,5 +367,77 @@ describe("CRM board SQL: large workspaces (query shape)", () => {
       3: buyers,
     });
     expect(rows).toHaveLength(63);
+  });
+});
+
+describe("CRM board SQL: rules in observation (Em observação)", () => {
+  type ObservedRow = Row & { observed: boolean };
+
+  it("moves the card to the stage of the observed event, flagged, with its value", async () => {
+    await lead({ id: "lead_obs_qualified" });
+    await lead({ id: "lead_obs_buyer" });
+    await lead({ id: "lead_plain" });
+    await log({ leadId: "lead_obs_buyer", eventName: "LeadSubmitted", status: "sent", at: at(3) });
+    await testDb.execution({ leadId: "lead_obs_qualified", eventName: "QualifiedLead", at: at(1) });
+    await testDb.execution({
+      leadId: "lead_obs_buyer",
+      eventName: "Purchase",
+      at: at(1),
+      valueCents: 49_700,
+      currency: "BRL",
+    });
+
+    const rows = byLead(await run<ObservedRow>(crmBoardSql(input(), 21))) as Record<
+      string,
+      ObservedRow
+    >;
+    expect(rows.lead_obs_qualified).toMatchObject({ stageRank: 2, observed: true });
+    expect(rows.lead_obs_buyer).toMatchObject({
+      stageRank: 3,
+      observed: true,
+      valueCents: 49_700,
+      currency: "BRL",
+    });
+    expect(rows.lead_plain).toMatchObject({ stageRank: 1, observed: false });
+  });
+
+  it("a real conversion of the same stage wins over the observed one (never twice)", async () => {
+    await lead({ id: "lead_both" });
+    await testDb.execution({ leadId: "lead_both", eventName: "Purchase", at: at(2), valueCents: 100 });
+    await log({ leadId: "lead_both", eventName: "Purchase", status: "sent", at: at(1), valueCents: 900, currency: "BRL" });
+
+    const rows = await run<ObservedRow>(crmBoardSql(input(), 21));
+    expect(rows.filter((row) => row.leadId === "lead_both")).toEqual([
+      expect.objectContaining({ stageRank: 3, observed: false, valueCents: 900 }),
+    ]);
+  });
+
+  it("ignores executions that are not observed, without lead, or outside the period", async () => {
+    await lead({ id: "lead_exec" });
+    for (const status of ["eligible", "materialized", "blocked", "failed", "duplicate"])
+      await testDb.execution({ leadId: "lead_exec", eventName: "Purchase", at: at(1), status });
+    await testDb.execution({ leadId: null, eventName: "Purchase", at: at(1) });
+    await testDb.execution({ leadId: "lead_exec", eventName: "QualifiedLead", at: at(60) });
+    await testDb.execution({ leadId: "lead_exec", eventName: "Purchase", at: at(1), workspaceId: "ws_other" });
+
+    const rows = await run<ObservedRow>(crmBoardSql(input(), 21));
+    expect(rows).toEqual([
+      expect.objectContaining({ leadId: "lead_exec", stageRank: 1, observed: false }),
+    ]);
+  });
+
+  it("brings in a lead that arrived before the period when its observed event is in it", async () => {
+    await lead({ id: "lead_old", firstMessageAt: at(90), createdAt: at(90) });
+    await testDb.execution({ leadId: "lead_old", eventName: "QualifiedLead", at: at(1) });
+
+    const rows = await run<ObservedRow>(crmBoardSql(input(), 21));
+    expect(rows).toEqual([
+      expect.objectContaining({ leadId: "lead_old", stageRank: 2, observed: true }),
+    ]);
+    // The single-lead check (kanban move) sees the same stage.
+    const stage = await run<ObservedRow>(
+      crmLeadStageSql(input({ range: null, leadId: "lead_old" })),
+    );
+    expect(stage).toEqual([expect.objectContaining({ stageRank: 2, observed: true })]);
   });
 });

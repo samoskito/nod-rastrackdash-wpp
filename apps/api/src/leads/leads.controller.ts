@@ -149,6 +149,38 @@ export class LeadsController {
     return this.leadsService.getLeadDetail(workspace.id, leadId);
   }
 
+  /**
+   * Apaga um evento de teste de regra em observação ("Em observação" no
+   * lead). Mesma permissão de quem gerencia as regras de conversão.
+   */
+  @Delete(":leadId/observed-events/:executionId")
+  @HttpCode(200)
+  async removeObservedEvent(
+    @AuthToken() refreshToken: string,
+    @Param("leadId") leadId: string,
+    @Param("executionId") executionId: string,
+  ) {
+    const authenticated = await this.authService.getSession(refreshToken);
+    const workspace = this.workspacesService.getCurrentWorkspace(authenticated);
+
+    if (!workspace.permissions.canManageIntegrations) {
+      throw new ForbiddenException("Sem permissao para excluir eventos de teste");
+    }
+    if (
+      !/^[A-Za-z0-9_-]{1,64}$/u.test(leadId) ||
+      !/^[A-Za-z0-9_-]{1,64}$/u.test(executionId)
+    ) {
+      throw new BadRequestException("Evento invalido");
+    }
+
+    return this.leadsService.deleteObservedEvent(
+      workspace.id,
+      leadId,
+      executionId,
+      authenticated.user.id,
+    );
+  }
+
   /** "Excluir lead": só gestor do workspace, com a confirmação da tela. */
   @Delete(":leadId")
   @HttpCode(200)

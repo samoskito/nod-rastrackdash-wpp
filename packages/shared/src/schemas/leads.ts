@@ -72,6 +72,11 @@ export const leadListItemSchema = z.object({
   adSetId: z.string().min(1).nullable(),
   adId: z.string().min(1).nullable(),
   lastEventName: z.string().min(1).nullable(),
+  /**
+   * The stage (lastEventName) comes from a rule in observation: nothing was
+   * sent to the Meta. The screens show "Em observação" next to the stage.
+   */
+  stageObservation: z.boolean().optional(),
   firstMessageAt: z.string().datetime().nullable(),
   lastMessageAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -126,7 +131,22 @@ export const leadDetailConversionEventSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * Event recognized by a rule in observation (status
+   * PROVIDER_OBSERVATION_EVENT_STATUS): listed like the others with the mark
+   * "Em observação", never sent to the Meta. `executionId` deletes it
+   * (DELETE /leads/:leadId/observed-events/:executionId).
+   */
+  observation: z
+    .object({
+      executionId: z.string().min(1),
+    })
+    .nullable()
+    .optional(),
 });
+
+/** Status of a lead event recognized by a rule in observation (not a log). */
+export const PROVIDER_OBSERVATION_EVENT_STATUS = "provider_observation";
 
 export const leadDetailWebhookEventSchema = z.object({
   id: z.string().min(1),

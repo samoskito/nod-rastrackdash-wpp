@@ -535,3 +535,26 @@ describe("CRM controller permissions", () => {
     await owner.nest.close();
   });
 });
+
+describe("CRM board service: rules in observation", () => {
+  it("the card of an observed event sits in its stage with the mark; real cards have none", async () => {
+    await testDb.lead({ id: "observed_buyer", name: "Lead Teste" });
+    await testDb.lead({ id: "real_buyer", name: "Lead Real" });
+    await testDb.execution({
+      leadId: "observed_buyer",
+      eventName: "Purchase",
+      at: daysAgo(1),
+      valueCents: 30_000,
+      currency: "BRL",
+    });
+    await testDb.log({ leadId: "real_buyer", eventName: "Purchase", status: "sent", at: daysAgo(1), valueCents: 100, currency: "BRL" });
+    const { service } = harness({});
+    const board = await service.getBoard(WS, {}, { canMoveCards: true }, NOW);
+    const purchase = board.columns.find((column) => column.key === "Purchase")!;
+
+    expect(purchase.total).toBe(2);
+    const byId = Object.fromEntries(purchase.cards.map((card) => [card.leadId, card]));
+    expect(byId.observed_buyer).toMatchObject({ observation: true, valueCents: 30_000 });
+    expect(byId.real_buyer).not.toHaveProperty("observation");
+  });
+});

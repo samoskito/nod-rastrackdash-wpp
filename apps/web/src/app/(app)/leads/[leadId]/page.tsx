@@ -93,7 +93,10 @@ export default async function LeadDetailPage({
             {lead.phoneDisplay ?? lead.phoneHash}
           </PresentationMask>
         </span>
-        <span className="status-chip">{leadStatusLabel(lead.status)}</span>
+        <span className="status-chip">
+          {leadStatusLabel(lead.status)}
+          {lead.stageObservation ? " · Em observação" : ""}
+        </span>
         {canDeleteLead ? (
           <DeleteLeadButton
             leadId={lead.id}

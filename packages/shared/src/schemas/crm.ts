@@ -114,6 +114,8 @@ export const crmLeadCardSchema = z.object({
   /** Value of the conversion that placed the card (value columns only). */
   valueCents: z.number().int().nullable(),
   currency: z.string().min(3).max(3).nullable(),
+  /** The stage came from a rule in observation (nothing sent to the Meta). */
+  observation: z.boolean().optional(),
   whatsappInstance: z
     .object({ id: z.string().min(1), name: z.string().min(1) })
     .nullable(),

@@ -90,6 +90,14 @@ export function CrmCardBody({
         <span className="crm-card-age">
           {crmDaysInStageLabel(card.enteredStageAt, options.now)}
         </span>
+        {card.observation ? (
+          <span
+            className="crm-origin-badge crm-card-observation"
+            title="Regra em observação: nada foi enviado à Meta"
+          >
+            Em observação
+          </span>
+        ) : null}
         {options.showValue && card.valueCents != null ? (
           <strong className="crm-card-value">
             <PresentationMask placeholder="R$ ••••">

@@ -520,6 +520,7 @@ export default async function LeadsPage({
                       <td>
                         <span className={`event-chip${lifecycleTone(lead)}`}>
                           {lifecycleLabel(lead)}
+                          {lead.stageObservation ? " · Em observação" : ""}
                         </span>
                       </td>
                       <td className="lead-date-cell">
@@ -581,6 +582,7 @@ export default async function LeadsPage({
                     <span className="micro-label">Etapa atual</span>
                     <span className={`event-chip${lifecycleTone(lead)}`}>
                       {lifecycleLabel(lead)}
+                      {lead.stageObservation ? " · Em observação" : ""}
                     </span>
                   </div>
                   <dl>
