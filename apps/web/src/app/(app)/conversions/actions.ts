@@ -35,6 +35,10 @@ import {
   type StructuredCatalogTestMessageResultDto,
 } from "@wpptrack/shared";
 import { revalidatePath } from "next/cache";
+import {
+  isObservationOnlyProvider,
+  observationOnlyCreatedMessage,
+} from "./webhook-view";
 import { licenseLockedMessageFor } from "../../../lib/license-locked-message";
 import {
   CONVERSION_RULES_OFF_FIX,
@@ -421,6 +425,9 @@ export async function createConversionRuleAction(
       message: createdRuleMessage(
         result.data.rule.mode,
         Boolean(result.data.webhookUrl),
+        isObservationOnlyProvider(
+          (input.data as { automationSource?: string }).automationSource,
+        ),
       ),
     };
   } catch (error) {
@@ -754,11 +761,14 @@ export async function reprocessBlockedExecutionsAction(
 function createdRuleMessage(
   mode: "observation" | "production",
   hasWebhookUrl: boolean,
+  observationOnly = false,
 ): string {
   const base =
     mode === "production"
       ? "Regra criada e enviando: cada conversão reconhecida vai para a Meta pelo destino de cada número."
-      : `Regra criada sem envio: o envio de conversões está desligado no servidor, ou esta integração ainda não pode enviar. Se for o envio desligado: ${CONVERSION_SENDING_OFF_FIX} Depois de resolver, use “Ativar envio” nesta regra.`;
+      : observationOnly
+        ? observationOnlyCreatedMessage
+        : `Regra criada sem envio: o envio de conversões está desligado no servidor, ou esta integração ainda não pode enviar. Se for o envio desligado: ${CONVERSION_SENDING_OFF_FIX} Depois de resolver, use “Ativar envio” nesta regra.`;
   return hasWebhookUrl
     ? `${base} Copie o endereço agora: ele não é exibido de novo.`
     : base;

@@ -734,7 +734,7 @@ export function ConversionsScreen({
         open={newRuleOpen}
         onClose={closeNewRule}
         title="Nova regra"
-        description="Origem, evento, alcance e detalhes. A regra já começa enviando para a Meta."
+        description="Origem, evento, alcance e detalhes. O passo final diz se a regra já começa enviando ou em observação."
         size="wide"
         id="conversion-new-rule"
       >

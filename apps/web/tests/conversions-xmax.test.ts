@@ -27,6 +27,7 @@ import { RuleEndpoint } from "../src/app/(app)/conversions/rule-endpoint";
 import { NewRuleFlow } from "../src/app/(app)/conversions/new-rule-flow";
 import { ReceivedEvents } from "../src/app/(app)/conversions/received-events";
 import { ruleOriginDefinition } from "../src/app/(app)/conversions/conversion-origins";
+import { XmaxPayloadExample } from "../src/app/(app)/conversions/xmax-payload-example";
 import { setupUser } from "./user-shim";
 import {
   firstFreeWebhookEvent,
@@ -34,6 +35,10 @@ import {
   webhookRuleForEvent,
   webhookRulesOf,
   xmaxBodyExample,
+  xmaxMinimalBodyExample,
+  isObservationOnlyOrigin,
+  isObservationOnlyProvider,
+  observationOnlyCreatedMessage,
 } from "../src/app/(app)/conversions/webhook-view";
 import { executionReasonLabel } from "../src/app/(app)/settings/provider-conversion-labels";
 import {
@@ -156,6 +161,8 @@ describe("XMAX CRM in Conversões", () => {
     ).not.toContain("automation_xmax");
     expect(ruleOriginDefinition("automation_xmax")).toMatchObject({
       label: "Etapa no CRM da XMAX",
+      // The rule cards use the XMAX logo of the Integrations hub.
+      logoProvider: "xmax",
     });
     // Lead qualificado, then Compra, then every other event of the pixel.
     expect(ruleOriginDefinition("automation_xmax").allowedEvents?.slice(0, 2)).toEqual([
@@ -265,12 +272,54 @@ describe("XMAX CRM in Conversões", () => {
     );
   });
 
-  it("body example: opportunity id, stage and phone only, fictitious", () => {
+  it("body example: the XMAX fields the reader knows, fictitious", () => {
     const body = JSON.parse(xmaxBodyExample());
-    expect(Object.keys(body).sort()).toEqual(
-      ["Etapa_oportunidade", "ID_oportunidade", "Telefone_oportunidade"].sort(),
-    );
+    expect(body).toEqual({
+      ID_oportunidade: "90001",
+      Titulo_oportunidade: "Lead Teste",
+      Etapa_oportunidade: "3 Negociação",
+      Telefone_oportunidade: "5511900000002",
+      Contatos_oportunidade: "[]",
+    });
     expect(xmaxBodyExample()).not.toMatch(/@|token/iu);
+    expect(JSON.parse(xmaxMinimalBodyExample())).toEqual({
+      ID_oportunidade: "<id da oportunidade>",
+      Telefone_oportunidade: "<telefone com DDI e DDD>",
+    });
+  });
+
+  it("payload example component: method, token header, fields, both bodies, copy button", () => {
+    const { container } = render(createElement(XmaxPayloadExample));
+    const text = container.textContent ?? "";
+    expect(text).toMatch(/POST/u);
+    expect(text).toMatch(/x-wpptrack-webhook-token/u);
+    for (const field of [
+      "ID_oportunidade",
+      "Telefone_oportunidade",
+      "Contatos_oportunidade",
+      "Etapa_oportunidade",
+      "contact_number",
+    ]) {
+      expect(text).toContain(field);
+    }
+    expect(text).toMatch(/5511999999999/u);
+    expect(text).toMatch(/valor fixo da regra/u);
+    expect(text).toContain("Lead Teste");
+    expect(text).toContain("<id da oportunidade>");
+    expect(screen.getAllByRole("button", { name: /Copiar JSON/u })).toHaveLength(2);
+  });
+
+  it("observation-only origins get the observation message, never the server-off one", () => {
+    expect(isObservationOnlyOrigin("automation_xmax")).toBe(true);
+    expect(isObservationOnlyOrigin("automation_payt")).toBe(false);
+    expect(isObservationOnlyProvider("xmax")).toBe(true);
+    expect(isObservationOnlyProvider("payt")).toBe(false);
+    expect(isObservationOnlyProvider(undefined)).toBe(false);
+    expect(observationOnlyCreatedMessage).toMatch(/^Regra criada em observação/u);
+    expect(observationOnlyCreatedMessage).toMatch(/nada vai para a Meta/u);
+    expect(observationOnlyCreatedMessage).not.toMatch(
+      /Dokploy|INBOUND_|desligado no servidor|sem envio/iu,
+    );
   });
 
   it("URL tab shows the XMAX steps (stage automation, header option), no QR", () => {
@@ -294,7 +343,8 @@ describe("XMAX CRM in Conversões", () => {
         onDismiss: vi.fn(),
       }),
     );
-    expect(screen.getByText(/x-wpptrack-webhook-token/u)).toBeTruthy();
+    expect(screen.getAllByText(/x-wpptrack-webhook-token/u).length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("Telefone_oportunidade");
     expect(screen.getByText(/A XMAX não cria lead/u)).toBeTruthy();
     expect(container.textContent).not.toMatch(/QR|n8n/u);
   });
@@ -354,6 +404,45 @@ describe("XMAX CRM: the observed call is visible in Eventos recebidos", () => {
     expect(await screen.findByText("Em observação")).toBeTruthy();
     expect(screen.getByText(/nada vai para a Meta/u)).toBeTruthy();
     expect(screen.getAllByText(/sem envio/iu).length).toBeGreaterThan(0);
+  });
+});
+
+describe("XMAX CRM Nova regra flow copy", () => {
+  function renderFlow(origin: "automation_xmax" | "automation_webhook") {
+    return render(
+      createElement(NewRuleFlow, {
+        offeredOrigins: [origin],
+        initialOrigin: origin,
+        numbers,
+        connections,
+        capabilities: capabilitiesWithXmax,
+        createAction: vi.fn(),
+        confirmAction: vi.fn(),
+        onFinished: () => undefined,
+        webhookRules: [],
+      }),
+    );
+  }
+
+  it("XMAX: helper names the XMAX automation and value is only the fixed one", async () => {
+    const user = setupUser();
+    const { container } = renderFlow("automation_xmax");
+    await user.selectOptions(screen.getByLabelText("Evento"), "InitiateCheckout");
+    const text = container.textContent ?? "";
+    expect(text).toContain("A automação da etapa no CRM da XMAX chama a URL desta regra");
+    expect(text).toContain("Uma regra por evento.");
+    expect(text).not.toMatch(/n8n|robô/u);
+    expect(text).toContain("Exige valor: o valor fixo desta regra.");
+    expect(text).not.toMatch(/extra[ií]do da mensagem/u);
+  });
+
+  it("Webhook / n8n keeps its own helper and value copy", async () => {
+    const user = setupUser();
+    const { container } = renderFlow("automation_webhook");
+    await user.selectOptions(screen.getByLabelText("Evento"), "InitiateCheckout");
+    const text = container.textContent ?? "";
+    expect(text).toContain("O n8n, o painel ou o robô chama a URL desta regra");
+    expect(text).toMatch(/fixo ou extra[ií]do da mensagem/u);
   });
 });
 
