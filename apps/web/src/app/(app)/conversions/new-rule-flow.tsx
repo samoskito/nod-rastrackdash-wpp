@@ -40,6 +40,7 @@ import { MessagePhraseFields } from "./message-phrase-fields";
 import { PendingNumbersWarning } from "./pending-numbers";
 import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
+import { XmaxPayloadExample } from "./xmax-payload-example";
 import { ValueSourceFields } from "./value-source-fields";
 import {
   firstFreeWebhookEvent,
@@ -47,6 +48,7 @@ import {
   webhookSourceOfOrigin,
   webhookRuleForEvent,
   webhookRuleName,
+  isObservationOnlyOrigin,
 } from "./webhook-view";
 import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
@@ -531,12 +533,15 @@ export function NewRuleFlow({
                 ))}
               </ol>
             ) : draft?.origin === "automation_xmax" ? (
-              <p className="action-note">
-                Use esta URL na automação da etapa no CRM da XMAX (uma URL por
-                evento). A regra começa em observação: as chamadas aparecem em
-                Eventos recebidos marcadas “Em observação” e nada vai para a
-                Meta. O passo a passo fica em Gerenciar.
-              </p>
+              <>
+                <p className="action-note">
+                  Use esta URL na automação da etapa no CRM da XMAX (uma URL por
+                  evento). A regra começa em observação: as chamadas aparecem em
+                  Eventos recebidos marcadas “Em observação” e nada vai para a
+                  Meta. O passo a passo fica em Gerenciar.
+                </p>
+                <XmaxPayloadExample />
+              </>
             ) : draft?.origin === "automation_webhook" ? (
               <p className="action-note">
                 Use esta URL no n8n ou no painel (POST com o JSON do lead). A
@@ -1774,7 +1779,9 @@ function DetailsStep({
         <div>
           <dt>Envio</dt>
           <dd>
-            {isWebhookFamilyOrigin(draft.origin)
+            {isObservationOnlyOrigin(draft.origin)
+              ? "Começa em observação: as chamadas aparecem em Eventos recebidos, na página do lead e no CRM com a marca “Em observação”, e nada vai para a Meta até a integração ser liberada."
+              : isWebhookFamilyOrigin(draft.origin)
               ? "Começa em observação: as chamadas aparecem em Eventos recebidos sem ir para a Meta. Depois de conferir, ative o envio."
               : "Já começa enviando: cada conversão reconhecida vai para a Meta pelo destino (pixel e página) de cada número."}
           </dd>

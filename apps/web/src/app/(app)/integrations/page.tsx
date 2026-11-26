@@ -53,6 +53,7 @@ import {
   rotateIntegrationEndpointAction,
   setRulePublicUrlAction,
 } from "./single-url/single-url-actions";
+import { XmaxPayloadExample } from "../conversions/xmax-payload-example";
 import { legacyUrlsFor } from "./single-url/single-url-copy";
 import { loadSingleUrlData } from "./single-url/single-url-data";
 import {
@@ -1770,6 +1771,7 @@ export default async function IntegrationsPage({
             etapa&rdquo;, chame essa URL (POST).
           </li>
         </ol>
+        <XmaxPayloadExample />
         <Link className="button primary" href={xmaxRulesHref}>
           {xmaxRules.length > 0
             ? "Gerenciar regras da XMAX"

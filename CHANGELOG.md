@@ -10,6 +10,11 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 ### Changed
 
 - Integrações › CRM: **XMAX card** next to Kommo and Pipedrive. "Disponível" until the workspace has a XMAX rule; with at least one it shows "Ativa" and the rule count. The button goes to Conversões with the XMAX origin preselected (`/conversions?nova=automation_xmax`) and the panel explains the three steps (one rule per event, copy the rule URL, call it from the XMAX "opportunity entered the stage" automation). XMAX rules in Conversões now use the XMAX logo instead of the generic CRM icon. Screen only: no migration, no new variable.
+- XMAX: the call example (POST, rule URL, token in the URL or in the `x-wpptrack-webhook-token` header, JSON body with `ID_oportunidade`, `Telefone_oportunidade`, `Contatos_oportunidade`, `Etapa_oportunidade`, minimal body, copy buttons) shows in the card panel, in the "Regra criada" step and in Gerenciar › Endereço e configuração. Matches what the `automation-v1` reader really reads.
+
+### Fixed
+
+- New rule for an observation-only reader (XMAX): the modal no longer promises sending to Meta, and the created message says "Regra criada em observação" instead of the server-off notice with the environment variable. The server-off message is kept for the real case (reader released, switch off). No migration, no new variable.
 
 ## [1.8.0] - 2026-11-26
 
