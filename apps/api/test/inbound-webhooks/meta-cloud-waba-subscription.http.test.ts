@@ -99,6 +99,10 @@ function graphFake() {
     phoneWebhookConfiguration: undefined as undefined | Record<string, string>,
     /** O POST com desvio grava o override_callback_uri no item deste app. */
     postAppliesOverride: true,
+    /** Erro da reconsulta de subscribed_apps depois de um POST aceito. */
+    subscribedErrorAfterPost: null as null | { code: number },
+    /** Erro ao ler webhook_configuration do número. */
+    phoneConfigError: null as null | { code: number },
   };
   const fetchImpl = vi.fn(async (input: string | URL, init?: RequestInit) => {
     if (state.networkFailure) throw new TypeError(`fetch failed ${String(input)}`);
@@ -141,6 +145,7 @@ function graphFake() {
     }
     if (path === `/${PHONE_ID}`) {
       if (url.searchParams.get("fields") === "webhook_configuration") {
+        if (state.phoneConfigError) return json({ error: state.phoneConfigError }, 400);
         return json({
           id: PHONE_ID,
           ...(state.phoneWebhookConfiguration
@@ -161,6 +166,7 @@ function graphFake() {
       }
       if (method === "POST") {
         if (state.postError) return json({ error: state.postError }, 400);
+        if (state.subscribedErrorAfterPost) state.subscribedError = state.subscribedErrorAfterPost;
         const parsed = body ? (JSON.parse(body) as Record<string, string>) : {};
         const override = parsed.override_callback_uri;
         // Igual à Meta: reinscrever sem corpo apaga o desvio deste app.
@@ -1105,5 +1111,104 @@ describe("handshake da URL usada no desvio", () => {
       .get("/webhooks/inbound/conn_outra")
       .query({ "hub.mode": "subscribe", "hub.verify_token": VERIFY_TOKEN, "hub.challenge": "1" })
       .expect(401);
+  });
+});
+
+describe("revisão: estados que nunca podem aparecer como 'chega nesta conexão'", () => {
+  it("app sem o campo messages assinado: app_messages_off, mesmo com o desvio apontando para cá", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(CONNECTION_URL)];
+    h.state.appSubscriptions = [
+      { object: "whatsapp_business_account", callback_url: CONNECTION_URL, active: true, fields: ["account_update"] },
+    ];
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      wabaOverride: "this_connection",
+      appMessagesField: false,
+      effective: "app_messages_off",
+    });
+  });
+
+  it("número que não deu para ler: effective unknown", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(CONNECTION_URL)];
+    h.state.phoneConfigError = { code: 100 };
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback).toMatchObject({
+      wabaOverride: "this_connection",
+      phoneOverrides: [{ phoneNumberId: PHONE_ID, target: "unknown" }],
+      phoneOverridesNotChecked: 0,
+      effective: "unknown",
+    });
+  });
+
+  it("números além do limite de 20: contados como não conferidos e effective unknown", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [thisAppItem(CONNECTION_URL)];
+    h.state.phoneNumbers = Array.from({ length: 21 }, () => ({
+      id: PHONE_ID,
+      display_phone_number: "+55 11 4000-0000",
+      verified_name: "Loja",
+    }));
+
+    const res = await h.api.post(`${base}/lookup`).set("Authorization", bearer).send(lookupBody).expect(200);
+
+    expect(res.body.callback.phoneOverrides).toHaveLength(20);
+    expect(res.body.callback.phoneOverrides.every((p: { target: string }) => p.target === "none")).toBe(true);
+    expect(res.body.callback).toMatchObject({ phoneOverridesNotChecked: 1, effective: "unknown" });
+  });
+
+  it("POST com desvio aceito e reconsulta falha: override_unconfirmed, sem erro", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+    h.state.subscribedErrorAfterPost = { code: 2 };
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(200);
+
+    expect(res.body).toMatchObject({
+      outcome: "override_unconfirmed",
+      callback: { effective: "unknown" },
+    });
+    expect(h.state.calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(h.audits.at(-1)!.data).toMatchObject({
+      afterSummary: expect.objectContaining({ outcome: "override_unconfirmed" }),
+    });
+  });
+
+  it("POST com desvio: 100 sem relação com o callback vira erro genérico, sem falar de API_PUBLIC_URL", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+    h.state.postError = { code: 100, message: "Invalid parameter" } as never;
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(502);
+
+    expect(res.body.code).toBe("subscribe_failed");
+    expect(res.body.message).not.toContain("API_PUBLIC_URL");
+    expect(res.body.message).not.toContain("token de verificação");
+  });
+
+  it("POST com desvio: 100 com mensagem de verificação do callback vira override_verification_failed", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+    h.state.postError = { code: 100, message: "Callback verification failed with the provided verify token" } as never;
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(422);
+
+    expect(res.body.code).toBe("override_verification_failed");
+    expect(res.body.message).not.toContain("Callback verification failed");
+  });
+
+  it("POST com desvio: erro HTTP sem corpo da Meta não aponta para a verificação", async () => {
+    const h = await centralFixture();
+    h.state.subscribed = [];
+    h.state.postError = { code: 1 };
+
+    const res = await h.api.post(base).set("Authorization", bearer).send(centralBody).expect(502);
+
+    expect(res.body.code).toBe("graph_unavailable");
   });
 });

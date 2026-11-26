@@ -76,6 +76,7 @@ describe("Meta Cloud WABA subscription contracts", () => {
         appCallback: "unknown",
         appMessagesField: null,
         phoneOverrides: [],
+        phoneOverridesNotChecked: 0,
         effective: "unknown",
       },
       checkedAt: "2026-10-24T12:00:00.000Z",

@@ -41,6 +41,7 @@ const status = {
     appCallback: "this_connection",
     appMessagesField: true,
     phoneOverrides: [],
+    phoneOverridesNotChecked: 0,
     effective: "this_connection",
   },
   checkedAt: "2026-10-24T12:00:00.000Z",

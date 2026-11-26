@@ -27,7 +27,7 @@ const outcomeLabels: Record<MetaCloudWabaSubscriptionStatusDto["outcome"], strin
   override_set:
     "Inscrição feita com a URL desta conexão e confirmada na Meta (reconsultado agora).",
   override_unconfirmed:
-    "A Meta aceitou o pedido, mas a reconsulta ainda não mostra a URL desta conexão nesta WABA. Consulte de novo em alguns minutos.",
+    "A Meta aceitou o pedido, mas ainda não deu para confirmar a URL desta conexão nesta WABA. Clique em Consultar em alguns minutos para ver o estado real.",
 };
 
 /** Frase simples para cada destino lido na Meta. */
@@ -417,6 +417,8 @@ export function MetaCloudWabaCallbackView({
     elsewhere: "As mensagens desta WABA estão indo para outro lugar, não para esta conexão.",
     unknown: "Não deu para confirmar para onde vão as mensagens desta WABA.",
     not_subscribed: "Sem a inscrição do app, a Meta não entrega as mensagens desta WABA.",
+    app_messages_off:
+      "O app não assina o campo messages: a Meta não entrega nada desta WABA. Assine o campo messages em Webhooks do app.",
   };
   const wabaLine =
     callback.wabaOverride === "this_connection"
@@ -429,6 +431,8 @@ export function MetaCloudWabaCallbackView({
   const phonesElsewhere = callback.phoneOverrides.filter(
     (phone) => phone.target === "other_url" || phone.target === "other_connection_here",
   ).length;
+  const phonesUnread = callback.phoneOverrides.filter((phone) => phone.target === "unknown");
+  const phonesUnchecked = phonesUnread.length + callback.phoneOverridesNotChecked;
 
   return (
     <div className="meta-waba-callback">
@@ -457,6 +461,22 @@ export function MetaCloudWabaCallbackView({
             {phonesElsewhere === 1
               ? "1 número desta WABA aponta para outro lugar (o desvio do número vence o da WABA)."
               : `${phonesElsewhere} números desta WABA apontam para outro lugar (o desvio do número vence o da WABA).`}
+          </li>
+        ) : null}
+        {phonesUnchecked > 0 ? (
+          <li>
+            <strong>Números não conferidos:</strong>{" "}
+            {phonesUnchecked === 1
+              ? "1 número desta WABA não pôde ser conferido"
+              : `${phonesUnchecked} números desta WABA não puderam ser conferidos`}
+            {phonesUnread.length > 0
+              ? ` (a Meta não respondeu para: ${phonesUnread.map((phone) => phone.phoneNumberId).join(", ")})`
+              : null}
+            {callback.phoneOverridesNotChecked > 0
+              ? ` (${callback.phoneOverridesNotChecked} acima do limite de 20 conferidos por consulta)`
+              : null}
+            . Sem conferir, não dá para garantir que as mensagens desses números chegam nesta
+            conexão.
           </li>
         ) : null}
       </ul>

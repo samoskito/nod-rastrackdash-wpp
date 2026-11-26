@@ -168,6 +168,20 @@ function normalizeCallbackUrl(value: string): { origin: string; path: string } |
   }
 }
 
+/**
+ * Erro da Meta que indica falha na verificação da URL de callback: 2200
+ * ("Callback verification failed") ou 100 com mensagem sobre o callback /
+ * verify token. A mensagem da Meta só é inspecionada, nunca devolvida.
+ */
+function isCallbackVerificationError(error: GraphError): boolean {
+  if (error.code === 2200) return true;
+  return (
+    error.code === 100 &&
+    typeof error.message === "string" &&
+    /callback|verif/i.test(error.message)
+  );
+}
+
 /** Compara uma URL lida na Meta com a URL desta conexão. */
 export function classifyMetaCloudCallbackUrl(
   value: unknown,
@@ -380,6 +394,7 @@ export class MetaCloudWabaSubscriptionService {
 
     let read = await this.readSubscribedApps(input, appId);
     let outcome: MetaCloudWabaSubscriptionStatusDto["outcome"] = "lookup";
+    let confirmationPending = false;
     const subscribed = () => read.apps.some((app) => app.isThisApp);
     const overrideTarget = () =>
       classifyMetaCloudCallbackUrl(
@@ -409,11 +424,18 @@ export class MetaCloudWabaSubscriptionService {
           overrideCallbackUri: input.expectedUrl as string,
           verifyToken: input.verifyToken as string,
         });
-        read = await this.readSubscribedApps(input, appId);
-        outcome =
-          subscribed() && overrideTarget() === "this_connection"
-            ? "override_set"
-            : "override_unconfirmed";
+        try {
+          read = await this.readSubscribedApps(input, appId);
+          outcome =
+            subscribed() && overrideTarget() === "this_connection"
+              ? "override_set"
+              : "override_unconfirmed";
+        } catch {
+          // A Meta aceitou o POST, mas a reconsulta falhou: o desvio foi
+          // pedido e a confirmação fica pendente ("Consultar" mostra o real).
+          outcome = "override_unconfirmed";
+          confirmationPending = true;
+        }
       }
     }
 
@@ -423,6 +445,7 @@ export class MetaCloudWabaSubscriptionService {
       subscribed: subscribed(),
       thisAppOverride: read.thisAppOverride,
       phoneNumbers,
+      confirmationPending,
     });
 
     return {
@@ -454,6 +477,8 @@ export class MetaCloudWabaSubscriptionService {
       subscribed: boolean;
       thisAppOverride: string | null;
       phoneNumbers: MetaCloudWabaPhoneNumberDto[];
+      /** O POST foi aceito, mas a reconsulta falhou: estado ainda incerto. */
+      confirmationPending?: boolean;
     },
   ): Promise<MetaCloudWabaCallbackStatusDto> {
     const classify = (value: unknown) =>
@@ -480,18 +505,32 @@ export class MetaCloudWabaSubscriptionService {
       if (wabaOverride !== "none" && wabaOverride !== "unknown") return wabaOverride;
       return appCallback;
     };
+    const phoneOverridesNotChecked = options.subscribed
+      ? Math.max(0, options.phoneNumbers.length - maxPhoneOverrideChecks)
+      : 0;
     let effective: MetaCloudWabaCallbackStatusDto["effective"];
-    if (!options.subscribed) {
+    if (options.confirmationPending) {
+      effective = "unknown";
+    } else if (!options.subscribed) {
       effective = "not_subscribed";
+    } else if (app.messagesField === false) {
+      // Sem o campo messages assinado no app, a Meta não entrega nada,
+      // nem para a URL do app nem para um desvio.
+      effective = "app_messages_off";
     } else {
-      // Número que não deu para ler segue a WABA (a Meta não exige desvio
-      // por número; quase sempre não há).
       const targets = (phoneOverrides.length > 0
         ? phoneOverrides.map((phone) => phone.target)
         : ["none" as const]
       ).map(resolve);
+      const someUnchecked =
+        phoneOverridesNotChecked > 0 ||
+        phoneOverrides.some((phone) => phone.target === "unknown");
       if (targets.some((target) => target === "other_url" || target === "other_connection_here")) {
         effective = "elsewhere";
+      } else if (someUnchecked) {
+        // Número que não deu para conferir pode ter desvio próprio: nunca
+        // afirmar que tudo chega aqui.
+        effective = "unknown";
       } else if (targets.every((target) => target === "this_connection")) {
         effective = "this_connection";
       } else {
@@ -507,6 +546,7 @@ export class MetaCloudWabaSubscriptionService {
       appCallback,
       appMessagesField: app.messagesField,
       phoneOverrides,
+      phoneOverridesNotChecked,
       effective,
     };
   }
@@ -895,15 +935,26 @@ export class MetaCloudWabaSubscriptionService {
         422,
       );
     }
-    // App central: a Meta recusa a URL (falha no GET de verificação ou URL
-    // inválida) com 100/2200 ou um código não documentado. PENDENTE: o
-    // código exato não está na documentação pública da Meta.
-    if (step === "override_post" && (code === 100 || code === 2200 || code === undefined || code > 2)) {
-      return new MetaCloudWabaError(
-        "override_verification_failed",
-        messages.overrideVerificationFailed,
-        422,
-      );
+    // App central: só a falha de verificação da URL vira a mensagem sobre
+    // API_PUBLIC_URL e token de verificação (2200, ou 100 cuja mensagem da
+    // Meta fala da verificação/callback). PENDENTE: confirmar o código com
+    // uma WABA real. Qualquer outro erro do POST com desvio cai no genérico.
+    if (step === "override_post") {
+      if (isCallbackVerificationError(error)) {
+        return new MetaCloudWabaError(
+          "override_verification_failed",
+          messages.overrideVerificationFailed,
+          422,
+        );
+      }
+      if (code === 1 || code === 2) {
+        return new MetaCloudWabaError(
+          "graph_unavailable",
+          messages.graphUnavailable,
+          502,
+        );
+      }
+      return new MetaCloudWabaError("subscribe_failed", messages.subscribeFailed, 502);
     }
     if (code === 100) {
       return step === "token"

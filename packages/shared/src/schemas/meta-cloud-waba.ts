@@ -148,15 +148,20 @@ export const metaCloudWabaCallbackStatusSchema = z.object({
       target: metaCloudWabaCallbackTargetSchema,
     }),
   ),
+  /** Números da WABA além do limite de conferência (não foram lidos). */
+  phoneOverridesNotChecked: z.number().int().nonnegative(),
   /**
    * Onde a Meta entrega as mensagens desta WABA para este app, pela ordem
-   * da Meta (número > WABA > app).
+   * da Meta (número > WABA > app). app_messages_off: o app não assina o
+   * campo messages, então a Meta não entrega nada. unknown também quando
+   * algum número não pôde ser conferido ou a reconsulta falhou.
    */
   effective: z.enum([
     "this_connection",
     "elsewhere",
     "unknown",
     "not_subscribed",
+    "app_messages_off",
   ]),
 });
 

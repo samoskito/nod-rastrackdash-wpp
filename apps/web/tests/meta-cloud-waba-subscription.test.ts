@@ -38,6 +38,7 @@ function status(change: Partial<MetaCloudWabaSubscriptionStatusDto> = {}): MetaC
       appCallback: "this_connection",
       appMessagesField: true,
       phoneOverrides: [{ phoneNumberId: "106540352242922", target: "none" }],
+      phoneOverridesNotChecked: 0,
       effective: "this_connection",
     },
     checkedAt: "2026-10-24T12:00:00.000Z",
@@ -222,6 +223,7 @@ describe("App central da agência no cartão da conexão", () => {
           appCallback: "other_url",
           appMessagesField: true,
           phoneOverrides: [],
+          phoneOverridesNotChecked: 0,
           effective: "this_connection",
         },
       }),
@@ -261,6 +263,7 @@ describe("App central da agência no cartão da conexão", () => {
           appCallback: "unknown",
           appMessagesField: null,
           phoneOverrides: [],
+          phoneOverridesNotChecked: 0,
           effective: "elsewhere",
         },
       }),
@@ -284,6 +287,7 @@ describe("App central da agência no cartão da conexão", () => {
           appCallback: "this_connection",
           appMessagesField: false,
           phoneOverrides: [{ phoneNumberId: "106540352242922", target: "other_url" }],
+          phoneOverridesNotChecked: 0,
           effective: "elsewhere",
         },
       }),
@@ -310,5 +314,79 @@ describe("App central da agência no cartão da conexão", () => {
     await click(/Inscrever com a URL desta conexão/);
     expect(screen.getByRole("alert").textContent).toContain("token de verificação");
     expect(screen.queryByText("Fazer a inscrição manualmente")).toBeNull();
+  });
+
+  it("app sem o campo messages: aviso de que a Meta não entrega nada", async () => {
+    vi.mocked(lookupMetaCloudWabaAction).mockResolvedValue({
+      ok: true,
+      data: status({
+        callback: {
+          expectedUrl: "https://api.exemplo.test/webhooks/inbound/conn",
+          wabaOverride: "this_connection",
+          wabaOverrideHost: null,
+          appCallback: "other_url",
+          appMessagesField: false,
+          phoneOverrides: [],
+          phoneOverridesNotChecked: 0,
+          effective: "app_messages_off",
+        },
+      }),
+    });
+    mount();
+    fill();
+    await click(/Consultar/);
+    expect(screen.getByText(/O app não assina o campo messages: a Meta não entrega nada/)).toBeTruthy();
+    expect(screen.queryByText("As mensagens desta WABA chegam nesta conexão.")).toBeNull();
+  });
+
+  it("números não conferidos: diz quantos e quais, sem o verde", async () => {
+    vi.mocked(lookupMetaCloudWabaAction).mockResolvedValue({
+      ok: true,
+      data: status({
+        callback: {
+          expectedUrl: "https://api.exemplo.test/webhooks/inbound/conn",
+          wabaOverride: "this_connection",
+          wabaOverrideHost: null,
+          appCallback: "other_url",
+          appMessagesField: true,
+          phoneOverrides: [{ phoneNumberId: "106540352242922", target: "unknown" }],
+          phoneOverridesNotChecked: 3,
+          effective: "unknown",
+        },
+      }),
+    });
+    mount();
+    fill();
+    await click(/Consultar/);
+    expect(screen.getByText(/Não deu para confirmar para onde vão/)).toBeTruthy();
+    expect(screen.getByText(/4 números desta WABA não puderam ser conferidos/)).toBeTruthy();
+    expect(screen.getByText(/a Meta não respondeu para: 106540352242922/)).toBeTruthy();
+    expect(screen.getByText(/3 acima do limite de 20/)).toBeTruthy();
+  });
+
+  it("desvio aceito sem confirmação: pede para clicar em Consultar", async () => {
+    vi.mocked(subscribeMetaCloudWabaAction).mockResolvedValue({
+      ok: true,
+      data: status({
+        outcome: "override_unconfirmed",
+        mode: "agency_central_app",
+        callback: {
+          expectedUrl: "https://api.exemplo.test/webhooks/inbound/conn",
+          wabaOverride: "none",
+          wabaOverrideHost: null,
+          appCallback: "unknown",
+          appMessagesField: null,
+          phoneOverrides: [],
+          phoneOverridesNotChecked: 0,
+          effective: "unknown",
+        },
+      }),
+    });
+    mount();
+    fireEvent.click(screen.getByRole("radio", { name: /App central da agência/ }));
+    fill();
+    fireEvent.change(screen.getByLabelText("Token de verificação desta conexão"), { target: { value: VERIFY } });
+    await click(/Inscrever com a URL desta conexão/);
+    expect(screen.getByText(/Clique em Consultar em alguns minutos/)).toBeTruthy();
   });
 });
