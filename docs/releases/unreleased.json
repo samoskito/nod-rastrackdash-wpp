@@ -3,7 +3,7 @@
   "title": "PENDENTE: título da atualização",
   "summary": "PENDENTE: benefício e impacto para o aluno",
   "changes": "PENDENTE: novidades e melhorias incluídas",
-  "fixes": "Integrações → WhatsApp: o card da Uazapi não fala mais em QR code; a conexão usa a URL e o token da sua instância.",
+  "fixes": "",
   "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
   "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",
   "rollback": "PENDENTE: procedimento de recuperação verificado e limitações",

@@ -1,0 +1,18 @@
+{
+  "version": "1.8.2",
+  "title": "Card da Uazapi sem QR code",
+  "summary": "Correção de texto: o card da Uazapi em Integrações → WhatsApp não fala mais em ler QR code. A conexão do aluno usa a URL e o token da própria instância Uazapi.",
+  "changes": "Nenhuma funcionalidade nova nesta versão.",
+  "fixes": "Integrações → WhatsApp: o card da Uazapi não fala mais em QR code; a conexão usa a URL e o token da sua instância.",
+  "requirements": "Mesmas versões de Node, PostgreSQL e Redis. Nenhuma variável de ambiente nova.",
+  "upgradeGuide": "Backup: recomendado como em toda atualização; esta versão não muda o banco.\nMigration: nenhuma.\nVariáveis de ambiente: nenhuma nova.\nPreservação de customizações: preserve as alterações locais do aluno; a atualização não mexe em .env nem em arquivos de configuração.\nVerificação: em Integrações → aba WhatsApp, o card da Uazapi diz \"Conecte a sua instância Uazapi (URL e token da sua instância)\".",
+  "rollback": "Para voltar, faça o deploy da 1.8.1; não há migration, então não precisa restaurar o banco. Voltar só traz de volta o texto antigo do card.",
+  "minVersion": null,
+  "breakingChange": false,
+  "components": "BOTH",
+  "links": [],
+  "tags": [
+    "uazapi",
+    "integracoes"
+  ]
+}
