@@ -261,7 +261,7 @@ export const ruleOriginDefinitions: readonly RuleOriginDefinition[] = [
     label: "Etapa no CRM da XMAX",
     description:
       "Quando a oportunidade muda de etapa no CRM da XMAX e a automação chama a URL da regra, para o contato que veio do anúncio.",
-    logoProvider: null,
+    logoProvider: "xmax",
     fallbackChannelProviders: [
       "umbler",
       "gupshup",

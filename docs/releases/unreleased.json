@@ -2,7 +2,7 @@
   "version": "PENDENTE: versão definida pelo mantenedor",
   "title": "PENDENTE: título da atualização",
   "summary": "PENDENTE: benefício e impacto para o aluno",
-  "changes": "PENDENTE: novidades e melhorias incluídas",
+  "changes": "Integrações → CRM: card da XMAX ao lado do Kommo e do Pipedrive. Aparece como Disponível; com ao menos uma regra \"Etapa no CRM da XMAX\" passa a Ativa, com a contagem de regras. O botão leva a Conversões com a origem XMAX já escolhida (/conversions?nova=automation_xmax) e a janela explica o passo a passo (uma regra por evento, copiar a URL, chamar a URL na automação da XMAX). As regras da XMAX em Conversões passam a mostrar o logo da XMAX. Só tela: sem migration e sem variável nova.",
   "fixes": "",
   "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
   "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",

@@ -156,6 +156,8 @@ describe("XMAX CRM in Conversões", () => {
     ).not.toContain("automation_xmax");
     expect(ruleOriginDefinition("automation_xmax")).toMatchObject({
       label: "Etapa no CRM da XMAX",
+      // The rule cards use the XMAX logo of the Integrations hub.
+      logoProvider: "xmax",
     });
     // Lead qualificado, then Compra, then every other event of the pixel.
     expect(ruleOriginDefinition("automation_xmax").allowedEvents?.slice(0, 2)).toEqual([

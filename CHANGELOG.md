@@ -7,6 +7,10 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+### Changed
+
+- Integrações › CRM: **XMAX card** next to Kommo and Pipedrive. "Disponível" until the workspace has a XMAX rule; with at least one it shows "Ativa" and the rule count. The button goes to Conversões with the XMAX origin preselected (`/conversions?nova=automation_xmax`) and the panel explains the three steps (one rule per event, copy the rule URL, call it from the XMAX "opportunity entered the stage" automation). XMAX rules in Conversões now use the XMAX logo instead of the generic CRM icon. Screen only: no migration, no new variable.
+
 ## [1.8.0] - 2026-11-26
 
 Upgrade notes for students: [`docs/releases/1.8.0.json`](docs/releases/1.8.0.json). **Three migrations (two for XMAX CRM), no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**

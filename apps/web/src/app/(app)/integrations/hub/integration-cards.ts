@@ -97,6 +97,15 @@ export type IntegrationHubSnapshot = {
     activeRuleCount: number;
     integrationUrl?: boolean;
   };
+  /**
+   * XMAX CRM: no connection, only rules in Conversões. Absent = no rule read
+   * yet (the card is still offered).
+   */
+  xmax?: {
+    loaded: boolean;
+    ruleCount: number;
+    activeRuleCount: number;
+  };
   crm: {
     kommo: CrmSnapshot;
     pipedrive: CrmSnapshot;
@@ -254,6 +263,34 @@ function yampiDecision(snapshot: IntegrationHubSnapshot): CardDecision {
   );
 }
 
+/** XMAX (CRM): always offered; state from its rules (no connection, no URL). */
+function xmaxDecision(snapshot: IntegrationHubSnapshot): CardDecision {
+  const { loaded, ruleCount, activeRuleCount } = snapshot.xmax ?? {
+    loaded: true,
+    ruleCount: 0,
+    activeRuleCount: 0,
+  };
+
+  if (ruleCount === 0) {
+    return loaded
+      ? available
+      : {
+          state: "available",
+          status: { label: "Não foi possível verificar", tone: "warn" },
+          detail: null,
+        };
+  }
+
+  return {
+    state: "active",
+    status:
+      activeRuleCount > 0
+        ? { label: "Ativa", tone: "ok" }
+        : { label: "Regras pausadas", tone: "warn" },
+    detail: plural(ruleCount, "regra", "regras"),
+  };
+}
+
 function salesPlatformDecision(platform: {
   loaded: boolean;
   ruleCount: number;
@@ -381,6 +418,8 @@ function decide(
       return braipDecision(snapshot);
     case "yampi_rules":
       return yampiDecision(snapshot);
+    case "xmax_rules":
+      return xmaxDecision(snapshot);
     case "always":
       return definition.id === "meta" ? metaDecision(snapshot) : available;
   }
