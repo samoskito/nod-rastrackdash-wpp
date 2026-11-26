@@ -7,6 +7,10 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+### Fixed
+
+- Integrações › WhatsApp: the Uazapi card no longer mentions a QR code; the connection uses your instance URL and token.
+
 ## [1.8.1] - 2026-11-26
 
 Upgrade notes for students: [`docs/releases/1.8.1.json`](docs/releases/1.8.1.json). **No migration, no new variable.**
