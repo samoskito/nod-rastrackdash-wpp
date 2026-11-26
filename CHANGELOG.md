@@ -7,6 +7,10 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+### Fixed
+
+- The installation's platform administrator now lands on Backoffice "Clientes e acessos" (`/backoffice/clients`) after login instead of an empty client workspace. Rule: with no explicit destination (including the bare `/overview` the middleware stores when an unauthenticated visitor opens the app) a platform admin goes to the Backoffice; password login, Google login (API callback) and the `/` route all follow it. An explicit `redirectTo` is honoured; external or invalid paths are still rejected; support-access sessions and regular users are unchanged. No migration, no new variable.
+
 ## [1.8.0] - 2026-11-26
 
 Upgrade notes for students: [`docs/releases/1.8.0.json`](docs/releases/1.8.0.json). **Three migrations (two for XMAX CRM), no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**

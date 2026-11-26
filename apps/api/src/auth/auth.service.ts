@@ -619,7 +619,12 @@ export class AuthService {
       action: "authenticated",
       missingEnv: [],
       codeReceived: true,
-      redirectTo,
+      // Sem destino explícito, o administrador da plataforma entra em
+      // "Clientes e acessos", igual ao login por senha.
+      redirectTo:
+        redirectTo === "/overview" && session.user.platformRole
+          ? "/backoffice/clients"
+          : redirectTo,
       session,
     };
   }

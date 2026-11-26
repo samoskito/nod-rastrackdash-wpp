@@ -3,7 +3,7 @@
   "title": "PENDENTE: título da atualização",
   "summary": "PENDENTE: benefício e impacto para o aluno",
   "changes": "PENDENTE: novidades e melhorias incluídas",
-  "fixes": "",
+  "fixes": "O administrador da plataforma agora cai direto em Clientes e acessos (Backoffice) ao entrar, em vez de um painel vazio sem cliente criado. Vale para o login por senha, para o login com Google e para quem abre a raiz do endereço. Um link específico (por exemplo, uma tela de cliente) continua sendo respeitado, o acesso de suporte a um cliente segue como antes e os demais usuários não mudam. O painel do cliente continua acessível pelo menu.",
   "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
   "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",
   "rollback": "PENDENTE: procedimento de recuperação verificado e limitações",
