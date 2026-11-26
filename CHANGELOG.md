@@ -7,6 +7,13 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **No migration, no new variable.**
+
+### Added
+
+- Meta WhatsApp (Cloud API): **App central da agência**. One Meta app of the agency for every client, instead of one app per client. In "Inscrição do app na sua WABA" the new mode "App central da agência" sends `POST /{WABA_ID}/subscribed_apps` with `override_callback_uri` (this connection's callback URL) and `verify_token` (this connection's verify token, checked against the connection before calling Meta; used once, never stored, logged or audited). Meta verifies the URL with the existing GET handshake. The default mode is unchanged (no override; an app already subscribed is never re-posted, so an existing override is kept); there is still no DELETE. Signatures keep the existing resolution (connection App Secret, else `META_APP_SECRET`): the central app's secret. [Details](docs/setup/whatsapp-providers.md#app-central-da-agência-um-app-meta-para-todos-os-clientes).
+- Connection card: new "Para onde a Meta entrega" box after Consultar/Inscrever. It reads `GET /{WABA_ID}/subscribed_apps` (override of this app), the app's callback URL (`GET /{APP_ID}/subscriptions`, app token, best effort) and each number's `webhook_configuration` (best effort, up to 20 numbers), and says in plain words whether the WABA delivers to this connection, to another connection of this panel, to another address (domain only) or to the app URL, plus whether the `messages` field is subscribed. It never shows "chegam nesta conexão" when the app does not subscribe `messages` (then it says Meta delivers nothing), when a number could not be checked or is beyond the 20 checked per lookup (it says how many), or when the follow-up read after an accepted override failed (outcome "override_unconfirmed", click Consultar).
+
 ### Changed
 
 - Integrações › CRM: **XMAX card** next to Kommo and Pipedrive. "Disponível" until the workspace has a XMAX rule; with at least one it shows "Ativa" and the rule count. The button goes to Conversões with the XMAX origin preselected (`/conversions?nova=automation_xmax`) and the panel explains the three steps (one rule per event, copy the rule URL, call it from the XMAX "opportunity entered the stage" automation). XMAX rules in Conversões now use the XMAX logo instead of the generic CRM icon. Screen only: no migration, no new variable.

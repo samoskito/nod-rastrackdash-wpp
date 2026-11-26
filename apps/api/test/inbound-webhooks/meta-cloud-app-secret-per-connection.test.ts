@@ -241,6 +241,33 @@ describe("assinatura x-hub-signature-256 com segredo por conexão", () => {
   });
 });
 
+describe("App central da agência: um app (um segredo) para as conexões de vários clientes", () => {
+  // O desvio da WABA muda só o endereço; quem assina continua sendo o app
+  // central, então vale a mesma resolução: conexão > META_APP_SECRET.
+  const CENTRAL_SECRET = "cccccccccccccccc0123456789abcdef";
+
+  it("pelo META_APP_SECRET: entregas de clientes diferentes validam com o segredo do app central", async () => {
+    const { receive } = ingestionFixture(
+      { ...baseEnv, META_APP_SECRET: CENTRAL_SECRET },
+      [metaConnection("conn_cliente_1", null), metaConnection("conn_cliente_2", null)],
+    );
+    await expect(receive("conn_cliente_1", CENTRAL_SECRET)).resolves.toMatchObject({ status: "accepted" });
+    await expect(receive("conn_cliente_2", CENTRAL_SECRET)).resolves.toMatchObject({ status: "accepted" });
+    // Assinatura de outro app (ex.: o app antigo do cliente) é recusada.
+    await expect(receive("conn_cliente_1", SECRET_A)).rejects.toThrow();
+  });
+
+  it("salvo em cada conexão: o segredo central da conexão vale e o do ambiente não", async () => {
+    const { receive } = ingestionFixture(
+      { ...baseEnv, META_APP_SECRET: ENV_SECRET },
+      [metaConnection("conn_cliente_1", CENTRAL_SECRET), metaConnection("conn_cliente_2", CENTRAL_SECRET)],
+    );
+    await expect(receive("conn_cliente_1", CENTRAL_SECRET)).resolves.toMatchObject({ status: "accepted" });
+    await expect(receive("conn_cliente_2", CENTRAL_SECRET)).resolves.toMatchObject({ status: "accepted" });
+    await expect(receive("conn_cliente_2", ENV_SECRET)).rejects.toThrow();
+  });
+});
+
 describe("portões de envio usam o mesmo resolvedor", () => {
   it("assertMetaCloudSigningConfigured: conexão sem env passa; sem nenhum, recusa com a mensagem nova", () => {
     expect(() =>

@@ -68,8 +68,47 @@ describe("Meta Cloud WABA subscription contracts", () => {
       phoneNumbers: [],
       channelCheck: { status: "no_real_channel", mismatchedChannels: 0 },
       outcome: "lookup",
+      mode: "standard",
+      callback: {
+        expectedUrl: "https://api.exemplo.test/webhooks/inbound/c1",
+        wabaOverride: "none",
+        wabaOverrideHost: null,
+        appCallback: "unknown",
+        appMessagesField: null,
+        phoneOverrides: [],
+        phoneOverridesNotChecked: 0,
+        effective: "unknown",
+      },
       checkedAt: "2026-10-24T12:00:00.000Z",
     });
     expect(JSON.stringify(status)).not.toContain("accessToken");
+    expect(JSON.stringify(status)).not.toContain("verifyToken");
+  });
+
+  it("subscribe: standard is the default; agency_central_app requires the verify token", () => {
+    const base = { wabaId: "102290129340398", accessToken: token, confirm: true as const };
+    expect(metaCloudWabaSubscriptionSubscribeInputSchema.parse(base)).toMatchObject({
+      mode: "standard",
+    });
+    expect(
+      metaCloudWabaSubscriptionSubscribeInputSchema.parse({
+        ...base,
+        mode: "agency_central_app",
+        verifyToken: " synthetic-verify-0123 ",
+      }),
+    ).toMatchObject({ mode: "agency_central_app", verifyToken: "synthetic-verify-0123" });
+    expect(
+      metaCloudWabaSubscriptionSubscribeInputSchema.safeParse({ ...base, mode: "agency_central_app" })
+        .success,
+    ).toBe(false);
+    expect(
+      metaCloudWabaSubscriptionSubscribeInputSchema.safeParse({
+        ...base,
+        verifyToken: "synthetic-verify-0123",
+      }).success,
+    ).toBe(false);
+    expect(
+      metaCloudWabaSubscriptionSubscribeInputSchema.safeParse({ ...base, mode: "other" }).success,
+    ).toBe(false);
   });
 });

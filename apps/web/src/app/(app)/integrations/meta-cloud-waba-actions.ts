@@ -6,6 +6,7 @@ import {
   metaCloudWabaSubscriptionStatusSchema,
   metaCloudWabaSubscriptionSubscribeInputSchema,
   type MetaCloudWabaErrorCode,
+  type MetaCloudWabaSubscriptionMode,
   type MetaCloudWabaSubscriptionStatusDto,
 } from "@wpptrack/shared";
 import { isApiRequestError, serverApiFetch } from "../../../lib/server-api";
@@ -83,15 +84,29 @@ export async function lookupMetaCloudWabaAction(
 
 export async function subscribeMetaCloudWabaAction(
   connectionId: string,
-  input: { wabaId: string; accessToken: string; confirm: true },
+  input: {
+    wabaId: string;
+    accessToken: string;
+    confirm: true;
+    /** agency_central_app: aponta a WABA para a URL desta conexão. */
+    mode?: MetaCloudWabaSubscriptionMode;
+    /** Só no App central; usado nesta chamada e descartado. */
+    verifyToken?: string;
+  },
 ): Promise<MetaCloudWabaActionResult> {
   const parsed = metaCloudWabaSubscriptionSubscribeInputSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
+  // Modo padrão vai sem `mode` (o mesmo corpo de antes da 1.8.x); só o App
+  // central leva mode e verifyToken.
+  const { mode, verifyToken, ...standard } = parsed.data;
+  const body =
+    mode === "agency_central_app" ? { ...standard, mode, verifyToken } : standard;
+
   try {
     const response = await serverApiFetch<unknown>(path(connectionId), {
       method: "POST",
-      body: JSON.stringify(parsed.data),
+      body: JSON.stringify(body),
     });
     const status = metaCloudWabaSubscriptionStatusSchema.safeParse(response);
     if (!status.success) return { ok: false, message: genericFailure };
