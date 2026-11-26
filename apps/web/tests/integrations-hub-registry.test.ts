@@ -91,6 +91,8 @@ describe("integration registry", () => {
         "yampi",
         "kommo",
         "pipedrive",
+        // XMAX CRM: rule origin in Conversões, always offered.
+        "xmax",
         "meta",
       ].sort(),
     );
@@ -178,7 +180,7 @@ describe("integration registry", () => {
       "yampi",
     ]);
     expect(inTab("ads")).toEqual(["meta"]);
-    expect(inTab("crm")).toEqual(["kommo", "pipedrive"]);
+    expect(inTab("crm")).toEqual(["kommo", "pipedrive", "xmax"]);
     expect(integrationTabForCategory("crm")).toBe("crm");
   });
 
@@ -352,7 +354,7 @@ describe("buildIntegrationCards", () => {
 
     const crm = cardsForTab(cards, "crm");
     expect(ids(crm.active)).toEqual(["kommo"]);
-    expect(ids(crm.available)).toEqual(["pipedrive"]);
+    expect(ids(crm.available)).toEqual(["pipedrive", "xmax"]);
     expect(crm.active[0].status.label).toBe("Ativa");
   });
 
@@ -532,6 +534,54 @@ describe("buildIntegrationCards", () => {
     });
     // Offered even though the API never lists Payt as a connection provider.
     expect(ids(buildIntegrationCards(snapshot()))).toContain("payt");
+  });
+
+  it("shows the XMAX card in the CRM tab from its rules, never as a connection", () => {
+    const find = (patch?: IntegrationHubSnapshot["xmax"]) =>
+      buildIntegrationCards(snapshot(patch ? { xmax: patch } : {})).find(
+        (card) => card.id === "xmax",
+      );
+
+    // Offered with no data at all (no gate), as "Disponível".
+    const none = find();
+    expect(none?.tab).toBe("crm");
+    expect(none?.category).toBe("crm");
+    expect(none?.name).toBe("XMAX");
+    expect(none?.logo).toBe("/integrations/xmax.svg");
+    expect(none?.state).toBe("available");
+    expect(none?.status).toEqual({ label: "Disponível", tone: "neutral" });
+    expect(none?.detail).toBeNull();
+    expect(none?.comingSoon).toBe(false);
+    expect(none?.description).toContain("CRM da XMAX");
+    expect(
+      ids(cardsForTab(buildIntegrationCards(snapshot()), "crm").available),
+    ).toContain("xmax");
+
+    const active = find({ loaded: true, ruleCount: 2, activeRuleCount: 2 });
+    expect(active?.state).toBe("active");
+    expect(active?.status).toEqual({ label: "Ativa", tone: "ok" });
+    expect(active?.detail).toBe("2 regras");
+    expect(
+      ids(
+        cardsForTab(
+          buildIntegrationCards(
+            snapshot({ xmax: { loaded: true, ruleCount: 1, activeRuleCount: 1 } }),
+          ),
+          "crm",
+        ).active,
+      ),
+    ).toContain("xmax");
+
+    const one = find({ loaded: true, ruleCount: 1, activeRuleCount: 1 });
+    expect(one?.detail).toBe("1 regra");
+
+    const paused = find({ loaded: true, ruleCount: 1, activeRuleCount: 0 });
+    expect(paused?.state).toBe("active");
+    expect(paused?.status).toEqual({ label: "Regras pausadas", tone: "warn" });
+
+    const unknown = find({ loaded: false, ruleCount: 0, activeRuleCount: 0 });
+    expect(unknown?.state).toBe("available");
+    expect(unknown?.status.label).toBe("Não foi possível verificar");
   });
 
   it("reflects the Meta connection state", () => {

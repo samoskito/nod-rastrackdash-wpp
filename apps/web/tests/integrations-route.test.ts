@@ -177,10 +177,15 @@ describe("integrations route", () => {
         "umbler",
         "uazapi_byo",
         "waha",
+        "xmax",
         "yampi",
         "zapi",
       ].sort(),
     );
+    // XMAX card (CRM tab): no rule yet, so the button opens the new-rule flow
+    // of Conversões with the XMAX origin already chosen.
+    expect(html).toContain("/conversions?nova=automation_xmax");
+    expect(html).toContain("Configurar regra da XMAX");
     for (const absent of [
       "unnichat",
       "gohighlevel",

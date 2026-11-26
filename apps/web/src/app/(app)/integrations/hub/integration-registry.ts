@@ -119,6 +119,7 @@ export const integrationProviderIds = [
   "yampi",
   "kommo",
   "pipedrive",
+  "xmax",
   "meta",
 ] as const;
 
@@ -167,6 +168,12 @@ export type IntegrationGate =
    * to every workspace in the student edition: no private-integration gate.
    */
   | { kind: "yampi_rules" }
+  /**
+   * XMAX CRM: no connection of its own. It is a rule origin in Conversões
+   * (the XMAX automation calls the rule's URL). Always offered; the state
+   * comes from the XMAX rules the workspace already has.
+   */
+  | { kind: "xmax_rules" }
   | { kind: "always" };
 
 export type IntegrationProviderDefinition = {
@@ -217,6 +224,9 @@ const logoAssets: Record<IntegrationProviderId, LogoAsset> = {
   yampi: { file: "yampi.svg", surface: "dark" },
   kommo: { file: "kommo.png", surface: "light" },
   pipedrive: { file: "pipedrive.svg", surface: "dark" },
+  // Neutral wordmark placeholder. PENDENTE: official XMAX artwork with usage
+  // permission (see public/integrations/SOURCES.md).
+  xmax: { file: "xmax.svg", surface: "dark" },
   meta: { file: "meta.svg", surface: "dark" },
 };
 
@@ -428,6 +438,17 @@ export const integrationProviders: readonly IntegrationProviderDefinition[] = [
     logoSurface: logoSurface("pipedrive"),
     description: "Envie conversões quando o negócio avança no Pipedrive.",
     gate: { kind: "crm", provider: "pipedrive" },
+  },
+  {
+    id: "xmax",
+    name: "XMAX",
+    category: "crm",
+    logo: integrationLogoPath("xmax"),
+    initials: "Xm",
+    logoSurface: logoSurface("xmax"),
+    description:
+      "Envie conversões quando a oportunidade muda de etapa no CRM da XMAX.",
+    gate: { kind: "xmax_rules" },
   },
 ];
 
