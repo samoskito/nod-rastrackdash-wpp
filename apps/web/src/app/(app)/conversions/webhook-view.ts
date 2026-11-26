@@ -135,12 +135,59 @@ export function xmaxBodyExample(): string {
   return JSON.stringify(
     {
       ID_oportunidade: "90001",
+      Titulo_oportunidade: "Lead Teste",
       Etapa_oportunidade: "3 Negociação",
       Telefone_oportunidade: "5511900000002",
+      Contatos_oportunidade: "[]",
     },
     null,
     2,
   );
+}
+
+/** XMAX só tem o valor fixo da regra (nada é extraído da chamada). */
+export function xmaxEventDescription(description: string): string {
+  return description.replace(
+    /Exige valor:[^.]*\./u,
+    "Exige valor: o valor fixo desta regra.",
+  );
+}
+
+/** XMAX CRM: o mínimo, se a XMAX deixar montar o corpo da chamada. */
+export function xmaxMinimalBodyExample(): string {
+  return JSON.stringify(
+    {
+      ID_oportunidade: "<id da oportunidade>",
+      Telefone_oportunidade: "<telefone com DDI e DDD>",
+    },
+    null,
+    2,
+  );
+}
+
+/**
+ * Origens cujo leitor ainda está em observação na API (nada vai para a Meta
+ * até a integração ser liberada). Hoje só a XMAX; um leitor novo e ainda não
+ * certificado entra aqui.
+ */
+const observationOnlyOrigins: readonly string[] = ["automation_xmax"];
+
+export function isObservationOnlyOrigin(origin: string): boolean {
+  return observationOnlyOrigins.includes(origin);
+}
+
+/**
+ * Mensagem ao criar uma regra de leitor em observação. Não é o envio desligado
+ * no servidor: sem aviso de variável de ambiente.
+ */
+export const observationOnlyCreatedMessage =
+  "Regra criada em observação: as chamadas aparecem em Eventos recebidos, na página do lead e no CRM com a marca “Em observação”, e nada vai para a Meta até a integração ser liberada.";
+
+/** Mesma regra, pelo provedor da regra (automationSource). */
+export function isObservationOnlyProvider(
+  provider: string | null | undefined,
+): boolean {
+  return provider === "xmax";
 }
 
 /** Passo a passo da XMAX (o guia completo fica em docs/setup/xmax.md). */

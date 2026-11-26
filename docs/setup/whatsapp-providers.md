@@ -258,7 +258,15 @@ indisponíveis (a API responde `423`).
 3. **Inscrever este app** pede confirmação, inscreve o app da instalação
    (sem trocar a URL de callback) e **reconsulta** a Meta para mostrar o
    estado real. Outros apps inscritos (CRM, BSP etc.) continuam lá: o
-   painel nunca remove nenhum app.
+   painel nunca remove nenhum app. Se o app já está inscrito, nada é
+   enviado (um desvio já configurado na WABA continua como está).
+4. Depois de consultar ou inscrever, o quadro **Para onde a Meta entrega**
+   mostra, em palavras simples, se as mensagens desta WABA chegam **nesta
+   conexão**, vão para **outro lugar** ou se não deu para confirmar. Ele
+   detalha o **desvio desta WABA** (URL desta conexão, outra conexão deste
+   painel, outro endereço — só o domínio aparece — ou nenhum), a **URL
+   configurada no app** e se o campo `messages` está assinado, e avisa se
+   algum número tem desvio próprio (o desvio do número vence o da WABA).
 
 Antes de tocar na WABA, a API confere o token na Meta (`debug_token`, com o
 app token montado só no servidor) e para com uma mensagem clara quando o
@@ -282,6 +290,81 @@ WABA ID, o resultado e quem fez — sem o token.
 > As **regras de frase da equipe** continuam fora do Meta Cloud: a Meta não
 > entrega as mensagens que o seu time envia, e a inscrição na WABA não muda
 > isso. Ela só libera o recebimento das mensagens dos clientes (CTWA).
+
+### App central da agência (um app Meta para todos os clientes)
+
+Um app Meta tem **uma única URL de callback** (em Webhooks). Antes, uma
+agência precisava de um app por cliente para cada conexão receber na sua
+própria URL. Com o **App central da agência**, a agência usa **um único
+app dela** e, na inscrição de cada WABA, a Meta passa a entregar as
+mensagens daquela WABA na URL da conexão do cliente (o "desvio" da WABA,
+`override_callback_uri` na Meta). A URL do app continua a mesma.
+
+**O que o cliente faz (uma vez)**
+
+- Compartilha a **WABA** (conta do WhatsApp Business) com o **Business
+  Manager da agência como parceiro**, no Gerenciador de Negócios dele.
+
+**O que a agência faz (uma vez)**
+
+1. Tem **um app Meta** (tipo Empresa) com o produto WhatsApp, em modo
+   Live. Em **WhatsApp → Configuração → Webhooks**, configura uma URL de
+   callback qualquer dela e assina o campo `messages` **uma vez**. Essa
+   URL do app não precisa ser de nenhuma conexão: o desvio de cada WABA
+   vence a URL do app.
+2. Salva o **App ID** e o **App Secret** do app central **uma vez** na API:
+   `META_APP_ID` e `META_APP_SECRET` no env da API (Dokploy ou `.env`) e
+   reinicia a API. Assim toda conexão sem app próprio usa o app central.
+   Outra opção: salvar o mesmo App ID e App Secret em **App do Meta desta
+   conexão** em cada conexão. Não misture: uma conexão com app próprio
+   salvo usa **só** o app dela.
+3. Cria um **usuário do sistema** no BM da agência e dá a ele acesso a cada
+   WABA de cliente compartilhada. O token desse usuário do sistema, gerado
+   no app central com `whatsapp_business_management`, é o token usado na
+   inscrição.
+
+**Em cada conexão do cliente**
+
+1. Crie a conexão **Meta WhatsApp (Cloud API)** e guarde o **verify token**
+   que aparece na criação (no Meta Cloud a URL não leva token).
+2. Abra o cartão da conexão → **Inscrição do app na sua WABA** → escolha
+   **App central da agência**.
+3. Preencha o **WABA ID** do cliente, cole o **token do usuário do sistema**
+   e o **token de verificação desta conexão**, e clique em **Inscrever com a
+   URL desta conexão**.
+4. A API confere o token de verificação com o desta conexão **antes** de
+   falar com a Meta e manda `POST <WABA ID>/subscribed_apps` com
+   `override_callback_uri` (a URL desta conexão) e `verify_token`. A Meta
+   chama a URL desta conexão com um GET de verificação e só aceita se o
+   token bater; depois a API reconsulta e o quadro **Para onde a Meta
+   entrega** mostra **"As mensagens desta WABA chegam nesta conexão."** e
+   **Desvio desta WABA: aponta para a URL desta conexão (App central da
+   agência ativo)**.
+5. Ative o envio da conexão como de costume. A assinatura de cada entrega é
+   conferida com o **App Secret do app central** (o da conexão, se salvo;
+   senão o `META_APP_SECRET`).
+
+**Regras e limites**
+
+- Os dois tokens (o do usuário do sistema e o de verificação) são usados
+  **só nessa requisição** e descartados: não vão para o banco, o navegador,
+  os logs nem a auditoria, e não voltam na resposta.
+- Perdeu o token de verificação? Clique em **Gerar nova URL** na conexão: no
+  Meta Cloud o endereço continua o mesmo e só o token de verificação muda.
+  As entregas continuam conferidas pela assinatura do app.
+- A URL desta conexão precisa ser **HTTPS** e pública: vem do
+  `API_PUBLIC_URL` da API. Sem ela, o painel avisa e não chama a Meta.
+- O painel **nunca remove** um app nem um desvio: não existe DELETE. O modo
+  padrão não reenvia a inscrição de um app já inscrito, então não apaga o
+  desvio. Para tirar um desvio, faça manualmente `POST <WABA ID>/subscribed_apps`
+  sem parâmetros no Graph API Explorer (a Meta documenta que isso remove o
+  desvio da WABA).
+- A Meta também aceita desvio **por número** (`POST <PHONE_NUMBER_ID>` com
+  `webhook_configuration`), que vence o da WABA. O painel **não** cria esse
+  desvio; só avisa quando um número tem desvio próprio apontando para outro
+  lugar.
+
+Referência da Meta: [Webhook overrides](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/override).
 
 ### Rota com qualquer conta do BM e ativação do Meta Cloud
 
@@ -366,6 +449,10 @@ nesta ordem:
 **Um único app Meta na instalação:** preencha `META_APP_SECRET` do próprio app
 e reinicie a API **antes de criar a conexão `meta_cloud`**. Produção direta
 (Fase 6.1c): com o segredo, a conexão já nasce enviando.
+
+**Agência com um app central para todos os clientes:** veja
+[App central da agência](#app-central-da-agência-um-app-meta-para-todos-os-clientes).
+O segredo é o do app central (em `META_APP_SECRET` ou salvo em cada conexão).
 
 **Vários apps Meta (agências, um app por BM de cliente):** um único
 `META_APP_SECRET` só valida as assinaturas de um dos apps. Crie a conexão de

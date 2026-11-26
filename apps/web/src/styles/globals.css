@@ -16853,6 +16853,57 @@ button.meta-manual-entry[aria-expanded="true"] {
   font-size: 13px;
 }
 
+.meta-waba-mode {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.meta-waba-mode label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.meta-waba-mode input {
+  margin-top: 3px;
+}
+
+.meta-waba-callback {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meta-waba-callback ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.meta-waba-callback p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.meta-waba-callback code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .meta-waba-scope-note {
   margin: 0;
   font-size: 12px;

@@ -21,7 +21,8 @@ import { MetaCloudWabaRateLimiter } from "./meta-cloud-waba-rate-limiter";
 import { MetaCloudWabaSubscriptionService } from "./meta-cloud-waba-subscription.service";
 
 /**
- * Inscrição do app Meta da instalação na WABA do aluno. As duas rotas são
+ * Inscrição do app Meta da instalação na WABA do aluno (modo padrão ou App
+ * central da agência, com desvio da WABA para a URL desta conexão). As duas rotas são
  * POST para o token do aluno nunca ir na URL; só dono/admin do workspace
  * (canManageIntegrations), com limite de chamadas por usuário e por
  * workspace (MetaCloudWabaRateLimiter). O guard global de licença responde 423 a ambas
@@ -81,6 +82,8 @@ export class MetaCloudWabaSubscriptionController {
       connectionId,
       wabaId: parsed.data.wabaId,
       accessToken: parsed.data.accessToken,
+      mode: parsed.data.mode,
+      verifyToken: parsed.data.verifyToken,
       sourceIp: request.ip ?? null,
     });
   }
@@ -108,7 +111,11 @@ export class MetaCloudWabaSubscriptionController {
 function invalidInput(error: ZodError): BadRequestException {
   const fields = error.flatten().fieldErrors as Record<string, string[] | undefined>;
   const first =
-    fields.confirm?.[0] ?? fields.wabaId?.[0] ?? fields.accessToken?.[0];
+    fields.confirm?.[0] ??
+    fields.wabaId?.[0] ??
+    fields.accessToken?.[0] ??
+    fields.mode?.[0] ??
+    fields.verifyToken?.[0];
   return new BadRequestException({
     statusCode: 400,
     message: first ?? "Dados inválidos para a consulta da WABA.",

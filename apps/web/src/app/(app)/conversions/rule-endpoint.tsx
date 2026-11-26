@@ -12,6 +12,7 @@ import { useState } from "react";
 import type { ProviderConversionRuleActionResult } from "./actions";
 import { originBetaEvents } from "./conversion-origins";
 import { PaytSetupPanel } from "./payt-setup";
+import { XmaxPayloadExample } from "./xmax-payload-example";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import {
   UnnichatAutomationSetupPanel,
@@ -34,7 +35,6 @@ import {
   WEBHOOK_N8N_FLOW_PATH,
   webhookBodyExample,
   webhookSetupSteps,
-  xmaxBodyExample,
   xmaxSetupSteps,
 } from "./webhook-view";
 
@@ -174,7 +174,7 @@ function SetupSteps({
             <li key={step}>{step}</li>
           ))}
         </ol>
-        <pre className="payload-block">{xmaxBodyExample()}</pre>
+        <XmaxPayloadExample />
       </>
     );
   }

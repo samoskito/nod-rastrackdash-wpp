@@ -53,6 +53,7 @@ import {
   rotateIntegrationEndpointAction,
   setRulePublicUrlAction,
 } from "./single-url/single-url-actions";
+import { XmaxPayloadExample } from "../conversions/xmax-payload-example";
 import { legacyUrlsFor } from "./single-url/single-url-copy";
 import { loadSingleUrlData } from "./single-url/single-url-data";
 import {
@@ -1242,6 +1243,12 @@ export default async function IntegrationsPage({
     (rule) => rule.automationSource === "yampi",
   );
 
+  // XMAX CRM: no connection, only rules in Conversões (one URL per rule).
+  const xmaxRules = (inboundWebhookData?.providerRules ?? []).filter(
+    (rule) =>
+      rule.automationSource === "xmax" || rule.origin === "automation_xmax",
+  );
+
   // Fase 5.3: URL única (Payt) e URLs por evento (Unnichat e Umbler).
   const singleUrlEnabled = Boolean(singleUrlData.endpoints?.enabled);
   const singleUrlEndpoints = singleUrlData.endpoints?.endpoints ?? [];
@@ -1337,6 +1344,13 @@ export default async function IntegrationsPage({
       activeRuleCount: yampiRules.filter((rule) => rule.conversionRule.active)
         .length,
       integrationUrl: Boolean(yampiIntegrationUrl),
+    },
+    xmax: {
+      loaded:
+        Boolean(inboundWebhookData) && inboundWebhookData!.providerRulesEnabled,
+      ruleCount: xmaxRules.length,
+      activeRuleCount: xmaxRules.filter((rule) => rule.conversionRule.active)
+        .length,
     },
     crm: {
       kommo: {
@@ -1732,6 +1746,41 @@ export default async function IntegrationsPage({
     </div>
   );
 
+  // XMAX CRM: a regra (uma por evento) gera a URL que a automação da XMAX
+  // chama. `?nova=automation_xmax` abre o fluxo de nova regra já na XMAX.
+  const xmaxRulesHref =
+    xmaxRules.length > 0 ? "/conversions" : "/conversions?nova=automation_xmax";
+  const xmaxPanel = (
+    <div className="integration-modal-stack">
+      <div className="integration-modal-note">
+        <strong>
+          {xmaxRules.length > 0
+            ? `${xmaxRules.length} ${xmaxRules.length === 1 ? "regra configurada" : "regras configuradas"}`
+            : "Como funciona"}
+        </strong>
+        <p className="muted">
+          A XMAX não tem conexão própria. Ela funciona por regra em Conversões:
+          quando a oportunidade entra numa etapa, a automação da XMAX chama a
+          URL da regra e o contato que veio do anúncio vira conversão.
+        </p>
+        <ol className="muted">
+          <li>Crie uma regra por evento, em Conversões.</li>
+          <li>Copie a URL da regra.</li>
+          <li>
+            No CRM da XMAX, na automação &ldquo;oportunidade entrou na
+            etapa&rdquo;, chame essa URL (POST).
+          </li>
+        </ol>
+        <XmaxPayloadExample />
+        <Link className="button primary" href={xmaxRulesHref}>
+          {xmaxRules.length > 0
+            ? "Gerenciar regras da XMAX"
+            : "Configurar regra da XMAX"}
+        </Link>
+      </div>
+    </div>
+  );
+
   const uazapiPanel = (
     <div className="integration-modal-stack">
       {whatsappProviderPanel("uazapi_byo")}
@@ -2120,6 +2169,7 @@ export default async function IntegrationsPage({
     payt: paytPanel,
     braip: braipPanel,
     yampi: yampiPanel,
+    xmax: xmaxPanel,
     meta: metaPanel,
     kommo:
       workspace && kommoViewerId && canManageKommo ? (
@@ -2327,6 +2377,15 @@ export default async function IntegrationsPage({
           payt: [rulesLink],
           braip: [rulesLink],
           yampi: [rulesLink],
+          xmax: [
+            {
+              label:
+                xmaxRules.length > 0
+                  ? "Gerenciar regras da XMAX"
+                  : "Configurar regra da XMAX",
+              href: xmaxRulesHref,
+            },
+          ],
         }}
         tabIntro={{
           whatsapp: whatsappIntro,

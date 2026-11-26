@@ -40,6 +40,7 @@ import { MessagePhraseFields } from "./message-phrase-fields";
 import { PendingNumbersWarning } from "./pending-numbers";
 import { PaytSetupPanel } from "./payt-setup";
 import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
+import { XmaxPayloadExample } from "./xmax-payload-example";
 import { ValueSourceFields } from "./value-source-fields";
 import {
   firstFreeWebhookEvent,
@@ -47,6 +48,8 @@ import {
   webhookSourceOfOrigin,
   webhookRuleForEvent,
   webhookRuleName,
+  isObservationOnlyOrigin,
+  xmaxEventDescription,
 } from "./webhook-view";
 import { UnnichatAutomationSetupPanel } from "../integrations/unnichat-setup";
 import { UazapiLabelPicker } from "../integrations/uazapi-label-picker";
@@ -531,12 +534,15 @@ export function NewRuleFlow({
                 ))}
               </ol>
             ) : draft?.origin === "automation_xmax" ? (
-              <p className="action-note">
-                Use esta URL na automação da etapa no CRM da XMAX (uma URL por
-                evento). A regra começa em observação: as chamadas aparecem em
-                Eventos recebidos marcadas “Em observação” e nada vai para a
-                Meta. O passo a passo fica em Gerenciar.
-              </p>
+              <>
+                <p className="action-note">
+                  Use esta URL na automação da etapa no CRM da XMAX (uma URL por
+                  evento). A regra começa em observação: as chamadas aparecem em
+                  Eventos recebidos marcadas “Em observação” e nada vai para a
+                  Meta. O passo a passo fica em Gerenciar.
+                </p>
+                <XmaxPayloadExample />
+              </>
             ) : draft?.origin === "automation_webhook" ? (
               <p className="action-note">
                 Use esta URL no n8n ou no painel (POST com o JSON do lead). A
@@ -940,7 +946,13 @@ function EventStep({
       </label>
       <div className="provider-conversion-event-hint">
         <span className="micro-label">{accentEventCopy(metadata.label)}</span>
-        <small>{accentEventCopy(metadata.description)}</small>
+        <small>
+          {accentEventCopy(
+            draft.origin === "automation_xmax"
+              ? xmaxEventDescription(metadata.description)
+              : metadata.description,
+          )}
+        </small>
       </div>
       {/* Produção direta: toda regra nova já nasce enviando (menos o
           Webhook / n8n, que começa em observação). */}
@@ -949,7 +961,14 @@ function EventStep({
         eventName={definition.lockedEvent ?? draft.eventName}
         mode={webhook ? "observation" : "production"}
       />
-      {webhook ? (
+      {draft.origin === "automation_xmax" ? (
+        <p className="action-note">
+          A automação da etapa no CRM da XMAX chama a URL desta regra quando a
+          oportunidade entra na etapa. Vale para os leads de qualquer número
+          conectado; o evento enviado à Meta é o escolhido aqui. Uma regra por
+          evento.
+        </p>
+      ) : webhook ? (
         <p className="action-note">
           O n8n, o painel ou o robô chama a URL desta regra quando o evento
           acontece. Vale para os leads de qualquer número conectado; o evento
@@ -1774,7 +1793,9 @@ function DetailsStep({
         <div>
           <dt>Envio</dt>
           <dd>
-            {isWebhookFamilyOrigin(draft.origin)
+            {isObservationOnlyOrigin(draft.origin)
+              ? "Começa em observação: as chamadas aparecem em Eventos recebidos, na página do lead e no CRM com a marca “Em observação”, e nada vai para a Meta até a integração ser liberada."
+              : isWebhookFamilyOrigin(draft.origin)
               ? "Começa em observação: as chamadas aparecem em Eventos recebidos sem ir para a Meta. Depois de conferir, ative o envio."
               : "Já começa enviando: cada conversão reconhecida vai para a Meta pelo destino (pixel e página) de cada número."}
           </dd>

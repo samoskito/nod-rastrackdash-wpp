@@ -33,6 +33,17 @@ const status = {
   phoneNumbers: [],
   channelCheck: { status: "no_real_channel", mismatchedChannels: 0 },
   outcome: "lookup",
+  mode: "standard",
+  callback: {
+    expectedUrl: "https://api.exemplo.test/webhooks/inbound/conn",
+    wabaOverride: "none",
+    wabaOverrideHost: null,
+    appCallback: "this_connection",
+    appMessagesField: true,
+    phoneOverrides: [],
+    phoneOverridesNotChecked: 0,
+    effective: "this_connection",
+  },
   checkedAt: "2026-10-24T12:00:00.000Z",
 };
 
@@ -61,6 +72,42 @@ describe("server actions da inscrição na WABA", () => {
     for (const call of vi.mocked(serverApiFetch).mock.calls) {
       expect(call[0]).not.toContain(TOKEN);
     }
+  });
+
+  it("App central: leva mode e verifyToken só no corpo", async () => {
+    vi.mocked(serverApiFetch).mockResolvedValue(status);
+    const VERIFY = "synthetic-verify-token-actions-0123";
+    await subscribeMetaCloudWabaAction("conn", {
+      wabaId: WABA,
+      accessToken: TOKEN,
+      confirm: true,
+      mode: "agency_central_app",
+      verifyToken: VERIFY,
+    });
+    expect(serverApiFetch).toHaveBeenCalledWith(
+      "/integrations/inbound-webhooks/conn/meta-cloud/waba-subscription",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          wabaId: WABA,
+          accessToken: TOKEN,
+          confirm: true,
+          mode: "agency_central_app",
+          verifyToken: VERIFY,
+        }),
+      },
+    );
+    expect(vi.mocked(serverApiFetch).mock.calls[0]![0]).not.toContain(VERIFY);
+
+    vi.mocked(serverApiFetch).mockClear();
+    const missing = await subscribeMetaCloudWabaAction("conn", {
+      wabaId: WABA,
+      accessToken: TOKEN,
+      confirm: true,
+      mode: "agency_central_app",
+    });
+    expect(missing).toMatchObject({ ok: false, code: "invalid_input" });
+    expect(serverApiFetch).not.toHaveBeenCalled();
   });
 
   it("valida a entrada antes de chamar a API", async () => {
