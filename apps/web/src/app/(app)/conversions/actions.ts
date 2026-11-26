@@ -140,6 +140,11 @@ const curatedMessages: Readonly<Record<string, string>> = {
     "Este evento já tem uma regra de webhook; use a URL dela.",
   "Informe o valor fixo (ticket médio) para usar valor fixo":
     "Informe o valor fixo (ticket médio) para usar valor fixo.",
+  // XMAX CRM (mesmo modelo do Webhook / n8n).
+  "Este evento já tem uma regra da XMAX; use a URL dela":
+    "Este evento já tem uma regra da XMAX; use a URL dela.",
+  "A regra da XMAX usa sempre o valor fixo":
+    "A regra da XMAX usa sempre o valor fixo.",
   "A regra de webhook só recebe pela URL dela; para parar, pause a regra":
     "A regra de webhook só recebe pela URL dela; para parar, pause a regra.",
   "Conexao nao encontrada": "Conexão não encontrada.",
@@ -381,7 +386,8 @@ export async function createConversionRuleAction(
     // conexão que não foi enviada.
     const anchorChosenByApi =
       input.data.triggerType === "provider_automation" &&
-      input.data.automationSource === "webhook" &&
+      (input.data.automationSource === "webhook" ||
+        input.data.automationSource === "xmax") &&
       expectedConnectionId === null;
 
     if (

@@ -8,6 +8,7 @@ import {
   type ProviderConversionRuleOriginDto,
   type ProviderConversionRuleScopeDto,
   webhookEventNames,
+  xmaxEventNames,
 } from "@wpptrack/shared";
 import { phoneIdentityKey } from "../common/phone/phone-identity";
 import { isBridgedWhatsappProvider } from "../inbound-webhooks/bridged-whatsapp-providers";
@@ -175,6 +176,7 @@ export function providerRuleOrigin(
       if (provider === "roichat") return "automation_roichat";
       if (provider === "webhook") return "automation_webhook";
       if (provider === "gohighlevel") return "automation_gohighlevel";
+      if (provider === "xmax") return "automation_xmax";
       return null;
     }
     default:
@@ -206,6 +208,8 @@ export function providerRuleOriginChannelProviders(
     case "automation_yampi":
     // Webhook / n8n: the lead's own number, whatever connection it came by.
     case "automation_webhook":
+    // XMAX CRM: same model (XMAX creates no lead; any WhatsApp connection).
+    case "automation_xmax":
       return WHATSAPP_CHANNEL_PROVIDERS;
   }
 }
@@ -315,7 +319,8 @@ export function providerRuleIsSalesPlatform(
     origin === "automation_payt" ||
     origin === "automation_braip" ||
     origin === "automation_yampi" ||
-    origin === "automation_webhook"
+    origin === "automation_webhook" ||
+    origin === "automation_xmax"
   );
 }
 
@@ -365,6 +370,7 @@ export function providerRuleOriginRequiresConnection(
     origin === "automation_braip" ||
     origin === "automation_yampi" ||
     origin === "automation_webhook" ||
+    origin === "automation_xmax" ||
     origin === "automation_gohighlevel"
   );
 }
@@ -527,6 +533,23 @@ export function providerRuleCapabilities(): ProviderConversionRuleCapabilitiesDt
       labelMatch: null,
       unifiable: false,
       eventNames: [...webhookEventNames],
+    },
+    {
+      // XMAX CRM (porte do SaaS, docs/integrations/xmax-crm-opportunity.md):
+      // the automation of a CRM opportunity stage calls the rule URL. Same
+      // model as Webhook / n8n (every number, one rule per event, anchored
+      // on a live WhatsApp connection, only a paid lead); fixed value only.
+      origin: "automation_xmax",
+      scopes: ["all_numbers"],
+      channelProviders: [...WHATSAPP_CHANNEL_PROVIDERS],
+      authorChannelProviders: null,
+      connectionBound: false,
+      requiresConnection: providerRuleOriginRequiresConnection(
+        "automation_xmax",
+      ),
+      labelMatch: null,
+      unifiable: false,
+      eventNames: [...xmaxEventNames],
     },
     {
       // GoHighLevel (porte do SaaS e279af76): the Webhook action of a

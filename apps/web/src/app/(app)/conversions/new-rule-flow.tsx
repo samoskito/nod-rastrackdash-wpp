@@ -43,6 +43,8 @@ import { UmblerAutomationPayloadPanel } from "./umbler-automation-payload";
 import { ValueSourceFields } from "./value-source-fields";
 import {
   firstFreeWebhookEvent,
+  isWebhookFamilyOrigin,
+  webhookSourceOfOrigin,
   webhookRuleForEvent,
   webhookRuleName,
 } from "./webhook-view";
@@ -147,7 +149,7 @@ export type NewRuleFlowProps = {
 
 /** Passos de uma origem: o Webhook / n8n vale sempre para todos os números. */
 function stepsFor(origin: RuleOriginId | null) {
-  return origin === "automation_webhook"
+  return isWebhookFamilyOrigin(origin)
     ? stepOrder.filter((item) => item.id !== "scope")
     : stepOrder;
 }
@@ -220,11 +222,17 @@ export function NewRuleFlow({
       connections,
       capabilities,
     );
-    return next === "automation_webhook"
+    return isWebhookFamilyOrigin(next)
       ? {
           ...draft,
           scope: "all_numbers",
-          eventName: firstFreeWebhookEvent(webhookRules) ?? draft.eventName,
+          // XMAX CRM: sempre o valor fixo da regra.
+          ...(next === "automation_xmax"
+            ? { webhookValueSource: "fixed" as const }
+            : {}),
+          eventName:
+            firstFreeWebhookEvent(webhookRules, webhookSourceOfOrigin(next)) ??
+            draft.eventName,
         }
       : draft;
   }
@@ -305,16 +313,19 @@ export function NewRuleFlow({
       setStep("event");
       return;
     }
-    if (step === "event" && draft?.origin === "automation_webhook") {
+    if (step === "event" && draft && isWebhookFamilyOrigin(draft.origin)) {
       // Uma regra (uma URL) por evento: um evento já usado fica com a URL dele.
-      const existing = webhookRuleForEvent(webhookRules, draft.eventName);
+      const source = webhookSourceOfOrigin(draft.origin);
+      const existing = webhookRuleForEvent(webhookRules, draft.eventName, source);
       if (existing) {
         setError(
           `${ruleEventLabelForOrigin(draft.origin, draft.eventName)} já tem a regra “${existing.conversionRule.name}”: use a URL dela.`,
         );
         return;
       }
-      if (!draft.name.trim()) patch({ name: webhookRuleName(draft.eventName) });
+      if (!draft.name.trim()) {
+        patch({ name: webhookRuleName(draft.eventName, source) });
+      }
       setStep("details");
       return;
     }
@@ -486,7 +497,7 @@ export function NewRuleFlow({
                   ? "URL de postback da Payt (exibida uma única vez)"
                   : draft?.origin === "automation_unnichat"
                     ? "URL da regra no Unnichat (exibida uma única vez)"
-                    : draft?.origin === "automation_webhook" ||
+                    : isWebhookFamilyOrigin(draft?.origin) ||
                         draft?.origin === "automation_gohighlevel"
                       ? "URL da regra (exibida uma única vez)"
                       : "Endereço da automação (exibido uma única vez)"}
@@ -519,6 +530,13 @@ export function NewRuleFlow({
                   <li key={step}>{step}</li>
                 ))}
               </ol>
+            ) : draft?.origin === "automation_xmax" ? (
+              <p className="action-note">
+                Use esta URL na automação da etapa no CRM da XMAX (uma URL por
+                evento). A regra começa em observação: as chamadas aparecem em
+                Eventos recebidos marcadas “Em observação” e nada vai para a
+                Meta. O passo a passo fica em Gerenciar.
+              </p>
             ) : draft?.origin === "automation_webhook" ? (
               <p className="action-note">
                 Use esta URL no n8n ou no painel (POST com o JSON do lead). A
@@ -851,9 +869,15 @@ function EventStep({
   onChange: (eventName: ConversionEventNameDto) => void;
 }) {
   const definition = ruleOriginDefinition(draft.origin);
-  const webhook = draft.origin === "automation_webhook";
+  const webhook = isWebhookFamilyOrigin(draft.origin);
   const takenBy = (eventName: ConversionEventNameDto) =>
-    webhook ? webhookRuleForEvent(webhookRules, eventName) : null;
+    webhook
+      ? webhookRuleForEvent(
+          webhookRules,
+          eventName,
+          webhookSourceOfOrigin(draft.origin),
+        )
+      : null;
   if (
     draft.origin === "automation_payt" ||
     draft.origin === "automation_braip" ||
@@ -1666,6 +1690,18 @@ function DetailsStep({
         </>
       ) : null}
 
+      {draft.origin === "automation_xmax" ? (
+        <>
+          {/* XMAX CRM: sempre o valor fixo da regra (sem valor na chamada). */}
+          <ValueFields draft={draft} onChange={onChange} />
+          <p className="action-note">
+            Depois de criar, você recebe a URL desta regra para a automação da
+            etapa no CRM da XMAX. A XMAX não cria lead: só conta o contato que
+            veio do anúncio.
+          </p>
+        </>
+      ) : null}
+
       {draft.origin === "automation_webhook" ? (
         <>
           <ValueSourceFields
@@ -1738,7 +1774,7 @@ function DetailsStep({
         <div>
           <dt>Envio</dt>
           <dd>
-            {draft.origin === "automation_webhook"
+            {isWebhookFamilyOrigin(draft.origin)
               ? "Começa em observação: as chamadas aparecem em Eventos recebidos sem ir para a Meta. Depois de conferir, ative o envio."
               : "Já começa enviando: cada conversão reconhecida vai para a Meta pelo destino (pixel e página) de cada número."}
           </dd>
@@ -1863,6 +1899,9 @@ function RoichatPurchaseFields({
 }
 
 export function ruleCurrencyHint(origin: string): string {
+  if (origin === "automation_xmax") {
+    return "A moeda do valor fixo desta regra.";
+  }
   if (origin === "automation_webhook") {
     return "A moeda enviada na chamada vence; esta vale para o valor fixo e quando ela não vier.";
   }

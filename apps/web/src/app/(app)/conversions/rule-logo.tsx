@@ -21,6 +21,7 @@ const originIcons: Record<RuleOriginId, LucideIcon> = {
   automation_yampi: CreditCard,
   automation_webhook: Webhook,
   automation_gohighlevel: Webhook,
+  automation_xmax: KanbanSquare,
   kommo: KanbanSquare,
   pipedrive: KanbanSquare,
 };

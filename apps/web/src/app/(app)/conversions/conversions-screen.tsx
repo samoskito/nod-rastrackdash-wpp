@@ -217,7 +217,7 @@ export function ConversionsScreen({
   );
   // Webhook / n8n (uma URL por evento): a Nova regra mantém uma por evento.
   const webhookRules = useMemo(
-    () => webhookRulesOf(providerRules),
+    () => webhookRulesOf(providerRules, ["webhook", "xmax"]),
     [providerRules],
   );
   const manageRule = manage ? (rulesById.get(manage.row.id) ?? manage.rule) : null;

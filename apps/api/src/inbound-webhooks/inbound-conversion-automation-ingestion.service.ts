@@ -116,11 +116,13 @@ import {
   ROICHAT_PURCHASE_REPEATED_REASON,
 } from "./providers/roichat/roichat-automation-v1.parser";
 import {
-  WEBHOOK_AUTOMATION_V1_PARSER_VERSION,
   WEBHOOK_REPEAT_WINDOW_SECONDS,
-  parseWebhookForRule,
   type ParsedWebhookRuleAutomation,
 } from "./providers/webhook/webhook-automation-v1.parser";
+import {
+  parseWebhookFamilyForRule,
+  webhookFamilyParserVersion,
+} from "./providers/webhook/webhook-family";
 import { WEBHOOK_EVENT_REPEATED_REASON } from "../conversion-rules/webhook-purchase-dedupe";
 
 const publicEndpointNotFoundMessage = "Webhook não encontrado";
@@ -2049,8 +2051,10 @@ export class InboundConversionAutomationIngestionService {
       !rule.conversionRule.active ||
       rule.conversionRule.triggerType !== "provider_automation" ||
       (!isPaytAutomation &&
-        // Webhook / n8n: anchored on any WhatsApp connection, URL per rule.
+        // Webhook / n8n (and XMAX CRM, same model): anchored on any
+        // WhatsApp connection, URL per rule.
         rule.parserRelease.provider !== "webhook" &&
+        rule.parserRelease.provider !== "xmax" &&
         rule.connection.provider !== "umbler" &&
         rule.connection.provider !== "unnichat" &&
         // GoHighLevel: the Workflow's Webhook action calls the rule URL.
@@ -2099,6 +2103,7 @@ export class InboundConversionAutomationIngestionService {
       rule.conversionRule.triggerType !== "provider_automation" ||
       (!isPaytAutomation &&
         rule.parserRelease.provider !== "webhook" &&
+        rule.parserRelease.provider !== "xmax" &&
         rule.connection.provider !== "umbler" &&
         rule.connection.provider !== "unnichat" &&
         rule.connection.provider !== "gohighlevel" &&
@@ -2242,12 +2247,15 @@ export class InboundConversionAutomationIngestionService {
       // lead entries, which never reach a rule).
       return parseRoichatAutomationV1(payload, receivedAt ?? new Date());
     }
+    const webhookProvider = rule.parserRelease.provider;
     if (
-      rule.parserRelease.provider === "webhook" &&
-      rule.parserRelease.version === WEBHOOK_AUTOMATION_V1_PARSER_VERSION
+      (webhookProvider === "webhook" || webhookProvider === "xmax") &&
+      rule.parserRelease.version === webhookFamilyParserVersion(webhookProvider)
     ) {
-      // First arrival, event and value source from the rule.
-      return parseWebhookForRule(
+      // First arrival, event and value source from the rule. XMAX CRM: its
+      // own body reader (opportunity), same model.
+      return parseWebhookFamilyForRule(
+        webhookProvider,
         payload,
         receivedAt ?? new Date(),
         rule.conversionRule,
@@ -2354,6 +2362,8 @@ export class InboundConversionAutomationIngestionService {
         return "gohighlevel-automation-v1";
       case "webhook":
         return "webhook-automation-v1";
+      case "xmax":
+        return "xmax-automation-v1";
       default:
         return "umbler-automation-v1";
     }
@@ -2436,8 +2446,10 @@ export class InboundConversionAutomationIngestionService {
     // that dedupes: its occurrence key and 12h fingerprint are released, so
     // the same contact calling again after an ad click is a first call,
     // evaluated at its own arrival (and sends the Qualified Lead once).
+    // XMAX CRM: same rule (the opportunity key has no time in it either).
     const organicWebhook =
-      input.parsed.provider === "webhook" &&
+      (input.parsed.provider === "webhook" ||
+        input.parsed.provider === "xmax") &&
       observed.reasonCode === WEBHOOK_NOT_PAID_LEAD_REASON;
     // GoHighLevel, same rule (só lead pago): a contact without ctwa_clid is
     // blocked "ctwa_missing" and never sent. Its occurrence key (location,
@@ -2463,7 +2475,9 @@ export class InboundConversionAutomationIngestionService {
       },
       data: {
         ...(organicWebhook
-          ? { ingressKey: `webhook-organic:${input.deliveryId}` }
+          ? {
+              ingressKey: `${input.parsed.provider}-organic:${input.deliveryId}`,
+            }
           : {}),
         ...(organicGoHighLevel
           ? { ingressKey: `gohighlevel-organic:${input.deliveryId}` }
@@ -2491,13 +2505,23 @@ export class InboundConversionAutomationIngestionService {
               }
             : {}),
           // Webhook / n8n: how the call read (no contact data).
-          ...(input.parsed.provider === "webhook" &&
+          ...((input.parsed.provider === "webhook" ||
+            input.parsed.provider === "xmax") &&
           "fingerprint" in input.parsed
             ? {
                 webhookValueStatus: input.parsed.receivedValue.status,
                 webhookFingerprint: organicWebhook ? null : input.parsed.fingerprint,
                 webhookHasMessageId: input.parsed.hasMessageId,
                 webhookNumberMatch: observed.webhookNumberMatch ?? null,
+              }
+            : {}),
+          // XMAX CRM: the opportunity read (stage only for display; never
+          // the event). No contact data.
+          ...("xmax" in input.parsed && input.parsed.xmax
+            ? {
+                xmaxOpportunityId: input.parsed.xmax.opportunityId,
+                xmaxStage: input.parsed.xmax.stage,
+                xmaxContactLinked: input.parsed.xmax.contactLinked,
               }
             : {}),
           decisionId: observed.decisionId,

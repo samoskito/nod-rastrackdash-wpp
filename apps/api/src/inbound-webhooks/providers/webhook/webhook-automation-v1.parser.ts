@@ -7,6 +7,7 @@ import {
   normalizeCurrencyCode,
   type ConversionEventNameDto,
   type CurrencyCode,
+  type WebhookFamilyProvider,
 } from "@wpptrack/shared";
 import {
   normalizePhoneIdentity,
@@ -70,7 +71,8 @@ export type WebhookRuleValueSource = "received" | "fixed";
 
 /** Uma chamada lida para UMA regra: o evento e o valor vem dela. */
 export type ParsedWebhookRuleAutomation = {
-  provider: "webhook";
+  /** Webhook / n8n, ou a XMAX CRM (mesmo modelo, outro corpo). */
+  provider: WebhookFamilyProvider;
   automation: "crm_automation";
   eventName: ConversionEventNameDto;
   /** Telefone do lead, digitos com DDI (PII; nunca vai para log). */
@@ -88,6 +90,13 @@ export type ParsedWebhookRuleAutomation = {
   /** Identidade do reenvio sem `message_id` (digest, sem PII); null em evento uma vez por lead. */
   fingerprint: string | null;
   externalExecutionKey: string;
+  /** XMAX CRM: a oportunidade lida (sem dados do contato). */
+  xmax?: {
+    opportunityId: string;
+    /** Etapa_oportunidade: so para consulta, nunca decide o evento. */
+    stage: string | null;
+    contactLinked: boolean;
+  };
 };
 
 export type WebhookForRuleParseResult =

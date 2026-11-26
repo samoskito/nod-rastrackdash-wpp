@@ -7,10 +7,11 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **One migration, no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **Three migrations (two for XMAX CRM), no new variable. Before deploying, review "Quem pode enviar" on phrase rules: contact / both rules now fire on Uazapi.**
 
 ### Added
 
+- XMAX CRM (**observation only**): new origin "Etapa no CRM da XMAX" in Conversões. The stage automation of the XMAX CRM calls the URL of a rule (one per event, every number, the rule's fixed value). XMAX creates no lead: only a paid lead of any WhatsApp connection converts (`contact_not_paid_lead` otherwise); once per opportunity per event. The `xmax` `automation-v1` reader is born `observation_only`: calls show in Gerenciar › Eventos recebidos with an "Em observação" mark and nothing is sent to Meta. Rule URLs also accept the token in the `x-wpptrack-webhook-token` header. Migrations `20261126120000_xmax_provider` and `20261126120100_xmax_parser_release`. [Details](docs/setup/xmax.md).
 - Uazapi: **phrase sent by the lead** (porte do SaaS #297). A phrase rule with "Quem pode enviar" = contact or both now fires when the lead writes the phrase (follow-up message without `ctwa_clid`, existing paid lead, never a group). The `ctwa_clid` branch is unchanged. In this edition the capability matrix also changed: contact messages are read on Umbler **and Uazapi** (WAHA stays team only). [Details](docs/setup/whatsapp-providers.md#uazapi-byo-uazapi_byo).
 - Meta: ad accounts **shared with the BM as a partner** (`client_ad_accounts`) are listed together with owned ones, without duplicates (porte do SaaS #299). The permission error now tells the agency to assign the person to the account.
 - Meta: **warning for paid leads on an account without a route** in Integrações › Meta Ads, and a confirmation before deactivating an account that would block leads (porte do SaaS #302). Read-only, no migration. The SaaS confirmation when turning BM routing on was **not** ported: this edition's API has no route that turns it on. [Details](docs/setup/meta-manual.md#aviso-leads-bloqueados-por-falta-de-rota-meta).

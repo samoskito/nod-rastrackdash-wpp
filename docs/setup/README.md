@@ -73,6 +73,7 @@ Cole o [prompt oficial de onboarding](../AI_ONBOARDING_PROMPT.pt-BR.md) em Claud
 - [Unnichat: conversas e automações como conversões (conexão por número)](unnichat.md)
 - [ROI Chat: entrada do anúncio e compra como conversões (uma URL por número)](roichat.md)
 - [GoHighLevel: entrada do lead e conversões das etapas do Workflow](gohighlevel.md)
+- [XMAX CRM: conversão pela etapa da oportunidade (em observação)](xmax.md)
 - [Guia de cobrança (BYO)](billing/README.md)
 
 ## Release

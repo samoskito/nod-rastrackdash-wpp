@@ -1,0 +1,20 @@
+[
+  {
+    "headers": {},
+    "body": {
+      "Nome": "",
+      "Email": "",
+      "Telefone": "",
+      "Tags": "",
+      "Queue_name": "",
+      "Queue_id": "",
+      "Queue_id_v2": "12",
+      "ID_oportunidade": "90002",
+      "Titulo_oportunidade": "Lead Teste",
+      "Etapa_oportunidade": "9 Negócio Fechado",
+      "Telefone_oportunidade": "",
+      "Email_oportunidade": "",
+      "Contatos_oportunidade": "[{\"contact_id\":70001,\"contact_name\":\"Lead Contato\",\"contact_number\":\"5511900000003\",\"contact_email\":\"contato.teste@example.com\"}]"
+    }
+  }
+]

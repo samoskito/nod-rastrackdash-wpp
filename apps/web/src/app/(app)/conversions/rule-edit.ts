@@ -81,7 +81,9 @@ export function ruleEditCapabilities(
         // Fase 6.8: ROI Chat, valor de reserva opcional (a compra traz o valor).
         origin === "automation_roichat" ||
         // Webhook / n8n: valor fixo ou reserva do valor recebido.
-        origin === "automation_webhook"),
+        origin === "automation_webhook" ||
+        // XMAX CRM: sempre o valor fixo da regra.
+        origin === "automation_xmax"),
     currency: carriesValue && origin !== "structured_catalog",
     catalogAliases: origin === "structured_catalog" && Boolean(rule.catalog),
     productFilter:

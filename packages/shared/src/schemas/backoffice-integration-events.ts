@@ -159,6 +159,12 @@ export const integrationReceiptReasons = {
   gohighlevel_automation_v1_invalid_payload:
     "Formato do Webhook do GoHighLevel não reconhecido",
   webhook_automation_v1_invalid_payload: "Formato da chamada não reconhecido",
+  // XMAX CRM (etapa da oportunidade).
+  xmax_automation_v1_invalid_payload:
+    "Formato da chamada da XMAX não reconhecido",
+  xmax_missing_opportunity_id: "Chamada da XMAX sem ID_oportunidade",
+  xmax_missing_phone: "Oportunidade sem telefone do lead",
+  xmax_value_missing: "Evento sem valor fixo na regra",
   webhook_phone_missing: "Chamada sem telefone do lead (phone)",
   webhook_value_missing: "Evento sem valor (value) e sem valor fixo na regra",
   webhook_value_invalid:

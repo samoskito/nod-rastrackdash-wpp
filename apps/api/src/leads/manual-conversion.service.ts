@@ -169,6 +169,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   waha: "WAHA",
   meta_cloud: "Meta Cloud",
   webhook: "Webhook / n8n",
+  xmax: "XMAX CRM",
 };
 
 /** Portuguese origin of a prior conversion (409 / warning messages). */

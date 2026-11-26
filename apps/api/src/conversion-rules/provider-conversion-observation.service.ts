@@ -107,8 +107,9 @@ function isLeadRoutedAutomationProvider(
 ): boolean {
   return (
     isSalesPlatformProvider(provider) ||
-    // Webhook / n8n: the lead's own number, from any connection.
-    provider === "webhook"
+    // Webhook / n8n and XMAX CRM: the lead's own number, from any connection.
+    provider === "webhook" ||
+    provider === "xmax"
   );
 }
 
@@ -476,10 +477,14 @@ export class ProviderConversionObservationService {
     // Webhook / n8n: its own routing (the entry of the lead's current click,
     // on any connection), phone_number_id only breaks a tie. Lead not
     // resolved: no number, the reason is decided below.
-    const webhook = rule.parserRelease.provider === "webhook";
+    // XMAX CRM: same routing (the XMAX creates no lead).
+    const webhook =
+      rule.parserRelease.provider === "webhook" ||
+      rule.parserRelease.provider === "xmax";
     const webhookRouting =
       webhook &&
-      input.automation.provider === "webhook" &&
+      (input.automation.provider === "webhook" ||
+        input.automation.provider === "xmax") &&
       purchaseLead?.status === "resolved"
         ? await resolveWebhookLeadChannel(this.prisma, {
             workspaceId: input.workspaceId,

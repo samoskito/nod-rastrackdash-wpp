@@ -138,6 +138,11 @@ export function executionReasonLabel(reasonCode: string | null): string {
     webhook_value_invalid:
       "Valor (value) ou moeda inválidos e sem valor fixo na regra",
     webhook_event_repeated: "Mesma chamada repetida",
+    // XMAX CRM (mesmas palavras dos recibos).
+    xmax_automation_v1_invalid_payload: "Formato da chamada da XMAX não reconhecido",
+    xmax_missing_opportunity_id: "Chamada da XMAX sem ID_oportunidade",
+    xmax_missing_phone: "Oportunidade sem telefone do lead",
+    xmax_value_missing: "Evento sem valor fixo na regra",
     contact_multiple_numbers:
       "Lead com entrada em mais de um número: informe o phone_number_id",
     contact_not_paid_lead: "Contato não é lead de anúncio",

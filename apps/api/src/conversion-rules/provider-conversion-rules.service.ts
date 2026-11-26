@@ -120,6 +120,7 @@ import {
   assertWebhookEventFree,
   assertWebhookUpdate,
   isWebhookRule,
+  webhookFamilyProviderOf,
   lockWebhookRules,
 } from "./webhook-rule-policy";
 import {
@@ -760,9 +761,15 @@ export class ProviderConversionRulesService {
           }
           // Webhook / n8n (porte do SaaS 098d0950): anchored on a live
           // WhatsApp connection of the workspace (all numbers), URL per rule.
-          const webhookRule =
+          // XMAX CRM follows the same model (URL per rule, every number,
+          // one rule per event), with its own reader and a fixed value.
+          const webhookProvider =
             input.triggerType === "provider_automation" &&
-            input.automationSource === "webhook";
+            (input.automationSource === "webhook" ||
+              input.automationSource === "xmax")
+              ? input.automationSource
+              : null;
+          const webhookRule = webhookProvider !== null;
           // Message/catalog/label rules may span connections and then carry no
           // connection; the Umbler automation always names its connection.
           // Webhook / n8n without a connection informed: the API picks the
@@ -868,6 +875,7 @@ export class ProviderConversionRulesService {
               transaction,
               workspaceId,
               input.eventName,
+              webhookProvider ?? "webhook",
             );
           }
 
@@ -917,7 +925,9 @@ export class ProviderConversionRulesService {
           const scope: ProviderConversionRuleScopeDto =
             input.scope ?? "specific_numbers";
           const origin: ProviderRuleOrigin = webhookRule
-            ? "automation_webhook"
+            ? webhookProvider === "xmax"
+              ? "automation_xmax"
+              : "automation_webhook"
             : this.createOrigin(input, connection, salesPlatform);
           // "Todos os numeros da <plataforma> (todas as conexoes)": explicit,
           // only for Umbler/Unnichat automations (and, since 6.8, the ROI
@@ -969,8 +979,8 @@ export class ProviderConversionRulesService {
               ? null
               : salesPlatform
                 ? salesPlatform
-                : webhookRule
-                  ? "webhook"
+                : webhookProvider
+                  ? webhookProvider
                   : connection?.provider === "umbler" ||
                     connection?.provider === "unnichat" ||
                     connection?.provider === "roichat" ||
@@ -988,7 +998,7 @@ export class ProviderConversionRulesService {
               transaction,
               workspaceId,
               connection.id,
-              salesPlatform ?? (webhookRule ? "webhook" : connection.provider),
+              salesPlatform ?? webhookProvider ?? connection.provider,
               input.channelIds,
             );
           } else {
@@ -1117,8 +1127,11 @@ export class ProviderConversionRulesService {
               });
             }
             if (webhookRule) {
+              // XMAX CRM: always the rule's fixed value.
               defaultItems = webhookRuleConfig(
-                input.webhookValueSource ?? "received",
+                webhookProvider === "xmax"
+                  ? "fixed"
+                  : (input.webhookValueSource ?? "received"),
               ) as Prisma.InputJsonValue;
             }
           } else if (input.triggerType === "structured_catalog") {
@@ -4934,9 +4947,7 @@ export class ProviderConversionRulesService {
         this.salesPlatformOfRule(rule) ??
         (this.isRoichatPurchaseRule(rule)
           ? "roichat"
-          : isWebhookRule(rule)
-            ? "webhook"
-            : null),
+          : webhookFamilyProviderOf(rule)),
       productFilterCodes: rule.productFilterCodes ?? [],
       ...(rule.parserRelease?.provider === "gohighlevel"
         ? {

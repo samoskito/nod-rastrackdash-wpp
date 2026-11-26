@@ -34,6 +34,8 @@ import {
   WEBHOOK_N8N_FLOW_PATH,
   webhookBodyExample,
   webhookSetupSteps,
+  xmaxBodyExample,
+  xmaxSetupSteps,
 } from "./webhook-view";
 
 type RuleAction = (formData: FormData) => Promise<ProviderConversionRuleActionResult>;
@@ -47,6 +49,7 @@ const platformNames: Partial<Record<ProviderConversionRuleOriginDto, string>> = 
   automation_yampi: "Yampi",
   automation_webhook: "n8n",
   automation_gohighlevel: "GoHighLevel",
+  automation_xmax: "XMAX",
 };
 
 // Artigo por plataforma: "na Umbler Talk", "na Payt", mas "no Unnichat".
@@ -55,6 +58,7 @@ const platformLocatives: Partial<Record<ProviderConversionRuleOriginDto, string>
   automation_roichat: "no ROI Chat",
   automation_webhook: "no n8n",
   automation_gohighlevel: "no GoHighLevel",
+  automation_xmax: "na XMAX",
 };
 
 function inPlatform(origin: ProviderConversionRuleOriginDto): string {
@@ -159,6 +163,19 @@ function SetupSteps({
           <li key={step}>{step}</li>
         ))}
       </ol>
+    );
+  }
+  if (origin === "automation_xmax") {
+    // XMAX CRM: a automação da etapa chama a URL da regra (corpo fictício).
+    return (
+      <>
+        <ol className="integration-steps">
+          {xmaxSetupSteps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        <pre className="payload-block">{xmaxBodyExample()}</pre>
+      </>
     );
   }
   if (origin === "automation_webhook") {

@@ -139,7 +139,8 @@ export async function reanchorWebhookRules(
       connectionId: input.connectionId,
       removedAt: null,
       conversionRule: { triggerType: "provider_automation" },
-      parserRelease: { is: { provider: "webhook" } },
+      // XMAX CRM rules follow the same model (URL per rule, every number).
+      parserRelease: { is: { provider: { in: ["webhook", "xmax"] } } },
     },
     select: { id: true },
     take: 200,

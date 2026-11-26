@@ -63,6 +63,7 @@ const automationOrigins: readonly ProviderConversionRuleOriginDto[] = [
   "automation_yampi",
   "automation_webhook",
   "automation_gohighlevel",
+  "automation_xmax",
 ];
 
 /**
@@ -533,7 +534,7 @@ function RuleEditForm({
             <dt>Evento</dt>
             <dd>{ruleEventLabelForOrigin(origin, rule.conversionRule.eventName)}</dd>
           </div>
-          {origin === "automation_webhook" ? (
+          {origin === "automation_webhook" || origin === "automation_xmax" ? (
             <div>
               <dt>Alcance</dt>
               <dd>Todos os números</dd>
@@ -551,7 +552,7 @@ function RuleEditForm({
       </fieldset>
 
       {/* Webhook / n8n: sempre todos os números (o alcance não muda). */}
-      {origin === "automation_webhook" ? null : (
+      {origin === "automation_webhook" || origin === "automation_xmax" ? null : (
         <ScopeStep
           draft={draft}
           numbers={numbers}
