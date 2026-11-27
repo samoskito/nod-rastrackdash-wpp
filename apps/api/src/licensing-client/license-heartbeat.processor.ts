@@ -14,10 +14,12 @@ export class LicenseHeartbeatProcessor extends WorkerHost {
 
   async process(_job: Job): Promise<void> {
     try {
-      // heartbeat() already fails open (grace) on network errors and never
-      // throws for that case; this guard only covers truly unexpected
-      // failures so a license outage can never turn into a worker crash loop.
-      await this.licenseClient.heartbeat();
+      // heartbeatIfDue() skips while the last check is recent and healthy,
+      // and retries on every tick after a failure. heartbeat() already fails
+      // open on network errors and never throws for that case; this guard
+      // only covers truly unexpected failures so a license outage can never
+      // turn into a worker crash loop.
+      await this.licenseClient.heartbeatIfDue();
     } catch (error) {
       this.logger.error("license_heartbeat_job_failed", error instanceof Error ? error.stack : undefined);
     }

@@ -206,11 +206,13 @@ Cada entrada segue: **sintoma → diagnóstico seguro → causa provável → co
 
 ## Escrita bloqueada com `423` (licença não ativada)
 
-- **Diagnóstico:** qualquer `POST/PATCH/PUT/DELETE` responde `423` com um `reason` (`license_required`, `activation_failed`, `revoked`, `expired`, `grace_exceeded`); `/backoffice/license` mostra o mesmo estado e o banner aparece no painel. Leitura e login continuam funcionando.
+- **Diagnóstico:** qualquer `POST/PATCH/PUT/DELETE` responde `423` com um `reason` (`license_required`, `activation_failed`, `revoked`, `expired`); `/backoffice/license` mostra o mesmo estado e o banner aparece no painel. Leitura e login continuam funcionando.
 - **Causa provável:**
   - `license_required`: `LICENSE_SERVER_URL` configurado e nenhuma ativação válida ainda (chave ausente ou ativação nunca executada);
   - `activation_failed`: `LICENSE_KEY` preenchida, mas a última tentativa de ativação falhou (chave errada, `403` de identidade, servidor fora);
-  - `revoked`/`expired`/`grace_exceeded`: licença bloqueada pelo servidor ou grace de 72h esgotado.
+  - `revoked`: o servidor de licença respondeu (com assinatura válida) que a licença está bloqueada;
+  - `expired`: a data de validade da licença (`expiresAt`) já passou.
+- **Servidor de licença fora do ar não bloqueia:** se o servidor não responder, a instalação continua funcionando normalmente enquanto a licença estiver dentro da validade. `/backoffice/license` mostra "Sem contato com o servidor de licença desde …" e a API tenta de novo sozinha (a cada hora e, no máximo a cada 5 minutos, quando há uso). Não é preciso fazer nada.
 - **Correção:** preencha `LICENSE_KEY` e `LICENSE_ACCOUNT_IDENTITY` (veja [`environment.md`](environment.md)) e reinicie/redeploy a API — a ativação é tentada automaticamente no boot. Se ainda assim falhar, chame `POST /license-client/activate` como fallback; essa rota, `/health` e `/auth` continuam liberadas durante o bloqueio. Para `revoked`/`expired`, renove ou fale com o suporte da PalmUP.
 - **Verificação:** `/backoffice/license` mostra `usable: true`, o banner some e a escrita volta a funcionar.
 

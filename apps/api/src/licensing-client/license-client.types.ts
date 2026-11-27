@@ -25,8 +25,10 @@ export interface LicensePublicKeyResult {
 
 /**
  * Why writes are locked. The first two cover an install that never reached a
- * valid activation (hard-lock); the last three cover a license that was
- * activated at some point and later stopped being valid.
+ * valid activation (hard-lock); "revoked"/"expired" cover a license that was
+ * activated and later stopped being valid. "grace_exceeded" is no longer
+ * produced (a license server outage never locks); it stays in the union so
+ * older UI builds that still know it keep working.
  */
 export type LicenseLockReason =
   | "license_required"
@@ -48,6 +50,13 @@ export interface LicenseRuntimeState {
   reason: LicenseLockReason | null;
   /** Subscription period reported by the license server, when known. */
   interval: string | null;
+  /** Last successful, verified contact with the license server (ISO), when any. */
+  lastCheckedAt: string | null;
+  /**
+   * True when the latest attempt to reach the license server failed or the
+   * cached confirmation is stale. Informational only — never locks by itself.
+   */
+  serverUnreachable: boolean;
 }
 
 /**

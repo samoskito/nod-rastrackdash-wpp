@@ -34,7 +34,10 @@ export async function LicenseStatusBanner() {
     );
   }
 
-  if (status.status === "grace") {
+  // A license server outage is not a tolerance period: the install keeps
+  // working normally, so no warning banner (the license page shows a neutral
+  // note instead).
+  if (status.status === "grace" && !status.serverUnreachable) {
     return (
       <div className="feedback-banner license-banner warn" role="status">
         <strong>Licença em período de tolerância</strong>

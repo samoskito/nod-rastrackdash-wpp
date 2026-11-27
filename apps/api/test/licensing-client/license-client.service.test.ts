@@ -1,9 +1,8 @@
 import { generateKeyPairSync, type KeyLike } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { signCompactToken, type LicenseCachePayload } from "../../src/licensing-client/compact-token";
-import { LICENSE_GRACE_WINDOW_MS } from "../../src/licensing-client/license-client.constants";
 import { LicenseAccountMismatchError } from "../../src/licensing-client/license-client-errors";
-import { LicenseClientService } from "../../src/licensing-client/license-client.service";
+import { deriveLicenseStatus, LicenseClientService } from "../../src/licensing-client/license-client.service";
 import type { LicenseActionResult } from "../../src/licensing-client/license-client.types";
 import { createFakePrisma } from "./support";
 
@@ -158,50 +157,215 @@ describe("LicenseClientService", () => {
     expect(laterState.status).toBe("blocked");
   });
 
-  it("getState() reports grace just inside the 72h no-contact window", async () => {
-    const { prisma } = createFakePrisma({
-      status: "active",
-      cacheValidUntil: new Date(Date.now() - 60_000),
-      lastCheckedAt: new Date(Date.now() - (LICENSE_GRACE_WINDOW_MS - 60_000)),
+  describe("license server outage (fail open until expiresAt)", () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const failingFetch = (async () => {
+      throw new Error("connect ECONNREFUSED");
+    }) as typeof fetch;
+
+    it("deriveLicenseStatus: 10-day outage with expiresAt in the future stays usable", () => {
+      const now = Date.now();
+      const result = deriveLicenseStatus(
+        "active",
+        new Date(now + 300 * DAY_MS),
+        new Date(now - 7 * DAY_MS),
+        new Date(now - 10 * DAY_MS),
+        now,
+      );
+      expect(result).toEqual({ status: "grace", reason: null });
     });
-    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
-      throw new Error("no network calls expected");
-    }) as typeof fetch);
 
-    const state = await service.getState();
-
-    expect(state.status).toBe("grace");
-  });
-
-  it("getState() reports blocked just outside the 72h no-contact window", async () => {
-    const { prisma } = createFakePrisma({
-      status: "active",
-      cacheValidUntil: new Date(Date.now() - 60_000),
-      lastCheckedAt: new Date(Date.now() - (LICENSE_GRACE_WINDOW_MS + 60_000)),
+    it("deriveLicenseStatus: lifetime (null expiresAt) stays usable through an outage", () => {
+      const now = Date.now();
+      expect(deriveLicenseStatus("active", null, new Date(now - DAY_MS), new Date(now - 30 * DAY_MS), now)).toEqual({
+        status: "grace",
+        reason: null,
+      });
     });
-    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
-      throw new Error("no network calls expected");
-    }) as typeof fetch);
 
-    const state = await service.getState();
-
-    expect(state.status).toBe("blocked");
-  });
-
-  it("getState() reason is 'grace_exceeded' when blocked because contact lapsed past the 72h window", async () => {
-    const { prisma } = createFakePrisma({
-      status: "active",
-      cacheValidUntil: new Date(Date.now() - 60_000),
-      lastCheckedAt: new Date(Date.now() - (LICENSE_GRACE_WINDOW_MS + 60_000)),
+    it("deriveLicenseStatus: outage after expiresAt passed blocks as expired", () => {
+      const now = Date.now();
+      expect(
+        deriveLicenseStatus("active", new Date(now - DAY_MS), new Date(now - 7 * DAY_MS), new Date(now - 10 * DAY_MS), now),
+      ).toEqual({ status: "blocked", reason: "expired" });
     });
-    const service = new LicenseClientService(prisma, baseEnv(), (async () => {
-      throw new Error("no network calls expected");
-    }) as typeof fetch);
 
-    const state = await service.getState();
+    it("deriveLicenseStatus: expiresAt passed but a fresh cache says grace stays usable", () => {
+      const now = Date.now();
+      expect(
+        deriveLicenseStatus("grace", new Date(now - DAY_MS), new Date(now + 2 * DAY_MS), new Date(now - 60_000), now),
+      ).toEqual({ status: "grace", reason: null });
+    });
 
-    expect(state.status).toBe("blocked");
-    expect(state.reason).toBe("grace_exceeded");
+    it("deriveLicenseStatus: a verified blocked verdict stays blocked", () => {
+      const now = Date.now();
+      expect(
+        deriveLicenseStatus("blocked", new Date(now + 300 * DAY_MS), new Date(now + DAY_MS), new Date(now), now),
+      ).toEqual({ status: "blocked", reason: "revoked" });
+    });
+
+    it("heartbeat() during a 10-day outage keeps the install usable with no lock flags", async () => {
+      const { prisma, getRow } = createFakePrisma({
+        status: "active",
+        fingerprint: "fp-1",
+        accountIdentity: "student@example.com",
+        expiresAt: new Date(Date.now() + 300 * DAY_MS),
+        cacheValidUntil: new Date(Date.now() - 7 * DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 10 * DAY_MS),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), failingFetch);
+
+      const state = await service.heartbeat();
+
+      expect(state).toMatchObject({
+        status: "grace",
+        usable: true,
+        softLock: false,
+        hardLock: false,
+        reason: null,
+        serverUnreachable: true,
+      });
+      expect(getRow()?.status).toBe("active");
+      expect((await service.getLockState()).locked).toBe(false);
+    });
+
+    it("heartbeat() 5xx during an outage never locks", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        expiresAt: new Date(Date.now() + 300 * DAY_MS),
+        cacheValidUntil: new Date(Date.now() - 7 * DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 10 * DAY_MS),
+      });
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/heartbeat": () => new Response(null, { status: 503 }),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      const state = await service.heartbeat();
+
+      expect(state.usable).toBe(true);
+      expect(state.status).toBe("grace");
+    });
+
+    it("heartbeat() during an outage after expiresAt passed is blocked as expired", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        expiresAt: new Date(Date.now() - DAY_MS),
+        cacheValidUntil: new Date(Date.now() - 7 * DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 10 * DAY_MS),
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), failingFetch);
+
+      const state = await service.heartbeat();
+
+      expect(state).toMatchObject({ status: "blocked", reason: "expired", usable: false, hardLock: true });
+      expect(await service.getLockState()).toMatchObject({ locked: true, reason: "expired" });
+    });
+
+    it("a state the old 72h rule derived as grace_exceeded is usable on the new code", async () => {
+      // Exactly what stuck installs have in the DB: stored status "active",
+      // stale cache, last confirmation 5 days ago, expiresAt 10/09/2027.
+      const { prisma } = createFakePrisma({
+        status: "active",
+        expiresAt: new Date("2027-09-10T00:00:00.000Z"),
+        cacheValidUntil: new Date(Date.now() - 2 * DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 5 * DAY_MS),
+        lastError: "license_heartbeat_failed:502",
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), failingFetch);
+
+      const lock = await service.getLockState();
+      await service.waitForBackgroundRefresh();
+
+      expect(lock.locked).toBe(false);
+      expect(lock.reason).toBeNull();
+      expect(lock.state).toMatchObject({ status: "grace", usable: true, hardLock: false, serverUnreachable: true });
+    });
+
+    it("recovers to active on the first successful heartbeat after an outage", async () => {
+      const { prisma, getRow } = createFakePrisma({
+        status: "active",
+        fingerprint: "fp-1",
+        accountIdentity: "student@example.com",
+        expiresAt: new Date(Date.now() + 300 * DAY_MS),
+        cacheValidUntil: new Date(Date.now() - 7 * DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 10 * DAY_MS),
+        lastError: "connect ECONNREFUSED",
+      });
+      let serverUp = false;
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/heartbeat": () => {
+          if (!serverUp) throw new Error("connect ECONNREFUSED");
+          return Response.json(actionResultFixture(privateKey, { status: "active" }));
+        },
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      expect((await service.heartbeat()).status).toBe("grace");
+
+      serverUp = true;
+      const recovered = await service.heartbeat();
+
+      expect(recovered).toMatchObject({ status: "active", source: "server", serverUnreachable: false });
+      expect(getRow()?.lastError).toBeNull();
+      expect((await service.getState()).status).toBe("active");
+    });
+
+    it("getLockState() with a stale cache triggers one throttled background refresh that recovers", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        fingerprint: "fp-1",
+        accountIdentity: "student@example.com",
+        expiresAt: new Date(Date.now() + 300 * DAY_MS),
+        cacheValidUntil: new Date(Date.now() - DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 4 * DAY_MS),
+      });
+      let heartbeatCalls = 0;
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/heartbeat": () => {
+          heartbeatCalls += 1;
+          return Response.json(actionResultFixture(privateKey, { status: "active" }));
+        },
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      expect((await service.getLockState()).state.status).toBe("grace");
+      await service.getLockState(); // in flight / throttled: no second call
+      await service.waitForBackgroundRefresh();
+
+      expect(heartbeatCalls).toBe(1);
+      expect((await service.getState()).status).toBe("active");
+    });
+
+    it("heartbeatIfDue() skips a healthy recent check and retries after a failure", async () => {
+      const { prisma } = createFakePrisma({
+        status: "active",
+        expiresAt: new Date(Date.now() + 300 * DAY_MS),
+        cacheValidUntil: new Date(Date.now() + 2 * DAY_MS),
+        lastCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+      });
+      let heartbeatCalls = 0;
+      const fetchFn = createFetchRouter({
+        "/license/public-key": publicKeyHandler,
+        "/license/heartbeat": () => {
+          heartbeatCalls += 1;
+          throw new Error("connect ECONNREFUSED");
+        },
+      });
+      const service = new LicenseClientService(prisma, baseEnv(), fetchFn);
+
+      expect(await service.heartbeatIfDue()).toBeNull();
+      expect(heartbeatCalls).toBe(0);
+
+      await service.heartbeat(); // fails -> lastError set
+      expect(heartbeatCalls).toBe(1);
+
+      await service.heartbeatIfDue(); // retried on the next tick
+      expect(heartbeatCalls).toBe(2);
+    });
   });
 
   it("getState() reason is 'expired' when a verified blocked verdict has an expiresAt already in the past", async () => {
@@ -428,15 +592,19 @@ describe("LicenseClientService", () => {
       expect(await service.getLockState()).toMatchObject({ locked: true, reason: "revoked" });
     });
 
-    it("locks with 'grace_exceeded' once the 72h no-contact window lapses", async () => {
+    it("never locks just because the server has been unreachable for longer than 72h", async () => {
       const { prisma } = createFakePrisma({
         status: "active",
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         cacheValidUntil: new Date(Date.now() - 60_000),
-        lastCheckedAt: new Date(Date.now() - (LICENSE_GRACE_WINDOW_MS + 60_000)),
+        lastCheckedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
       });
       const service = new LicenseClientService(prisma, baseEnv(), offlineFetch());
 
-      expect(await service.getLockState()).toMatchObject({ locked: true, reason: "grace_exceeded" });
+      const lock = await service.getLockState();
+      await service.waitForBackgroundRefresh();
+
+      expect(lock).toMatchObject({ locked: false, reason: null });
     });
   });
 

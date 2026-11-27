@@ -16,6 +16,8 @@ function fullState(overrides: Partial<LicenseRuntimeState> = {}): LicenseRuntime
     source: "cache",
     reason: null,
     interval: null,
+    lastCheckedAt: null,
+    serverUnreachable: false,
     ...overrides,
   };
 }
@@ -62,6 +64,8 @@ describe("LicenseClientStatusController", () => {
       locked: false,
       lockReason: null,
       interval: null,
+      lastCheckedAt: null,
+      serverUnreachable: false,
     });
     expect(response).not.toHaveProperty("reason");
   });

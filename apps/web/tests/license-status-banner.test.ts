@@ -35,6 +35,28 @@ describe("LicenseStatusBanner", () => {
     expect(html).toContain("feedback-banner license-banner warn");
   });
 
+  it("renders no warning banner during a license server outage", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "grace",
+        softLock: false,
+        hardLock: false,
+        usable: true,
+        expiresAt: "2027-09-10T00:00:00.000Z",
+        validUntil: null,
+        source: "cache",
+        locked: false,
+        lockReason: null,
+        lastCheckedAt: "2026-11-17T12:00:00.000Z",
+        serverUnreachable: true,
+      }),
+    );
+
+    const element = await LicenseStatusBanner();
+
+    expect(element).toBeNull();
+  });
+
   it("renders a red persistent banner when the license is blocked", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse({

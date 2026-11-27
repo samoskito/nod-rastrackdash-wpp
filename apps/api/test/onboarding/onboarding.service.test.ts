@@ -41,6 +41,8 @@ function licenseState(overrides: Partial<LicenseRuntimeState> = {}): LicenseRunt
     source: "cache",
     reason: null,
     interval: null,
+    lastCheckedAt: null,
+    serverUnreachable: false,
     ...overrides,
   };
 }
