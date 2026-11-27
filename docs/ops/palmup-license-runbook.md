@@ -10,7 +10,7 @@ These operations happen on the **private** `dash-com-ia` admin surface (spec §6
 
 - **Issue**: created automatically by the Guru purchase webhook (spec §6.4), or manually by an operator for dev/homolog/support cases.
 - **List**: internal admin view of `License` + `LicenseActivation` records — use it to see every device/instance that has activated a given key (binding is 1 license = 1 account, unlimited instances per account, spec §6.6).
-- **Revoke**: manual revoke (refund, chargeback, abuse) flips the `License` state; the running student instance soft-locks on its **next successful check-in** (activate/heartbeat), even inside an active 72h grace window (spec §15).
+- **Revoke**: manual revoke (refund, chargeback, abuse) flips the `License` state; the running student instance soft-locks on its **next successful check-in** (activate/heartbeat), even while it was previously running offline (spec §15).
 
 Operators: always confirm the account identity on the license record before revoking — a revoke is enforced eagerly, so a wrong revoke locks a paying student's instance immediately.
 
@@ -44,12 +44,15 @@ Known pitfalls (high level, no secrets):
 - The public client verifies that same signature over the same canonical UTF-8 JSON byte sequence, using the server's public key. A mismatch in how the bytes are constructed (e.g. re-serializing with different key order, or verifying over a string instead of the exact byte sequence) breaks verification even when the payload is semantically identical — this was the exact bug fixed in PR #3 (`ebfeb22`, "verify license cacheToken over canonical JSON bytes").
 - Never change the canonical serialization on either side (server signing, client verifying) without changing both together and re-running the activation smoke test.
 
-## 5. Soft-lock semantics (72h grace)
+## 5. Soft-lock semantics (an outage never locks)
 
-- On any successful `activate`/`heartbeat`, the client caches a signed token including status and `lastCheckedAt`.
-- While `now - lastCheckedAt < 72h` (`LICENSE_GRACE_WINDOW_MS`), the app reports `grace` and stays **fully usable**, even if the license server is unreachable.
-- Once `now - lastCheckedAt >= 72h` with no successful contact, the app reports `blocked` (soft-lock): **reads continue to work** (data already collected stays visible), **writes are blocked** — see `apps/api/src/licensing-client/license-softlock.guard.ts`.
-- A revoked/expired license soft-locks on the **next successful** server contact, regardless of where the instance is inside its grace window — grace does not protect against an explicit revoke.
+- On any successful `activate`/`heartbeat`, the client stores the verified response: status, `expiresAt`, `cacheValidUntil` and `lastCheckedAt`.
+- The install locks **only on a verified verdict**: a signed server response with status `blocked` (revoked), or the license's own `expiresAt` (from the last verified response) having passed (`expired`). A null `expiresAt` never expires.
+- License server unreachable (network error, 5xx, timeout, bad signature on heartbeat) **never locks** while `expiresAt` is in the future: once the cache is stale the app reports `grace`, stays **fully usable** (`softLock`/`hardLock` false) and the license page shows a neutral "Sem contato com o servidor de licença desde …" note. There is no longer a 72h limit (`LICENSE_GRACE_WINDOW_MS` was removed; incident 11/2026).
+- Anti-abuse: blocking the license server domain cannot extend use past the paid term — `expiresAt` still applies offline. It does delay a revoke until the next successful contact.
+- Recovery is automatic: the scheduler ticks hourly; a healthy install still calls the server every 6h, but after a failure it retries every tick. The write guard / status endpoint also fire a throttled background heartbeat (at most every 5 min) when the confirmation is stale or the install is blocked.
+- When locked, **reads continue to work** (data already collected stays visible) and **writes are blocked** — see `apps/api/src/licensing-client/license-softlock.guard.ts`.
+- A revoked/expired license soft-locks on the **next successful** server contact.
 - A renewal approved on Guru clears the block automatically on the next successful check-in — no new key needed.
 
 ## 6. Incident: student's `activate` fails signature verification

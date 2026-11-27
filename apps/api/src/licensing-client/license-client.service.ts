@@ -8,8 +8,10 @@ import { computeFingerprint } from "./fingerprint";
 import { LicenseAccountMismatchError } from "./license-client-errors";
 import {
   DEFAULT_LICENSE_SERVER_URL,
-  LICENSE_GRACE_WINDOW_MS,
+  LICENSE_BACKGROUND_REFRESH_MIN_INTERVAL_MS,
+  LICENSE_SERVER_TIMEOUT_MS,
   LICENSE_STATE_ID,
+  resolveHeartbeatIntervalMs,
 } from "./license-client.constants";
 import type {
   LicenseActionResult,
@@ -30,6 +32,8 @@ function unlicensedState(reason: LicenseLockReason, interval: string | null): Li
     source: "cache",
     reason,
     interval,
+    lastCheckedAt: null,
+    serverUnreachable: false,
   };
 }
 
@@ -53,6 +57,9 @@ export class LicenseClientService {
   private lastActivationError: string | null = null;
   /** Subscription period from the last verified server response, when it reports one. */
   private lastKnownInterval: string | null = null;
+  /** In-flight background refresh, so concurrent requests never stack heartbeats. */
+  private backgroundRefresh: Promise<void> | null = null;
+  private lastBackgroundRefreshAt = 0;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -81,6 +88,7 @@ export class LicenseClientService {
     try {
       const response = await this.fetchFn(this.serverUrl("/license/activate"), {
         method: "POST",
+        signal: AbortSignal.timeout(LICENSE_SERVER_TIMEOUT_MS),
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           key,
@@ -139,10 +147,68 @@ export class LicenseClientService {
     }
 
     const state = await this.getState(client);
+    this.refreshInBackgroundIfStale(state);
     if (state.usable) {
       return { inert: false, locked: false, reason: null, state };
     }
     return { inert: false, locked: true, reason: state.reason ?? "revoked", state };
+  }
+
+  /**
+   * Scheduler entry point (runs every tick, hourly). A healthy install only
+   * calls the server once per heartbeat interval (6h); after a failed contact
+   * or with a stale cache it retries on every tick, so an install recovers on
+   * its own within about an hour of the license server coming back.
+   */
+  async heartbeatIfDue(): Promise<LicenseRuntimeState | null> {
+    const row = await this.prisma.licenseState.findUnique({ where: { id: LICENSE_STATE_ID } });
+    const now = Date.now();
+    const healthy =
+      row !== null &&
+      !row.lastError &&
+      row.lastCheckedAt !== null &&
+      now - row.lastCheckedAt.getTime() < resolveHeartbeatIntervalMs(this.env) &&
+      row.cacheValidUntil !== null &&
+      row.cacheValidUntil.getTime() > now;
+    if (healthy) {
+      return null;
+    }
+    return this.heartbeat();
+  }
+
+  /** Resolves once the current background refresh (if any) settles. For tests and shutdown. */
+  async waitForBackgroundRefresh(): Promise<void> {
+    await this.backgroundRefresh;
+  }
+
+  /**
+   * When the guard or the status endpoint sees a stale confirmation (server
+   * unreachable) or a blocked state, fire one throttled heartbeat in the
+   * background so a recovered server (or a renewed license) unlocks the
+   * install without waiting for the next scheduler tick.
+   */
+  private refreshInBackgroundIfStale(state: LicenseRuntimeState): void {
+    if (state.status === "unlicensed" || !this.isConfigured()) {
+      return;
+    }
+    if (!state.serverUnreachable && state.status !== "blocked") {
+      return;
+    }
+    const now = Date.now();
+    if (this.backgroundRefresh || now - this.lastBackgroundRefreshAt < LICENSE_BACKGROUND_REFRESH_MIN_INTERVAL_MS) {
+      return;
+    }
+    this.lastBackgroundRefreshAt = now;
+    this.backgroundRefresh = this.heartbeat()
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `license_background_refresh_error:${error instanceof Error ? error.message : "unknown"}`,
+        );
+      })
+      .finally(() => {
+        this.backgroundRefresh = null;
+      });
   }
 
   async heartbeat(): Promise<LicenseRuntimeState> {
@@ -157,6 +223,7 @@ export class LicenseClientService {
     try {
       const response = await this.fetchFn(this.serverUrl("/license/heartbeat"), {
         method: "POST",
+        signal: AbortSignal.timeout(LICENSE_SERVER_TIMEOUT_MS),
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ key, fingerprint }),
       });
@@ -167,10 +234,10 @@ export class LicenseClientService {
       const accountIdentity = existing?.accountIdentity ?? this.env.LICENSE_ACCOUNT_IDENTITY?.trim() ?? "";
       return await this.persistVerifiedResult(result, fingerprint, accountIdentity);
     } catch (error) {
-      // Network/verification failure never turns into a status change here.
-      // We fail OPEN (grace, derived from cached data) rather than blocking a
-      // student out for a transient outage; only a *verified* server
-      // response is allowed to set status to "blocked".
+      // Network/5xx/timeout/verification failure never turns into a status
+      // change here. We fail OPEN (grace, derived from cached data) for as
+      // long as the license's own expiresAt is in the future; only a
+      // *verified* server response is allowed to set status to "blocked".
       const message = error instanceof Error ? error.message : "unknown_license_heartbeat_error";
       this.logger.warn(`license_heartbeat_error:${message}`);
       if (existing) {
@@ -202,49 +269,30 @@ export class LicenseClientService {
       );
     }
 
-    const { status, reason } = this.deriveStatus(row.status, row.expiresAt, row.cacheValidUntil, row.lastCheckedAt);
+    const now = Date.now();
+    const { status, reason } = deriveLicenseStatus(
+      row.status,
+      row.expiresAt,
+      row.cacheValidUntil,
+      row.lastCheckedAt,
+      now,
+    );
+    const usable = status === "active" || status === "grace";
+    const cacheFresh = row.cacheValidUntil !== null && row.cacheValidUntil.getTime() > now;
     return {
       status,
-      softLock: status !== "active",
-      hardLock: status === "blocked" || status === "unlicensed",
-      usable: status === "active" || status === "grace",
+      // An outage keeps the install fully usable: only a non-usable verdict locks.
+      softLock: !usable,
+      hardLock: !usable,
+      usable,
       expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
       validUntil: row.cacheValidUntil ? row.cacheValidUntil.toISOString() : null,
       source: "cache",
       reason,
       interval: this.lastKnownInterval,
+      lastCheckedAt: row.lastCheckedAt ? row.lastCheckedAt.toISOString() : null,
+      serverUnreachable: Boolean(row.lastError) || !cacheFresh,
     };
-  }
-
-  /**
-   * Grace algorithm: a *verified* blocked verdict from the server is
-   * fail-closed and sticks until a future successful activate/heartbeat
-   * overrides it. Otherwise, an unexpired cache is trusted as-is; once it
-   * expires we fail open into "grace" for up to 72h since the last
-   * confirmed server contact, then fail closed to "blocked".
-   */
-  private deriveStatus(
-    storedStatus: string,
-    expiresAt: Date | null,
-    cacheValidUntil: Date | null,
-    lastCheckedAt: Date | null,
-  ): { status: LicenseRuntimeState["status"]; reason: LicenseLockReason | null } {
-    const now = Date.now();
-    if (storedStatus === "blocked") {
-      const reason: LicenseLockReason = expiresAt && expiresAt.getTime() <= now ? "expired" : "revoked";
-      return { status: "blocked", reason };
-    }
-    if (cacheValidUntil && cacheValidUntil.getTime() > now) {
-      return { status: isLicenseStatus(storedStatus) ? storedStatus : "active", reason: null };
-    }
-    if (!lastCheckedAt) {
-      return { status: "blocked", reason: "expired" };
-    }
-    const elapsedSinceLastCheck = now - lastCheckedAt.getTime();
-    if (elapsedSinceLastCheck <= LICENSE_GRACE_WINDOW_MS) {
-      return { status: "grace", reason: null };
-    }
-    return { status: "blocked", reason: "grace_exceeded" };
   }
 
   private async persistVerifiedResult(
@@ -262,13 +310,14 @@ export class LicenseClientService {
       this.lastKnownInterval = result.interval;
     }
 
+    const checkedAt = new Date();
     const data = {
       fingerprint,
       accountIdentity,
       licenseKeyPrefix: result.keyPrefix,
       signedCache: result.cacheToken,
       cacheValidUntil: new Date(result.validUntil),
-      lastCheckedAt: new Date(),
+      lastCheckedAt: checkedAt,
       lastError: null,
       status: result.status,
       expiresAt: result.expiresAt ? new Date(result.expiresAt) : null,
@@ -296,6 +345,8 @@ export class LicenseClientService {
       source: "server",
       reason,
       interval: this.lastKnownInterval,
+      lastCheckedAt: checkedAt.toISOString(),
+      serverUnreachable: false,
     };
   }
 
@@ -308,7 +359,9 @@ export class LicenseClientService {
     if (this.publicKeyCache) {
       return this.publicKeyCache;
     }
-    const response = await this.fetchFn(this.serverUrl("/license/public-key"));
+    const response = await this.fetchFn(this.serverUrl("/license/public-key"), {
+      signal: AbortSignal.timeout(LICENSE_SERVER_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(`license_public_key_fetch_failed:${response.status}`);
     }
@@ -322,6 +375,44 @@ export class LicenseClientService {
     this.publicKeyCache = createPublicKey(body.publicKey);
     return this.publicKeyCache;
   }
+}
+
+/**
+ * Lock only on a VERIFIED verdict:
+ * - a stored "blocked" (only ever written from a signed server response)
+ *   stays blocked until a later verified response says otherwise;
+ * - the license's own expiresAt (from the last verified signed response)
+ *   having passed blocks as "expired". A null expiresAt never expires.
+ * An unreachable license server (network error, 5xx, timeout, bad signature
+ * on heartbeat) never locks: once the cache is stale the install reports
+ * "grace" and stays usable for as long as expiresAt is in the future. Even
+ * blocking the server's domain cannot extend use past the paid term.
+ *
+ * This also unlocks installs that an older build left "blocked" by the
+ * removed 72h rule ("grace_exceeded"): that state was derived, never stored.
+ */
+export function deriveLicenseStatus(
+  storedStatus: string,
+  expiresAt: Date | null,
+  cacheValidUntil: Date | null,
+  lastCheckedAt: Date | null,
+  now: number = Date.now(),
+): { status: LicenseRuntimeState["status"]; reason: LicenseLockReason | null } {
+  const expired = expiresAt !== null && expiresAt.getTime() <= now;
+  if (storedStatus === "blocked") {
+    return { status: "blocked", reason: expired ? "expired" : "revoked" };
+  }
+  if (expired) {
+    return { status: "blocked", reason: "expired" };
+  }
+  if (!lastCheckedAt) {
+    // No verified contact was ever recorded: nothing to trust, fail closed.
+    return { status: "blocked", reason: "expired" };
+  }
+  if (cacheValidUntil && cacheValidUntil.getTime() > now) {
+    return { status: isLicenseStatus(storedStatus) ? storedStatus : "active", reason: null };
+  }
+  return { status: "grace", reason: null };
 }
 
 function isLicenseStatus(value: string): value is LicenseRuntimeState["status"] {

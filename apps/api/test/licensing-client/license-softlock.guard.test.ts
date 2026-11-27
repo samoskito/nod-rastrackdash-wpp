@@ -16,6 +16,8 @@ function blockedState(reason: LicenseRuntimeState["reason"] = "revoked"): Licens
     source: "cache",
     reason,
     interval: null,
+    lastCheckedAt: null,
+    serverUnreachable: false,
   };
 }
 
@@ -32,6 +34,8 @@ function neverActivatedState(
     source: "cache",
     reason,
     interval: null,
+    lastCheckedAt: null,
+    serverUnreachable: false,
   };
 }
 
@@ -46,6 +50,8 @@ function activeState(): LicenseRuntimeState {
     source: "cache",
     reason: null,
     interval: null,
+    lastCheckedAt: null,
+    serverUnreachable: false,
   };
 }
 

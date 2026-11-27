@@ -33,7 +33,7 @@ describe("backoffice license page", () => {
 
     expect(html).toContain("Licença");
     expect(html).toContain("Ativa");
-    expect(html).toContain("Servidor de licenciamento");
+    expect(html).toContain("Última confirmação com o servidor");
     expect(html).not.toContain("LICENSE_KEY");
   });
 
@@ -58,7 +58,7 @@ describe("backoffice license page", () => {
 
     expect(html).toContain("Tipo de licença");
     expect(html).toContain("Anual");
-    expect(html).toContain("Expira em");
+    expect(html).toContain("Licença válida até");
     expect(html).toContain("15/06/2027");
   });
 
@@ -136,7 +136,7 @@ describe("backoffice license page", () => {
     expect(html).toContain("LICENSE_ACCOUNT_IDENTITY");
   });
 
-  it("shows the grace-period tolerance window", async () => {
+  it("shows a server-reported grace status without the old tolerance label", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse({
         status: "grace",
@@ -153,7 +153,39 @@ describe("backoffice license page", () => {
     const html = renderToStaticMarkup(createElement("div", null, element));
 
     expect(html).toContain("tolerância");
-    expect(html).toContain("Cache local");
+    expect(html).not.toContain("Tolerância até");
+    expect(html).not.toContain("Cache local");
+  });
+
+  it("shows a license server outage as a working install with a neutral note", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({
+        status: "grace",
+        softLock: false,
+        hardLock: false,
+        usable: true,
+        expiresAt: "2027-09-10T12:00:00.000Z",
+        validUntil: "2026-11-20T12:00:00.000Z",
+        source: "cache",
+        locked: false,
+        lockReason: null,
+        lastCheckedAt: "2026-11-17T12:00:00.000Z",
+        serverUnreachable: true,
+      }),
+    );
+
+    const element = await LicensePage();
+    const html = renderToStaticMarkup(createElement("div", null, element));
+
+    expect(html).toContain("Licença válida até");
+    expect(html).toContain("10/09/2027");
+    expect(html).toContain("Última confirmação com o servidor");
+    expect(html).toContain("Sem contato com o servidor de licença desde 17/11/2026");
+    expect(html).toContain("A instalação continua funcionando.");
+    expect(html).toContain("Liberadas");
+    expect(html).not.toContain("Bloqueada");
+    expect(html).not.toContain("Bloqueio total");
+    expect(html).not.toContain("tolerância");
   });
 
   it("shows a configuration CTA without secrets when unlicensed", async () => {

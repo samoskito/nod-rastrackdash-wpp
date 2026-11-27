@@ -26,6 +26,13 @@ export type LicenseStatusResponse = {
   lockReason?: LicenseLockReason | null;
   /** Subscription period reported by the license server, when it sends one. */
   interval?: string | null;
+  /** Last verified contact with the license server (ISO). Optional for older API builds. */
+  lastCheckedAt?: string | null;
+  /**
+   * True when the license server could not be reached recently. Informational
+   * only: an outage never locks the install while the license is valid.
+   */
+  serverUnreachable?: boolean;
 };
 
 /**
@@ -68,7 +75,11 @@ export const licenseLockCopy: Record<
       "A última tentativa de ativação não foi concluída. Confira LICENSE_KEY e LICENSE_ACCOUNT_IDENTITY (o e-mail vinculado à compra) e ative novamente.",
   },
   revoked: { title: "Licença bloqueada", detail: BLOCKED_DETAIL },
-  expired: { title: "Licença bloqueada", detail: BLOCKED_DETAIL },
+  expired: {
+    title: "Licença expirada",
+    detail:
+      "O prazo da licença terminou e as operações de escrita foram desativadas. Renove a licença ou fale com o suporte.",
+  },
   grace_exceeded: { title: "Licença bloqueada", detail: BLOCKED_DETAIL },
 };
 

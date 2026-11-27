@@ -8,7 +8,16 @@ const ACTIVATE_MIN_INTERVAL_MS = 5_000;
 
 type PublicLicenseStatus = Pick<
   LicenseRuntimeState,
-  "status" | "softLock" | "hardLock" | "usable" | "expiresAt" | "validUntil" | "source" | "interval"
+  | "status"
+  | "softLock"
+  | "hardLock"
+  | "usable"
+  | "expiresAt"
+  | "validUntil"
+  | "source"
+  | "interval"
+  | "lastCheckedAt"
+  | "serverUnreachable"
 > & {
   /** True when writes are locked — lets the web UI show the hard-lock banner. */
   locked: boolean;
@@ -67,6 +76,8 @@ function toPublicStatus(state: LicenseRuntimeState, lock: LicenseLockState): Pub
     validUntil: state.validUntil,
     source: state.source,
     interval: state.interval,
+    lastCheckedAt: state.lastCheckedAt,
+    serverUnreachable: state.serverUnreachable,
     locked: lock.locked,
     lockReason: lock.reason,
   };

@@ -22,7 +22,8 @@ const LOCK_MESSAGES: Record<LicenseLockReason, string> = {
   activation_failed:
     "Falha ao ativar a licença — confira LICENSE_KEY e LICENSE_ACCOUNT_IDENTITY e ative novamente em /backoffice/license.",
   revoked: "Licença bloqueada — operações de escrita desativadas. Contate o suporte / reative.",
-  expired: "Licença bloqueada — operações de escrita desativadas. Contate o suporte / reative.",
+  expired: "Licença expirada — operações de escrita desativadas. Renove a licença ou contate o suporte.",
+  // Not produced anymore (an outage never locks); kept for older states.
   grace_exceeded: "Licença bloqueada — operações de escrita desativadas. Contate o suporte / reative.",
 };
 

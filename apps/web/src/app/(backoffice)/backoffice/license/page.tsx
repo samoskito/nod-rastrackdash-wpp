@@ -44,8 +44,8 @@ export default async function BackofficeLicensePage() {
           <p>Consulta somente leitura do status da licença local.</p>
         </div>
         {status ? (
-          <span className={statusChipClass[status.status]}>
-            {statusLabel[status.status]}
+          <span className={displayChipClass(status)}>
+            {displayStatusLabel(status)}
           </span>
         ) : (
           <span className="status-chip bad">Indisponível</span>
@@ -74,32 +74,53 @@ export default async function BackofficeLicensePage() {
   );
 }
 
+/**
+ * A license server outage keeps the install working while the license is
+ * valid (the API reports "grace" with serverUnreachable). Show that as an
+ * active license, never as a block.
+ */
+function displayStatusLabel(status: LicenseStatusResponse): string {
+  if (status.status === "grace" && status.serverUnreachable) {
+    return statusLabel.active;
+  }
+  return statusLabel[status.status];
+}
+
+function displayChipClass(status: LicenseStatusResponse): string {
+  if (status.status === "grace" && status.serverUnreachable) {
+    return statusChipClass.active;
+  }
+  return statusChipClass[status.status];
+}
+
 function LicenseStatusPanel({ status }: { status: LicenseStatusResponse }) {
+  const showOutageNote = status.usable && status.serverUnreachable === true;
+
   return (
     <section className="surface-panel license-status-panel">
+      {showOutageNote ? (
+        <p className="feedback-banner neutral" role="status">
+          {status.lastCheckedAt
+            ? `Sem contato com o servidor de licença desde ${formatDateTime(status.lastCheckedAt)}.`
+            : "Sem contato com o servidor de licença no momento."}{" "}
+          A instalação continua funcionando.
+        </p>
+      ) : null}
       <dl className="account-facts license-status-fields">
         <div>
           <dt>Status</dt>
-          <dd>{statusLabel[status.status]}</dd>
+          <dd>{displayStatusLabel(status)}</dd>
         </div>
         <div>
-          <dt>Utilizável</dt>
-          <dd>{status.usable ? "Sim" : "Não"}</dd>
-        </div>
-        <div>
-          <dt>Bloqueio parcial (soft lock)</dt>
-          <dd>{status.softLock ? "Sim" : "Não"}</dd>
-        </div>
-        <div>
-          <dt>Bloqueio total (hard lock)</dt>
-          <dd>{status.hardLock ? "Sim" : "Não"}</dd>
+          <dt>Operações de escrita</dt>
+          <dd>{status.usable ? "Liberadas" : "Bloqueadas"}</dd>
         </div>
         <div>
           <dt>Tipo de licença</dt>
           <dd>{licenseIntervalLabel(status)}</dd>
         </div>
         <div>
-          <dt>Expira em</dt>
+          <dt>Licença válida até</dt>
           <dd>
             {isLifetimeLicense(status)
               ? "Não expira"
@@ -109,15 +130,9 @@ function LicenseStatusPanel({ status }: { status: LicenseStatusResponse }) {
           </dd>
         </div>
         <div>
-          <dt>Tolerância até</dt>
-          <dd>{status.validUntil ? formatDateTime(status.validUntil) : "—"}</dd>
-        </div>
-        <div>
-          <dt>Origem da checagem</dt>
+          <dt>Última confirmação com o servidor</dt>
           <dd>
-            {status.source === "server"
-              ? "Servidor de licenciamento"
-              : "Cache local"}
+            {status.lastCheckedAt ? formatDateTime(status.lastCheckedAt) : "—"}
           </dd>
         </div>
       </dl>
