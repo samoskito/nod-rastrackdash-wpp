@@ -190,6 +190,13 @@ describe("LicenseClientService", () => {
       ).toEqual({ status: "blocked", reason: "expired" });
     });
 
+    it("deriveLicenseStatus: expiresAt passed but a fresh cache says grace stays usable", () => {
+      const now = Date.now();
+      expect(
+        deriveLicenseStatus("grace", new Date(now - DAY_MS), new Date(now + 2 * DAY_MS), new Date(now - 60_000), now),
+      ).toEqual({ status: "grace", reason: null });
+    });
+
     it("deriveLicenseStatus: a verified blocked verdict stays blocked", () => {
       const now = Date.now();
       expect(

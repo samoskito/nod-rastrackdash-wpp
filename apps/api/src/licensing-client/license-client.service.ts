@@ -402,15 +402,18 @@ export function deriveLicenseStatus(
   if (storedStatus === "blocked") {
     return { status: "blocked", reason: expired ? "expired" : "revoked" };
   }
-  if (expired) {
-    return { status: "blocked", reason: "expired" };
+  if (cacheValidUntil && cacheValidUntil.getTime() > now) {
+    // A fresh signed verdict wins, including the server's post-expiry grace
+    // (e.g. renewal paid a day late). The server caps validUntil at
+    // expiresAt + 72h, so a fresh cache never outlives expiry + grace.
+    return { status: isLicenseStatus(storedStatus) ? storedStatus : "active", reason: null };
   }
   if (!lastCheckedAt) {
     // No verified contact was ever recorded: nothing to trust, fail closed.
     return { status: "blocked", reason: "expired" };
   }
-  if (cacheValidUntil && cacheValidUntil.getTime() > now) {
-    return { status: isLicenseStatus(storedStatus) ? storedStatus : "active", reason: null };
+  if (expired) {
+    return { status: "blocked", reason: "expired" };
   }
   return { status: "grace", reason: null };
 }
