@@ -7,10 +7,13 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
-Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **1 additive migration (`20261126130000_meta_ad_preview_miss_until`), no new variable.**
+## [1.8.3] - 2026-11-27
+
+Upgrade notes for students: [`docs/releases/1.8.3.json`](docs/releases/1.8.3.json). **Migration: one additive migration (`MetaAd.previewMissUntil`). No new variable.**
 
 ### Fixed
 
+- License: an installation is only blocked by a verified verdict (a signed server answer saying blocked, or `expiresAt` in the past). License server outage, network error, 5xx or timeout never lock it (before, 72 hours without contact locked writes). Installations left "Bloqueada" (`grace_exceeded`) by an outage recover after the update, with no action. Retry after a failed contact is hourly (was 6 hours), at most every 5 minutes in the background while in use, each call limited to 15 seconds. `/backoffice/license` shows "Licença válida até" and "Última confirmação com o servidor"; `/license-client/status` also returns `lastCheckedAt` and `serverUnreachable`.
 - Meta: a dead token (OAuthException 190/102) found while fetching creative previews/thumbnails now parks the reporting sync of that account (`reportingSyncBlockedAt`, UI asks to reconnect) instead of retrying every cycle. CAPI and CTWA routing are untouched.
 - Meta: creatives returned without a preview are marked in the database (`MetaAd.previewMissUntil`: 7 days when absent, 24 hours on failure) and not requested again before then, also across API restarts.
 
