@@ -62,6 +62,39 @@ describe("meta adapter creative thumbnails (Fase 6.4)", () => {
     });
   });
 
+  it("keeps the good thumbnails when a single item answers 190", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify([
+          {
+            code: 200,
+            body: JSON.stringify({
+              id: "111",
+              thumbnail_url: "https://example.com/ok.jpg",
+            }),
+          },
+          {
+            code: 400,
+            body: JSON.stringify({
+              error: { code: 190, message: "Invalid OAuth access token" },
+            }),
+          },
+        ]),
+        { status: 200 },
+      ),
+    ) as unknown as typeof fetch;
+    const adapter = new MetaAdapter({}, fetcher);
+
+    const thumbnails = await adapter.getCreativeThumbnails({
+      accessToken: "meta-token",
+      creativeIds: ["111", "222"],
+      size: 320,
+    });
+
+    expect(thumbnails.get("111")?.url).toBe("https://example.com/ok.jpg");
+    expect(thumbnails.has("222")).toBe(false);
+  });
+
   it("falls back to video thumbnails only for videos without an image candidate", async () => {
     let batchCall = 0;
     const fetcher = vi.fn(async () => {

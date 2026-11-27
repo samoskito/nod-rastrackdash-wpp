@@ -7,6 +7,13 @@ Version 1.0.0 was the initial public release of the `nod-rastrackdash-wpp` stude
 
 ## [Unreleased]
 
+Upgrade notes for students: [`docs/releases/unreleased.json`](docs/releases/unreleased.json). **1 additive migration (`20261126130000_meta_ad_preview_miss_until`), no new variable.**
+
+### Fixed
+
+- Meta: a dead token (OAuthException 190/102) found while fetching creative previews/thumbnails now parks the reporting sync of that account (`reportingSyncBlockedAt`, UI asks to reconnect) instead of retrying every cycle. CAPI and CTWA routing are untouched.
+- Meta: creatives returned without a preview are marked in the database (`MetaAd.previewMissUntil`: 7 days when absent, 24 hours on failure) and not requested again before then, also across API restarts.
+
 ## [1.8.2] - 2026-11-26
 
 Upgrade notes for students: [`docs/releases/1.8.2.json`](docs/releases/1.8.2.json). **No migration, no new variable.**

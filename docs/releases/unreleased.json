@@ -1,15 +1,19 @@
 {
   "version": "PENDENTE: versão definida pelo mantenedor",
-  "title": "PENDENTE: título da atualização",
-  "summary": "PENDENTE: benefício e impacto para o aluno",
-  "changes": "PENDENTE: novidades e melhorias incluídas",
-  "fixes": "",
-  "requirements": "PENDENTE: requisitos reais ou declaração de que não mudaram",
-  "upgradeGuide": "PENDENTE: preparar passos verificados\nBackup: informar cópia e cuidados aplicáveis.\nMigration: informar quais e a ordem, ou não se aplica.\nVariáveis de ambiente: informar nomes e finalidade, sem valores secretos.\nPreservação de customizações: preservar alterações locais do aluno.\nVerificação: informar verificações e resultado esperado.",
-  "rollback": "PENDENTE: procedimento de recuperação verificado e limitações",
+  "title": "Meta: pausa com token inválido e menos chamadas à Meta",
+  "summary": "A sincronização com a Meta deixa de repetir chamadas quando o token foi invalidado: a conta fica pausada e o painel pede para reconectar. Criativos sem miniatura/preview também deixam de ser consultados de novo na Meta a cada ciclo, o que reduz o consumo do limite de chamadas do app.",
+  "changes": "Token Meta inválido ou expirado (OAuthException 190/102) detectado na busca de previews/miniaturas de criativos agora pausa a sincronização de relatórios daquela conta (a tela de Relatórios/Integrações mostra o aviso para reconectar), em vez de tentar de novo a cada ciclo. A pausa só afeta relatórios: o envio de conversões (CAPI) e o roteamento de leads não mudam. Reconectar ou revalidar a conta limpa a pausa.\nCriativos que a Meta devolveu sem preview (ausente: 7 dias; falha: 24 horas) ficam marcados no banco (coluna previewMissUntil em MetaAd) e não são consultados de novo antes desse prazo, mesmo depois de reiniciar a API. Criativos que já têm preview salvo continuam sem nova consulta.",
+  "fixes": "Reinício/redeploy da API não zera mais a memória de criativos sem preview (antes ela era só em memória e causava uma consulta extra à Meta para cada um após cada reinício).",
+  "requirements": "Mesmas versões de Node, PostgreSQL e Redis. Nenhuma variável de ambiente nova.",
+  "upgradeGuide": "Backup: faça o backup do banco antes de atualizar (no Dokploy, o backup do banco de dados); esta versão adiciona uma coluna.\nMigration: 1 migration aditiva (20261126130000_meta_ad_preview_miss_until) que adiciona a coluna opcional previewMissUntil na tabela MetaAd. Ela roda sozinha no boot da API (prisma migrate deploy); não apaga nem altera dados existentes.\nVariáveis de ambiente: nenhuma nova. META_VIDEO_THUMBNAILS_ENABLED continua desligada por padrão (não ligue).\nPreservação de customizações: preserve as alterações locais do aluno; a atualização não mexe em .env nem em arquivos de configuração.\nVerificação: PENDENTE: confirmar em instalação real. Após o deploy, a API sobe sem erro de migration; em Relatórios, uma conta com token Meta revogado mostra o aviso para reconectar e deixa de ser sincronizada até reconectar. Conta saudável sincroniza normalmente.",
+  "rollback": "Para voltar, faça o deploy da versão anterior. A coluna previewMissUntil pode ficar no banco sem efeito (a versão anterior a ignora); não é preciso restaurar o backup.",
   "minVersion": null,
   "breakingChange": false,
-  "components": "BOTH",
+  "components": "API",
   "links": [],
-  "tags": []
+  "tags": [
+    "meta",
+    "relatorios",
+    "limite-de-chamadas"
+  ]
 }

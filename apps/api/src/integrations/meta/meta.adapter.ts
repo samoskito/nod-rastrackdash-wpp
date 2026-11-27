@@ -375,6 +375,8 @@ type MetaGraphBatchResult<T> = {
   batchRequests: number;
   /** A whole batch request failed and the remaining chunks were skipped. */
   aborted: boolean;
+  /** Graph answered 190/102: the token is dead; retrying only burns quota. */
+  credentialInvalid: boolean;
 };
 
 type MetaCreativePreview = {
@@ -1072,7 +1074,13 @@ export class MetaAdapter implements IntegrationAdapter {
         input.accessToken,
         previewStats,
       );
-    } catch {
+    } catch (error) {
+      // A dead token is the one exception: it parks the account instead of
+      // retrying previews every cycle.
+      if (isMetaCredentialFatalError(error)) {
+        throw error;
+      }
+
       // Media enrichment must never abort structure/metrics sync.
       previews = new Map(
         creativeIdsToRequest.map((creativeId) => [
@@ -1960,6 +1968,7 @@ export class MetaAdapter implements IntegrationAdapter {
       accessToken,
       "/creative-previews",
     );
+    this.throwIfBatchCredentialInvalid(creatives);
     stats.creativeBatchRequests = creatives.batchRequests;
     stats.creativesSucceeded = creatives.results.size;
     stats.creativesFailed = creatives.failures.size;
@@ -1990,6 +1999,7 @@ export class MetaAdapter implements IntegrationAdapter {
           ),
           batchRequests: 0,
           aborted: true,
+          credentialInvalid: false,
         }
       : await this.getGraphBatch<
           MetaGraphListResponse<MetaVideoThumbnailGraphNode>
@@ -2099,6 +2109,7 @@ export class MetaAdapter implements IntegrationAdapter {
       input.accessToken,
       "/creative-thumbnails",
     );
+    this.throwIfBatchCredentialInvalid(creatives);
     this.throwIfBatchRateLimited(creatives);
     const thumbnails = new Map<string, MetaCreativeThumbnailCandidate>();
     const videoFallbacks = new Map<string, string[]>();
@@ -2154,6 +2165,31 @@ export class MetaAdapter implements IntegrationAdapter {
     }
 
     return thumbnails;
+  }
+
+  private isCredentialInvalidPayload(payload: unknown): boolean {
+    const code = this.asInteger(this.asRecord(this.asRecord(payload)?.error)?.code);
+
+    return code === 190 || code === 102;
+  }
+
+  /**
+   * A dead token fails every Graph call the same way. Raising it lets the
+   * reporting sync park the account (reportingSyncBlockedAt) until the
+   * customer reconnects, instead of retrying previews on every cycle.
+   */
+  private throwIfBatchCredentialInvalid<T>(batch: MetaGraphBatchResult<T>): void {
+    // Only when the whole batch is dead: one bad item (e.g. a creative of
+    // another business) must not discard the thumbnails that did come back.
+    if (batch.credentialInvalid && batch.results.size === 0) {
+      throw new MetaGraphError("Meta Graph batch credential invalid", {
+        httpStatus: 401,
+        code: 190,
+        subcode: null,
+        type: "OAuthException",
+        isTransient: false,
+      });
+    }
   }
 
   private throwIfBatchRateLimited<T>(batch: MetaGraphBatchResult<T>): void {
@@ -2336,6 +2372,7 @@ export class MetaAdapter implements IntegrationAdapter {
     const failures = new Map<string, MetaGraphBatchFailureReason>();
     let batchCount = 0;
     let aborted = false;
+    let credentialInvalid = false;
 
     try {
       for (
@@ -2388,6 +2425,11 @@ export class MetaAdapter implements IntegrationAdapter {
 
         if (chunkFailure || !Array.isArray(payload)) {
           const reason = chunkFailure ?? "unexpected";
+
+          if (this.isCredentialInvalidPayload(payload)) {
+            credentialInvalid = true;
+          }
+
           chunk.forEach((request) => failures.set(request.key, reason));
           aborted = true;
           // Status and reason only: Graph error text and URLs stay out of logs.
@@ -2419,6 +2461,10 @@ export class MetaAdapter implements IntegrationAdapter {
           const parsedBody = this.parseGraphBatchBody<T>(item.body);
 
           if (code < 200 || code >= 300) {
+            if (this.isCredentialInvalidPayload(parsedBody)) {
+              credentialInvalid = true;
+            }
+
             failures.set(
               request.key,
               this.graphFailureReason(code, parsedBody),
@@ -2431,7 +2477,13 @@ export class MetaAdapter implements IntegrationAdapter {
         });
       }
 
-      return { results, failures, batchRequests: batchCount, aborted };
+      return {
+        results,
+        failures,
+        batchRequests: batchCount,
+        aborted,
+        credentialInvalid,
+      };
     } finally {
       this.logSlowGraphList(
         operation,
